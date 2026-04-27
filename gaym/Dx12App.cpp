@@ -1742,6 +1742,22 @@ void Dx12App::RenderText()
     // ========== Debug Rune Inspector (overlay) ==========
     RenderDebugRuneUI();
 
+    // ========== Flight Mode Crosshair + Hit Counter (4스테이지 바람 보스) ==========
+    if (m_pScene && m_pScene->IsFlightHUDActive())
+    {
+        const wchar_t* crosshair = L"+";
+        XMVECTOR sz = m_spriteFont->MeasureString(crosshair);
+        float cx = (float)m_nWndClientWidth * 0.5f - XMVectorGetX(sz) * 0.5f;
+        float cy = (float)m_nWndClientHeight * 0.5f - XMVectorGetY(sz) * 0.5f;
+        m_spriteFont->DrawString(m_spriteBatch.get(), crosshair,
+            XMFLOAT2(cx, cy), DirectX::Colors::White, 0.0f, XMFLOAT2(0,0), 1.6f);
+
+        wchar_t hitBuf[64];
+        swprintf_s(hitBuf, L"HITS: %d", m_pScene->GetFlightHitCount());
+        m_spriteFont->DrawString(m_spriteBatch.get(), hitBuf,
+            XMFLOAT2(20.0f, 20.0f), DirectX::Colors::Cyan);
+    }
+
     // ========== Pause Menu (topmost overlay) ==========
     RenderPauseMenu();
 

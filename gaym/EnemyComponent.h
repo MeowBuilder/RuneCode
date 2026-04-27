@@ -98,6 +98,10 @@ public:
     void SetTarget(GameObject* pTarget) { m_pTarget = pTarget; }
     GameObject* GetTarget() const { return m_pTarget; }
 
+    // AI 일시 정지 (4스테이지 비행 보스 — Scene 이 직접 transform 제어)
+    void SetAIPaused(bool bPaused) { m_bAIPaused = bPaused; }
+    bool IsAIPaused() const { return m_bAIPaused; }
+
     // Threat (Aggro) System
     void RegisterAllPlayers(const std::vector<GameObject*>& players);
     void AddThreat(GameObject* pPlayer, float fAmount);
@@ -246,6 +250,7 @@ private:
     std::function<std::unique_ptr<IAttackBehavior>()> m_fnSpecialAttackFactory;
     GameObject* m_pTarget = nullptr;
     CRoom* m_pRoom = nullptr;
+    bool m_bAIPaused = false;  // 4스테이지 비행 보스: Scene 이 transform 직접 제어
 
     // Boss flags
     bool m_bIsBoss = false;

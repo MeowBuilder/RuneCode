@@ -32,6 +32,9 @@ void EnemyComponent::Update(float deltaTime)
         if (m_pOwner) m_pOwner->SetHitFlashAll(flash);
     }
 
+    // AI 일시정지 (4스테이지 비행 보스 — Scene 이 transform 직접 제어)
+    if (m_bAIPaused) return;
+
     // 방어 분쇄 디버프 타이머
     if (m_fDefenseDebuffTimer > 0.f)
     {

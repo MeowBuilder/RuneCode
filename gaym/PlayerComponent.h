@@ -42,6 +42,12 @@ public:
     // (텔레포트 Y가 바닥보다 높으면 gravity가 자연스럽게 스냅; Y=0이면 즉시 ground 판정)
     void ResetGroundY() { m_fVelocityY = 0.0f; m_bOnGround = false; }
 
+    // Flight Mode (4스테이지 바람 보스 비행 슈팅): 보스 중심 구면 좌표 비행
+    void EnterFlightMode(GameObject* pFlightCenter);
+    void ExitFlightMode();
+    bool IsFlightMode() const { return m_bFlightMode; }
+    GameObject* GetFlightCenter() const { return m_pFlightCenter; }
+
     // Fall zone: safe AABB(center±extents) 안 = 수면에 뜸(차오르는 물 따라 상승),
     // 밖 = 중력 낙하 → y<FALL_DEATH_Y 도달 시 즉사. 크라켄 WaterRise/전투에서만 활성화.
     void EnableFallZone(const XMFLOAT3& safeCenter, const XMFLOAT3& safeExtents);
@@ -95,6 +101,23 @@ private:
     // 네트워크 회전 동기화용 (이전 프레임 Y 회전값)
     float m_fPrevYaw = 0.0f;
     static constexpr float YAW_SYNC_THRESHOLD = 1.0f;  // 1도 이상 변화 시 동기화
+
+    // Flight mode (레일 슈팅: 보스 forward 기준 2D 평면 락온)
+    bool m_bFlightMode = false;
+    GameObject* m_pFlightCenter = nullptr;     // 추적할 보스
+    float m_fFlightOffsetX = 0.0f;             // 보스 로컬 right 방향 오프셋
+    float m_fFlightOffsetY = 0.0f;             // 월드 up 방향 오프셋
+    float m_fFlightOffsetXVel = 0.0f;
+    float m_fFlightOffsetYVel = 0.0f;
+    static constexpr float kFlightTrailDist  = 30.0f;  // 보스 뒤 거리
+    static constexpr float kFlightOffsetXMax = 18.0f;  // 좌우 무빙 한계
+    static constexpr float kFlightOffsetYMax = 11.0f;  // 상하 무빙 한계
+    static constexpr float kFlightOffsetYMin = -8.0f;  // 아래쪽 한계 (보스 시야 유지)
+    static constexpr float kFlightAccel      = 110.0f; // m/s^2
+    static constexpr float kFlightMaxSpeed   = 28.0f;  // m/s
+    static constexpr float kFlightDrag       = 5.0f;   // 1/s — 키 떼면 빠르게 정지(무빙 정확도)
+    static constexpr float kFlightBoostMult  = 1.6f;
+    void UpdateFlightMode(float deltaTime, InputSystem* pInputSystem, CCamera* pCamera);
 
     void UpdateAnimation(float deltaTime, bool bMoving, bool bAttackTriggered, bool bDashStarted, bool bDashing);
 };

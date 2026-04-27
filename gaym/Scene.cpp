@@ -930,6 +930,37 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         m_pCamera->ToggleFreeCam();
     }
 
+    // F6: Flight 프로토타입 토글 (4스테이지 바람 보스 레일 슈팅 Step1)
+    if (pInputSystem && pInputSystem->IsKeyPressed(VK_F6))
+    {
+        ToggleFlightMode(Dx12App::GetInstance()->GetDevice(),
+                         Dx12App::GetInstance()->GetCommandList());
+    }
+
+    // 비행 모드 활성 시 보스 전진 + 연출 갱신
+    if (m_pFlightBossDummy && m_pPlayerGameObject)
+    {
+        auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>();
+        if (pPC && pPC->IsFlightMode())
+        {
+            UpdateFlightBoss(deltaTime);
+            UpdateFlightFX(deltaTime, pInputSystem);
+        }
+    }
+
+    // 보스 피격 플래시
+    if (m_fFlightBossHitFlashTimer > 0.0f && m_pFlightBossDummy)
+    {
+        m_fFlightBossHitFlashTimer -= deltaTime;
+        float ratio = max(0.0f, m_fFlightBossHitFlashTimer / kFlightHitFlashDuration);
+        m_pFlightBossDummy->SetHitFlashAll(ratio);
+        if (m_fFlightBossHitFlashTimer <= 0.0f)
+        {
+            m_pFlightBossDummy->SetHitFlashAll(0.0f);
+            m_fFlightBossHitFlashTimer = 0.0f;
+        }
+    }
+
     // Toggle debug collider visualization with F1
     if (pInputSystem && pInputSystem->IsKeyPressed(VK_F1))
     {
@@ -3441,6 +3472,27 @@ void Scene::TransitionToGrassBossRoom()
 {
     OutputDebugString(L"[Scene] ========== GRASS BOSS ROOM (DEMON) ==========\n");
 
+    // 이전 비행 테스트 상태(F6 등) 초기화 — 보스 스폰 후 새 비행 모드로 재진입
+    if (m_pPlayerGameObject)
+    {
+        if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
+            if (pPC->IsFlightMode()) pPC->ExitFlightMode();
+    }
+    if (m_pCamera)
+    {
+        m_pCamera->SetFlightMode(false);
+        m_pCamera->SetFovDegrees(m_pCamera->GetBaseFovDeg());
+    }
+    m_pFlightBossDummy = nullptr;
+    m_fFlightFovOffsetCur = 0.0f;
+    m_fFlightBossHitFlashTimer = 0.0f;
+    m_fFlightBossSkillTimer = 0.0f;
+    // 잔존 탄환 모두 제거 (유체 트레일 stop)
+    if (m_pEnemyFluidVFXManager)
+        for (auto& b : m_FlightBossBullets)
+            if (b.fluidId >= 0) m_pEnemyFluidVFXManager->StopEffect(b.fluidId);
+    m_FlightBossBullets.clear();
+
     if (m_pPlayerGameObject)
     {
         XMFLOAT3 pp = m_pPlayerGameObject->GetTransform()->GetPosition();
@@ -3498,8 +3550,38 @@ void Scene::TransitionToGrassBossRoom()
         if (pDemon)
         {
             if (auto* pA = pDemon->GetComponent<AnimationComponent>()) pA->SetCullEnabled(false);
-            EnemyComponent* pEnemy = pDemon->GetComponent<EnemyComponent>();
-            if (pEnemy) pEnemy->StartBossIntro(4.0f);
+
+            // ── 4스테이지 바람 보스 = 레일 슈팅 (인트로 대신 비행 모드 자동 진입) ──
+            if (auto* pE = pDemon->GetComponent<EnemyComponent>()) pE->SetAIPaused(true);
+
+            // 비행 보스 크기/고도 (3.5x → 7.0x, Y=38 공중 부양)
+            pDemon->GetTransform()->SetScale(7.0f, 7.0f, 7.0f);
+            pDemon->GetTransform()->SetPosition(XMFLOAT3(demonPos.x, 38.0f, demonPos.z));
+            // 초기 visual yaw = 180 (motion yaw 0 + 180 보정)
+            pDemon->GetTransform()->SetRotation(0.0f, 180.0f, 0.0f);
+
+            // 비행 중 idle 루프 — Demon_Anim.txt 기준 사용 가능 클립 중 가장 자연스러움
+            if (auto* pA = pDemon->GetComponent<AnimationComponent>())
+                pA->CrossFade("Idle1", 0.3f, true);
+
+            // Flight 시스템에 보스 등록 (테스트용 m_pFlightBossDummy 슬롯 재사용)
+            m_pFlightBossDummy = pDemon;
+            m_fFlightBossYawDeg = 0.0f;
+            m_fFlightCurveTime  = 0.0f;
+            m_fFlightBossHitFlashTimer = 0.0f;
+            m_nFlightHitCount = 0;
+
+            // 플레이어를 보스 뒤쪽 30단위, 같은 고도에 배치
+            if (m_pPlayerGameObject)
+            {
+                m_pPlayerGameObject->GetTransform()->SetPosition(
+                    XMFLOAT3(demonPos.x, 38.0f, demonPos.z - 30.0f));
+                if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
+                    pPC->EnterFlightMode(pDemon);
+            }
+            if (m_pCamera) m_pCamera->SetFlightMode(true, pDemon);
+
+            OutputDebugString(L"[Scene] Grass boss: rail flight mode auto-entered\n");
         }
 
         m_pCurrentRoom->SetState(RoomState::Active);
@@ -3519,4 +3601,521 @@ void Scene::TransitionToGrassBossRoom()
 
     m_bInBossRoom = true;
     OutputDebugString(L"[Scene] Grass boss room ready - Demon spawned!\n");
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Flight Mode 프로토타입 (4스테이지 바람 보스 비행 슈팅 - Step 1)
+// F6 토글: 더미 보스 박스 스폰 + Player/Camera FlightMode 진입/이탈
+// ────────────────────────────────────────────────────────────────────────────
+void Scene::SpawnFlightBossDummy(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
+{
+    if (m_pFlightBossDummy) return;
+
+    // global object 로 생성 (room 외부)
+    CRoom* pTempRoom = m_pCurrentRoom;
+    m_pCurrentRoom = nullptr;
+    m_pFlightBossDummy = CreateGameObject(pDevice, pCommandList);
+    m_pCurrentRoom = pTempRoom;
+
+    // 플레이어 앞 높이 ~25, 거리 ~30 위치
+    XMFLOAT3 spawnPos = { 0.0f, 25.0f, 30.0f };
+    if (m_pPlayerGameObject && m_pPlayerGameObject->GetTransform())
+    {
+        XMFLOAT3 pp = m_pPlayerGameObject->GetTransform()->GetPosition();
+        spawnPos = { pp.x, pp.y + 22.0f, pp.z + 30.0f };
+    }
+    m_pFlightBossDummy->GetTransform()->SetPosition(spawnPos);
+    m_pFlightBossDummy->GetTransform()->SetScale(6.0f, 6.0f, 6.0f);  // 보스급 크기
+
+    CubeMesh* pCubeMesh = new CubeMesh(pDevice, pCommandList, 1.0f, 1.0f, 1.0f);
+    m_pFlightBossDummy->SetMesh(pCubeMesh);
+
+    MATERIAL windMaterial;
+    windMaterial.m_cAmbient  = XMFLOAT4(0.1f, 0.15f, 0.1f, 1.0f);
+    windMaterial.m_cDiffuse  = XMFLOAT4(0.6f, 0.85f, 0.7f, 1.0f);   // 청록빛 (바람 컨셉)
+    windMaterial.m_cSpecular = XMFLOAT4(0.4f, 0.4f, 0.4f, 16.0f);
+    windMaterial.m_cEmissive = XMFLOAT4(0.05f, 0.15f, 0.1f, 1.0f);
+    m_pFlightBossDummy->SetMaterial(windMaterial);
+
+    m_pFlightBossDummy->AddComponent<RenderComponent>()->SetMesh(pCubeMesh);
+    if (!m_vShaders.empty())
+        m_vShaders[0]->AddRenderComponent(m_pFlightBossDummy->GetComponent<RenderComponent>());
+
+    // 초기 진행 방향 = +Z (yaw 0)
+    m_fFlightBossYawDeg = 0.0f;
+    m_fFlightCurveTime  = 0.0f;
+    m_pFlightBossDummy->GetTransform()->SetRotation(0.0f, m_fFlightBossYawDeg, 0.0f);
+
+    OutputDebugString(L"[Scene] Flight boss dummy spawned (rail)\n");
+}
+
+void Scene::ToggleFlightMode(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
+{
+    if (!m_pPlayerGameObject || !m_pCamera) return;
+    auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>();
+    if (!pPC) return;
+
+    if (pPC->IsFlightMode())
+    {
+        pPC->ExitFlightMode();
+        m_pCamera->SetFlightMode(false);
+        // 윈드 이미터 정지
+        if (m_nFlightWindEmitterId >= 0 && m_pParticleSystem)
+        {
+            if (auto* pEm = m_pParticleSystem->GetEmitter(m_nFlightWindEmitterId))
+                pEm->Stop();
+        }
+        // 잔존 탄환 정리 (유체 트레일 stop)
+        if (m_pEnemyFluidVFXManager)
+            for (auto& b : m_FlightBossBullets)
+                if (b.fluidId >= 0) m_pEnemyFluidVFXManager->StopEffect(b.fluidId);
+        m_FlightBossBullets.clear();
+        // FOV 복원
+        m_pCamera->SetFovDegrees(m_pCamera->GetBaseFovDeg());
+        m_fFlightFovOffsetCur = 0.0f;
+        OutputDebugString(L"[Scene] Flight Mode: OFF\n");
+    }
+    else
+    {
+        if (!m_pFlightBossDummy)
+            SpawnFlightBossDummy(pDevice, pCommandList);
+        else
+        {
+            // 재진입 시 보스 위치를 플레이어 앞쪽으로 리셋 (장시간 비활성화 후 멀리 가버린 경우 대비)
+            XMFLOAT3 pp = m_pPlayerGameObject->GetTransform()->GetPosition();
+            m_pFlightBossDummy->GetTransform()->SetPosition(XMFLOAT3(pp.x, pp.y + 22.0f, pp.z + 30.0f));
+            m_fFlightBossYawDeg = 0.0f;
+            m_fFlightCurveTime  = 0.0f;
+            m_pFlightBossDummy->GetTransform()->SetRotation(0.0f, m_fFlightBossYawDeg, 0.0f);
+        }
+
+        pPC->EnterFlightMode(m_pFlightBossDummy);
+        m_pCamera->SetFlightMode(true, m_pFlightBossDummy);
+        OutputDebugString(L"[Scene] Flight Mode: ON (F6 to exit)\n");
+    }
+}
+
+bool Scene::IsFlightHUDActive() const
+{
+    if (!m_pPlayerGameObject) return false;
+    auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>();
+    return pPC && pPC->IsFlightMode();
+}
+
+void Scene::FlightShoot(const XMFLOAT3& muzzlePos, const XMFLOAT3& dirNormalized)
+{
+    if (!m_pFlightBossDummy || !m_pParticleSystem) return;
+
+    XMVECTOR ro = XMLoadFloat3(&muzzlePos);
+    XMVECTOR rd = XMLoadFloat3(&dirNormalized);
+
+    // 보스 sphere 충돌 (스케일 6.0 → 반경 ~ 4.0 + 약간의 여유)
+    XMFLOAT3 bp = m_pFlightBossDummy->GetTransform()->GetPosition();
+    XMFLOAT3 bs = m_pFlightBossDummy->GetTransform()->GetScale();
+    float bossRadius = bs.x * 0.65f + 1.0f;
+    XMVECTOR center = XMLoadFloat3(&bp);
+    XMVECTOR oc = center - ro;
+    float t = XMVectorGetX(XMVector3Dot(oc, rd));
+
+    bool bHit = false;
+    XMFLOAT3 hitPoint = muzzlePos;
+    if (t > 0.0f && t < 250.0f)
+    {
+        XMVECTOR closest = ro + rd * t;
+        float d = XMVectorGetX(XMVector3Length(center - closest));
+        if (d < bossRadius)
+        {
+            bHit = true;
+            XMStoreFloat3(&hitPoint, closest);
+        }
+    }
+
+    // 머즐 플래시
+    {
+        ParticleEmitterConfig cfg;
+        cfg.emissionRate = 0.0f;
+        cfg.burstCount   = 14;
+        cfg.minLifetime  = 0.05f;
+        cfg.maxLifetime  = 0.18f;
+        cfg.minStartSize = 0.35f;
+        cfg.maxStartSize = 0.65f;
+        cfg.minEndSize   = 0.0f;
+        cfg.maxEndSize   = 0.0f;
+        cfg.minVelocity  = { -3.0f, -3.0f, -3.0f };
+        cfg.maxVelocity  = {  3.0f,  3.0f,  3.0f };
+        cfg.startColor   = { 0.85f, 0.95f, 1.0f, 1.0f };
+        cfg.endColor     = { 0.2f,  0.4f,  0.9f, 0.0f };
+        cfg.gravity      = { 0,0,0 };
+        cfg.spawnRadius  = 0.4f;
+        int id = m_pParticleSystem->CreateEmitter(cfg, muzzlePos);
+        if (auto* pEm = m_pParticleSystem->GetEmitter(id))
+        {
+            pEm->Burst(14);
+            pEm->Stop();
+        }
+    }
+
+    if (bHit)
+    {
+        // 피격 폭발
+        ParticleEmitterConfig cfg;
+        cfg.emissionRate = 0.0f;
+        cfg.burstCount   = 28;
+        cfg.minLifetime  = 0.20f;
+        cfg.maxLifetime  = 0.45f;
+        cfg.minStartSize = 0.5f;
+        cfg.maxStartSize = 1.1f;
+        cfg.minEndSize   = 0.0f;
+        cfg.maxEndSize   = 0.05f;
+        cfg.minVelocity  = { -8.0f, -8.0f, -8.0f };
+        cfg.maxVelocity  = {  8.0f,  8.0f,  8.0f };
+        cfg.startColor   = { 1.0f, 0.95f, 0.7f, 1.0f };
+        cfg.endColor     = { 0.6f, 0.3f,  0.1f, 0.0f };
+        cfg.gravity      = { 0, -1.5f, 0 };
+        cfg.spawnRadius  = 0.6f;
+        int id = m_pParticleSystem->CreateEmitter(cfg, hitPoint);
+        if (auto* pEm = m_pParticleSystem->GetEmitter(id))
+        {
+            pEm->Burst(28);
+            pEm->Stop();
+        }
+        m_fFlightBossHitFlashTimer = kFlightHitFlashDuration;
+        m_nFlightHitCount++;
+    }
+    else
+    {
+        // 미스 트레이서: 라인 따라 일정 간격 burst (시각용)
+        XMVECTOR end = ro + rd * 70.0f;
+        for (int i = 1; i <= 4; ++i)
+        {
+            float u = (float)i / 5.0f;
+            XMVECTOR p = XMVectorLerp(ro, end, u);
+            XMFLOAT3 pp; XMStoreFloat3(&pp, p);
+            ParticleEmitterConfig cfg;
+            cfg.emissionRate = 0.0f;
+            cfg.burstCount   = 4;
+            cfg.minLifetime  = 0.05f;
+            cfg.maxLifetime  = 0.15f;
+            cfg.minStartSize = 0.25f;
+            cfg.maxStartSize = 0.45f;
+            cfg.minEndSize   = 0.0f;
+            cfg.maxEndSize   = 0.0f;
+            cfg.minVelocity  = { -1.0f, -1.0f, -1.0f };
+            cfg.maxVelocity  = {  1.0f,  1.0f,  1.0f };
+            cfg.startColor   = { 0.7f, 0.85f, 1.0f, 0.9f };
+            cfg.endColor     = { 0.2f, 0.3f,  0.6f, 0.0f };
+            cfg.gravity      = { 0,0,0 };
+            cfg.spawnRadius  = 0.2f;
+            int id = m_pParticleSystem->CreateEmitter(cfg, pp);
+            if (auto* pEm = m_pParticleSystem->GetEmitter(id))
+            {
+                pEm->Burst(4);
+                pEm->Stop();
+            }
+        }
+    }
+}
+
+void Scene::UpdateFlightFX(float deltaTime, InputSystem* pInputSystem)
+{
+    if (!m_pPlayerGameObject || !m_pParticleSystem) return;
+    TransformComponent* pPT = m_pPlayerGameObject->GetTransform();
+    if (!pPT) return;
+
+    // 부스트 입력
+    bool bBoost = pInputSystem && pInputSystem->IsKeyDown(VK_SHIFT);
+
+    // ── FOV 펀치: 비행 항시 +6deg, 부스트 시 +22deg (광각감 살림)
+    if (m_pCamera)
+    {
+        float target = bBoost ? kFlightBoostFovOffset : kFlightBaseFovOffset;
+        float k = 1.0f - expf(-(bBoost ? 9.0f : 5.0f) * deltaTime);
+        m_fFlightFovOffsetCur += (target - m_fFlightFovOffsetCur) * k;
+        m_pCamera->SetFovDegrees(m_pCamera->GetBaseFovDeg() + m_fFlightFovOffsetCur);
+    }
+
+    // ── 윈드 라인 이미터: 플레이어 주변에서 뒤로 빠르게 흘러가는 줄
+    // 모션 forward = m_fFlightBossYawDeg 직접 계산 (보스 visual rotation 과 분리)
+    float yawRad = XMConvertToRadians(m_fFlightBossYawDeg);
+    XMVECTOR fwd = XMVectorSet(sinf(yawRad), 0.0f, cosf(yawRad), 0.0f);
+
+    XMFLOAT3 fwdF; XMStoreFloat3(&fwdF, fwd);
+    float windSpeed = bBoost ? 160.0f : 110.0f;
+
+    // 부스트 토글 또는 진행 방향이 크게 바뀌면 이미터 재생성 — emit 속도/방향이 갱신되도록
+    static bool s_lastBoost = false;
+    static XMFLOAT3 s_lastFwd = { 0, 0, 1 };
+    bool needRebuild = (s_lastBoost != bBoost);
+    {
+        float dotF = s_lastFwd.x * fwdF.x + s_lastFwd.z * fwdF.z;
+        if (dotF < 0.85f) needRebuild = true;  // ~30° 이상 변화
+    }
+
+    ParticleEmitter* pWind = (m_nFlightWindEmitterId >= 0)
+        ? m_pParticleSystem->GetEmitter(m_nFlightWindEmitterId) : nullptr;
+    if (pWind && needRebuild)
+    {
+        pWind->Stop();
+        m_pParticleSystem->RemoveEmitter(m_nFlightWindEmitterId);
+        m_nFlightWindEmitterId = -1;
+        pWind = nullptr;
+    }
+    s_lastBoost = bBoost;
+    s_lastFwd   = fwdF;
+
+    if (!pWind)
+    {
+        ParticleEmitterConfig cfg;
+        cfg.emissionRate = bBoost ? 200.0f : 110.0f;
+        cfg.burstCount   = 0;
+        cfg.minLifetime  = 0.40f;
+        cfg.maxLifetime  = 0.85f;
+        cfg.minStartSize = 0.45f;
+        cfg.maxStartSize = 1.05f;
+        cfg.minEndSize   = 0.0f;
+        cfg.maxEndSize   = 0.05f;
+        cfg.minVelocity  = { -fwdF.x * windSpeed - 3.0f, -3.0f, -fwdF.z * windSpeed - 3.0f };
+        cfg.maxVelocity  = { -fwdF.x * windSpeed + 3.0f,  3.0f, -fwdF.z * windSpeed + 3.0f };
+        cfg.startColor   = { 0.95f, 1.0f, 1.0f, 0.7f };
+        cfg.endColor     = { 0.55f, 0.85f, 1.0f, 0.0f };
+        cfg.gravity      = { 0,0,0 };
+        cfg.spawnRadius  = 12.0f;  // 더 넓은 범위 (시야 양옆까지 spread)
+        m_nFlightWindEmitterId = m_pParticleSystem->CreateEmitter(cfg, pPT->GetPosition());
+    }
+    else
+    {
+        // 플레이어 앞쪽 8단위에서 스폰 → 카메라 시야로 빠르게 흘러내려옴
+        XMVECTOR pp = XMLoadFloat3(&pPT->GetPosition());
+        XMVECTOR spawn = pp + fwd * 8.0f;
+        XMFLOAT3 spawnF; XMStoreFloat3(&spawnF, spawn);
+        pWind->SetPosition(spawnF);
+        pWind->Start();
+    }
+}
+
+void Scene::UpdateFlightBoss(float deltaTime)
+{
+    if (!m_pFlightBossDummy) return;
+    TransformComponent* pBT = m_pFlightBossDummy->GetTransform();
+    if (!pBT) return;
+
+    // 코스 곡선: 사인파 yaw 변동(-15° ~ +15°) — 단순 길찾기
+    m_fFlightCurveTime += deltaTime;
+    float targetYaw = sinf(m_fFlightCurveTime * 0.35f) * 15.0f;
+    float yawDelta = targetYaw - m_fFlightBossYawDeg;
+    m_fFlightBossYawDeg += yawDelta * fminf(1.0f, deltaTime * 1.5f);
+
+    // 보스 visual rotation: motion yaw + 180 — Demon mesh natural facing이 -Z이므로
+    // 모션 방향(+Z 계열)을 보려면 메시를 180 돌려야 함
+    pBT->SetRotation(0.0f, m_fFlightBossYawDeg + 180.0f, 0.0f);
+
+    // 모션 forward는 yaw로 직접 계산 (mesh rotation 보정과 무관하게 일관)
+    float yawRad = XMConvertToRadians(m_fFlightBossYawDeg);
+    XMVECTOR motionFwd = XMVectorSet(sinf(yawRad), 0.0f, cosf(yawRad), 0.0f);
+
+    XMFLOAT3 bp = pBT->GetPosition();
+    XMVECTOR bpv = XMLoadFloat3(&bp);
+    bpv = bpv + motionFwd * (m_fFlightBossSpeed * deltaTime);
+    XMStoreFloat3(&bp, bpv);
+    pBT->SetPosition(bp);
+
+    // ── 보스 기본 공격: 부채꼴 탄막 (속성별 색만 다름) ─────────
+    m_fFlightBossSkillTimer += deltaTime;
+    if (m_fFlightBossSkillTimer >= kFlightBossSkillCooldown && m_pPlayerGameObject)
+    {
+        m_fFlightBossSkillTimer = 0.0f;
+        FireFlightBossBarrage();
+    }
+
+    // 활성 탄환 갱신 (이동/충돌/수명)
+    UpdateFlightBossBullets(deltaTime);
+}
+
+void Scene::GetFlightBulletColors(ElementType e, XMFLOAT4& outStart, XMFLOAT4& outEnd) const
+{
+    // 속성별 탄막 색상 — 메커닉은 동일, 비주얼만 차별화
+    switch (e)
+    {
+    case ElementType::Fire:
+        outStart = { 1.0f, 0.7f, 0.2f, 1.0f };
+        outEnd   = { 0.8f, 0.2f, 0.05f, 0.0f };
+        break;
+    case ElementType::Water:
+        outStart = { 0.4f, 0.8f, 1.0f, 1.0f };
+        outEnd   = { 0.1f, 0.3f, 0.7f, 0.0f };
+        break;
+    case ElementType::Earth:
+        outStart = { 0.85f, 0.7f, 0.4f, 1.0f };
+        outEnd   = { 0.4f,  0.3f, 0.15f, 0.0f };
+        break;
+    case ElementType::Wind:
+    default:
+        outStart = { 0.85f, 1.0f, 0.95f, 1.0f };
+        outEnd   = { 0.45f, 0.85f, 0.7f, 0.0f };
+        break;
+    }
+}
+
+void Scene::FireFlightBossBarrage()
+{
+    if (!m_pFlightBossDummy || !m_pPlayerGameObject || !m_pParticleSystem) return;
+    TransformComponent* pBT = m_pFlightBossDummy->GetTransform();
+    if (!pBT) return;
+
+    XMFLOAT3 bossPos = pBT->GetPosition();
+    bossPos.y -= 2.0f;  // 가슴 높이
+
+    XMFLOAT3 playerPos = m_pPlayerGameObject->GetTransform()->GetPosition();
+    XMVECTOR toPlayer = XMVectorSubtract(XMLoadFloat3(&playerPos), XMLoadFloat3(&bossPos));
+    if (XMVectorGetX(XMVector3LengthSq(toPlayer)) < 0.01f)
+    {
+        // fallback: motion forward 반대(보스 뒤쪽) 방향으로
+        float yawRad = XMConvertToRadians(m_fFlightBossYawDeg);
+        toPlayer = XMVectorSet(-sinf(yawRad), 0.0f, -cosf(yawRad), 0.0f);
+    }
+    XMVECTOR baseDir = XMVector3Normalize(toPlayer);
+
+    XMFLOAT4 colStart, colEnd;
+    GetFlightBulletColors(m_eFlightBossElement, colStart, colEnd);
+
+    // 유체 VFX 정의 — 속성에 따라 색/궤도 자동 선택
+    FluidSkillVFXDef fluidDef = FluidSkillVFXManager::GetVFXDef(m_eFlightBossElement);
+    // 보스 탄막은 작고 빠르게 — 입자 수/반경 살짝 줄여서 5발 동시에도 부담 적게
+    fluidDef.particleCount = 80;
+    fluidDef.spawnRadius   = 0.5f;
+
+    const int N = kFlightBulletsPerVolley;
+    for (int i = 0; i < N; ++i)
+    {
+        // 부채꼴 각도: -fan ~ +fan 등분
+        float t = (N == 1) ? 0.0f : ((float)i / (float)(N - 1)) * 2.0f - 1.0f; // -1..+1
+        float angRad = XMConvertToRadians(kFlightBulletFanDeg * t);
+
+        // baseDir 을 worldUp 축 기준 angRad 회전
+        XMMATRIX yawRot = XMMatrixRotationY(angRad);
+        XMVECTOR dir = XMVector3TransformNormal(baseDir, yawRot);
+        dir = XMVector3Normalize(dir);
+
+        FlightBossBullet b;
+        b.pos = bossPos;
+        XMFLOAT3 d; XMStoreFloat3(&d, dir);
+        b.vel = { d.x * kFlightBulletSpeed, d.y * kFlightBulletSpeed, d.z * kFlightBulletSpeed };
+        b.lifeRemain = kFlightBulletLifetime;
+
+        // 유체 트레일 (적 전용 VFX 매니저 — 빌보드 렌더, SSF 제외)
+        b.fluidId = -1;
+        if (m_pEnemyFluidVFXManager)
+            b.fluidId = m_pEnemyFluidVFXManager->SpawnEffect(b.pos, d, fluidDef);
+
+        // 출발 순간 파티클 burst (속성색 임팩트감 추가)
+        if (m_pParticleSystem)
+        {
+            ParticleEmitterConfig cfg;
+            cfg.emissionRate = 0.0f;
+            cfg.burstCount   = 10;
+            cfg.minLifetime  = 0.10f;
+            cfg.maxLifetime  = 0.20f;
+            cfg.minStartSize = 0.4f;
+            cfg.maxStartSize = 0.8f;
+            cfg.minEndSize   = 0.0f;
+            cfg.maxEndSize   = 0.0f;
+            cfg.minVelocity  = { -3.0f, -3.0f, -3.0f };
+            cfg.maxVelocity  = {  3.0f,  3.0f,  3.0f };
+            cfg.startColor   = colStart;
+            cfg.endColor     = colEnd;
+            cfg.gravity      = { 0, 0, 0 };
+            cfg.spawnRadius  = 0.3f;
+            int eid = m_pParticleSystem->CreateEmitter(cfg, b.pos);
+            if (auto* pEm = m_pParticleSystem->GetEmitter(eid))
+            {
+                pEm->Burst(10);
+                pEm->Stop();
+            }
+        }
+
+        m_FlightBossBullets.push_back(b);
+    }
+
+    OutputDebugString(L"[FlightBoss] Fluid barrage volley fired\n");
+}
+
+void Scene::UpdateFlightBossBullets(float deltaTime)
+{
+    if (m_FlightBossBullets.empty()) return;
+
+    XMFLOAT3 playerPos = m_pPlayerGameObject
+        ? m_pPlayerGameObject->GetTransform()->GetPosition()
+        : XMFLOAT3{ 0, 0, 0 };
+    XMVECTOR pp = XMLoadFloat3(&playerPos);
+
+    for (auto it = m_FlightBossBullets.begin(); it != m_FlightBossBullets.end(); )
+    {
+        // 이동
+        it->pos.x += it->vel.x * deltaTime;
+        it->pos.y += it->vel.y * deltaTime;
+        it->pos.z += it->vel.z * deltaTime;
+        it->lifeRemain -= deltaTime;
+
+        // 유체 트레일 위치/방향 갱신
+        if (m_pEnemyFluidVFXManager && it->fluidId >= 0)
+        {
+            float invSpeed = 1.0f / (kFlightBulletSpeed > 0.0f ? kFlightBulletSpeed : 1.0f);
+            XMFLOAT3 dir = { it->vel.x * invSpeed, it->vel.y * invSpeed, it->vel.z * invSpeed };
+            m_pEnemyFluidVFXManager->TrackEffect(it->fluidId, it->pos, dir);
+        }
+
+        // 플레이어 충돌 (sphere)
+        XMVECTOR bp = XMLoadFloat3(&it->pos);
+        XMVECTOR diff = pp - bp;
+        float distSq = XMVectorGetX(XMVector3LengthSq(diff));
+        bool bHitPlayer = (distSq < kFlightBulletHitRadius * kFlightBulletHitRadius);
+
+        bool bExpired = (it->lifeRemain <= 0.0f);
+
+        if (bHitPlayer || bExpired)
+        {
+            // 유체 트레일 종료 — 피격은 수렴(impact), 자연 소멸은 stop
+            if (m_pEnemyFluidVFXManager && it->fluidId >= 0)
+            {
+                if (bHitPlayer)
+                    m_pEnemyFluidVFXManager->ImpactEffect(it->fluidId, it->pos);
+                else
+                    m_pEnemyFluidVFXManager->StopEffect(it->fluidId);
+            }
+
+            // 임팩트 burst — 유체 수렴 + 입자 분산으로 펀치감 강화 (피격 시만)
+            if (bHitPlayer && m_pParticleSystem)
+            {
+                XMFLOAT4 colStart, colEnd;
+                GetFlightBulletColors(m_eFlightBossElement, colStart, colEnd);
+                ParticleEmitterConfig cfg;
+                cfg.emissionRate = 0.0f;
+                cfg.burstCount   = 22;
+                cfg.minLifetime  = 0.12f;
+                cfg.maxLifetime  = 0.30f;
+                cfg.minStartSize = 0.55f;
+                cfg.maxStartSize = 1.15f;
+                cfg.minEndSize   = 0.0f;
+                cfg.maxEndSize   = 0.05f;
+                cfg.minVelocity  = { -5.0f, -5.0f, -5.0f };
+                cfg.maxVelocity  = {  5.0f,  5.0f,  5.0f };
+                cfg.startColor   = colStart;
+                cfg.endColor     = colEnd;
+                cfg.gravity      = { 0, 0, 0 };
+                cfg.spawnRadius  = 0.5f;
+                int eid = m_pParticleSystem->CreateEmitter(cfg, it->pos);
+                if (auto* pEm = m_pParticleSystem->GetEmitter(eid))
+                {
+                    pEm->Burst(22);
+                    pEm->Stop();
+                }
+            }
+
+            it = m_FlightBossBullets.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
 }

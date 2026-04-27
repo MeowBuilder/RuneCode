@@ -15,6 +15,9 @@ public:
 
     // Set camera lens properties
     void SetLens(float fovY, float aspect, float zn, float zf);
+    // Adjust FOV (degrees) keeping aspect/near/far. Used for boost punch.
+    void SetFovDegrees(float fovDeg);
+    float GetBaseFovDeg() const { return m_fBaseFovDeg; }
 
     // Update camera based on mouse input
     void Update(float mouseDeltaX, float mouseDeltaY, float scrollDelta, float deltaTime = 0.0f,
@@ -24,6 +27,11 @@ public:
     // Free camera toggle
     void ToggleFreeCam();
     bool IsFreeCam() const { return m_bFreeCam; }
+
+    // Flight mode (3rd-person boss-orbit follow). Pass nullptr to exit.
+    void SetFlightMode(bool bEnabled, GameObject* pFlightCenter = nullptr);
+    bool IsFlightMode() const { return m_bFlightMode; }
+    GameObject* GetFlightCenter() const { return m_pFlightCenter; }
 
     // Get camera matrices
     const DirectX::XMFLOAT4X4& GetViewMatrix() const { return m_viewMatrix; }
@@ -58,6 +66,12 @@ private:
     DirectX::XMFLOAT4X4 m_viewMatrix;
     DirectX::XMFLOAT4X4 m_projectionMatrix;
 
+    // Lens cache (for runtime FOV adjustment)
+    float m_fBaseFovDeg = 60.0f;
+    float m_fAspect = 1.0f;
+    float m_fNearZ = 0.1f;
+    float m_fFarZ = 500.0f;
+
     // Camera position and orientation
     DirectX::XMFLOAT3 m_position;
 
@@ -85,6 +99,16 @@ private:
     float m_freePitch = -30.0f;  // degrees (looking down)
     float m_freeMoveSpeed = 40.0f;
     float m_freeRotSpeed  = 0.15f;
+
+    // Flight mode (보스 중심 3인칭 비행 카메라)
+    bool m_bFlightMode = false;
+    GameObject* m_pFlightCenter = nullptr;   // 보스 (lookAt 가중치 대상)
+    float m_fFlightCamBack    = 20.0f;       // 플레이어 뒤 거리
+    float m_fFlightCamHeight  = 5.0f;        // 플레이어 위 높이
+    float m_fFlightLookBias   = 0.35f;       // lookAt 보스 쪽 가중치(0=플레이어, 1=보스)
+    float m_fFlightAimYaw     = 0.0f;        // 마우스 누적 yaw 보정(deg)
+    float m_fFlightAimPitch   = 0.0f;        // 마우스 누적 pitch 보정(deg)
+    float m_fFlightAimSpeed   = 0.12f;       // 마우스 감도
 
     // Cinematic mode
     bool m_bCinematic = false;

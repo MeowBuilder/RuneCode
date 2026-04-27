@@ -25,6 +25,13 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
     TransformComponent* pTransform = m_pOwner->GetTransform();
     if (!pTransform) return;
 
+    // === Flight Mode (4스테이지 바람 보스) — 중력/지면판정/스킬/네트워크 모두 우회 ===
+    if (m_bFlightMode)
+    {
+        UpdateFlightMode(deltaTime, pInputSystem, pCamera);
+        return;
+    }
+
     // Hit flash 페이드 — 대쉬 중이 아닐 때만 (대쉬는 자기 플래시 적용)
     if (m_fHitFlashTimer > 0.0f)
     {
@@ -346,6 +353,112 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
     }
 
     UpdateAnimation(deltaTime, bMoving, bAttackTriggered, bDashStarted, bDashing);
+}
+
+void PlayerComponent::EnterFlightMode(GameObject* pFlightCenter)
+{
+    if (!pFlightCenter || !m_pOwner || !m_pOwner->GetTransform()) return;
+    m_bFlightMode = true;
+    m_pFlightCenter = pFlightCenter;
+
+    // 오프셋 0 으로 시작 (보스 정 뒤에서 출발)
+    m_fFlightOffsetX = 0.0f;
+    m_fFlightOffsetY = 0.0f;
+    m_fFlightOffsetXVel = 0.0f;
+    m_fFlightOffsetYVel = 0.0f;
+
+    // 중력/지면 상태 리셋
+    m_fVelocityY = 0.0f;
+    m_bOnGround  = false;
+    OutputDebugString(L"[Player] Flight Mode ENTER (rail)\n");
+}
+
+void PlayerComponent::ExitFlightMode()
+{
+    if (!m_bFlightMode) return;
+    m_bFlightMode = false;
+    m_pFlightCenter = nullptr;
+    m_fVelocityY = 0.0f;
+    m_bOnGround  = false;
+    OutputDebugString(L"[Player] Flight Mode EXIT\n");
+}
+
+void PlayerComponent::UpdateFlightMode(float deltaTime, InputSystem* pInputSystem, CCamera* pCamera)
+{
+    if (!m_pFlightCenter || !m_pFlightCenter->GetTransform()) { ExitFlightMode(); return; }
+    TransformComponent* pT = m_pOwner->GetTransform();
+    if (!pT) return;
+
+    // 입력 (D=오른쪽, A=왼쪽, W=위, S=아래)
+    float xInput = 0.0f, yInput = 0.0f;
+    bool bBoost = pInputSystem && pInputSystem->IsKeyDown(VK_SHIFT);
+    if (pInputSystem)
+    {
+        if (pInputSystem->IsKeyDown('D')) xInput += 1.0f;
+        if (pInputSystem->IsKeyDown('A')) xInput -= 1.0f;
+        if (pInputSystem->IsKeyDown('W')) yInput += 1.0f;
+        if (pInputSystem->IsKeyDown('S')) yInput -= 1.0f;
+    }
+
+    // 가속 + 항력 (선형 속도 적분)
+    float accelMult = bBoost ? kFlightBoostMult : 1.0f;
+    float maxSpd    = kFlightMaxSpeed * accelMult;
+    m_fFlightOffsetXVel += xInput * kFlightAccel * accelMult * deltaTime;
+    m_fFlightOffsetYVel += yInput * kFlightAccel * accelMult * deltaTime;
+    float drag = expf(-kFlightDrag * deltaTime);
+    m_fFlightOffsetXVel *= drag;
+    m_fFlightOffsetYVel *= drag;
+    m_fFlightOffsetXVel = max(-maxSpd, min(maxSpd, m_fFlightOffsetXVel));
+    m_fFlightOffsetYVel = max(-maxSpd, min(maxSpd, m_fFlightOffsetYVel));
+
+    // 적분 + 클램프 (경계 도달 시 속도 리셋)
+    m_fFlightOffsetX += m_fFlightOffsetXVel * deltaTime;
+    m_fFlightOffsetY += m_fFlightOffsetYVel * deltaTime;
+    if (m_fFlightOffsetX >  kFlightOffsetXMax) { m_fFlightOffsetX =  kFlightOffsetXMax; m_fFlightOffsetXVel = 0.0f; }
+    if (m_fFlightOffsetX < -kFlightOffsetXMax) { m_fFlightOffsetX = -kFlightOffsetXMax; m_fFlightOffsetXVel = 0.0f; }
+    if (m_fFlightOffsetY >  kFlightOffsetYMax) { m_fFlightOffsetY =  kFlightOffsetYMax; m_fFlightOffsetYVel = 0.0f; }
+    if (m_fFlightOffsetY <  kFlightOffsetYMin) { m_fFlightOffsetY =  kFlightOffsetYMin; m_fFlightOffsetYVel = 0.0f; }
+
+    // 보스 forward / right 벡터 (보스 GameObject 의 회전 사용)
+    // 보스 mesh가 motion 방향과 +180 회전 보정되어 있어 GetLook이 motion의 반대 방향임 → 부호 반전
+    XMFLOAT3 bp = m_pFlightCenter->GetTransform()->GetPosition();
+    XMVECTOR bossForward = m_pFlightCenter->GetTransform()->GetLook();
+    bossForward = XMVectorScale(bossForward, -1.0f);
+    bossForward = XMVectorSetY(bossForward, 0.0f);
+    if (XMVectorGetX(XMVector3LengthSq(bossForward)) < 0.001f)
+        bossForward = XMVectorSet(0, 0, 1, 0);
+    bossForward = XMVector3Normalize(bossForward);
+    XMVECTOR worldUp = XMVectorSet(0, 1, 0, 0);
+    XMVECTOR bossRight = XMVector3Normalize(XMVector3Cross(worldUp, bossForward));
+
+    // 플레이어 = 보스 - forward*trail + right*offsetX + up*offsetY
+    XMVECTOR bossPos = XMLoadFloat3(&bp);
+    XMVECTOR playerPos = bossPos
+                       - bossForward * kFlightTrailDist
+                       + bossRight   * m_fFlightOffsetX
+                       + worldUp     * m_fFlightOffsetY;
+    XMFLOAT3 newPos;
+    XMStoreFloat3(&newPos, playerPos);
+    pT->SetPosition(newPos);
+
+    // 회전: 보스와 같은 방향(정면)을 바라봄
+    float facingYaw = XMConvertToDegrees(atan2f(XMVectorGetX(bossForward), XMVectorGetZ(bossForward)));
+    const XMFLOAT3& curRot = pT->GetRotation();
+    pT->SetRotation(curRot.x, facingYaw, curRot.z);
+
+    // 좌클릭 사격 (히트스캔)
+    if (pInputSystem && pCamera && pInputSystem->IsMouseButtonPressed(0))
+    {
+        Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
+        if (pScene)
+        {
+            XMFLOAT3 muzzlePos = newPos;
+            muzzlePos.y += 1.6f;
+            XMVECTOR camLook = pCamera->GetLookDirection();
+            XMFLOAT3 dirF; XMStoreFloat3(&dirF, XMVector3Normalize(camLook));
+            pScene->FlightShoot(muzzlePos, dirF);
+        }
+    }
 }
 
 void PlayerComponent::EnableFallZone(const XMFLOAT3& safeCenter, const XMFLOAT3& safeExtents)

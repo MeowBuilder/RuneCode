@@ -225,6 +225,52 @@ private:
     CRoom* m_pCurrentRoom = nullptr; // Pointer to the current active room
     int m_nRoomCount = 0; // Room counter for tracking progression
 
+    // Flight prototype (4스테이지 바람 보스 레일 슈팅) — F6 토글
+    GameObject* m_pFlightBossDummy = nullptr;
+    float m_fFlightBossSpeed = 22.0f;       // 보스 전진 속도 (m/s)
+    float m_fFlightBossYawDeg = 0.0f;       // 보스 진행 방향 yaw (deg). +Z 기준
+    float m_fFlightCurveTime  = 0.0f;       // 곡선 코스 누적 시간
+    float m_fFlightBossHitFlashTimer = 0.0f; // 사격 피격 시 보스 플래시
+    int   m_nFlightHitCount = 0;             // 누적 명중 (HUD/디버그)
+    int   m_nFlightWindEmitterId = -1;       // 속도감 윈드 라인 이미터
+    float m_fFlightFovOffsetCur = 0.0f;      // 현재 적용된 FOV 보정(deg)
+    float m_fFlightBossSkillTimer = 0.0f;    // 보스 기본 공격 쿨다운 (s)
+    static constexpr float kFlightHitFlashDuration = 0.18f;
+    static constexpr float kFlightBaseFovOffset    = 6.0f;  // 비행 진입 시 항상 +6deg
+    static constexpr float kFlightBoostFovOffset   = 22.0f; // 부스트 시 +22deg (기본+16)
+    static constexpr float kFlightBossSkillCooldown = 2.2f; // 보스 기본 공격 발사 주기(s)
+
+    // 보스 기본 공격 = 부채꼴 탄막 (속성별 색만 다름, 메커닉은 동일)
+    struct FlightBossBullet
+    {
+        XMFLOAT3 pos;
+        XMFLOAT3 vel;
+        float    lifeRemain;
+        int      fluidId;  // FluidSkillVFXManager 슬롯 (유체 트레일)
+    };
+    std::vector<FlightBossBullet> m_FlightBossBullets;
+    ElementType m_eFlightBossElement = ElementType::Wind;
+    static constexpr int   kFlightBulletsPerVolley = 5;
+    static constexpr float kFlightBulletSpeed      = 38.0f;
+    static constexpr float kFlightBulletLifetime   = 2.5f;
+    static constexpr float kFlightBulletFanDeg     = 22.0f; // 부채꼴 반각
+    static constexpr float kFlightBulletHitRadius  = 1.6f;  // 플레이어 피격 반경
+    void FireFlightBossBarrage();
+    void UpdateFlightBossBullets(float deltaTime);
+    void GetFlightBulletColors(ElementType e, XMFLOAT4& outStart, XMFLOAT4& outEnd) const;
+    void SpawnFlightBossDummy(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList);
+    void ToggleFlightMode(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList);
+    void UpdateFlightBoss(float deltaTime);
+    void UpdateFlightFX(float deltaTime, InputSystem* pInputSystem);
+
+public:
+    // 사격: 외부(PlayerComponent)에서 호출
+    void FlightShoot(const XMFLOAT3& muzzlePos, const XMFLOAT3& dirNormalized);
+    int  GetFlightHitCount() const { return m_nFlightHitCount; }
+    bool IsFlightHUDActive() const;
+
+private:
+
     // Interaction Cube
     GameObject* m_pInteractionCube = nullptr;
     bool m_bInteractionCubeActive = true;

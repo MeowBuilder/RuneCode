@@ -21,7 +21,18 @@ CCamera::~CCamera()
 
 void CCamera::SetLens(float fovY, float aspect, float zn, float zf)
 {
+    m_fBaseFovDeg = XMConvertToDegrees(fovY);
+    m_fAspect = aspect;
+    m_fNearZ  = zn;
+    m_fFarZ   = zf;
     XMMATRIX P = XMMatrixPerspectiveFovLH(fovY, aspect, zn, zf);
+    XMStoreFloat4x4(&m_projectionMatrix, P);
+}
+
+void CCamera::SetFovDegrees(float fovDeg)
+{
+    fovDeg = max(20.0f, min(120.0f, fovDeg));
+    XMMATRIX P = XMMatrixPerspectiveFovLH(XMConvertToRadians(fovDeg), m_fAspect, m_fNearZ, m_fFarZ);
     XMStoreFloat4x4(&m_projectionMatrix, P);
 }
 
@@ -42,9 +53,91 @@ void CCamera::ToggleFreeCam()
     }
 }
 
+void CCamera::SetFlightMode(bool bEnabled, GameObject* pFlightCenter)
+{
+    m_bFlightMode = bEnabled;
+    m_pFlightCenter = bEnabled ? pFlightCenter : nullptr;
+    m_fFlightAimYaw = 0.0f;
+    m_fFlightAimPitch = 0.0f;
+    OutputDebugString(bEnabled ? L"[Camera] FlightMode ON\n" : L"[Camera] FlightMode OFF\n");
+}
+
 void CCamera::Update(float mouseDeltaX, float mouseDeltaY, float scrollDelta, float deltaTime,
                      bool bForward, bool bBackward, bool bLeft, bool bRight, bool bUp, bool bDown)
 {
+    // === Flight Mode (보스 중심 3인칭 비행 카메라) ===
+    if (m_bFlightMode && m_pTarget)
+    {
+        // 마우스 = 조준점 누적 보정 (자동 복귀 살짝)
+        m_fFlightAimYaw   += mouseDeltaX * m_fFlightAimSpeed;
+        m_fFlightAimPitch += mouseDeltaY * m_fFlightAimSpeed;
+        m_fFlightAimYaw   = max(-45.0f, min(45.0f, m_fFlightAimYaw));
+        m_fFlightAimPitch = max(-30.0f, min(30.0f, m_fFlightAimPitch));
+        // 자동 복귀 (감쇠)
+        if (deltaTime > 0.0f)
+        {
+            float decay = expf(-2.0f * deltaTime);
+            m_fFlightAimYaw   *= decay;
+            m_fFlightAimPitch *= decay;
+        }
+
+        TransformComponent* pPlayerT = m_pTarget->GetTransform();
+        XMVECTOR playerPos = XMLoadFloat3(&pPlayerT->GetPosition());
+        XMVECTOR bossPos   = m_pFlightCenter
+            ? XMLoadFloat3(&m_pFlightCenter->GetTransform()->GetPosition())
+            : playerPos + XMVectorSet(0, 0, 30, 0);
+
+        // "비행 forward" = 보스의 진행 방향
+        // 보스 mesh가 motion과 +180 회전 보정되어 있어 GetLook이 motion 반대 방향 → 부호 반전
+        XMVECTOR flightForward = m_pFlightCenter
+            ? XMVectorScale(m_pFlightCenter->GetTransform()->GetLook(), -1.0f)
+            : XMVectorSet(0, 0, 1, 0);
+        flightForward = XMVectorSetY(flightForward, 0.0f);
+        if (XMVectorGetX(XMVector3LengthSq(flightForward)) < 0.001f)
+            flightForward = XMVectorSet(0, 0, 1, 0);
+        flightForward = XMVector3Normalize(flightForward);
+
+        // 마우스 보정용 회전 (yaw 만 forward 회전, pitch 는 height 보정으로)
+        float aimYawRad = XMConvertToRadians(m_fFlightAimYaw);
+        XMMATRIX yawRot = XMMatrixRotationY(aimYawRad);
+        XMVECTOR adjustedForward = XMVector3TransformNormal(flightForward, yawRot);
+
+        // 카메라 = 플레이어 - forward*back + up*height(+pitch 보정)
+        XMVECTOR worldUp = XMVectorSet(0, 1, 0, 0);
+        float pitchOffset = -m_fFlightAimPitch * 0.08f;
+        XMVECTOR camPos = playerPos
+            - adjustedForward * m_fFlightCamBack
+            + worldUp * (m_fFlightCamHeight + pitchOffset);
+
+        // LookAt = 플레이어보다 약간 앞쪽 (forward * lookAhead) + 보스 쪽 약간 보정
+        // 이러면 카메라가 항상 진행 방향을 바라보고, 보스도 화면 중앙에 잡힘
+        const float kLookAhead = 30.0f;
+        XMVECTOR forwardLook = playerPos + flightForward * kLookAhead;
+        XMVECTOR lookAtPoint = forwardLook + (bossPos - forwardLook) * m_fFlightLookBias
+                             + worldUp * 1.5f;
+
+        // 카메라 셰이크 적용
+        if (m_bShaking && deltaTime > 0.0f)
+        {
+            m_fShakeTimer += deltaTime;
+            if (m_fShakeTimer >= m_fShakeDuration) StopShake();
+            else
+            {
+                float fRem = 1.0f - (m_fShakeTimer / m_fShakeDuration);
+                float fInt = m_fShakeIntensity * fRem;
+                m_shakeOffset.x = ((float)(rand() % 1000) / 500.0f - 1.0f) * fInt;
+                m_shakeOffset.y = ((float)(rand() % 1000) / 500.0f - 1.0f) * fInt;
+                m_shakeOffset.z = ((float)(rand() % 1000) / 500.0f - 1.0f) * fInt * 0.5f;
+            }
+            camPos = camPos + XMLoadFloat3(&m_shakeOffset);
+        }
+
+        XMStoreFloat3(&m_position, camPos);
+        XMMATRIX view = XMMatrixLookAtLH(camPos, lookAtPoint, worldUp);
+        XMStoreFloat4x4(&m_viewMatrix, view);
+        return;
+    }
+
     // === Free Camera Mode ===
     if (m_bFreeCam)
     {
