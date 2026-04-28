@@ -937,6 +937,15 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
                          Dx12App::GetInstance()->GetCommandList());
     }
 
+    // F7: Toon shading 토글 (원신풍 셀 셰이딩 ON/OFF — 적용 전후 비교용)
+    if (pInputSystem && pInputSystem->IsKeyPressed(VK_F7))
+    {
+        m_bToonEnabled = !m_bToonEnabled;
+        OutputDebugString(m_bToonEnabled
+            ? L"[Toon] Cel shading ON (Genshin style)\n"
+            : L"[Toon] Cel shading OFF (original Phong)\n");
+    }
+
     // 비행 모드 활성 시 보스 전진 + 연출 갱신
     if (m_pFlightBossDummy && m_pPlayerGameObject)
     {
@@ -1188,6 +1197,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
 
     // 스테이지 테마 (셰이더 caustics/fog 분기용)
     m_pcbMappedPass->m_nStageTheme = static_cast<int>(m_eCurrentTheme);
+    m_pcbMappedPass->m_nToonEnabled = m_bToonEnabled ? 1 : 0;
 
     // Update SpotLight parameters based on player position
     if (m_pPlayerGameObject)

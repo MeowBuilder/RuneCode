@@ -74,7 +74,8 @@ cbuffer cbPass : register(b1)
     WaveParams g_Waves[5];
 
     // Stage theme: 0=Fire, 1=Water, 2=Earth, 3=Grass — drives caustics/fog
-    int g_StageTheme; int _themePad1; int _themePad2; int _themePad3;
+    // g_ToonEnabled: 0=original Phong, 1=Genshin-style cel shading (F7 toggle)
+    int g_StageTheme; int g_ToonEnabled; int _themePad2; int _themePad3;
 };
 
 Texture2D gAlbedoMap    : register(t0);
@@ -377,6 +378,68 @@ PS_INPUT VS(VS_INPUT input)
     return output;
 }
 
+// ========================================================================
+// Outline Pass (Inverted Hull) — Genshin-style outline.
+// Renders extruded back faces in solid color; main pass overdraws the
+// interior, leaving only the silhouette ring visible.
+//
+// When g_ToonEnabled == 0, vertices are pushed outside NDC so the entire
+// pass collapses to nothing (no need to skip from C++).
+// ========================================================================
+
+struct VS_OUTLINE_OUTPUT
+{
+    float4 position : SV_POSITION;
+};
+
+VS_OUTLINE_OUTPUT VS_Outline(VS_INPUT input)
+{
+    VS_OUTLINE_OUTPUT output;
+
+    // Outline only on skinned characters/enemies (the first approach that
+    // visibly worked). World geometry has unpredictable winding so applying
+    // inverted hull there gives the "all-black floor" failure mode.
+    if (g_ToonEnabled == 0 || !bIsSkinned)
+    {
+        output.position = float4(2.0f, 2.0f, 2.0f, 1.0f);
+        return output;
+    }
+
+    float3 posL    = float3(0.0f, 0.0f, 0.0f);
+    float3 normalL = float3(0.0f, 0.0f, 0.0f);
+
+    [unroll]
+    for (int i = 0; i < 4; ++i)
+    {
+        int   idx = input.boneIndices[i];
+        float w   = input.boneWeights[i];
+
+        if (w > 0.0f)
+        {
+            posL    += w * mul(float4(input.position, 1.0f), gBoneTransforms[idx]).xyz;
+            normalL += w * mul(input.normal, (float3x3)gBoneTransforms[idx]);
+        }
+    }
+
+    float4 worldPos    = mul(float4(posL, 1.0f), World);
+    float3 worldNormal = normalize(mul(normalL, (float3x3)World));
+
+    // Canonical inverted hull: push outward in world space along the normal.
+    // Scale by clip-w to keep the on-screen thickness roughly constant.
+    float4 clipFirst = mul(worldPos, ViewProj);
+    float thickness  = 0.0040f * clipFirst.w;
+    worldPos.xyz += worldNormal * thickness;
+
+    output.position = mul(worldPos, ViewProj);
+    return output;
+}
+
+float4 PS_Outline(VS_OUTLINE_OUTPUT input) : SV_TARGET
+{
+    // Near-black with faint cool tint.
+    return float4(0.02f, 0.02f, 0.04f, 1.0f);
+}
+
 // Shadow Pass Vertex Shader (depth only)
 float4 VS_Shadow(VS_INPUT input) : SV_POSITION
 {
@@ -524,13 +587,58 @@ float4 PS(PS_INPUT input) : SV_TARGET
     float shadowFactor = CalculateShadow(input.posLightSpace);
 
     // --- Directional Light Calculation ---
-    float directionalDiffuseFactor = saturate(dot(shadingNormal, -g_LightDirection));
-    float3 vHalfDirectional = normalize(vToCamera + (-g_LightDirection)); // Half vector for directional specular
-    float directionalSpecularFactor = pow(max(dot(vHalfDirectional, shadingNormal), 0.0f), specPower);
+    // F7 toggles between original Phong and Genshin-style cel shading.
+    float NdotL = saturate(dot(shadingNormal, -g_LightDirection));
+    float3 vHalfDirectional = normalize(vToCamera + (-g_LightDirection));
+    float specRaw = pow(max(dot(vHalfDirectional, shadingNormal), 0.0f), specPower);
 
-    float4 directionalDiffuse = directionalDiffuseFactor * g_LightColor * baseColor;
-    float4 directionalSpecular = directionalSpecularFactor * g_LightColor * gMaterial.m_cSpecular;
-    float4 directionalTotal = (directionalDiffuse + directionalSpecular) * shadowFactor;  // Apply shadow
+    // Surfaces that should bypass cel even when toon is on:
+    //   - Deep lava plane (Y < -2): emissive, cel boundary makes it look split
+    //   - Lava-tagged ground tiles when their stage env effects are running
+    //     (warmth/cracks already stylize the look — adding cel cool tint clashes)
+    bool isDeepLavaPlane = bIsLava && (input.worldPosition.y < -2.0f);
+
+    float4 directionalTotal;
+    if (g_ToonEnabled != 0 && !isDeepLavaPlane)
+    {
+        // ── Genshin cel path ──
+        // Combine NdotL with shadow before quantizing — single hard boundary
+        // handles self-shadow and cast-shadow uniformly.
+        float lightTerm = NdotL * shadowFactor;
+        // Tight cel band — both characters and world get a hard boundary.
+        // Wider bands wash out so much that toon mode looks identical to Phong
+        // on flat surfaces. Sharp boundary is the whole point.
+        float celBandLo = bIsSkinned ? 0.46f : 0.44f;
+        float celBandHi = bIsSkinned ? 0.54f : 0.52f;
+        float celDiffuse = smoothstep(celBandLo, celBandHi, lightTerm);
+
+        // Cool shadow tint — characters get full lilac, world gets a milder
+        // version so it doesn't fight stage atmospheric tints, but still cool
+        // enough to read as "cel shadow" not just "darker albedo".
+        float3 shadowTint = bIsSkinned ? float3(0.62f, 0.68f, 0.95f)
+                                       : float3(0.62f, 0.66f, 0.88f);
+        // Skinned characters get a brighter shadow side so their albedo (often
+        // dark cloth/skin tones) doesn't crush to near-black after the global
+        // contrast pop applied later.
+        float shadowMul   = bIsSkinned ? 0.60f : 0.45f;
+        float3 litRGB    = baseColor.rgb * g_LightColor.rgb * 0.85f;
+        float3 shadowRGB = baseColor.rgb * shadowTint * shadowMul;
+        float3 dirDiffuseRGB = lerp(shadowRGB, litRGB, celDiffuse);
+
+        // Hard specular: sharp cutoff masked by celDiffuse so it never blooms
+        // in shadow.
+        float specMask = smoothstep(0.40f, 0.55f, specRaw) * celDiffuse;
+        float3 dirSpecRGB = specMask * g_LightColor.rgb * gMaterial.m_cSpecular.rgb;
+
+        directionalTotal = float4(dirDiffuseRGB + dirSpecRGB, 0.0f);
+    }
+    else
+    {
+        // ── Original Phong path (also used for deep lava plane) ──
+        float4 dDiffuse  = NdotL * g_LightColor * baseColor;
+        float4 dSpecular = specRaw * g_LightColor * gMaterial.m_cSpecular;
+        directionalTotal = (dDiffuse + dSpecular) * shadowFactor;
+    }
 
     // --- Point Light Calculation ---
     float3 lightVec = g_PointLightPosition - input.worldPosition;
@@ -548,7 +656,9 @@ float4 PS(PS_INPUT input) : SV_TARGET
     float4 pointTotal = pointDiffuse + pointSpecular;
     
     // --- Ambient Light Calculation ---
-    float4 ambient = g_AmbientLight * gMaterial.m_cAmbient * albedoColor; // Apply texture to ambient too
+    // In cel mode reduced — full ambient washes out the hard light/shadow boundary.
+    float ambientScale = (g_ToonEnabled != 0) ? 0.30f : 1.00f;
+    float4 ambient = g_AmbientLight * gMaterial.m_cAmbient * albedoColor * ambientScale;
     
     // Final color is the sum of all light components + emissive
     // Emission Map이 있으면 _EmissionColor * EmissionMap, 없으면 _EmissionColor 그대로
@@ -613,6 +723,19 @@ float4 PS(PS_INPUT input) : SV_TARGET
 
             finalColor += torchDiffuse + torchSpecular;
         }
+    }
+
+    // --- Genshin-style Rim Light (characters only) ---
+    // Restricted to skinned meshes — environment rim catches odd grazing
+    // angles on horizontal floors (lava plane, water bottom) and looks weird.
+    // Genshin itself only rim-lights characters; world geometry stays flat.
+    if (g_ToonEnabled != 0 && bIsSkinned)
+    {
+        float rim = 1.0f - saturate(dot(shadingNormal, vToCamera));
+        // Bias toward lit side so rim reads as light wrap, not pure fresnel.
+        float rimWeight = NdotL * 0.65f + 0.35f;
+        float rimMask = smoothstep(0.55f, 0.95f, rim) * rimWeight;
+        finalColor.rgb += float3(1.00f, 0.95f, 0.85f) * rimMask * 0.55f;
     }
 
     if (bIsWater)
@@ -761,6 +884,23 @@ float4 PS(PS_INPUT input) : SV_TARGET
             float crackBoost = 0.55f + 0.45f * tileMask;
             finalColor.rgb += crackColor * cracks * crackBoost * slopeMul * 0.40f;
         }
+    }
+
+    // --- Toon final-color grading (saturation + contrast pop) ---
+    // Stage envrironment effects (caustics, lava cracks, fog) overwhelm the
+    // cel boundary on flat lit surfaces. A global saturation+contrast bump on
+    // toon mode makes the difference visible everywhere, not just on shadow
+    // boundaries.
+    if (g_ToonEnabled != 0)
+    {
+        float lum = dot(finalColor.rgb, float3(0.299f, 0.587f, 0.114f));
+        // Saturation 1.35× — cartoon-y vivid colors
+        finalColor.rgb = lerp(float3(lum, lum, lum), finalColor.rgb, 1.35f);
+        // Contrast 1.10× around 0.42 pivot — pivot lifted so dark areas
+        // (cel-shaded character body) don't crush to black.
+        // max() (not saturate) preserves HDR > 1 so bloom still picks up
+        // emissive/caustic peaks.
+        finalColor.rgb = max((finalColor.rgb - 0.42f) * 1.10f + 0.42f, 0.0f);
     }
 
     // Hit Flash: rim-based white outline flash + additive bloom pop

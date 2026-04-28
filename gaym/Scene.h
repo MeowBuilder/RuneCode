@@ -95,7 +95,8 @@ struct PassConstants
     WaveParams m_Waves[5];
 
     // 스테이지 테마: 0=Fire, 1=Water, 2=Earth, 3=Grass — 셰이더에서 caustics/fog 결정
-    int m_nStageTheme; int m_nThemePad1; int m_nThemePad2; int m_nThemePad3;
+    // m_nToonEnabled: 0=원본 Phong, 1=원신풍 셀 셰이딩 (F7로 토글)
+    int m_nStageTheme; int m_nToonEnabled; int m_nThemePad2; int m_nThemePad3;
 };
 
 // Include TorchSystem after PassConstants is defined (avoid circular include)
@@ -201,6 +202,7 @@ private:
     float m_fLastDeltaTime = 0.016f;
     bool m_bInBossRoom = false;  // 보스 룸 여부 (클리어 시 다음 스테이지 전환)
     StageTheme m_eCurrentTheme = StageTheme::Fire; // 현재 스테이지 테마
+    bool m_bToonEnabled = true;  // F7로 토글: 원신풍 셀 셰이딩 (기본 ON)
     GameObject* m_pLavaPlane = nullptr; // 용암 바닥 평면
     GameObject* m_pWaterPlane = nullptr; // 물 바닥 평면
     GameObject* m_pRockPlane = nullptr; // 바위/동굴 바닥 평면 (Earth)

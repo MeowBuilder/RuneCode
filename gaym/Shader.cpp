@@ -36,6 +36,15 @@ void Shader::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_VIRTUAL_A
     // Set the shadow map SRV for root parameter 3
     pCommandList->SetGraphicsRootDescriptorTable(3, shadowSrvHandle);
 
+    // 0. Outline pass — 메인 패스 직전에 그려야 silhouette만 남음.
+    //    g_ToonEnabled=0 이면 VS가 정점을 절두체 밖으로 보내 자동 무효화.
+    pCommandList->SetPipelineState(m_pd3dOutlinePSO.Get());
+    for (auto& pRenderComp : m_vRenderComponents)
+    {
+        if (!pRenderComp->IsTransparent() && !pRenderComp->IsOverlay())
+            pRenderComp->Render(pCommandList);
+    }
+
     // 1. Render opaque objects first (인디케이터/투명 제외)
     pCommandList->SetPipelineState(m_pd3dPipelineState.Get());
     for (auto& pRenderComp : m_vRenderComponents)
@@ -303,7 +312,7 @@ void Shader::Build(ID3D12Device* pDevice)
     CHECK_HR(D3D12SerializeRootSignature(&d3dRootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &pd3dSignatureBlob, &pd3dErrorBlob));
     CHECK_HR(pDevice->CreateRootSignature(0, pd3dSignatureBlob->GetBufferPointer(), pd3dSignatureBlob->GetBufferSize(), __uuidof(ID3D12RootSignature), (void**)&m_pd3dRootSignature));
 
-    ComPtr<ID3DBlob> vsBlob, psBlob, vsShadowBlob;
+    ComPtr<ID3DBlob> vsBlob, psBlob, vsShadowBlob, vsOutlineBlob, psOutlineBlob;
     UINT compileFlags = 0;
 #if defined(_DEBUG)
     compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
@@ -311,6 +320,8 @@ void Shader::Build(ID3D12Device* pDevice)
     CHECK_HR(D3DCompileFromFile(L"shaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS", "vs_5_1", compileFlags, 0, &vsBlob, &pd3dErrorBlob));
     CHECK_HR(D3DCompileFromFile(L"shaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS", "ps_5_1", compileFlags, 0, &psBlob, &pd3dErrorBlob));
     CHECK_HR(D3DCompileFromFile(L"shaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS_Shadow", "vs_5_1", compileFlags, 0, &vsShadowBlob, &pd3dErrorBlob));
+    CHECK_HR(D3DCompileFromFile(L"shaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "VS_Outline", "vs_5_1", compileFlags, 0, &vsOutlineBlob, &pd3dErrorBlob));
+    CHECK_HR(D3DCompileFromFile(L"shaders.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE, "PS_Outline", "ps_5_1", compileFlags, 0, &psOutlineBlob, &pd3dErrorBlob));
 
     D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
     {
@@ -378,4 +389,13 @@ void Shader::Build(ID3D12Device* pDevice)
     indicatorPsoDesc.DepthStencilState.DepthFunc      = D3D12_COMPARISON_FUNC_LESS;
     indicatorPsoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
     CHECK_HR(pDevice->CreateGraphicsPipelineState(&indicatorPsoDesc, __uuidof(ID3D12PipelineState), (void**)&m_pd3dIndicatorPSO));
+
+    // Outline PSO — Inverted Hull (월드스페이스 normal 푸시). Cull=FRONT 로
+    // 카메라 뒤쪽 면만 그려 silhouette ring 형성. 스킨드 메시 한정 적용
+    // (VS에서 비-스킨드는 절두체 밖으로 보냄).
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC outlinePsoDesc = psoDesc;
+    outlinePsoDesc.VS = { reinterpret_cast<BYTE*>(vsOutlineBlob->GetBufferPointer()), vsOutlineBlob->GetBufferSize() };
+    outlinePsoDesc.PS = { reinterpret_cast<BYTE*>(psOutlineBlob->GetBufferPointer()), psOutlineBlob->GetBufferSize() };
+    outlinePsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_FRONT;
+    CHECK_HR(pDevice->CreateGraphicsPipelineState(&outlinePsoDesc, __uuidof(ID3D12PipelineState), (void**)&m_pd3dOutlinePSO));
 }
