@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "FluidSkillVFXManager.h"
+#include "EffectRegistry.h"
 #include "ScreenSpaceFluid.h"
 #include "DescriptorHeap.h"
 #include <algorithm>
@@ -8,10 +9,21 @@
 void FluidSkillVFXManager::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList,
                                  CDescriptorHeap* pDescriptorHeap, UINT nStartDescIndex)
 {
+    m_pDevice    = pDevice;
+    m_pDescHeap  = pDescriptorHeap;
+    m_nStartDesc = nStartDescIndex;
+
+    // 파이프라인은 최초 1회만 컴파일 (스폰 전 스터터 방지)
+    LightEmitterSystem::EnsurePipelines(pDevice);
+
     for (int i = 0; i < MAX_EFFECTS; ++i)
     {
+        // SPH 시스템: 슬롯 [0 .. MAX_EFFECTS-1] 디스크립터 사용
         m_Slots[i].pSystem = std::make_unique<FluidParticleSystem>();
         m_Slots[i].pSystem->Init(pDevice, pCommandList, pDescriptorHeap, nStartDescIndex + i);
+
+        // 경량 이미터: GPU 리소스는 첫 사용 시 지연 초기화 (Init() 호출하지 않음)
+        m_Slots[i].pLightEmitter = std::make_unique<LightEmitterSystem>();
     }
     OutputDebugStringA("[FluidSkillVFXManager] Initialized\n");
 }
@@ -64,9 +76,12 @@ int FluidSkillVFXManager::SpawnEffect(const XMFLOAT3& origin, const XMFLOAT3& di
     return -1;
 }
 
-int FluidSkillVFXManager::SpawnSequenceEffect(const XMFLOAT3& origin, const XMFLOAT3& direction,
-                                               const VFXSequenceDef& seqDef, bool isPlayerEffect)
+int FluidSkillVFXManager::SpawnSPHLayer(const XMFLOAT3& origin, const XMFLOAT3& direction,
+                                         const std::string& effectName,
+                                         const EffectLayer& layer, bool isPlayerEffect)
 {
+    const SPHEmitterParams& sph = layer.sph;
+
     for (int i = 0; i < MAX_EFFECTS; ++i)
     {
         if (!m_Slots[i].isActive)
@@ -79,32 +94,37 @@ int FluidSkillVFXManager::SpawnSequenceEffect(const XMFLOAT3& origin, const XMFL
             slot.prevOrigin       = origin;
             slot.direction        = direction;
             slot.useSequence      = true;
-            slot.sequenceDef      = seqDef;
+            slot.sphLayer         = layer;
+            slot.effectName       = effectName;
             slot.isPlayerEffect    = isPlayerEffect;
-            slot.useBlur           = isPlayerEffect ? seqDef.useSSFBlur : false;
+            slot.useBlur           = isPlayerEffect ? layer.useSSF : false;
             slot.currentPhaseIndex = -1;
             slot.spawnGeneration   = ++m_nextSpawnGeneration;
 
             // 메테오용 마스터 CP 초기 위치: origin 그대로 사용
             // (MeteorBehavior에서 이미 상공 위치를 origin으로 전달)
             slot.masterCPPos       = origin;
-            slot.masterCPFallSpeed = seqDef.masterCPFallSpeed;
+            slot.masterCPFallSpeed = sph.masterCPFallSpeed;
 
             // FluidParticleConfig 설정
             FluidParticleConfig cfg;
-            cfg.element           = seqDef.element;
-            cfg.particleCount     = seqDef.particleCount;
-            cfg.spawnRadius       = seqDef.spawnRadius;
+            cfg.element           = layer.element;
+            cfg.particleCount     = sph.particleCount;
+            cfg.spawnRadius       = sph.spawnRadius;
             cfg.boundaryStiffness = 150.0f;
             // 보스 메가브레스 입자 크기를 7.0으로 최적화 (검은 선 제거 + 시야 확보)
-            cfg.particleSize      = (seqDef.particleSize > 0.f) ? seqDef.particleSize
-                                  : (seqDef.name == "Dragon_MegaBreath") ? 7.0f : 0.35f;
-            if (seqDef.overridePhysics) {
-                cfg.stiffness              = seqDef.sphStiffness;
-                cfg.nearPressureMultiplier = seqDef.sphNearPressureMult;
-                cfg.restDensity            = seqDef.sphRestDensity;
-                cfg.viscosity              = seqDef.sphViscosity;
-                cfg.smoothingRadius        = seqDef.sphSmoothingRadius;
+            cfg.particleSize      = (sph.particleSize > 0.f) ? sph.particleSize
+                                  : (effectName == "Dragon_MegaBreath") ? 7.0f : 0.35f;
+            // sizeScale 적용
+            if (layer.sizeScale != 1.f && cfg.particleSize > 0.f)
+                cfg.particleSize *= layer.sizeScale;
+
+            if (sph.overridePhysics) {
+                cfg.stiffness              = sph.sphStiffness;
+                cfg.nearPressureMultiplier = sph.sphNearPressureMult;
+                cfg.restDensity            = sph.sphRestDensity;
+                cfg.viscosity              = sph.sphViscosity;
+                cfg.smoothingRadius        = sph.sphSmoothingRadius;
             } else {
                 cfg.smoothingRadius = 1.2f;
                 cfg.restDensity     = 7.0f;
@@ -114,30 +134,30 @@ int FluidSkillVFXManager::SpawnSequenceEffect(const XMFLOAT3& origin, const XMFL
 
             // OrbitalCP 페이즈가 있으면 maxParticleSpeed를 높여 CP 추적 가능하게 함
             bool hasOrbitalCP = false;
-            for (const auto& ph : seqDef.phases)
+            for (const auto& ph : sph.phases)
                 if (ph.motionMode == ParticleMotionMode::OrbitalCP) { hasOrbitalCP = true; break; }
-            cfg.maxParticleSpeed = seqDef.maxParticleSpeed > 0.f ? seqDef.maxParticleSpeed
-                                                                   : (hasOrbitalCP ? 35.0f : 12.0f);
+            cfg.maxParticleSpeed = sph.maxParticleSpeed > 0.f ? sph.maxParticleSpeed
+                                                              : (hasOrbitalCP ? 35.0f : 12.0f);
 
             // 핵-궤도 색상 오버라이드 및 핵 전용 스폰 설정
-            if (seqDef.overrideColors) {
+            if (layer.overrideColors) {
                 cfg.overrideColors  = true;
-                cfg.customCoreColor = seqDef.overrideCoreColor;
-                cfg.customEdgeColor = seqDef.overrideEdgeColor;
+                cfg.customCoreColor = layer.coreColor;
+                cfg.customEdgeColor = layer.edgeColor;
             }
-            cfg.nucleusFraction = seqDef.nucleusSpawnFraction;
-            cfg.nucleusRadius   = seqDef.nucleusSpawnRadius;
+            cfg.nucleusFraction = sph.nucleusSpawnFraction;
+            cfg.nucleusRadius   = sph.nucleusSpawnRadius;
 
             // OrbitalCP: 위성 CP 초기 위치에 파티클 스폰 그룹 추가
             // 파티클이 궤도 위치에서 시작해야 위성 인력권 안에 즉시 진입함
-            if (hasOrbitalCP && !seqDef.satelliteCPs.empty())
+            if (hasOrbitalCP && !sph.satelliteCPs.empty())
             {
-                int satCount = (int)seqDef.satelliteCPs.size();
+                int satCount = (int)sph.satelliteCPs.size();
                 // 전체 파티클의 60%를 위성 위치에 배분
-                int totalSatParticles = (int)(seqDef.particleCount * 0.60f);
+                int totalSatParticles = (int)(sph.particleCount * 0.60f);
                 int perSat = (std::max)(5, totalSatParticles / satCount);
 
-                for (const auto& sat : seqDef.satelliteCPs)
+                for (const auto& sat : sph.satelliteCPs)
                 {
                     // t=0 (elapsed=0) 기준 위성 CP 초기 위치 계산
                     float angle = sat.orbitPhase;
@@ -157,7 +177,7 @@ int FluidSkillVFXManager::SpawnSequenceEffect(const XMFLOAT3& origin, const XMFL
 
             // 사방 집결 스폰: cardinalSpawnRadius > 0이면 ±X/±Y/±Z 6방향에 SpawnGroup 추가
             // 각 그룹의 파티클은 cpGroup=-1(전체 CP 응답) + 내향 초기 속도로 빠르게 수렴
-            if (seqDef.cardinalSpawnRadius > 0.f)
+            if (sph.cardinalSpawnRadius > 0.f)
             {
                 // 발사 방향 기준 로컬 좌표계 (fwd/right/up)
                 XMVECTOR fwdV    = XMVector3Normalize(XMLoadFloat3(&direction));
@@ -175,8 +195,8 @@ int FluidSkillVFXManager::SpawnSequenceEffect(const XMFLOAT3& origin, const XMFL
                      upV,    XMVectorNegate(upV)
                 };
 
-                float r = seqDef.cardinalSpawnRadius;
-                int perDir = (std::max)(5, seqDef.particleCount / 6);
+                float r = sph.cardinalSpawnRadius;
+                int perDir = (std::max)(5, sph.particleCount / 6);
                 // 중심 스폰 파티클 수 줄이기 (cardinal이 대부분 담당)
                 cfg.spawnRadius = 0.8f;
 
@@ -191,19 +211,19 @@ int FluidSkillVFXManager::SpawnSequenceEffect(const XMFLOAT3& origin, const XMFL
                     g.count       = perDir;
                     g.radius      = 0.7f;         // 각 방향 그룹 산포 반경
                     g.cpGroup     = -1;            // 전체 CP에 응답
-                    g.inwardSpeed = seqDef.cardinalInwardSpeed;
+                    g.inwardSpeed = sph.cardinalInwardSpeed;
                     cfg.spawnGroups.push_back(g);
                 }
             }
 
             // 첫 페이즈의 모드 설정
-            if (!seqDef.phases.empty()) {
-                slot.pSystem->SetMotionMode(seqDef.phases[0].motionMode);
+            if (!sph.phases.empty()) {
+                slot.pSystem->SetMotionMode(sph.phases[0].motionMode);
             }
 
             // Wave 모드: 플레이어 앞 spawnRadius 위치에 스폰
             XMFLOAT3 spawnPos = origin;
-            if (seqDef.isWave) {
+            if (sph.isWave) {
                 XMVECTOR fwdV     = XMVector3Normalize(XMLoadFloat3(&direction));
                 XMVECTOR shiftedV = XMVectorAdd(XMLoadFloat3(&origin),
                     XMVectorScale(fwdV, cfg.spawnRadius));
@@ -212,10 +232,10 @@ int FluidSkillVFXManager::SpawnSequenceEffect(const XMFLOAT3& origin, const XMFL
             slot.pSystem->Spawn(spawnPos, cfg);
 
             // Wave 모드 초기화
-            slot.isWaveMode  = seqDef.isWave;
+            slot.isWaveMode  = sph.isWave;
             slot.waveDist    = 0.f;
             slot.waveStopped = false;
-            if (seqDef.isWave) {
+            if (sph.isWave) {
                 slot.useSequence = false;
                 slot.origin     = spawnPos;
                 slot.prevOrigin = spawnPos;
@@ -243,7 +263,7 @@ int FluidSkillVFXManager::SpawnSequenceEffect(const XMFLOAT3& origin, const XMFL
 
                 ConfinementBoxDesc wbd;
                 wbd.active = true;
-                wbd.halfExtents = { seqDef.waveHalfW, seqDef.waveHalfH, halfZBig };
+                wbd.halfExtents = { sph.waveHalfW, sph.waveHalfH, halfZBig };
                 wbd.center = boxCenter;
                 XMStoreFloat3(&wbd.axisX, wRightV);
                 XMStoreFloat3(&wbd.axisY, wUpV);
@@ -253,25 +273,25 @@ int FluidSkillVFXManager::SpawnSequenceEffect(const XMFLOAT3& origin, const XMFL
                 slot.pSystem->SetMotionMode(ParticleMotionMode::Gravity); // wave는 CP 없음 — Gravity 모드로 SPH+힘만 사용
 
                 // Traveling wave 수직 진동 활성화
-                if (seqDef.waveOscAmplitude > 0.f) {
+                if (sph.waveOscAmplitude > 0.f) {
                     XMFLOAT3 fwdDir3, upDir3;
                     XMStoreFloat3(&fwdDir3, wDir);
                     XMStoreFloat3(&upDir3, wUpV);
                     slot.pSystem->SetWaveOscillation(
-                        seqDef.waveOscAmplitude,
-                        seqDef.waveOscFrequency,
-                        seqDef.waveOscWaveNumber,
+                        sph.waveOscAmplitude,
+                        sph.waveOscFrequency,
+                        sph.waveOscWaveNumber,
                         fwdDir3, upDir3);
                 }
             }
 
             wchar_t buf[128];
-            swprintf_s(buf, 128, L"[FluidSkillVFXManager] SpawnSequenceEffect slot %d\n", i);
+            swprintf_s(buf, 128, L"[FluidSkillVFXManager] SpawnSPHLayer slot %d\n", i);
             OutputDebugString(buf);
             return i;
         }
     }
-    OutputDebugStringA("[FluidSkillVFXManager] No free slot for sequence!\n");
+    OutputDebugStringA("[FluidSkillVFXManager] No free slot for SPH layer!\n");
     return -1;
 }
 
@@ -285,9 +305,18 @@ void FluidSkillVFXManager::TrackEffect(int id, const XMFLOAT3& origin, const XMF
 void FluidSkillVFXManager::StopEffect(int id)
 {
     if (id < 0 || id >= MAX_EFFECTS) return;
-    m_Slots[id].isActive    = false;
-    m_Slots[id].useSequence = false;
-    m_Slots[id].pSystem->Clear();
+    auto& slot = m_Slots[id];
+    slot.isActive    = false;
+    slot.useSequence = false;
+    if (slot.useLightEmitter)
+    {
+        slot.useLightEmitter = false;
+        slot.pLightEmitter->Clear();
+    }
+    else
+    {
+        slot.pSystem->Clear();
+    }
 }
 
 int FluidSkillVFXManager::SpawnFireTrailEffect(const XMFLOAT3& pos,
@@ -300,21 +329,29 @@ int FluidSkillVFXManager::SpawnFireTrailEffect(const XMFLOAT3& pos,
     // 매 호출마다 랜덤 변화 → 같은 패턴 반복 방지
     float r0 = (rand() % 1000) * 0.001f;  // [0, 1)
     float r1 = (rand() % 1000) * 0.001f;
+    (void)r1;
 
-    VFXSequenceDef def;
-    def.name             = "Q_FireTrail";
-    def.element          = ElementType::Fire;
-    def.particleCount    = 80 + (rand() % 51);              // 80~130
-    def.spawnRadius      = halfWidth * (0.8f + r0 * 0.4f);  // 0.8~1.2 × halfWidth
-    def.maxParticleSpeed = 8.f;
+    // EffectLayer를 직접 채워 SPH 레이어로 스폰
+    EffectLayer layer;
+    layer.type      = EmitterType::SPH_Gravity;
+    layer.element   = ElementType::Fire;
+    layer.overrideColors = true;
+    // 짙은 붉은색 불꽃
+    layer.coreColor = { 0.75f, 0.08f, 0.01f, 1.0f };
+    layer.edgeColor = { 0.35f, 0.02f, 0.0f,  0.85f };
+
+    SPHEmitterParams& s    = layer.sph;
+    s.particleCount        = 80 + (rand() % 51);              // 80~130
+    s.spawnRadius          = halfWidth * (0.8f + r0 * 0.4f);  // 0.8~1.2 × halfWidth
+    s.maxParticleSpeed     = 8.f;
 
     // SPH: restDensity=0 (인력 없음), 낮은 점성으로 자유롭게 퍼짐
-    def.overridePhysics     = true;
-    def.sphStiffness        = 10.f;
-    def.sphNearPressureMult = 0.3f;
-    def.sphRestDensity      = 0.0f;  // 0이면 항상 반발력만 → 뭉침 방지
-    def.sphViscosity        = 0.08f;
-    def.sphSmoothingRadius  = 2.0f;
+    s.overridePhysics      = true;
+    s.sphStiffness         = 10.f;
+    s.sphNearPressureMult  = 0.3f;
+    s.sphRestDensity       = 0.0f;  // 0이면 항상 반발력만 → 뭉침 방지
+    s.sphViscosity         = 0.08f;
+    s.sphSmoothingRadius   = 2.0f;
 
     // Phase 0: 메인 화염 — 중앙 버스트 없이 스폰 구체 그대로 바닥에 퍼짐
     float mainDur = lifetime - 1.0f;
@@ -329,7 +366,7 @@ int FluidSkillVFXManager::SpawnFireTrailEffect(const XMFLOAT3& pos,
     p0.phaseMaxSpeed = 5.f;
     p0.boxDesc.active      = true;
     p0.boxDesc.halfExtents = { 30.0f, 30.0f, 2.5f };
-    def.phases.push_back(p0);
+    s.phases.push_back(p0);
 
     // Phase 1: 서서히 소멸 (ExplodeFade)
     VFXPhase p1;
@@ -344,15 +381,77 @@ int FluidSkillVFXManager::SpawnFireTrailEffect(const XMFLOAT3& pos,
     p1.triggerExplodeFadeOnEnter   = true;
     p1.boxDesc.active      = true;
     p1.boxDesc.halfExtents = { 30.0f, 30.0f, 2.5f };
-    def.phases.push_back(p1);
-
-    // 짙은 붉은색 불꽃
-    def.overrideColors    = true;
-    def.overrideCoreColor = { 0.75f, 0.08f, 0.01f, 1.0f };
-    def.overrideEdgeColor = { 0.35f, 0.02f, 0.0f,  0.85f };
+    s.phases.push_back(p1);
 
     XMFLOAT3 up = { 0.f, 1.f, 0.f };
-    return SpawnSequenceEffect(pos, up, def);
+    return SpawnSPHLayer(pos, up, "Q_FireTrail", layer, /*isPlayerEffect*/true);
+}
+
+// ── EffectLayer / EffectDef 기반 스폰 ─────────────────────────────────────────
+
+int FluidSkillVFXManager::SpawnEffectLayer(const XMFLOAT3& origin, const XMFLOAT3& direction,
+                                            const std::string& effectName,
+                                            const EffectLayer& layer, bool isPlayerEffect)
+{
+    // SPH 레이어: SpawnSPHLayer로 라우팅 (EffectLayer 직접 사용)
+    bool isSPH = (layer.type == EmitterType::SPH_Attract ||
+                  layer.type == EmitterType::SPH_Gravity  ||
+                  layer.type == EmitterType::SPH_Orbital  ||
+                  layer.type == EmitterType::SPH_Beam);
+    if (isSPH)
+        return SpawnSPHLayer(origin, direction, effectName, layer, isPlayerEffect);
+
+    // 경량 이미터 슬롯 탐색
+    for (int i = 0; i < MAX_EFFECTS; ++i)
+    {
+        if (m_Slots[i].isActive) continue;
+
+        FluidVFXSlot& slot      = m_Slots[i];
+        slot.isActive           = true;
+        slot.isFadingOut        = false;
+        slot.isExplodeMode      = false;
+        slot.elapsed            = 0.0f;
+        slot.origin             = origin;
+        slot.prevOrigin         = origin;
+        slot.direction          = direction;
+        slot.isPlayerEffect     = isPlayerEffect;
+        slot.useBlur            = false; // 경량 이미터는 SSF 없음
+        slot.useSequence        = false;
+        slot.isWaveMode         = false;
+        slot.waveStopped        = false;
+        slot.useLightEmitter    = true;
+        slot.lightLayer         = layer;
+        slot.effectName         = effectName;
+        slot.spawnGeneration    = ++m_nextSpawnGeneration;
+
+        // 첫 사용 시 지연 초기화
+        if (!slot.pLightEmitter->IsInited())
+        {
+            slot.pLightEmitter->Init(m_pDevice, nullptr, m_pDescHeap,
+                                     m_nStartDesc + MAX_EFFECTS + i);
+        }
+        slot.pLightEmitter->Spawn(origin, direction, layer);
+        return i;
+    }
+
+    OutputDebugStringA("[FluidSkillVFXManager] SpawnEffectLayer: no free slot\n");
+    return -1;
+}
+
+int FluidSkillVFXManager::SpawnEffectDef(const XMFLOAT3& origin, const XMFLOAT3& direction,
+                                          const EffectDef& def, bool isPlayerEffect)
+{
+    int firstId = -1;
+    for (const auto& layer : def.layers)
+    {
+        // emitDelay 미지원 — 즉시 스폰. element는 EffectDef가 권위를 가짐
+        EffectLayer l   = layer;
+        l.element       = def.element;
+
+        int id = SpawnEffectLayer(origin, direction, def.name, l, isPlayerEffect);
+        if (id >= 0 && firstId < 0) firstId = id;
+    }
+    return firstId;
 }
 
 void FluidSkillVFXManager::ImpactEffect(int id, const XMFLOAT3& impactPos)
@@ -425,6 +524,34 @@ void FluidSkillVFXManager::Update(float deltaTime)
     {
         if (!slot.isActive) continue;
 
+        // ── 경량 이미터 슬롯: GPU가 물리를 처리하므로 CPU 업데이트 최소화 ──
+        if (slot.useLightEmitter)
+        {
+            if (slot.isFadingOut)
+            {
+                slot.fadeTimer -= deltaTime;
+                if (slot.fadeTimer <= 0.0f)
+                {
+                    slot.isActive    = false;
+                    slot.isFadingOut = false;
+                    slot.pLightEmitter->Clear();
+                }
+                continue;
+            }
+            slot.elapsed += deltaTime;
+            // 유한 duration 자동 소멸
+            if (slot.lightLayer.duration > 0.f && slot.elapsed >= slot.lightLayer.duration)
+            {
+                slot.isActive = false;
+                slot.pLightEmitter->Clear();
+                continue;
+            }
+            // 투사체 추적
+            if (slot.lightLayer.attachToProjectile)
+                slot.pLightEmitter->SetOrigin(slot.origin, slot.direction);
+            continue;
+        }
+
         if (slot.isFadingOut) {
             // fade-out 중: SPH 업데이트
             slot.fadeTimer -= deltaTime;
@@ -454,10 +581,10 @@ void FluidSkillVFXManager::Update(float deltaTime)
 
         // Wave 모드: 일정 폭으로 앞으로 전진
         if (slot.isWaveMode && !slot.waveStopped) {
-            float moveDelta = slot.sequenceDef.waveSpeed * deltaTime;
+            float moveDelta = slot.sphLayer.sph.waveSpeed * deltaTime;
             slot.waveDist  += moveDelta;
 
-            if (slot.waveDist >= slot.sequenceDef.waveMaxDist) {
+            if (slot.waveDist >= slot.sphLayer.sph.waveMaxDist) {
                 // 최대 거리 도달 → fade-out
                 // ConfinementBox 해제: 파티클이 자유롭게 퍼지며 소멸
                 slot.waveStopped = true;
@@ -475,7 +602,7 @@ void FluidSkillVFXManager::Update(float deltaTime)
                 XMFLOAT3 fwdDir3;
                 XMStoreFloat3(&fwdDir3, dir);
                 slot.pSystem->ApplyDirectionalForce(fwdDir3,
-                    slot.sequenceDef.wavePushForce * deltaTime);
+                    slot.sphLayer.sph.wavePushForce * deltaTime);
             }
 
             slot.pSystem->Update(deltaTime);
@@ -487,9 +614,9 @@ void FluidSkillVFXManager::Update(float deltaTime)
             slot.elapsed += deltaTime;
 
             // 시퀀스 자동 종료: 모든 페이즈의 (startTime + duration) 중 최대값을 넘으면 종료
-            if (!slot.sequenceDef.phases.empty()) {
+            if (!slot.sphLayer.sph.phases.empty()) {
                 float maxEnd = 0.f;
-                for (const auto& phase : slot.sequenceDef.phases) {
+                for (const auto& phase : slot.sphLayer.sph.phases) {
                     float phaseEnd = phase.startTime + phase.duration;
                     if (phaseEnd > maxEnd) maxEnd = phaseEnd;
                 }
@@ -512,7 +639,7 @@ void FluidSkillVFXManager::Update(float deltaTime)
                 slot.prevOrigin = slot.origin;
                 bool moved = fabsf(delta.x) + fabsf(delta.y) + fabsf(delta.z) > 0.0001f;
                 if (moved && slot.currentPhaseIndex >= 0) {
-                    const auto& curP = slot.sequenceDef.phases[slot.currentPhaseIndex];
+                    const auto& curP = slot.sphLayer.sph.phases[slot.currentPhaseIndex];
                     if (curP.offsetParticlesWithOrigin &&
                         (curP.motionMode == ParticleMotionMode::ControlPoint || curP.motionMode == ParticleMotionMode::OrbitalCP))
                         slot.pSystem->OffsetParticles(delta);
@@ -544,8 +671,13 @@ void FluidSkillVFXManager::DispatchSPH(ID3D12GraphicsCommandList* pCmdList, floa
 {
     for (auto& slot : m_Slots)
     {
-        if (!slot.isActive || !slot.pSystem) continue;
-        slot.pSystem->DispatchSPH(pCmdList, deltaTime);
+        if (!slot.isActive) continue;
+        if (slot.useLightEmitter)
+        {
+            slot.pLightEmitter->Dispatch(pCmdList, deltaTime);
+            continue;
+        }
+        if (slot.pSystem) slot.pSystem->DispatchSPH(pCmdList, deltaTime);
     }
 }
 
@@ -554,7 +686,13 @@ void FluidSkillVFXManager::Render(ID3D12GraphicsCommandList* pCommandList,
 {
     for (auto& slot : m_Slots)
     {
-        if (!slot.isActive || !slot.pSystem->IsActive()) continue;
+        if (!slot.isActive) continue;
+        if (slot.useLightEmitter)
+        {
+            slot.pLightEmitter->Render(pCommandList, viewProj, camRight, camUp);
+            continue;
+        }
+        if (!slot.pSystem->IsActive()) continue;
         slot.pSystem->Render(pCommandList, viewProj, camRight, camUp);
     }
 }
@@ -566,8 +704,14 @@ void FluidSkillVFXManager::RenderEnemyEffects(ID3D12GraphicsCommandList* pComman
 {
     for (auto& slot : m_Slots)
     {
-        if (!slot.isActive || !slot.pSystem->IsActive()) continue;
+        if (!slot.isActive) continue;
         if (slot.isPlayerEffect) continue;  // 플레이어 슬롯 건너뜀
+        if (slot.useLightEmitter)
+        {
+            slot.pLightEmitter->Render(pCommandList, viewProj, camRight, camUp);
+            continue;
+        }
+        if (!slot.pSystem->IsActive()) continue;
         slot.pSystem->Render(pCommandList, viewProj, camRight, camUp);
     }
 }
@@ -584,8 +728,9 @@ void FluidSkillVFXManager::RenderDepth(ID3D12GraphicsCommandList* pCmdList,
     for (auto& slot : m_Slots)
     {
         if (!slot.isActive || !slot.pSystem->IsActive()) continue;
-        if (!slot.isPlayerEffect) continue;       // 적 투사체는 SSF 제외 → RenderEnemyEffects에서 처리
-        if (slot.useBlur != blurOnly) continue;  // blur 패스 필터
+        if (slot.useLightEmitter)    continue; // 경량 이미터는 SSF 제외
+        if (!slot.isPlayerEffect)    continue; // 적 투사체는 SSF 제외 → RenderEnemyEffects에서 처리
+        if (slot.useBlur != blurOnly) continue;
         slot.pSystem->RenderDepth(pCmdList, viewProjTransposed, viewTransposed,
                                    camRight, camUp, projA, projB, pSSF);
     }
@@ -599,8 +744,9 @@ void FluidSkillVFXManager::RenderThicknessOnly(
     for (auto& slot : m_Slots)
     {
         if (!slot.isActive || !slot.pSystem->IsActive()) continue;
-        if (!slot.isPlayerEffect) continue;       // 적 투사체 제외
-        if (slot.useBlur != blurOnly) continue;  // blur 패스 필터
+        if (slot.useLightEmitter)    continue; // 경량 이미터는 SSF 제외
+        if (!slot.isPlayerEffect)    continue;
+        if (slot.useBlur != blurOnly) continue;
         slot.pSystem->RenderThicknessOnly(pCmdList, pSSF);
     }
 }
@@ -609,10 +755,11 @@ bool FluidSkillVFXManager::HasActiveSlots(bool blurOnly) const
 {
     for (const auto& slot : m_Slots)
     {
-        if (slot.isActive && slot.pSystem->IsActive()
-            && slot.isPlayerEffect               // 플레이어 슬롯만 집계
-            && slot.useBlur == blurOnly)
-            return true;
+        if (!slot.isActive) continue;
+        if (slot.useLightEmitter)  continue; // 경량 이미터는 SSF 없음
+        if (!slot.isPlayerEffect)  continue;
+        if (slot.useBlur != blurOnly) continue;
+        if (slot.pSystem->IsActive()) return true;
     }
     return false;
 }
@@ -660,12 +807,12 @@ void FluidSkillVFXManager::PushControlPoints(FluidVFXSlot& slot) const
 // ============================================================================
 void FluidSkillVFXManager::UpdatePhase(FluidVFXSlot& slot, float dt)
 {
-    if (slot.sequenceDef.phases.empty()) return;
+    if (slot.sphLayer.sph.phases.empty()) return;
 
     // 현재 페이즈 찾기
     int targetPhase = 0;
-    for (int i = 0; i < static_cast<int>(slot.sequenceDef.phases.size()); i++) {
-        if (slot.elapsed >= slot.sequenceDef.phases[i].startTime) {
+    for (int i = 0; i < static_cast<int>(slot.sphLayer.sph.phases.size()); i++) {
+        if (slot.elapsed >= slot.sphLayer.sph.phases[i].startTime) {
             targetPhase = i;
         }
     }
@@ -673,7 +820,7 @@ void FluidSkillVFXManager::UpdatePhase(FluidVFXSlot& slot, float dt)
     // 페이즈 전환 발생
     if (targetPhase != slot.currentPhaseIndex) {
         slot.currentPhaseIndex = targetPhase;
-        const auto& phase = slot.sequenceDef.phases[targetPhase];
+        const auto& phase = slot.sphLayer.sph.phases[targetPhase];
 
         // 모드 전환
         slot.pSystem->SetMotionMode(phase.motionMode);
@@ -681,7 +828,7 @@ void FluidSkillVFXManager::UpdatePhase(FluidVFXSlot& slot, float dt)
 
         if (phase.motionMode == ParticleMotionMode::Beam) {
             // 빔 길이 우선순위: phase.beamDesc.beamLength > swirlFadeEnd(레거시) > 기본값
-            bool isBossBreath = (slot.sequenceDef.name == "Dragon_MegaBreath");
+            bool isBossBreath = (slot.effectName == "Dragon_MegaBreath");
             float beamLen = (phase.beamDesc.beamLength > 0.f)
                           ? phase.beamDesc.beamLength
                           : ((phase.beamDesc.swirlFadeEnd > 0.f)
@@ -831,15 +978,15 @@ void FluidSkillVFXManager::UpdatePhase(FluidVFXSlot& slot, float dt)
 
     // ─── 매 프레임 업데이트 ───
 
-    const auto& curPhase = slot.sequenceDef.phases[slot.currentPhaseIndex];
+    const auto& curPhase = slot.sphLayer.sph.phases[slot.currentPhaseIndex];
 
     // OrbitalCP 매 프레임 위성 CP 갱신
     if (curPhase.motionMode == ParticleMotionMode::OrbitalCP) {
         UpdateOrbitalCPs(slot, dt);
     }
 
-    // ControlPoint/Beam + sequenceDef.cpDescs: 매 프레임 궤도 CP 갱신
-    if (!slot.sequenceDef.cpDescs.empty() &&
+    // ControlPoint/Beam + sphLayer.sph.cpDescs: 매 프레임 궤도 CP 갱신
+    if (!slot.sphLayer.sph.cpDescs.empty() &&
         (curPhase.motionMode == ParticleMotionMode::ControlPoint ||
          curPhase.motionMode == ParticleMotionMode::Beam))
     {
@@ -853,7 +1000,7 @@ void FluidSkillVFXManager::UpdatePhase(FluidVFXSlot& slot, float dt)
         XMVECTOR originV = XMLoadFloat3(&slot.origin);
 
         std::vector<FluidControlPoint> cps;
-        for (const auto& cpd : slot.sequenceDef.cpDescs)
+        for (const auto& cpd : slot.sphLayer.sph.cpDescs)
         {
             float angle = slot.elapsed * cpd.orbitSpeed + cpd.orbitPhase;
             float c = cosf(angle), s = sinf(angle);
@@ -875,7 +1022,7 @@ void FluidSkillVFXManager::UpdatePhase(FluidVFXSlot& slot, float dt)
     // Beam 모드: 매 프레임 startPos/endPos 갱신 (플레이어 방향 추적)
     // prevDir 보존하면서 startPos/endPos만 업데이트
     if (curPhase.motionMode == ParticleMotionMode::Beam) {
-        bool isBossBreath = (slot.sequenceDef.name == "Dragon_MegaBreath");
+        bool isBossBreath = (slot.effectName == "Dragon_MegaBreath");
         float beamLen = (curPhase.beamDesc.beamLength > 0.f)
                       ? curPhase.beamDesc.beamLength
                       : ((curPhase.beamDesc.swirlFadeEnd > 0.f)
@@ -905,7 +1052,7 @@ void FluidSkillVFXManager::UpdatePhase(FluidVFXSlot& slot, float dt)
     // 박스 halfExtents lerp (이전 페이즈와 현재 페이즈 간)
     if (curPhase.boxDesc.active) {
         XMFLOAT3 prev = (slot.currentPhaseIndex > 0)
-            ? slot.sequenceDef.phases[slot.currentPhaseIndex - 1].boxDesc.halfExtents
+            ? slot.sphLayer.sph.phases[slot.currentPhaseIndex - 1].boxDesc.halfExtents
             : XMFLOAT3{ 0.5f, 0.5f, 0.5f };
         XMFLOAT3 curr = curPhase.boxDesc.halfExtents;
 
@@ -985,7 +1132,7 @@ void FluidSkillVFXManager::UpdateOrbitalCPs(FluidVFXSlot& slot, float dt)
     else
         slot.masterCPPos = slot.origin;
 
-    const auto& seqDef = slot.sequenceDef;
+    const SPHEmitterParams& seqDef = slot.sphLayer.sph;
 
     std::vector<FluidControlPoint> cps;
     // 마스터 CP 추가
@@ -996,7 +1143,7 @@ void FluidSkillVFXManager::UpdateOrbitalCPs(FluidVFXSlot& slot, float dt)
     cps.push_back(masterCP);
 
     // 위성 CP들 공전 + 세차운동 (궤도면 자체가 Y축 주위로 회전)
-    for (const auto& sat : slot.sequenceDef.satelliteCPs) {
+    for (const auto& sat : slot.sphLayer.sph.satelliteCPs) {
         float theta = sat.orbitPhase + slot.elapsed * sat.orbitSpeed;   // 궤도 내 각도
         float omega = slot.elapsed * sat.precessionSpeed;                // 궤도면 세차 각도
         float phi   = sat.orbitTiltX;                                    // 궤도면 기울기
@@ -1244,9 +1391,9 @@ FluidSkillVFXDef FluidSkillVFXManager::GetVFXDef(ElementType element, const Rune
 // 슬롯의 실제 렌더 색상 반환 헬퍼 (overrideColors 우선)
 static FluidElementColor GetSlotColors(const FluidVFXSlot& slot)
 {
-    if (slot.useSequence && slot.sequenceDef.overrideColors)
-        return { slot.sequenceDef.overrideCoreColor, slot.sequenceDef.overrideEdgeColor };
-    ElementType elem = slot.useSequence ? slot.sequenceDef.element : slot.def.element;
+    if (slot.useSequence && slot.sphLayer.overrideColors)
+        return { slot.sphLayer.coreColor, slot.sphLayer.edgeColor };
+    ElementType elem = slot.useSequence ? slot.sphLayer.element : slot.def.element;
     return FluidElementColors::Get(elem);
 }
 
@@ -1373,8 +1520,8 @@ bool FluidSkillVFXManager::IsPointInWave(int id, const XMFLOAT3& point) const
 
     // 파도 선두(waveDist)와 back wall(0) 사이, 폭/높이 범위 내
     if (fwdDist < 0.f || fwdDist > slot.waveDist) return false;
-    if (rightDist > slot.sequenceDef.waveHalfW)   return false;
-    if (upDist    > slot.sequenceDef.waveHalfH * 2.0f) return false; // 높이는 여유 있게
+    if (rightDist > slot.sphLayer.sph.waveHalfW)   return false;
+    if (upDist    > slot.sphLayer.sph.waveHalfH * 2.0f) return false; // 높이는 여유 있게
 
     return true;
 }

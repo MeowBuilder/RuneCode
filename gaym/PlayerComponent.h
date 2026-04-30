@@ -91,7 +91,7 @@ private:
     float m_fDashCooldownRemain = 0.0f;  // 쿨다운 잔여
     float m_fDashFlashTail = 0.0f;       // 대쉬 종료 후 HitFlash 잔상 타이머
     XMFLOAT3 m_xmf3DashDir = { 0, 0, 1 };// 대쉬 방향 (시작 시 고정)
-    int   m_nDashEmitterId = -1;         // 플레이어 주변 블루 파티클 이미터 (최초 대쉬에서 지연 생성)
+    float m_fDashTrailAccum = 0.0f;      // 대쉬 트레일 LightEmitter 재스폰 누적 타이머
 
     static constexpr float kDashDuration      = 0.25f;  // 대쉬 지속
     static constexpr float kDashCooldown      = 1.2f;   // 쿨다운

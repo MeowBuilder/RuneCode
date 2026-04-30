@@ -2,10 +2,12 @@
 #include "stdafx.h"
 #include "FluidParticle.h"
 #include "FluidParticleSystem.h"
+#include "LightEmitterSystem.h"
 #include "VFXTypes.h"
-#include "VFXLibrary.h"
+#include "EffectRegistry.h"   // EffectDef / EffectLayer
 #include <array>
 #include <memory>
+#include <string>
 
 class CDescriptorHeap;
 class ScreenSpaceFluid;
@@ -24,8 +26,9 @@ struct FluidVFXSlot {
     XMFLOAT3         direction   = {0, 0, 1};
     FluidSkillVFXDef def;
 
-    // 시퀀스 기반 VFX 확장 멤버
-    VFXSequenceDef   sequenceDef;           // 현재 재생 중인 시퀀스 정의
+    // 시퀀스 기반 VFX 확장 멤버 (EffectLayer.sph 기반)
+    EffectLayer      sphLayer;              // 현재 재생 중인 SPH 레이어 정의 (sph/coreColor/edgeColor 포함)
+    std::string      effectName;            // 부모 EffectDef::name (Dragon_MegaBreath 등 분기 비교용)
     int              currentPhaseIndex = 0; // 현재 페이즈 인덱스
     bool             useSequence = false;   // 시퀀스 모드 활성 여부
     float            masterCPFallY = 0.f;   // 메테오용 마스터 CP Y 위치 (낙하 추적)
@@ -37,15 +40,20 @@ struct FluidVFXSlot {
     float            waveDist    = 0.f;    // 현재 이동 거리
     bool             waveStopped = false;  // 충돌/최대거리로 멈춘 여부
 
-    // SSF bilateral blur 적용 여부 (VFXSequenceDef.useSSFBlur에서 설정)
+    // SSF bilateral blur 적용 여부 (EffectLayer.useSSF에서 설정)
     bool             useBlur     = false;
 
-    // 플레이어 스킬 여부: SpawnSequenceEffect → true, SpawnEffect(적 투사체) → false
+    // 플레이어 스킬 여부: SpawnSPHLayer → 인자, SpawnEffect(적 투사체) → false
     // false인 슬롯은 SSF 파이프라인에서 제외되고 빌보드로 별도 렌더
     bool             isPlayerEffect = false;
 
     // 스폰 순서 — GetDominantFluidColors에서 가장 최근 슬롯 우선 선택에 사용
     uint32_t         spawnGeneration = 0;
+
+    // 경량 이미터 (LightEmitterSystem) 지원
+    std::unique_ptr<LightEmitterSystem> pLightEmitter;
+    EffectLayer      lightLayer;        // useLightEmitter=true 일 때만 유효
+    bool             useLightEmitter = false;
 };
 
 class FluidSkillVFXManager
@@ -60,11 +68,20 @@ public:
     int SpawnEffect(const XMFLOAT3& origin, const XMFLOAT3& direction,
                     const FluidSkillVFXDef& def);
 
-    // 시퀀스 기반 이펙트 생성 (VFXLibrary 연동)
+    // SPH 레이어 직접 스폰 (EffectLayer.sph 기반, 내부 라우팅 + SpawnFireTrailEffect용)
     // isPlayerEffect=true  → SSF 파이프라인 (플레이어 스킬)
     // isPlayerEffect=false → 빌보드 렌더 (적 스킬) — SSF 색상과 완전 분리
-    int SpawnSequenceEffect(const XMFLOAT3& origin, const XMFLOAT3& direction,
-                            const VFXSequenceDef& seqDef, bool isPlayerEffect = true);
+    int SpawnSPHLayer(const XMFLOAT3& origin, const XMFLOAT3& direction,
+                      const std::string& effectName,
+                      const EffectLayer& layer, bool isPlayerEffect = true);
+
+    // EffectDef/EffectLayer 기반 이펙트 생성 (새 이미터 시스템)
+    // SPH 레이어 → SpawnSPHLayer, 경량 이미터 레이어 → LightEmitterSystem
+    int SpawnEffectLayer(const XMFLOAT3& origin, const XMFLOAT3& direction,
+                         const std::string& effectName,
+                         const EffectLayer& layer, bool isPlayerEffect = true);
+    int SpawnEffectDef(const XMFLOAT3& origin, const XMFLOAT3& direction,
+                       const EffectDef& def, bool isPlayerEffect = true);
 
     // 매 프레임 투사체 위치/방향 추적
     void TrackEffect(int id, const XMFLOAT3& origin, const XMFLOAT3& direction);
@@ -142,5 +159,8 @@ private:
     void UpdateOrbitalCPs(FluidVFXSlot& slot, float dt);
 
     std::array<FluidVFXSlot, MAX_EFFECTS> m_Slots;
-    uint32_t m_nextSpawnGeneration = 0; // 스폰할 때마다 증가, 최근 슬롯 색상 우선순위용
+    uint32_t         m_nextSpawnGeneration = 0;
+    ID3D12Device*    m_pDevice    = nullptr; // 경량 이미터 지연 초기화용
+    CDescriptorHeap* m_pDescHeap  = nullptr;
+    UINT             m_nStartDesc = 0;
 };

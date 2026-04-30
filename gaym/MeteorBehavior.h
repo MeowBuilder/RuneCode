@@ -46,8 +46,8 @@ private:
 
     static constexpr float METEOR_SPAWN_HEIGHT = 50.f;
     static constexpr float METEOR_FORWARD_DIST = 15.f;
-    static constexpr float FALL_DURATION       = 3.0f;  // VFXLibrary Phase0 duration
-    static constexpr float EXPLODE_DURATION    = 2.4f;  // VFXLibrary Phase1(0.6) + Phase2(1.8)
+    static constexpr float FALL_DURATION       = 3.0f;  // R_Meteor Phase0 duration
+    static constexpr float EXPLODE_DURATION    = 2.4f;  // R_Meteor Phase1(0.6) + Phase2(1.8)
     static constexpr float MULTI_HIT_INTERVAL  = 0.3f;  // 폭발 중 다단히트 간격 (초)
     static constexpr float EXPLODE_RADIUS      = 10.0f; // 초기 폭발 반경 (SkillData.radius)
     static constexpr float MULTI_HIT_RADIUS    = 8.0f;  // 다단히트 반경

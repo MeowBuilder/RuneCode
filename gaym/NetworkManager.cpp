@@ -9,7 +9,7 @@
 #include "MeshLoader.h"
 #include "AnimationComponent.h"
 #include "FluidSkillVFXManager.h"
-#include "VFXLibrary.h"
+#include "EffectRegistry.h"
 #include "SkillTypes.h"
 #include "ProjectileManager.h"
 #include "PlayerComponent.h"
@@ -972,8 +972,8 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
                 horizontalDir.z /= hLen;
             }
 
-            VFXSequenceDef seqDef = VFXLibrary::Get().GetDef(SkillSlot::Q, RUNE_NONE, ElementType::Fire);
-            int vfxId = pVFXManager->SpawnSequenceEffect(skillOrigin, horizontalDir, seqDef);
+            EffectDef def = EffectRegistry::Get().GetEffect("Q_WaveSlash", RUNE_NONE);
+            int vfxId = pVFXManager->SpawnEffectDef(skillOrigin, horizontalDir, def, true);
 
             wchar_t vfxBuf[128];
             swprintf_s(vfxBuf, L"[Network] Spawned Q (WaveSlash) VFX: vfxId=%d\n", vfxId);
@@ -1002,8 +1002,8 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
                     pVFXManager->StopEffect(vfxIt->second.vfxId);
                 }
 
-                VFXSequenceDef seqDef = VFXLibrary::Get().GetDef(SkillSlot::E, RUNE_NONE, ElementType::Fire);
-                int vfxId = pVFXManager->SpawnSequenceEffect(skillOrigin, skillDirection, seqDef);
+                EffectDef def = EffectRegistry::Get().GetEffect("E_FireBeam_Core", RUNE_NONE);
+                int vfxId = pVFXManager->SpawnEffectDef(skillOrigin, skillDirection, def, true);
 
                 RemoteVFXState state;
                 state.vfxId = vfxId;
@@ -1032,8 +1032,8 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
             // 낙하 방향 = 아래
             XMFLOAT3 downDir = XMFLOAT3(0.0f, -1.0f, 0.0f);
 
-            VFXSequenceDef seqDef = VFXLibrary::Get().GetDef(SkillSlot::R, RUNE_NONE, ElementType::Fire);
-            int vfxId = pVFXManager->SpawnSequenceEffect(spawnPos, downDir, seqDef);
+            EffectDef def = EffectRegistry::Get().GetEffect("R_Meteor", RUNE_NONE);
+            int vfxId = pVFXManager->SpawnEffectDef(spawnPos, downDir, def, true);
 
             wchar_t vfxBuf[128];
             swprintf_s(vfxBuf, L"[Network] Spawned R (Meteor) VFX: vfxId=%d, target=(%.1f,%.1f,%.1f) spawn=(%.1f,%.1f,%.1f)\n",

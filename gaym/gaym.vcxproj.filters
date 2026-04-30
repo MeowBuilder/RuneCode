@@ -213,12 +213,6 @@
     <ClInclude Include="ProjectileManager.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="Particle.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="ParticleSystem.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
     <ClInclude Include="BloomPostProcess.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -240,19 +234,16 @@
     <ClInclude Include="VFXTypes.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="VFXLibrary.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
     <ClInclude Include="FluidParticle.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="FluidParticleSystem.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="FluidSkillEffect.h">
+    <ClInclude Include="FluidSkillVFXManager.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="FluidSkillVFXManager.h">
+    <ClInclude Include="VFXManager.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="ScreenSpaceFluid.h">
@@ -554,9 +545,6 @@
     <ClCompile Include="ProjectileManager.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="ParticleSystem.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
     <ClCompile Include="BloomPostProcess.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
@@ -572,13 +560,10 @@
     <ClCompile Include="NetworkManager.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="VFXLibrary.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
     <ClCompile Include="FluidParticleSystem.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="FluidSkillEffect.cpp">
+    <ClCompile Include="VFXManager.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="FluidSkillVFXManager.cpp">

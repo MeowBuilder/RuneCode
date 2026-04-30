@@ -8,7 +8,6 @@ using namespace DirectX;
 
 class GameObject;
 class CRoom;
-class ParticleSystem;
 
 // 메가 브레스 공격: 보스가 벽으로 이동 후 맵 전체를 덮는 브레스 공격
 // 플레이어는 엄폐물 뒤에 숨어서 회피해야 함

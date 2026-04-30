@@ -4,7 +4,7 @@
 #include "stdafx.h"
 
 class FluidParticleSystem;
-class ParticleSystem;
+class VFXManager;
 class Mesh;
 class Shader;
 class CRoom;
@@ -44,8 +44,8 @@ public:
     // FluidParticleSystem 설정 (Manager에서 호출)
     void SetFluidSystem(FluidParticleSystem* pFluid) { m_pFluidSystem = pFluid; }
 
-    // ParticleSystem 설정 (용암 기둥 효과용)
-    void SetParticleSystem(ParticleSystem* pParticle) { m_pParticleSystem = pParticle; }
+    // VFXManager 설정 (용암 기둥 효과용 — LightEmitterSystem 경유)
+    void SetVFXManager(VFXManager* pVFX) { m_pVFXManager = pVFX; }
 
     // Room 설정 (데미지 처리용)
     void SetRoom(CRoom* pRoom) { m_pRoom = pRoom; }
@@ -74,9 +74,9 @@ private:
     // 유체 파티클 시스템 (용암 VFX) - 현재 미사용
     FluidParticleSystem* m_pFluidSystem = nullptr;
 
-    // 일반 파티클 시스템 (용암 기둥 효과)
-    ParticleSystem* m_pParticleSystem = nullptr;
-    int m_nEmitterId = -1;  // 현재 활성 이미터 ID
+    // 통합 VFX 매니저 (용암 기둥 효과 - LightEmitterSystem 경유)
+    VFXManager* m_pVFXManager = nullptr;
+    bool m_bEruptSpawned = false;  // 분출 VFX가 이번 사이클에 이미 스폰되었는지
 
     // Room 참조 (데미지 처리용)
     CRoom* m_pRoom = nullptr;

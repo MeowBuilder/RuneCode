@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "FireBeamBehavior.h"
 #include "FluidSkillVFXManager.h"
-#include "VFXLibrary.h"
+#include "EffectRegistry.h"
 #include "GameObject.h"
 #include "TransformComponent.h"
 #include "SkillComponent.h"
@@ -10,18 +10,22 @@
 #include "EnemyComponent.h"
 
 // 코어 빔: swirlSpeed=0, 좁은 spreadRadius → 빔 축을 따라 빽빽하게 흐르는 직선
-VFXSequenceDef FireBeamBehavior::BuildCoreBeamDef()
+EffectDef FireBeamBehavior::BuildCoreBeamDef()
 {
-    VFXSequenceDef def;
-    def.name          = "E_FireBeam_Core";
-    def.element       = ElementType::Fire;
-    def.particleCount = 300;
-    def.spawnRadius   = 0.1f;
-    def.particleSize  = 0.35f;
+    EffectDef def;
+    def.name    = "E_FireBeam_Core";
+    def.element = ElementType::Fire;
 
-    def.overrideColors    = true;
-    def.overrideCoreColor = { 1.0f, 0.92f, 0.55f, 1.0f };
-    def.overrideEdgeColor = { 1.0f, 0.55f, 0.10f, 0.80f };
+    EffectLayer layer;
+    layer.type       = EmitterType::SPH_Beam;
+    layer.element    = ElementType::Fire;
+    layer.coreColor  = { 1.0f, 0.92f, 0.55f, 1.0f };
+    layer.edgeColor  = { 1.0f, 0.55f, 0.10f, 0.80f };
+
+    SPHEmitterParams& s = layer.sph;
+    s.particleCount = 300;
+    s.spawnRadius   = 0.1f;
+    s.particleSize  = 0.35f;
 
     VFXPhase p;
     p.startTime             = 0.f;
@@ -33,23 +37,29 @@ VFXSequenceDef FireBeamBehavior::BuildCoreBeamDef()
     p.beamDesc.swirlSpeed   = 0.f;
     p.beamDesc.swirlExpand  = false;
     p.beamDesc.enableFlow   = true;
-    def.phases.push_back(p);
+    s.phases.push_back(p);
+
+    def.layers.push_back(std::move(layer));
     return def;
 }
 
 // 나선: swirlExpand=true → 시작점에서 퍼지며 공전, swirlFadeEnd=10m에서 소멸
-VFXSequenceDef FireBeamBehavior::BuildSwirlDef()
+EffectDef FireBeamBehavior::BuildSwirlDef()
 {
-    VFXSequenceDef def;
-    def.name          = "E_FireBeam_Swirl";
-    def.element       = ElementType::Fire;
-    def.particleCount = 80;
-    def.spawnRadius   = 0.1f;
-    def.particleSize  = 0.18f;
+    EffectDef def;
+    def.name    = "E_FireBeam_Swirl";
+    def.element = ElementType::Fire;
 
-    def.overrideColors    = true;
-    def.overrideCoreColor = { 0.95f, 0.10f, 0.02f, 0.85f };  // 짙은 크림슨 (코어빔 황금과 대비, 불꽃 계열)
-    def.overrideEdgeColor = { 0.55f, 0.04f, 0.00f, 0.50f };
+    EffectLayer layer;
+    layer.type       = EmitterType::SPH_Beam;
+    layer.element    = ElementType::Fire;
+    layer.coreColor  = { 0.95f, 0.10f, 0.02f, 0.85f };
+    layer.edgeColor  = { 0.55f, 0.04f, 0.00f, 0.50f };
+
+    SPHEmitterParams& s = layer.sph;
+    s.particleCount = 80;
+    s.spawnRadius   = 0.1f;
+    s.particleSize  = 0.18f;
 
     VFXPhase p;
     p.startTime              = 0.f;
@@ -57,30 +67,35 @@ VFXSequenceDef FireBeamBehavior::BuildSwirlDef()
     p.motionMode             = ParticleMotionMode::Beam;
     p.beamDesc.speedMin      = 7.f;
     p.beamDesc.speedMax      = 12.f;
-    p.beamDesc.spreadRadius  = 2.0f;    // 최대 공전 반경
-    p.beamDesc.swirlSpeed    = 10.f;    // 공전 각속도
-    p.beamDesc.swirlExpand   = true;    // 시작점에서 바깥으로 퍼짐
-    p.beamDesc.swirlFadeEnd  = 10.f;    // 10m 중간 지점이 피크, 그 후 사라짐
-    p.beamDesc.swirlFadeInOut = true;   // 밝아지다가 사라지는 삼각파
+    p.beamDesc.spreadRadius  = 2.0f;
+    p.beamDesc.swirlSpeed    = 10.f;
+    p.beamDesc.swirlExpand   = true;
+    p.beamDesc.swirlFadeEnd  = 10.f;
+    p.beamDesc.swirlFadeInOut = true;
     p.beamDesc.enableFlow    = true;
-    def.phases.push_back(p);
+    s.phases.push_back(p);
+
+    def.layers.push_back(std::move(layer));
     return def;
 }
 
-// 방사 스파크: swirlExpand=true, swirlSpeed=0 → 각 파티클이 고정 각도로 콘 형태 퍼짐
-// swirlFadeEnd=8m → 8m에서 소멸
-VFXSequenceDef FireBeamBehavior::BuildBurstDef()
+// 방사 스파크
+EffectDef FireBeamBehavior::BuildBurstDef()
 {
-    VFXSequenceDef def;
-    def.name          = "E_FireBeam_Burst";
-    def.element       = ElementType::Fire;
-    def.particleCount = 120;
-    def.spawnRadius   = 0.1f;
-    def.particleSize  = 0.12f;
+    EffectDef def;
+    def.name    = "E_FireBeam_Burst";
+    def.element = ElementType::Fire;
 
-    def.overrideColors    = true;
-    def.overrideCoreColor = { 1.00f, 0.32f, 0.02f, 1.00f };  // 선명한 적오렌지 (코어빔 황금보다 붉음, 불꽃 계열)
-    def.overrideEdgeColor = { 0.80f, 0.10f, 0.01f, 0.80f };
+    EffectLayer layer;
+    layer.type       = EmitterType::SPH_Beam;
+    layer.element    = ElementType::Fire;
+    layer.coreColor  = { 1.00f, 0.32f, 0.02f, 1.00f };
+    layer.edgeColor  = { 0.80f, 0.10f, 0.01f, 0.80f };
+
+    SPHEmitterParams& s = layer.sph;
+    s.particleCount = 120;
+    s.spawnRadius   = 0.1f;
+    s.particleSize  = 0.12f;
 
     VFXPhase p;
     p.startTime              = 0.f;
@@ -88,12 +103,14 @@ VFXSequenceDef FireBeamBehavior::BuildBurstDef()
     p.motionMode             = ParticleMotionMode::Beam;
     p.beamDesc.speedMin      = 14.f;
     p.beamDesc.speedMax      = 20.f;
-    p.beamDesc.spreadRadius  = 3.5f;   // 콘 최대 반경
-    p.beamDesc.swirlSpeed    = 0.f;    // 각도 고정 → 직선 방사
-    p.beamDesc.swirlExpand   = true;   // 시작점에서 퍼짐
-    p.beamDesc.swirlFadeEnd  = 1.5f;   // 1.5m에서 거의 즉시 소멸
+    p.beamDesc.spreadRadius  = 3.5f;
+    p.beamDesc.swirlSpeed    = 0.f;
+    p.beamDesc.swirlExpand   = true;
+    p.beamDesc.swirlFadeEnd  = 1.5f;
     p.beamDesc.enableFlow    = true;
-    def.phases.push_back(p);
+    s.phases.push_back(p);
+
+    def.layers.push_back(std::move(layer));
     return def;
 }
 
@@ -160,11 +177,11 @@ void FireBeamBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
                 XMVectorScale(dirV, 1.3f)));
         }
 
-        m_vfxCoreId  = m_pVFXManager->SpawnSequenceEffect(origin, direction, BuildCoreBeamDef(), true);
-        m_vfxSwirlId = m_pVFXManager->SpawnSequenceEffect(origin, direction, BuildSwirlDef(), true);
-        m_vfxBurstId = m_pVFXManager->SpawnSequenceEffect(origin, direction, BuildBurstDef(), true);
+        m_vfxCoreId  = m_pVFXManager->SpawnEffectDef(origin, direction, BuildCoreBeamDef(), true);
+        m_vfxSwirlId = m_pVFXManager->SpawnEffectDef(origin, direction, BuildSwirlDef(), true);
+        m_vfxBurstId = m_pVFXManager->SpawnEffectDef(origin, direction, BuildBurstDef(), true);
 
-        // 서브 파티클 VFX 스폰
+        // 서브 파티클 VFX 스폰 (EffectRegistry sub_* 이펙트)
         m_subVFXIds.clear();
         if (caster)
         {
@@ -174,9 +191,9 @@ void FireBeamBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
                 SkillStats stats = pSkillComp->BuildSkillStats(m_slot, m_SkillData.activationType);
                 for (const auto& subId : stats.subVFXIds)
                 {
-                    const VFXSequenceDef* subDef = VFXLibrary::Get().GetSubDef(subId);
-                    if (!subDef) continue;
-                    int sid = m_pVFXManager->SpawnSequenceEffect(origin, direction, *subDef, true);
+                    if (!EffectRegistry::Get().HasEffect(subId)) continue;
+                    EffectDef subDef = EffectRegistry::Get().GetEffect(subId);
+                    int sid = m_pVFXManager->SpawnEffectDef(origin, direction, subDef, true);
                     if (sid >= 0) m_subVFXIds.push_back(sid);
                 }
             }

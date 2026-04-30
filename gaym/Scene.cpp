@@ -24,7 +24,7 @@
 #include "EnemyComponent.h"
 #include "MathUtils.h"
 #include "LavaGeyserManager.h"
-#include "VFXLibrary.h"
+#include "EffectRegistry.h"
 #include <functional> // Added for std::function
 #include "MapLoader.h"
 #include "WICTextureLoader12.h"
@@ -39,11 +39,7 @@ Scene::Scene()
     m_pCollisionManager = std::make_unique<CollisionManager>();
     m_pEnemySpawner = std::make_unique<EnemySpawner>();
     m_pProjectileManager = std::make_unique<ProjectileManager>();
-    m_pParticleSystem = std::make_unique<ParticleSystem>();
-    m_pFluidParticleSystem = std::make_unique<FluidParticleSystem>();
-    m_pFluidSkillEffect    = std::make_unique<FluidSkillEffect>();
-    m_pFluidVFXManager        = std::make_unique<FluidSkillVFXManager>();
-    m_pEnemyFluidVFXManager   = std::make_unique<FluidSkillVFXManager>();
+    m_pVFXManager     = std::make_unique<VFXManager>();
     m_pSSF                 = std::make_unique<ScreenSpaceFluid>();
     m_pDebugRenderer = std::make_unique<DebugRenderer>();
     m_pTorchSystem = std::make_unique<TorchSystem>();
@@ -116,21 +112,18 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
         // Add Skill Component
         auto* pSkillComponent = pPlayer->AddComponent<SkillComponent>();
 
-        // Q - WaveSlash (웨이브 슬래시)
+        // Q/E/R 스킬 VFXManager 연결은 VFXManager::Init 이후에 수행 (아래 참고)
         auto waveSlash = std::make_unique<WaveSlashBehavior>();
-        waveSlash->SetVFXManager(m_pFluidVFXManager.get());
         waveSlash->SetScene(this);
         pSkillComponent->EquipSkill(SkillSlot::Q, std::move(waveSlash));
 
         // E - FireBeam (화염 빔)
         auto fireBeam = std::make_unique<FireBeamBehavior>();
-        fireBeam->SetVFXManager(m_pFluidVFXManager.get());
         fireBeam->SetScene(this);
         pSkillComponent->EquipSkill(SkillSlot::E, std::move(fireBeam));
 
         // R - Meteor (메테오)
         auto meteor = std::make_unique<MeteorBehavior>();
-        meteor->SetVFXManager(m_pFluidVFXManager.get());
         meteor->SetScene(this);
         pSkillComponent->EquipSkill(SkillSlot::R, std::move(meteor));
 
@@ -167,54 +160,31 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
     // 맵 전환 시 m_nPersistentDescriptorEnd 이후 슬롯만 재활용할 수 있습니다.
     // --------------------------------------------------------------------------
 
-    // Particle System (512 reserved slots)
-    UINT nParticleDescriptorStart = m_nNextDescriptorIndex;
-    m_nNextDescriptorIndex += 512;
-    m_pParticleSystem->Init(pDevice, pCommandList, m_pDescriptorHeap.get(), nParticleDescriptorStart);
-    OutputDebugString(L"[Scene] Particle system initialized\n");
+    // (구) ParticleSystem 환경 파티클(Ember/Dust/Sandstorm)은 LightEmitterSystem
+    //  마이그레이션 과정에서 제거됨 — 향후 ambient 효과는 LightEmitterSystem
+    //  Sphere/Cone 레이어로 재구현 가능.
 
-    // Floating embers for volcanic atmosphere (Fire 테마에서만 활성)
-    m_nEmberEmitterId = m_pParticleSystem->CreateEmitter(
-        FireParticlePresets::FloatingEmbers(),
-        XMFLOAT3(0.0f, 0.0f, 0.0f)
-    );
-    OutputDebugString(L"[Scene] Floating embers emitter created\n");
+    // VFXManager — 통합 파사드 (플레이어 SSF + 적 빌보드)
+    // 내부에서 두 개의 FluidSkillVFXManager를 생성하며, 각 매니저가 슬롯당 2개
+    // 디스크립터를 사용한다(SPH SRV + LightEmitter SRV).
+    m_pVFXManager->Init(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex);
+    OutputDebugString(L"[Scene] VFXManager initialized\n");
 
-    // Floating dust for cave/rock atmosphere (Earth 테마에서만 활성 — 기본 Stop)
-    m_nDustEmitterId = m_pParticleSystem->CreateEmitter(
-        FireParticlePresets::FloatingDust(),
-        XMFLOAT3(0.0f, 0.0f, 0.0f)
-    );
-    if (auto* pDust = m_pParticleSystem->GetEmitter(m_nDustEmitterId))
-        pDust->Stop();
-    OutputDebugString(L"[Scene] Floating dust emitter created (idle)\n");
-
-    // 주기적 모래폭풍 burst — Earth 스테이지 + STORM_ACTIVE 구간 동안만 가동
-    m_nSandstormEmitterId = m_pParticleSystem->CreateEmitter(
-        FireParticlePresets::Sandstorm(),
-        XMFLOAT3(0.0f, 0.0f, 0.0f)
-    );
-    if (auto* pStorm = m_pParticleSystem->GetEmitter(m_nSandstormEmitterId))
-        pStorm->Stop();
-    OutputDebugString(L"[Scene] Sandstorm emitter created (idle)\n");
-
-    // Fluid Particle System (SRV 디스크립터 슬롯 1개)
-    UINT nFluidParticleDescriptorStart = m_nNextDescriptorIndex;
-    m_nNextDescriptorIndex += 1;
-    m_pFluidParticleSystem->Init(pDevice, pCommandList, m_pDescriptorHeap.get(), nFluidParticleDescriptorStart);
-    OutputDebugString(L"[Scene] Fluid particle system initialized\n");
-
-    // FluidSkillVFXManager — 플레이어 전용 (SSF 파이프라인)
-    UINT nFluidVFXDescStart = m_nNextDescriptorIndex;
-    m_nNextDescriptorIndex += FluidSkillVFXManager::MAX_EFFECTS;
-    m_pFluidVFXManager->Init(pDevice, pCommandList, m_pDescriptorHeap.get(), nFluidVFXDescStart);
-    OutputDebugString(L"[Scene] FluidSkillVFXManager (player) initialized\n");
-
-    // FluidSkillVFXManager — 적 전용 (빌보드 렌더, SSF 완전 분리)
-    UINT nEnemyVFXDescStart = m_nNextDescriptorIndex;
-    m_nNextDescriptorIndex += FluidSkillVFXManager::MAX_EFFECTS;
-    m_pEnemyFluidVFXManager->Init(pDevice, pCommandList, m_pDescriptorHeap.get(), nEnemyVFXDescStart);
-    OutputDebugString(L"[Scene] FluidSkillVFXManager (enemy) initialized\n");
+    // VFXManager 초기화 이후 스킬 행동 클래스에 플레이어 VFX 매니저 연결
+    // (Init 전에는 m_pPlayerVFX가 nullptr이므로 반드시 여기서 설정)
+    if (m_pPlayerGameObject)
+    {
+        if (auto* pSC = m_pPlayerGameObject->GetComponent<SkillComponent>())
+        {
+            FluidSkillVFXManager* pPlayerVFX = m_pVFXManager->GetPlayerVFX();
+            if (auto* pQ = dynamic_cast<WaveSlashBehavior*>(pSC->GetSkill(SkillSlot::Q)))
+                pQ->SetVFXManager(pPlayerVFX);
+            if (auto* pE = dynamic_cast<FireBeamBehavior*>(pSC->GetSkill(SkillSlot::E)))
+                pE->SetVFXManager(pPlayerVFX);
+            if (auto* pR = dynamic_cast<MeteorBehavior*>(pSC->GetSkill(SkillSlot::R)))
+                pR->SetVFXManager(pPlayerVFX);
+        }
+    }
 
     // TorchSystem (횃불 조명 및 불꽃 빌보드)
     UINT nTorchDescStart = m_nNextDescriptorIndex;
@@ -222,9 +192,9 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
     m_pTorchSystem->Init(pDevice, pCommandList, this, pShader.get(), m_pDescriptorHeap.get(), nTorchDescStart);
     OutputDebugString(L"[Scene] TorchSystem initialized\n");
 
-    // VFXLibrary 초기화 (모든 스킬 VFX 정의 등록)
-    VFXLibrary::Get().Initialize();
-    OutputDebugString(L"[Scene] VFXLibrary initialized\n");
+    // EffectRegistry 초기화 (모든 VFX 이펙트 등록)
+    EffectRegistry::Get().Initialize();
+    OutputDebugString(L"[Scene] EffectRegistry initialized\n");
 
     // Screen-Space Fluid Renderer 초기화
     if (auto* pApp = Dx12App::GetInstance())
@@ -233,16 +203,9 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
         OutputDebugString(L"[Scene] ScreenSpaceFluid initialized\n");
     }
 
-    // FluidSkillEffect: SkillComponent 연결 (플레이어 설정 후)
-    if (m_pPlayerGameObject)
-    {
-        auto* pSkill = m_pPlayerGameObject->GetComponent<SkillComponent>();
-        if (pSkill)
-        {
-            m_pFluidSkillEffect->Init(m_pFluidParticleSystem.get(), pSkill);
-            OutputDebugString(L"[Scene] FluidSkillEffect initialized\n");
-        }
-    }
+    // FluidSkillEffect (구형 Enhance ring 효과) 제거됨.
+    // 동일한 효과를 EffectRegistry/VFXManager 경로로 재구현하려면
+    // EffectDef를 등록한 뒤 m_pVFXManager->Spawn(...)으로 스폰한다.
 
     // Projectile Manager (64 reserved slots)
     UINT nProjectileDescriptorStart = m_nNextDescriptorIndex;
@@ -1298,87 +1261,12 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         m_pProjectileManager->Update(deltaTime);
     }
 
-    // Update Particle System
-    if (m_pParticleSystem)
-    {
-        // Floating ambient particles follow player; theme-gated emission
-        if (m_pPlayerGameObject)
-        {
-            XMFLOAT3 playerPos = m_pPlayerGameObject->GetTransform()->GetPosition();
-            // Fire 테마: 불꽃 잔해
-            if (m_nEmberEmitterId >= 0)
-            {
-                if (auto* pEmber = m_pParticleSystem->GetEmitter(m_nEmberEmitterId))
-                {
-                    bool bWantEmit = (m_eCurrentTheme == StageTheme::Fire);
-                    if (bWantEmit && !pEmber->IsEmitting()) pEmber->Start();
-                    else if (!bWantEmit && pEmber->IsEmitting()) pEmber->Stop();
-                    pEmber->SetPosition(playerPos);
-                }
-            }
-            // Earth 테마: 동굴 먼지 (ambient)
-            if (m_nDustEmitterId >= 0)
-            {
-                if (auto* pDust = m_pParticleSystem->GetEmitter(m_nDustEmitterId))
-                {
-                    bool bWantEmit = (m_eCurrentTheme == StageTheme::Earth);
-                    if (bWantEmit && !pDust->IsEmitting()) pDust->Start();
-                    else if (!bWantEmit && pDust->IsEmitting()) pDust->Stop();
-                    pDust->SetPosition(playerPos);
-                }
-            }
-            // Earth 테마: 주기적 모래폭풍 burst (10s 정적 → 5s 폭풍 사이클)
-            if (m_nSandstormEmitterId >= 0)
-            {
-                if (auto* pStorm = m_pParticleSystem->GetEmitter(m_nSandstormEmitterId))
-                {
-                    if (m_eCurrentTheme == StageTheme::Earth)
-                    {
-                        m_fStormTimer += deltaTime;
-                        float threshold = m_bStormActive ? STORM_ACTIVE_DURATION : STORM_QUIET_DURATION;
-                        if (m_fStormTimer >= threshold)
-                        {
-                            m_bStormActive = !m_bStormActive;
-                            m_fStormTimer = 0.0f;
-                            if (m_bStormActive) { pStorm->Start(); OutputDebugString(L"[Scene] Sandstorm gust!\n"); }
-                            else                { pStorm->Stop();  OutputDebugString(L"[Scene] Sandstorm calm\n"); }
-                        }
-                        // 폭풍 중에는 폭풍이 플레이어 풍상(upwind, -X 방향) 쪽에서 시작되도록 살짝 오프셋
-                        XMFLOAT3 stormOrigin = playerPos;
-                        stormOrigin.x -= 8.0f;
-                        pStorm->SetPosition(stormOrigin);
-                    }
-                    else
-                    {
-                        // 다른 스테이지에선 즉시 정지·리셋
-                        if (pStorm->IsEmitting()) pStorm->Stop();
-                        m_bStormActive = false;
-                        m_fStormTimer = 0.0f;
-                    }
-                }
-            }
-        }
-        m_pParticleSystem->Update(deltaTime);
-    }
+    // (구) ParticleSystem 기반 환경 파티클 업데이트 블록은 마이그레이션과 함께
+    //  제거되었습니다. 동일 효과 필요 시 LightEmitterSystem 으로 재구현하세요.
 
-    // Update Fluid Particle System
-    if (m_pFluidParticleSystem)
-    {
-        m_pFluidParticleSystem->Update(deltaTime);
-    }
-
-    // Update Fluid Skill VFX Manager
-    if (m_pFluidVFXManager)
-        m_pFluidVFXManager->Update(deltaTime);
-    if (m_pEnemyFluidVFXManager)
-        m_pEnemyFluidVFXManager->Update(deltaTime);
-
-    // Update Fluid Skill Effect (제어점을 플레이어 위치에 맞게 갱신)
-    if (m_pFluidSkillEffect && m_pPlayerGameObject)
-    {
-        m_pFluidSkillEffect->Update(deltaTime,
-            m_pPlayerGameObject->GetTransform()->GetPosition());
-    }
+    // Update VFX Manager (player + enemy 슬롯 풀 동시 업데이트)
+    if (m_pVFXManager)
+        m_pVFXManager->Update(deltaTime);
 
     // Update Torch System (flickering effect)
     if (m_pTorchSystem)
@@ -1538,26 +1426,16 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
         }
     }
 
-    // Render particles
-    if (m_pParticleSystem)
-    {
-        m_pParticleSystem->Render(pCommandList);
-    }
+    // 구 ParticleSystem.Render 호출은 LightEmitterSystem 통합으로 제거됨.
 
-    // ---------- Screen-Space Fluid 렌더링 ----------
-    bool bHasFluid = (m_pFluidParticleSystem && m_pFluidParticleSystem->IsActive());
-    if (!bHasFluid && m_pFluidVFXManager)
-    {
-        // VFX 매니저에 활성 슬롯이 있는지 확인 (Render에서 내부적으로도 체크하므로 간단히 true)
-        bHasFluid = true;
-    }
+    // ---------- Screen-Space Fluid 렌더링 (VFXManager 통합 경로) ----------
+    bool bHasFluid = (m_pVFXManager != nullptr); // 매니저 있으면 SSF 시도
 
     if (m_pSSF && m_pSSF->IsInitialized() && bHasFluid)
     {
         // 행렬 준비
         XMMATRIX mView = XMLoadFloat4x4(&m_pCamera->GetViewMatrix());
         XMMATRIX mProj = XMLoadFloat4x4(&m_pCamera->GetProjectionMatrix());
-        // 뷰 행렬 r[i] = (xaxis.i, yaxis.i, zaxis.i) 구조이므로 열 방향으로 추출
         XMFLOAT3 camRight = { XMVectorGetX(mView.r[0]), XMVectorGetX(mView.r[1]), XMVectorGetX(mView.r[2]) };
         XMFLOAT3 camUp    = { XMVectorGetY(mView.r[0]), XMVectorGetY(mView.r[1]), XMVectorGetY(mView.r[2]) };
 
@@ -1566,18 +1444,13 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
         XMStoreFloat4x4(&viewT, XMMatrixTranspose(mView));
 
         XMFLOAT4X4 projRaw;
-        XMStoreFloat4x4(&projRaw, mProj);  // 비전치 (projA/projB 추출용)
+        XMStoreFloat4x4(&projRaw, mProj);
 
         float projA = projRaw._33;
         float projB = projRaw._43;
 
-        // GPU SPH dispatch (BeginDepthPass 전에)
-        if (m_pFluidVFXManager)
-            m_pFluidVFXManager->DispatchSPH(pCommandList, m_fLastDeltaTime);
-        if (m_pEnemyFluidVFXManager)
-            m_pEnemyFluidVFXManager->DispatchSPH(pCommandList, m_fLastDeltaTime);
-        if (m_pFluidParticleSystem && m_pFluidParticleSystem->IsActive())
-            m_pFluidParticleSystem->DispatchSPH(pCommandList, m_fLastDeltaTime);
+        // GPU SPH dispatch (BeginDepthPass 전에) — 두 매니저 동시 처리
+        m_pVFXManager->DispatchSPH(pCommandList, m_fLastDeltaTime);
 
         // 조명 방향 (공통)
         XMFLOAT3 lightDirWorld = { -0.5f, -0.8f, -0.3f };
@@ -1589,37 +1462,25 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
         {
             XMFLOAT4 outer = { 0.95f, 0.15f, 0.0f, 0.9f };
             XMFLOAT4 inner = { 1.0f,  0.88f, 0.25f, 1.0f };
-            if (m_pFluidVFXManager)
+            FluidElementColor colors = m_pVFXManager->GetDominantFluidColors(blurOnly);
+            if (colors.coreColor.w > 0.01f)
             {
-                FluidElementColor colors = m_pFluidVFXManager->GetDominantFluidColors(blurOnly);
-                if (colors.coreColor.w > 0.01f)  // 해당 패스에 유효한 색상이 있을 때만 덮어씀
-                {
-                    outer   = colors.edgeColor;
-                    outer.w = (std::max)(outer.w, 0.6f);
-                    inner   = colors.coreColor;
-                }
+                outer   = colors.edgeColor;
+                outer.w = (std::max)(outer.w, 0.6f);
+                inner   = colors.coreColor;
             }
             return { outer, inner };
         };
 
-        // ── 패스 A: blur 없는 플레이어 이펙트 (파이어 트레일, E빔, R메테오 등) ──
-        bool bHasNonBlur = (m_pFluidParticleSystem && m_pFluidParticleSystem->IsActive())
-                         || (m_pFluidVFXManager && m_pFluidVFXManager->HasActiveSlots(false));
+        // ── 패스 A: blur 없는 플레이어 이펙트 ──
+        bool bHasNonBlur = m_pVFXManager->HasActiveSlots(false);
         if (bHasNonBlur)
         {
             m_pSSF->BeginDepthPass(pCommandList);
-
-            if (m_pFluidParticleSystem && m_pFluidParticleSystem->IsActive())
-                m_pFluidParticleSystem->RenderDepth(pCommandList, viewProjT, viewT, camRight, camUp, projA, projB, m_pSSF.get());
-            if (m_pFluidVFXManager)
-                m_pFluidVFXManager->RenderDepth(pCommandList, viewProjT, viewT, camRight, camUp, projA, projB, m_pSSF.get(), false);
+            m_pVFXManager->RenderDepth(pCommandList, viewProjT, viewT, camRight, camUp, projA, projB, m_pSSF.get(), false);
 
             m_pSSF->BeginThicknessPass(pCommandList);
-
-            if (m_pFluidParticleSystem && m_pFluidParticleSystem->IsActive())
-                m_pFluidParticleSystem->RenderThicknessOnly(pCommandList, m_pSSF.get());
-            if (m_pFluidVFXManager)
-                m_pFluidVFXManager->RenderThicknessOnly(pCommandList, m_pSSF.get(), false);
+            m_pVFXManager->RenderThicknessOnly(pCommandList, m_pSSF.get(), false);
 
             m_pSSF->EndDepthPass(pCommandList);
             m_pSSF->SetBlurEnabled(false);
@@ -1640,14 +1501,14 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
         }
 
         // ── 패스 B: blur 이펙트 (Q 파도 등) ──
-        bool bHasBlur = m_pFluidVFXManager && m_pFluidVFXManager->HasActiveSlots(true);
+        bool bHasBlur = m_pVFXManager->HasActiveSlots(true);
         if (bHasBlur)
         {
             m_pSSF->BeginDepthPass(pCommandList);
-            m_pFluidVFXManager->RenderDepth(pCommandList, viewProjT, viewT, camRight, camUp, projA, projB, m_pSSF.get(), true);
+            m_pVFXManager->RenderDepth(pCommandList, viewProjT, viewT, camRight, camUp, projA, projB, m_pSSF.get(), true);
 
             m_pSSF->BeginThicknessPass(pCommandList);
-            m_pFluidVFXManager->RenderThicknessOnly(pCommandList, m_pSSF.get(), true);
+            m_pVFXManager->RenderThicknessOnly(pCommandList, m_pSSF.get(), true);
 
             m_pSSF->EndDepthPass(pCommandList);
             m_pSSF->SetBlurEnabled(true);
@@ -1667,40 +1528,22 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
             pCommandList->OMSetRenderTargets(1, &mainRTV, FALSE, &mainDSV);
         }
 
-        // ── 적 투사체 빌보드 렌더 (SSF 완료 후, 전용 매니저로 완전 분리) ──
-        if (m_pEnemyFluidVFXManager)
-            m_pEnemyFluidVFXManager->RenderEnemyEffects(pCommandList, viewProjT, camRight, camUp);
+        // ── 적 투사체 빌보드 렌더 (SSF 완료 후, 적 슬롯 풀 전용) ──
+        m_pVFXManager->RenderEnemyEffects(pCommandList, viewProjT, camRight, camUp);
     }
     else
     {
-        // Fallback: 기존 빌보드 렌더링
-        if (m_pFluidParticleSystem && m_pFluidParticleSystem->IsActive())
-        {
-            XMMATRIX mView = XMLoadFloat4x4(&m_pCamera->GetViewMatrix());
-            XMFLOAT3 camRight = { XMVectorGetX(mView.r[0]), XMVectorGetX(mView.r[1]), XMVectorGetX(mView.r[2]) };
-            XMFLOAT3 camUp    = { XMVectorGetY(mView.r[0]), XMVectorGetY(mView.r[1]), XMVectorGetY(mView.r[2]) };
+        // Fallback: SSF 없이 빌보드 렌더링
+        XMMATRIX mView2 = XMLoadFloat4x4(&m_pCamera->GetViewMatrix());
+        XMFLOAT3 camRight2 = { XMVectorGetX(mView2.r[0]), XMVectorGetX(mView2.r[1]), XMVectorGetX(mView2.r[2]) };
+        XMFLOAT3 camUp2    = { XMVectorGetY(mView2.r[0]), XMVectorGetY(mView2.r[1]), XMVectorGetY(mView2.r[2]) };
 
-            XMMATRIX mViewProj = mView * XMLoadFloat4x4(&m_pCamera->GetProjectionMatrix());
-            XMFLOAT4X4 viewProj;
-            XMStoreFloat4x4(&viewProj, XMMatrixTranspose(mViewProj));
+        XMMATRIX mViewProj2 = mView2 * XMLoadFloat4x4(&m_pCamera->GetProjectionMatrix());
+        XMFLOAT4X4 viewProj2;
+        XMStoreFloat4x4(&viewProj2, XMMatrixTranspose(mViewProj2));
 
-            m_pFluidParticleSystem->Render(pCommandList, viewProj, camRight, camUp);
-        }
-
-        {
-            XMMATRIX mView2 = XMLoadFloat4x4(&m_pCamera->GetViewMatrix());
-            XMFLOAT3 camRight2 = { XMVectorGetX(mView2.r[0]), XMVectorGetX(mView2.r[1]), XMVectorGetX(mView2.r[2]) };
-            XMFLOAT3 camUp2    = { XMVectorGetY(mView2.r[0]), XMVectorGetY(mView2.r[1]), XMVectorGetY(mView2.r[2]) };
-
-            XMMATRIX mViewProj2 = mView2 * XMLoadFloat4x4(&m_pCamera->GetProjectionMatrix());
-            XMFLOAT4X4 viewProj2;
-            XMStoreFloat4x4(&viewProj2, XMMatrixTranspose(mViewProj2));
-
-            if (m_pFluidVFXManager)
-                m_pFluidVFXManager->Render(pCommandList, viewProj2, camRight2, camUp2);
-            if (m_pEnemyFluidVFXManager)
-                m_pEnemyFluidVFXManager->Render(pCommandList, viewProj2, camRight2, camUp2);
-        }
+        if (m_pVFXManager)
+            m_pVFXManager->Render(pCommandList, viewProj2, camRight2, camUp2);
     }
 
     // Render lava geyser particles (Room 기반 맵 기믹)
@@ -3498,9 +3341,9 @@ void Scene::TransitionToGrassBossRoom()
     m_fFlightBossHitFlashTimer = 0.0f;
     m_fFlightBossSkillTimer = 0.0f;
     // 잔존 탄환 모두 제거 (유체 트레일 stop)
-    if (m_pEnemyFluidVFXManager)
+    if (m_pVFXManager)
         for (auto& b : m_FlightBossBullets)
-            if (b.fluidId >= 0) m_pEnemyFluidVFXManager->StopEffect(b.fluidId);
+            if (b.fluidId >= 0) m_pVFXManager->Stop(b.fluidId);
     m_FlightBossBullets.clear();
 
     if (m_pPlayerGameObject)
@@ -3669,16 +3512,12 @@ void Scene::ToggleFlightMode(ID3D12Device* pDevice, ID3D12GraphicsCommandList* p
     {
         pPC->ExitFlightMode();
         m_pCamera->SetFlightMode(false);
-        // 윈드 이미터 정지
-        if (m_nFlightWindEmitterId >= 0 && m_pParticleSystem)
-        {
-            if (auto* pEm = m_pParticleSystem->GetEmitter(m_nFlightWindEmitterId))
-                pEm->Stop();
-        }
+        // 윈드 이미터: LightEmitterSystem 기반은 자동 만료(짧은 lifetime), 별도 종료 불필요
+        m_fFlightWindAccum = 0.f;
         // 잔존 탄환 정리 (유체 트레일 stop)
-        if (m_pEnemyFluidVFXManager)
+        if (m_pVFXManager)
             for (auto& b : m_FlightBossBullets)
-                if (b.fluidId >= 0) m_pEnemyFluidVFXManager->StopEffect(b.fluidId);
+                if (b.fluidId >= 0) m_pVFXManager->Stop(b.fluidId);
         m_FlightBossBullets.clear();
         // FOV 복원
         m_pCamera->SetFovDegrees(m_pCamera->GetBaseFovDeg());
@@ -3714,7 +3553,7 @@ bool Scene::IsFlightHUDActive() const
 
 void Scene::FlightShoot(const XMFLOAT3& muzzlePos, const XMFLOAT3& dirNormalized)
 {
-    if (!m_pFlightBossDummy || !m_pParticleSystem) return;
+    if (!m_pFlightBossDummy || !m_pVFXManager) return;
 
     XMVECTOR ro = XMLoadFloat3(&muzzlePos);
     XMVECTOR rd = XMLoadFloat3(&dirNormalized);
@@ -3740,95 +3579,72 @@ void Scene::FlightShoot(const XMFLOAT3& muzzlePos, const XMFLOAT3& dirNormalized
         }
     }
 
-    // 머즐 플래시
+    // 머즐 플래시 — 작은 Sphere Burst
     {
-        ParticleEmitterConfig cfg;
-        cfg.emissionRate = 0.0f;
-        cfg.burstCount   = 14;
-        cfg.minLifetime  = 0.05f;
-        cfg.maxLifetime  = 0.18f;
-        cfg.minStartSize = 0.35f;
-        cfg.maxStartSize = 0.65f;
-        cfg.minEndSize   = 0.0f;
-        cfg.maxEndSize   = 0.0f;
-        cfg.minVelocity  = { -3.0f, -3.0f, -3.0f };
-        cfg.maxVelocity  = {  3.0f,  3.0f,  3.0f };
-        cfg.startColor   = { 0.85f, 0.95f, 1.0f, 1.0f };
-        cfg.endColor     = { 0.2f,  0.4f,  0.9f, 0.0f };
-        cfg.gravity      = { 0,0,0 };
-        cfg.spawnRadius  = 0.4f;
-        int id = m_pParticleSystem->CreateEmitter(cfg, muzzlePos);
-        if (auto* pEm = m_pParticleSystem->GetEmitter(id))
-        {
-            pEm->Burst(14);
-            pEm->Stop();
-        }
+        EffectLayer layer;
+        layer.type          = EmitterType::Sphere;
+        layer.particleCount = 14;
+        layer.coreColor     = { 0.85f, 0.95f, 1.0f, 1.0f };
+        layer.edgeColor     = { 0.2f,  0.4f,  0.9f, 0.0f };
+        layer.speedMin      = 2.0f;
+        layer.speedMax      = 5.0f;
+        layer.lifetimeMin   = 0.05f;
+        layer.lifetimeMax   = 0.18f;
+        layer.sizeScale     = 0.6f;
+        layer.sphere.radius = 0.4f;
+        m_pVFXManager->SpawnLightLayer(muzzlePos, dirNormalized, layer, /*isPlayer*/true);
     }
 
     if (bHit)
     {
-        // 피격 폭발
-        ParticleEmitterConfig cfg;
-        cfg.emissionRate = 0.0f;
-        cfg.burstCount   = 28;
-        cfg.minLifetime  = 0.20f;
-        cfg.maxLifetime  = 0.45f;
-        cfg.minStartSize = 0.5f;
-        cfg.maxStartSize = 1.1f;
-        cfg.minEndSize   = 0.0f;
-        cfg.maxEndSize   = 0.05f;
-        cfg.minVelocity  = { -8.0f, -8.0f, -8.0f };
-        cfg.maxVelocity  = {  8.0f,  8.0f,  8.0f };
-        cfg.startColor   = { 1.0f, 0.95f, 0.7f, 1.0f };
-        cfg.endColor     = { 0.6f, 0.3f,  0.1f, 0.0f };
-        cfg.gravity      = { 0, -1.5f, 0 };
-        cfg.spawnRadius  = 0.6f;
-        int id = m_pParticleSystem->CreateEmitter(cfg, hitPoint);
-        if (auto* pEm = m_pParticleSystem->GetEmitter(id))
-        {
-            pEm->Burst(28);
-            pEm->Stop();
-        }
+        // 피격 폭발 — Burst (중력 영향)
+        EffectLayer layer;
+        layer.type          = EmitterType::Burst;
+        layer.particleCount = 28;
+        layer.coreColor     = { 1.0f, 0.95f, 0.7f, 1.0f };
+        layer.edgeColor     = { 0.6f, 0.3f,  0.1f, 0.0f };
+        layer.speedMin      = 5.0f;
+        layer.speedMax      = 10.0f;
+        layer.lifetimeMin   = 0.20f;
+        layer.lifetimeMax   = 0.45f;
+        layer.sizeScale     = 0.8f;
+        layer.burst.bounceCoeff = 0.f;
+        layer.burst.fadeOut     = true;
+        layer.burst.fadeSize    = true;
+        m_pVFXManager->SpawnLightLayer(hitPoint, dirNormalized, layer, /*isPlayer*/true);
+
         m_fFlightBossHitFlashTimer = kFlightHitFlashDuration;
         m_nFlightHitCount++;
     }
     else
     {
-        // 미스 트레이서: 라인 따라 일정 간격 burst (시각용)
+        // 미스 트레이서: 라인 따라 일정 간격 작은 Sphere Burst (시각용)
         XMVECTOR end = ro + rd * 70.0f;
         for (int i = 1; i <= 4; ++i)
         {
             float u = (float)i / 5.0f;
             XMVECTOR p = XMVectorLerp(ro, end, u);
             XMFLOAT3 pp; XMStoreFloat3(&pp, p);
-            ParticleEmitterConfig cfg;
-            cfg.emissionRate = 0.0f;
-            cfg.burstCount   = 4;
-            cfg.minLifetime  = 0.05f;
-            cfg.maxLifetime  = 0.15f;
-            cfg.minStartSize = 0.25f;
-            cfg.maxStartSize = 0.45f;
-            cfg.minEndSize   = 0.0f;
-            cfg.maxEndSize   = 0.0f;
-            cfg.minVelocity  = { -1.0f, -1.0f, -1.0f };
-            cfg.maxVelocity  = {  1.0f,  1.0f,  1.0f };
-            cfg.startColor   = { 0.7f, 0.85f, 1.0f, 0.9f };
-            cfg.endColor     = { 0.2f, 0.3f,  0.6f, 0.0f };
-            cfg.gravity      = { 0,0,0 };
-            cfg.spawnRadius  = 0.2f;
-            int id = m_pParticleSystem->CreateEmitter(cfg, pp);
-            if (auto* pEm = m_pParticleSystem->GetEmitter(id))
-            {
-                pEm->Burst(4);
-                pEm->Stop();
-            }
+
+            EffectLayer layer;
+            layer.type          = EmitterType::Sphere;
+            layer.particleCount = 4;
+            layer.coreColor     = { 0.7f, 0.85f, 1.0f, 0.9f };
+            layer.edgeColor     = { 0.2f, 0.3f,  0.6f, 0.0f };
+            layer.speedMin      = 0.5f;
+            layer.speedMax      = 1.5f;
+            layer.lifetimeMin   = 0.05f;
+            layer.lifetimeMax   = 0.15f;
+            layer.sizeScale     = 0.45f;
+            layer.sphere.radius = 0.2f;
+            m_pVFXManager->SpawnLightLayer(pp, dirNormalized, layer, /*isPlayer*/true);
         }
     }
 }
 
 void Scene::UpdateFlightFX(float deltaTime, InputSystem* pInputSystem)
 {
-    if (!m_pPlayerGameObject || !m_pParticleSystem) return;
+    if (!m_pPlayerGameObject || !m_pVFXManager) return;
     TransformComponent* pPT = m_pPlayerGameObject->GetTransform();
     if (!pPT) return;
 
@@ -3844,7 +3660,7 @@ void Scene::UpdateFlightFX(float deltaTime, InputSystem* pInputSystem)
         m_pCamera->SetFovDegrees(m_pCamera->GetBaseFovDeg() + m_fFlightFovOffsetCur);
     }
 
-    // ── 윈드 라인 이미터: 플레이어 주변에서 뒤로 빠르게 흘러가는 줄
+    // ── 윈드 라인 — LightEmitterSystem(Sphere) 짧은 Burst 주기 재스폰.
     // 모션 forward = m_fFlightBossYawDeg 직접 계산 (보스 visual rotation 과 분리)
     float yawRad = XMConvertToRadians(m_fFlightBossYawDeg);
     XMVECTOR fwd = XMVectorSet(sinf(yawRad), 0.0f, cosf(yawRad), 0.0f);
@@ -3852,54 +3668,40 @@ void Scene::UpdateFlightFX(float deltaTime, InputSystem* pInputSystem)
     XMFLOAT3 fwdF; XMStoreFloat3(&fwdF, fwd);
     float windSpeed = bBoost ? 160.0f : 110.0f;
 
-    // 부스트 토글 또는 진행 방향이 크게 바뀌면 이미터 재생성 — emit 속도/방향이 갱신되도록
-    static bool s_lastBoost = false;
-    static XMFLOAT3 s_lastFwd = { 0, 0, 1 };
-    bool needRebuild = (s_lastBoost != bBoost);
+    // ~30Hz 재스폰 (0.033s). 부스트 시 ~50Hz (0.020s).
+    const float windInterval = bBoost ? 0.020f : 0.033f;
+    m_fFlightWindAccum += deltaTime;
+    int spawnSteps = 0;
+    while (m_fFlightWindAccum >= windInterval && spawnSteps < 4)
     {
-        float dotF = s_lastFwd.x * fwdF.x + s_lastFwd.z * fwdF.z;
-        if (dotF < 0.85f) needRebuild = true;  // ~30° 이상 변화
-    }
+        m_fFlightWindAccum -= windInterval;
+        ++spawnSteps;
 
-    ParticleEmitter* pWind = (m_nFlightWindEmitterId >= 0)
-        ? m_pParticleSystem->GetEmitter(m_nFlightWindEmitterId) : nullptr;
-    if (pWind && needRebuild)
-    {
-        pWind->Stop();
-        m_pParticleSystem->RemoveEmitter(m_nFlightWindEmitterId);
-        m_nFlightWindEmitterId = -1;
-        pWind = nullptr;
-    }
-    s_lastBoost = bBoost;
-    s_lastFwd   = fwdF;
+        // 플레이어 앞쪽 8단위에서 스폰 → 뒤로 빠르게 흘러내려옴
+        XMVECTOR ppV = XMLoadFloat3(&pPT->GetPosition());
+        XMVECTOR spawn = ppV + fwd * 8.0f;
+        XMFLOAT3 spawnPos; XMStoreFloat3(&spawnPos, spawn);
 
-    if (!pWind)
-    {
-        ParticleEmitterConfig cfg;
-        cfg.emissionRate = bBoost ? 200.0f : 110.0f;
-        cfg.burstCount   = 0;
-        cfg.minLifetime  = 0.40f;
-        cfg.maxLifetime  = 0.85f;
-        cfg.minStartSize = 0.45f;
-        cfg.maxStartSize = 1.05f;
-        cfg.minEndSize   = 0.0f;
-        cfg.maxEndSize   = 0.05f;
-        cfg.minVelocity  = { -fwdF.x * windSpeed - 3.0f, -3.0f, -fwdF.z * windSpeed - 3.0f };
-        cfg.maxVelocity  = { -fwdF.x * windSpeed + 3.0f,  3.0f, -fwdF.z * windSpeed + 3.0f };
-        cfg.startColor   = { 0.95f, 1.0f, 1.0f, 0.7f };
-        cfg.endColor     = { 0.55f, 0.85f, 1.0f, 0.0f };
-        cfg.gravity      = { 0,0,0 };
-        cfg.spawnRadius  = 12.0f;  // 더 넓은 범위 (시야 양옆까지 spread)
-        m_nFlightWindEmitterId = m_pParticleSystem->CreateEmitter(cfg, pPT->GetPosition());
-    }
-    else
-    {
-        // 플레이어 앞쪽 8단위에서 스폰 → 카메라 시야로 빠르게 흘러내려옴
-        XMVECTOR pp = XMLoadFloat3(&pPT->GetPosition());
-        XMVECTOR spawn = pp + fwd * 8.0f;
-        XMFLOAT3 spawnF; XMStoreFloat3(&spawnF, spawn);
-        pWind->SetPosition(spawnF);
-        pWind->Start();
+        // direction = -fwd (뒤로 흐름)
+        XMFLOAT3 backDir = { -fwdF.x, 0.0f, -fwdF.z };
+
+        EffectLayer layer;
+        layer.type          = EmitterType::Cone;
+        layer.particleCount = bBoost ? 12 : 8;   // 1회 스폰량
+        layer.coreColor     = { 0.95f, 1.0f, 1.0f, 0.7f };
+        layer.edgeColor     = { 0.55f, 0.85f, 1.0f, 0.0f };
+        layer.speedMin      = windSpeed * 0.85f;
+        layer.speedMax      = windSpeed * 1.05f;
+        layer.lifetimeMin   = 0.40f;
+        layer.lifetimeMax   = 0.85f;
+        layer.sizeScale     = 0.85f;
+        layer.cone.halfAngle     = 35.0f;        // 시야 양옆까지 spread
+        layer.cone.gravityScale  = 0.f;
+        layer.cone.startSizeMult = 1.0f;
+        layer.cone.endSizeMult   = 0.05f;
+        layer.cone.fadeAlpha     = true;
+        layer.cone.fadeSize      = false;
+        m_pVFXManager->SpawnLightLayer(spawnPos, backDir, layer, /*isPlayer*/true);
     }
 }
 
@@ -3968,7 +3770,7 @@ void Scene::GetFlightBulletColors(ElementType e, XMFLOAT4& outStart, XMFLOAT4& o
 
 void Scene::FireFlightBossBarrage()
 {
-    if (!m_pFlightBossDummy || !m_pPlayerGameObject || !m_pParticleSystem) return;
+    if (!m_pFlightBossDummy || !m_pPlayerGameObject) return;
     TransformComponent* pBT = m_pFlightBossDummy->GetTransform();
     if (!pBT) return;
 
@@ -4014,33 +3816,25 @@ void Scene::FireFlightBossBarrage()
 
         // 유체 트레일 (적 전용 VFX 매니저 — 빌보드 렌더, SSF 제외)
         b.fluidId = -1;
-        if (m_pEnemyFluidVFXManager)
-            b.fluidId = m_pEnemyFluidVFXManager->SpawnEffect(b.pos, d, fluidDef);
+        if (m_pVFXManager)
+            b.fluidId = m_pVFXManager->SpawnEffect(b.pos, d, fluidDef);
 
-        // 출발 순간 파티클 burst (속성색 임팩트감 추가)
-        if (m_pParticleSystem)
+        // 출발 순간 LightEmitter burst (속성색 임팩트감 추가)
+        if (m_pVFXManager)
         {
-            ParticleEmitterConfig cfg;
-            cfg.emissionRate = 0.0f;
-            cfg.burstCount   = 10;
-            cfg.minLifetime  = 0.10f;
-            cfg.maxLifetime  = 0.20f;
-            cfg.minStartSize = 0.4f;
-            cfg.maxStartSize = 0.8f;
-            cfg.minEndSize   = 0.0f;
-            cfg.maxEndSize   = 0.0f;
-            cfg.minVelocity  = { -3.0f, -3.0f, -3.0f };
-            cfg.maxVelocity  = {  3.0f,  3.0f,  3.0f };
-            cfg.startColor   = colStart;
-            cfg.endColor     = colEnd;
-            cfg.gravity      = { 0, 0, 0 };
-            cfg.spawnRadius  = 0.3f;
-            int eid = m_pParticleSystem->CreateEmitter(cfg, b.pos);
-            if (auto* pEm = m_pParticleSystem->GetEmitter(eid))
-            {
-                pEm->Burst(10);
-                pEm->Stop();
-            }
+            EffectLayer layer;
+            layer.type          = EmitterType::Sphere;
+            layer.particleCount = 10;
+            layer.coreColor     = colStart;
+            layer.edgeColor     = colEnd;
+            layer.speedMin      = 1.5f;
+            layer.speedMax      = 4.0f;
+            layer.lifetimeMin   = 0.10f;
+            layer.lifetimeMax   = 0.20f;
+            layer.sizeScale     = 0.7f;
+            layer.sphere.radius = 0.3f;
+            // 보스 발사 = 적 슬롯
+            m_pVFXManager->SpawnLightLayer(b.pos, d, layer, /*isPlayer*/false);
         }
 
         m_FlightBossBullets.push_back(b);
@@ -4067,11 +3861,11 @@ void Scene::UpdateFlightBossBullets(float deltaTime)
         it->lifeRemain -= deltaTime;
 
         // 유체 트레일 위치/방향 갱신
-        if (m_pEnemyFluidVFXManager && it->fluidId >= 0)
+        if (m_pVFXManager && it->fluidId >= 0)
         {
             float invSpeed = 1.0f / (kFlightBulletSpeed > 0.0f ? kFlightBulletSpeed : 1.0f);
             XMFLOAT3 dir = { it->vel.x * invSpeed, it->vel.y * invSpeed, it->vel.z * invSpeed };
-            m_pEnemyFluidVFXManager->TrackEffect(it->fluidId, it->pos, dir);
+            m_pVFXManager->Track(it->fluidId, it->pos, dir);
         }
 
         // 플레이어 충돌 (sphere)
@@ -4085,40 +3879,33 @@ void Scene::UpdateFlightBossBullets(float deltaTime)
         if (bHitPlayer || bExpired)
         {
             // 유체 트레일 종료 — 피격은 수렴(impact), 자연 소멸은 stop
-            if (m_pEnemyFluidVFXManager && it->fluidId >= 0)
+            if (m_pVFXManager && it->fluidId >= 0)
             {
                 if (bHitPlayer)
-                    m_pEnemyFluidVFXManager->ImpactEffect(it->fluidId, it->pos);
+                    m_pVFXManager->Impact(it->fluidId, it->pos);
                 else
-                    m_pEnemyFluidVFXManager->StopEffect(it->fluidId);
+                    m_pVFXManager->Stop(it->fluidId);
             }
 
             // 임팩트 burst — 유체 수렴 + 입자 분산으로 펀치감 강화 (피격 시만)
-            if (bHitPlayer && m_pParticleSystem)
+            if (bHitPlayer && m_pVFXManager)
             {
                 XMFLOAT4 colStart, colEnd;
                 GetFlightBulletColors(m_eFlightBossElement, colStart, colEnd);
-                ParticleEmitterConfig cfg;
-                cfg.emissionRate = 0.0f;
-                cfg.burstCount   = 22;
-                cfg.minLifetime  = 0.12f;
-                cfg.maxLifetime  = 0.30f;
-                cfg.minStartSize = 0.55f;
-                cfg.maxStartSize = 1.15f;
-                cfg.minEndSize   = 0.0f;
-                cfg.maxEndSize   = 0.05f;
-                cfg.minVelocity  = { -5.0f, -5.0f, -5.0f };
-                cfg.maxVelocity  = {  5.0f,  5.0f,  5.0f };
-                cfg.startColor   = colStart;
-                cfg.endColor     = colEnd;
-                cfg.gravity      = { 0, 0, 0 };
-                cfg.spawnRadius  = 0.5f;
-                int eid = m_pParticleSystem->CreateEmitter(cfg, it->pos);
-                if (auto* pEm = m_pParticleSystem->GetEmitter(eid))
-                {
-                    pEm->Burst(22);
-                    pEm->Stop();
-                }
+
+                EffectLayer layer;
+                layer.type          = EmitterType::Sphere;
+                layer.particleCount = 22;
+                layer.coreColor     = colStart;
+                layer.edgeColor     = colEnd;
+                layer.speedMin      = 3.0f;
+                layer.speedMax      = 8.0f;
+                layer.lifetimeMin   = 0.12f;
+                layer.lifetimeMax   = 0.30f;
+                layer.sizeScale     = 0.85f;
+                layer.sphere.radius = 0.5f;
+                m_pVFXManager->SpawnLightLayer(it->pos, XMFLOAT3(0, 1, 0),
+                                               layer, /*isPlayer*/false);
             }
 
             it = m_FlightBossBullets.erase(it);

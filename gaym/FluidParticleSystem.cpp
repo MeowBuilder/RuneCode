@@ -2169,6 +2169,10 @@ void FluidParticleSystem::BuildSPHPipeline(ID3D12Device* pDevice)
     OutputDebugStringA("[FluidPS] GPU SPH 파이프라인 빌드 완료 (공간 해싱 포함)\n");
 }
 
+void FluidParticleSystem::EnsureRenderPipeline(ID3D12Device* pDevice) {
+    BuildSharedPipeline(pDevice);
+}
+
 // ============================================================================
 // DispatchSPH - GPU 기반 SPH 시뮬레이션 실행
 // ============================================================================

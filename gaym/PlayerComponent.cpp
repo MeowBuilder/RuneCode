@@ -9,8 +9,8 @@
 #include "Dx12App.h" // For runtime window size
 #include "NetworkManager.h" // For rotation sync
 #include "Scene.h"
-#include "ParticleSystem.h"
-#include "Particle.h"
+#include "VFXManager.h"
+#include "VFXTypes.h"
 #include "DamageNumberManager.h"
 
 PlayerComponent::PlayerComponent(GameObject* pOwner)
@@ -220,34 +220,29 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
     if (m_fDashCooldownRemain > 0.0f)
         m_fDashCooldownRemain = fmaxf(0.0f, m_fDashCooldownRemain - deltaTime);
 
-    // 대쉬 파티클 이미터 — 플레이어 주변 시안-블루 광휘. 최초 대쉬에서 지연 생성, 평상시엔 정지 상태
-    auto GetDashEmitter = [&]() -> ParticleEmitter* {
+    // 대쉬 트레일 — LightEmitterSystem(Sphere) 단발 Burst를 주기적 스폰.
+    //   대시 시작 시 큰 Burst 1회, 진행 중 짧은 주기로 작은 Sphere를 추가 스폰.
+    auto SpawnDashBurst = [&](const XMFLOAT3& pos, int particleCount, float radius)
+    {
         Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
-        ParticleSystem* pPS = pScene ? pScene->GetParticleSystem() : nullptr;
-        if (!pPS) return nullptr;
+        VFXManager* pVFX = pScene ? pScene->GetVFXManager() : nullptr;
+        if (!pVFX) return;
 
-        // ParticleSystem은 Stop + 파티클 0 상태가 되면 슬롯을 자동 반환하므로 매번 유효성 검사
-        ParticleEmitter* pEm = (m_nDashEmitterId >= 0) ? pPS->GetEmitter(m_nDashEmitterId) : nullptr;
-        if (pEm) return pEm;
-
-        // 재생성
-        ParticleEmitterConfig cfg;
-        cfg.emissionRate   = 55.0f;
-        cfg.burstCount     = 0;
-        cfg.minLifetime    = 0.18f;
-        cfg.maxLifetime    = 0.40f;
-        cfg.minStartSize   = 0.35f;
-        cfg.maxStartSize   = 0.75f;
-        cfg.minEndSize     = 0.0f;
-        cfg.maxEndSize     = 0.05f;
-        cfg.minVelocity    = { -1.8f, 0.3f, -1.8f };
-        cfg.maxVelocity    = {  1.8f, 2.8f,  1.8f };
-        cfg.startColor     = { 0.35f, 0.75f, 1.0f, 1.0f };
-        cfg.endColor       = { 0.05f, 0.15f, 0.55f, 0.0f };
-        cfg.gravity        = { 0.0f, 0.4f, 0.0f };
-        cfg.spawnRadius    = 1.6f;
-        m_nDashEmitterId = pPS->CreateEmitter(cfg, pTransform->GetPosition());
-        return pPS->GetEmitter(m_nDashEmitterId);
+        EffectLayer layer;
+        layer.type          = EmitterType::Sphere;
+        layer.particleCount = particleCount;
+        layer.coreColor     = { 0.35f, 0.75f, 1.0f, 1.0f };  // 시안-블루 코어
+        layer.edgeColor     = { 0.05f, 0.15f, 0.55f, 0.0f };  // 진청 → 투명
+        layer.sizeScale     = 0.55f;
+        layer.speedMin      = 1.5f;
+        layer.speedMax      = 4.0f;
+        layer.lifetimeMin   = 0.18f;
+        layer.lifetimeMax   = 0.40f;
+        layer.sphere.radius        = radius;
+        layer.sphere.shellFraction = 0.f;     // 전체 채움
+        layer.sphere.inward        = false;
+        layer.sphere.rotationSpeed = 0.f;
+        pVFX->SpawnLightLayer(pos, XMFLOAT3(0, 1, 0), layer, /*isPlayer*/true);
     };
 
     bool bDashStarted = false;
@@ -266,13 +261,13 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
             m_fDashTimer = kDashDuration;
             bDashStarted = true;
 
-            // 시작 시 폭발적 버스트 + 연속 방출 시작
-            if (ParticleEmitter* pEm = GetDashEmitter())
+            // 시작 시 폭발적 Sphere Burst (즉시 18개 팡)
             {
-                pEm->SetPosition(pTransform->GetPosition());
-                pEm->Burst(18);   // 즉시 18개 팡
-                pEm->Start();
+                XMFLOAT3 startPos = pTransform->GetPosition();
+                startPos.y += 2.0f;
+                SpawnDashBurst(startPos, 36, 1.6f);
             }
+            m_fDashTrailAccum = 0.0f;
         }
     }
 
@@ -290,21 +285,24 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
         float flash = (t < 0.8f) ? 1.0f : (1.0f - (t - 0.8f) / 0.2f);
         m_pOwner->SetHitFlashAll(flash);
 
-        // 파티클 이미터 위치 갱신 — 플레이어 몸 중앙 근처(살짝 올려서 허리~가슴 높이)
-        if (ParticleEmitter* pEm = GetDashEmitter())
+        // 진행 중 주기적 트레일 Burst — 0.04s 마다 작은 Sphere 1회 (≒ 25Hz)
+        m_fDashTrailAccum += deltaTime;
+        constexpr float kDashTrailInterval = 0.04f;
+        while (m_fDashTrailAccum >= kDashTrailInterval)
         {
+            m_fDashTrailAccum -= kDashTrailInterval;
             XMFLOAT3 p = pTransform->GetPosition();
             p.y += 2.0f;
-            pEm->SetPosition(p);
+            SpawnDashBurst(p, 6, 1.6f);
         }
 
-        // 대쉬 끝난 프레임: 쿨다운 시작 + 잔상 타이머 시작 + 이미터 정지
+        // 대쉬 끝난 프레임: 쿨다운 시작 + 잔상 타이머 시작
         if (m_fDashTimer <= 0.0f)
         {
             m_fDashTimer = 0.0f;
             m_fDashCooldownRemain = kDashCooldown;
             m_fDashFlashTail = kDashFlashTail;
-            if (ParticleEmitter* pEm = GetDashEmitter()) pEm->Stop();
+            m_fDashTrailAccum = 0.0f;
         }
     }
     else if (m_fDashFlashTail > 0.0f)

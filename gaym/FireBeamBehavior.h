@@ -2,7 +2,7 @@
 
 #include "ISkillBehavior.h"
 #include "SkillData.h"
-#include "VFXLibrary.h"
+#include "VFXTypes.h"      // EffectDef
 #include <vector>
 #include <string>
 
@@ -31,9 +31,9 @@ private:
     uint32_t GetRuneFlags(GameObject* caster) const;
     void     HitEnemiesInBeam(float damage);
 
-    static VFXSequenceDef BuildCoreBeamDef();
-    static VFXSequenceDef BuildSwirlDef();
-    static VFXSequenceDef BuildBurstDef();
+    static EffectDef BuildCoreBeamDef();
+    static EffectDef BuildSwirlDef();
+    static EffectDef BuildBurstDef();
 
     SkillData m_SkillData;
     bool m_bIsFinished = true;

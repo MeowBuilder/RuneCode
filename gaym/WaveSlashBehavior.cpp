@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "WaveSlashBehavior.h"
 #include "FluidSkillVFXManager.h"
-#include "VFXLibrary.h"
+#include "EffectRegistry.h"
 #include "GameObject.h"
 #include "TransformComponent.h"
 #include "SkillComponent.h"
@@ -67,35 +67,48 @@ void WaveSlashBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& tar
             stats = pSkillComp->BuildSkillStats(m_slot, m_SkillData.activationType);
     }
 
-    // VFX 시퀀스 정의 + 룬 원소 색상 오버라이드
-    VFXSequenceDef seqDef = VFXLibrary::Get().GetDef(SkillSlot::Q, runeFlags, m_SkillData.element);
+    // EffectRegistry에서 Q_WaveSlash EffectDef 가져와 색상 오버라이드 후 스폰
+    auto applyElement = [](EffectDef& def, ElementType e, bool reduceCount) {
+        FluidElementColor ec = FluidElementColors::Get(e);
+        def.element = e;
+        for (auto& l : def.layers) {
+            l.element   = e;
+            l.coreColor = ec.coreColor;
+            l.edgeColor = ec.edgeColor;
+            if (reduceCount) {
+                bool isSPH = (l.type >= EmitterType::SPH_Attract &&
+                              l.type <= EmitterType::SPH_Beam);
+                if (isSPH)
+                    l.sph.particleCount = max(100, (int)(l.sph.particleCount * 0.6f));
+                else
+                    l.particleCount = max(100, (int)(l.particleCount * 0.6f));
+            }
+        }
+    };
+
+    EffectDef def = EffectRegistry::Get().GetEffect("Q_WaveSlash", runeFlags);
     if (!stats.elementSet.empty())
-    {
-        seqDef = WithElementColors(seqDef, stats.elementSet[0]);
-        if (stats.elementSet.size() > 1)
-            seqDef.particleCount = max(100, (int)(seqDef.particleCount * 0.6f));
-    }
+        applyElement(def, stats.elementSet[0], stats.elementSet.size() > 1);
 
     // 3. VFX 스폰 (1차 원소)
-    m_vfxId = m_pVFXManager->SpawnSequenceEffect(origin, direction, seqDef);
+    m_vfxId = m_pVFXManager->SpawnEffectDef(origin, direction, def, /*isPlayer*/true);
 
     // 추가 원소 VFX (2차 이상)
     m_extraVFXIds.clear();
     for (size_t ei = 1; ei < stats.elementSet.size(); ++ei)
     {
-        VFXSequenceDef extraDef = VFXLibrary::Get().GetDef(SkillSlot::Q, runeFlags, m_SkillData.element);
-        extraDef = WithElementColors(extraDef, stats.elementSet[ei]);
-        extraDef.particleCount = max(100, (int)(extraDef.particleCount * 0.6f));
-        int eid = m_pVFXManager->SpawnSequenceEffect(origin, direction, extraDef);
+        EffectDef extraDef = EffectRegistry::Get().GetEffect("Q_WaveSlash", runeFlags);
+        applyElement(extraDef, stats.elementSet[ei], /*reduceCount*/true);
+        int eid = m_pVFXManager->SpawnEffectDef(origin, direction, extraDef, /*isPlayer*/true);
         if (eid >= 0) m_extraVFXIds.push_back(eid);
     }
 
-    // 서브 파티클 VFX 스폰
+    // 서브 파티클 VFX 스폰 (EffectRegistry sub_* 이펙트)
     for (const auto& subId : stats.subVFXIds)
     {
-        const VFXSequenceDef* subDef = VFXLibrary::Get().GetSubDef(subId);
-        if (!subDef) continue;
-        int sid = m_pVFXManager->SpawnSequenceEffect(origin, direction, *subDef);
+        if (!EffectRegistry::Get().HasEffect(subId)) continue;
+        EffectDef subDef = EffectRegistry::Get().GetEffect(subId, runeFlags);
+        int sid = m_pVFXManager->SpawnEffectDef(origin, direction, subDef, /*isPlayer*/true);
         if (sid >= 0) m_extraVFXIds.push_back(sid);
     }
 

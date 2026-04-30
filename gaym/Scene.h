@@ -15,10 +15,9 @@
 #include "EnemySpawner.h" // Added EnemySpawner include
 #include "EnemyComponent.h" // For BossIntroPhase, EnemyComponent*
 #include "ProjectileManager.h" // Added ProjectileManager include
-#include "ParticleSystem.h" // Added ParticleSystem include
-#include "FluidParticleSystem.h" // Added FluidParticleSystem include
-#include "FluidSkillEffect.h"   // Added FluidSkillEffect include
+#include "FluidParticleSystem.h" // Added FluidParticleSystem include (FluidSkillVFXManager 내부에서 SPH 슬롯용으로 사용)
 #include "FluidSkillVFXManager.h" // Added FluidSkillVFXManager include
+#include "VFXManager.h"     // 통합 VFX 파사드
 #include "ScreenSpaceFluid.h" // Screen-Space Fluid Renderer
 #include "DebugRenderer.h" // Added DebugRenderer include
 #include "Terrain.h"       // Decorative terrain
@@ -121,10 +120,14 @@ public:
     CRoom* GetCurrentRoom() const { return m_pCurrentRoom; } // Added getter for current room
     void SetCurrentRoom(CRoom* pRoom) { m_pCurrentRoom = pRoom; }
     ProjectileManager* GetProjectileManager() { return m_pProjectileManager.get(); }
-    ParticleSystem* GetParticleSystem() { return m_pParticleSystem.get(); }
-    FluidParticleSystem* GetFluidParticleSystem() { return m_pFluidParticleSystem.get(); }
-    FluidSkillVFXManager* GetFluidVFXManager() { return m_pFluidVFXManager.get(); }
-    FluidSkillVFXManager* GetEnemyFluidVFXManager() { return m_pEnemyFluidVFXManager.get(); }
+
+    // 통합 VFX 파사드: 신규 코드는 이 API만 사용한다.
+    VFXManager* GetVFXManager() { return m_pVFXManager.get(); }
+
+    // ─── 호환용 게터: 기존 SetVFXManager(FluidSkillVFXManager*) 패턴 보존 ───
+    // 신규 코드에서 사용하지 말 것 — 점진적 마이그레이션을 위해 잠시 유지.
+    FluidSkillVFXManager* GetFluidVFXManager()      { return m_pVFXManager ? m_pVFXManager->GetPlayerVFX() : nullptr; }
+    FluidSkillVFXManager* GetEnemyFluidVFXManager() { return m_pVFXManager ? m_pVFXManager->GetEnemyVFX()  : nullptr; }
     TorchSystem* GetTorchSystem() { return m_pTorchSystem.get(); }
     GameObject* GetPlayer() const { return m_pPlayerGameObject; }
     std::vector<GameObject*> GetAllPlayers() const;  // 로컬 + 원격 플레이어 목록 반환
@@ -234,7 +237,7 @@ private:
     float m_fFlightCurveTime  = 0.0f;       // 곡선 코스 누적 시간
     float m_fFlightBossHitFlashTimer = 0.0f; // 사격 피격 시 보스 플래시
     int   m_nFlightHitCount = 0;             // 누적 명중 (HUD/디버그)
-    int   m_nFlightWindEmitterId = -1;       // 속도감 윈드 라인 이미터
+    float m_fFlightWindAccum = 0.f;          // 비행 윈드 LightEmitter 재스폰 누적
     float m_fFlightFovOffsetCur = 0.0f;      // 현재 적용된 FOV 보정(deg)
     float m_fFlightBossSkillTimer = 0.0f;    // 보스 기본 공격 쿨다운 (s)
     static constexpr float kFlightHitFlashDuration = 0.18f;
@@ -368,27 +371,9 @@ private:
     // Projectile System
     std::unique_ptr<ProjectileManager> m_pProjectileManager;
 
-    // Particle System
-    std::unique_ptr<ParticleSystem> m_pParticleSystem;
-    int m_nEmberEmitterId = -1; // Floating embers emitter ID (Fire stage)
-    int m_nDustEmitterId  = -1; // Ambient dust emitter ID (Earth stage)
-    int m_nSandstormEmitterId = -1; // Periodic sandstorm gust (Earth)
-    // Earth 모래폭풍 사이클: m_bStormActive=false면 정적, true면 burst 중
-    float m_fStormTimer = 0.0f;
-    bool  m_bStormActive = false;
-    static constexpr float STORM_QUIET_DURATION  = 10.0f; // 정적
-    static constexpr float STORM_ACTIVE_DURATION = 5.0f;  // 폭풍
-
-    // Fluid Particle System (SPH)
-    std::unique_ptr<FluidParticleSystem> m_pFluidParticleSystem;
-
-    // Fluid Skill Effect (connects SkillComponent to FluidParticleSystem)
-    std::unique_ptr<FluidSkillEffect> m_pFluidSkillEffect;
-
-    // Fluid Skill VFX Manager — 플레이어 전용 (SSF 파이프라인)
-    std::unique_ptr<FluidSkillVFXManager> m_pFluidVFXManager;
-    // 적 전용 VFX Manager — SSF와 완전 분리, 빌보드 렌더만
-    std::unique_ptr<FluidSkillVFXManager> m_pEnemyFluidVFXManager;
+    // 통합 VFX 매니저 (player SSF + enemy 빌보드 두 슬롯 풀을 내부에서 소유)
+    // 환경 파티클(Ember/Dust/Sandstorm)은 마이그레이션 과정에서 제거됨.
+    std::unique_ptr<VFXManager> m_pVFXManager;
 
     // Screen-Space Fluid Renderer
     std::unique_ptr<ScreenSpaceFluid> m_pSSF;

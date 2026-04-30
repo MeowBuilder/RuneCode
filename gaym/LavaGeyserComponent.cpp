@@ -4,8 +4,8 @@
 #include "TransformComponent.h"
 #include "FluidParticleSystem.h"
 #include "FluidParticle.h"
-#include "ParticleSystem.h"
-#include "Particle.h"
+#include "VFXManager.h"
+#include "VFXTypes.h"
 #include "Room.h"
 #include "Scene.h"
 #include "PlayerComponent.h"
@@ -59,29 +59,13 @@ void LavaGeyserComponent::Update(float deltaTime)
     case GeyserState::Erupting:
         m_fTimer += deltaTime;
 
-        // 0.7초 후 방출 중단 (기둥이 서서히 사라짐)
-        if (m_fTimer >= 0.7f && m_pParticleSystem && m_nEmitterId >= 0)
-        {
-            ParticleEmitter* pEmitter = m_pParticleSystem->GetEmitter(m_nEmitterId);
-            if (pEmitter && pEmitter->IsEmitting())
-            {
-                pEmitter->Stop();  // 방출 중단
-            }
-        }
-
         if (m_fTimer >= m_fEruptDuration)
         {
             // 폭발 종료 → 대기 상태로 복귀
             m_fTimer = 0.0f;
             m_eState = GeyserState::Idle;
             HideIndicator();
-
-            // 이미터 정리
-            if (m_pParticleSystem && m_nEmitterId >= 0)
-            {
-                m_pParticleSystem->RemoveEmitter(m_nEmitterId);
-                m_nEmitterId = -1;
-            }
+            m_bEruptSpawned = false;
         }
         break;
     }
@@ -137,48 +121,31 @@ void LavaGeyserComponent::Erupt()
     // 2. 인디케이터 숨기기 (폭발 시 사라짐)
     HideIndicator();
 
-    // 3. 일반 파티클 시스템으로 용암 기둥 폭발!
-    if (m_pParticleSystem)
+    // 3. LightEmitterSystem(Cone, 위 방향)으로 용암 기둥 폭발!
+    if (m_pVFXManager && !m_bEruptSpawned)
     {
-        // 용암 기둥 파티클 설정 - 피격 범위에 맞는 큰 기둥
-        ParticleEmitterConfig cfg;
-        cfg.emissionRate = 12000.0f;          // 초당 12000개! (넓은 범위 커버)
-        cfg.burstCount = 0;
+        EffectLayer layer;
+        layer.type          = EmitterType::Cone;
+        layer.element       = ElementType::Fire;
+        layer.particleCount = 600;                       // 큰 분출 (1회 Burst)
+        layer.coreColor     = { 1.0f, 0.6f, 0.1f, 1.0f };
+        layer.edgeColor     = { 0.8f, 0.15f, 0.0f, 0.0f };
+        layer.sizeScale     = 1.4f;
+        layer.speedMin      = 18.0f;
+        layer.speedMax      = 55.0f;
+        layer.lifetimeMin   = 0.18f;
+        layer.lifetimeMax   = 0.55f;
+        layer.cone.halfAngle     = 18.0f;                // 좁은 기둥
+        layer.cone.gravityScale  = 0.4f;                 // 약한 중력 (오를 때 자연 감속)
+        layer.cone.startSizeMult = 1.0f;
+        layer.cone.endSizeMult   = 0.5f;
+        layer.cone.fadeAlpha     = true;
+        layer.cone.fadeSize      = true;
 
-        // 수명 범위를 넓게 - 다양한 높이에 분포
-        cfg.minLifetime = 0.08f;
-        cfg.maxLifetime = 0.6f;
-
-        // 파티클 크기
-        cfg.minStartSize = 0.8f;
-        cfg.maxStartSize = 1.5f;
-        cfg.minEndSize = 0.4f;
-        cfg.maxEndSize = 0.8f;
-
-        // 속도 범위 - 더 높이 솟구침
-        cfg.minVelocity = { -1.5f, 10.0f, -1.5f };
-        cfg.maxVelocity = { 1.5f, 75.0f, 1.5f };
-
-        // 진한 주황색 → 어두운 빨강으로 페이드
-        cfg.startColor = { 1.0f, 0.6f, 0.1f, 1.0f };   // 진한 주황
-        cfg.endColor = { 0.8f, 0.15f, 0.0f, 0.0f };    // 어두운 빨강
-
-        // 중력 없음 (기둥이 똑바로 서있음)
-        cfg.gravity = { 0.0f, 0.0f, 0.0f };
-
-        // 둘레를 줄인 스폰 영역
-        cfg.spawnRadius = m_fRadius * 0.5f;  // 5.0
-
-        // 이미터 생성 및 시작
-        m_nEmitterId = m_pParticleSystem->CreateEmitter(cfg, m_vTargetPosition);
-        if (m_nEmitterId >= 0)
-        {
-            ParticleEmitter* pEmitter = m_pParticleSystem->GetEmitter(m_nEmitterId);
-            if (pEmitter)
-            {
-                pEmitter->Start();  // 연속 방출 시작
-            }
-        }
+        // direction = 위쪽 (Y+)
+        m_pVFXManager->SpawnLightLayer(m_vTargetPosition, XMFLOAT3(0, 1, 0),
+                                       layer, /*isPlayer*/false);
+        m_bEruptSpawned = true;
     }
 }
 

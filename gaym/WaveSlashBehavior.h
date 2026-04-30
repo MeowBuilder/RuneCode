@@ -62,12 +62,12 @@ private:
     std::vector<int>                    m_extraVFXIds; // 다중 원소 추가 VFX 슬롯
 
     // 파도 본체 히트 판정
-    // WAVE_PARTICLE_SPEED: VFXLibrary maxParticleSpeed(20)에 맞춰 실제 파티클 선두 속도 사용
+    // WAVE_PARTICLE_SPEED: Q_WaveSlash sph.maxParticleSpeed(20)에 맞춰 실제 파티클 선두 속도 사용
     // waveSpeed(10)는 타이머 전용 — 파티클은 push force로 훨씬 빠르게 이동
     static constexpr float WAVE_DURATION        = 2.0f;   // waveMaxDist(20) / waveSpeed(10)
     static constexpr float WAVE_PARTICLE_SPEED  = 20.0f;  // 히트 슬랩 선두 속도 (m/s) ← 조정 가능
     static constexpr float WAVE_HIT_DEPTH       = 6.0f;   // 히트 슬랩 두께 (m)
-    static constexpr float WAVE_HALF_W          = 5.0f;   // = VFXLibrary waveHalfW
+    static constexpr float WAVE_HALF_W          = 5.0f;   // = Q_WaveSlash sph.waveHalfW
     static constexpr float WAVE_HALF_H          = 3.0f;   // 수직 판정 여유
 
     // 불꽃 자국

@@ -3,6 +3,7 @@
 #include "LavaGeyserComponent.h"
 #include "FluidParticleSystem.h"
 #include "FluidParticle.h"
+#include "VFXManager.h"
 #include "Room.h"
 #include "Scene.h"
 #include "GameObject.h"
@@ -58,7 +59,7 @@ void LavaGeyserManager::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* p
     m_pFluidSystem->Init(pDevice, pCommandList, pDescriptorHeap, nDescriptorIndex);
 
     // 인디케이터 풀 생성 (Scene::CreateGameObject 사용!)
-    ParticleSystem* pParticleSystem = m_pScene->GetParticleSystem();
+    VFXManager* pVFXManager = m_pScene->GetVFXManager();
 
     for (int i = 0; i < POOL_SIZE; ++i)
     {
@@ -70,7 +71,7 @@ void LavaGeyserManager::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* p
             auto* pComp = m_Indicators[i]->AddComponent<LavaGeyserComponent>();
             pComp->SetIndicator(m_Indicators[i]);  // 자기 자신이 인디케이터
             pComp->SetFluidSystem(m_pFluidSystem.get());
-            pComp->SetParticleSystem(pParticleSystem);  // 일반 파티클 시스템!
+            pComp->SetVFXManager(pVFXManager);  // LightEmitterSystem 경유
             pComp->SetRoom(pRoom);
             m_Components[i] = pComp;
         }

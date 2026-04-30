@@ -119,6 +119,11 @@ public:
     bool IsActive() const { return !m_Particles.empty(); }
     int  GetParticleCount() const { return static_cast<int>(m_Particles.size()); }
 
+    // LightEmitterSystem이 동일한 빌보드 렌더 PSO를 재사용할 때 사용
+    static void EnsureRenderPipeline(ID3D12Device* pDevice);
+    static ID3D12RootSignature* SharedRootSig() { return s_pRootSignature.Get(); }
+    static ID3D12PipelineState* SharedPSO()     { return s_pPSO.Get(); }
+
     // Shift all particle positions by delta (used to co-move with a projectile)
     void OffsetParticles(const XMFLOAT3& delta);
 

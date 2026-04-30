@@ -1,8 +1,9 @@
 #include "stdafx.h"
 #include "ProjectileManager.h"
-#include "ParticleSystem.h"
 #include "FluidSkillVFXManager.h"
-#include "VFXLibrary.h"
+#include "VFXManager.h"
+#include "VFXTypes.h"
+#include "EffectRegistry.h"
 #include "Scene.h"
 #include "Room.h"
 #include "GameObject.h"
@@ -37,10 +38,8 @@ void ProjectileManager::Init(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphic
     m_pDescriptorHeap = pDescriptorHeap;
     m_nDescriptorStartIndex = nStartDescriptorIndex;
 
-    // Get particle system from scene
-    m_pParticleSystem = pScene->GetParticleSystem();
-    m_pFluidVFXManager      = pScene->GetFluidVFXManager();
-    m_pEnemyFluidVFXManager = pScene->GetEnemyFluidVFXManager();
+    // Get VFX manager from scene
+    m_pVFXManager     = pScene->GetVFXManager();
 
     // Create projectile mesh (small cube)
     m_pProjectileMesh = std::make_unique<CubeMesh>(pDevice, pCommandList, 0.5f, 0.5f, 0.5f);
@@ -86,46 +85,87 @@ void ProjectileManager::SpawnProjectile(const Projectile& projectile)
     {
         auto& proj = m_Projectiles.back();
 
-        if (proj.isPlayerProjectile && m_pFluidVFXManager)
+        if (proj.isPlayerProjectile && m_pVFXManager)
         {
-            // 플레이어 투사체: 플레이어 전용 매니저 → SSF 파이프라인
+            // 플레이어 투사체: 통합 VFXManager의 player 슬롯 풀 → SSF 파이프라인
             uint32_t runeFlags = ToRuneFlags(proj.runeCombo);
             SkillSlot vfxSlot  = (proj.skillSlot != SkillSlot::Count) ? proj.skillSlot : SkillSlot::RightClick;
 
             // 1차 원소: elementSet이 있으면 그 색상 사용, 없으면 기본 element
             ElementType primaryElem = proj.elementSet.empty() ? proj.element : proj.elementSet[0];
-            VFXSequenceDef seqDef = VFXLibrary::Get().GetDef(vfxSlot, runeFlags, primaryElem);
+
+            // SkillSlot → EffectRegistry effectId 매핑
+            auto slotToEffectId = [](SkillSlot slot) -> const char* {
+                switch (slot)
+                {
+                case SkillSlot::Q:          return "Q_WaveSlash";
+                case SkillSlot::E:          return "E_FireBeam_Core";
+                case SkillSlot::R:          return "R_Meteor";
+                case SkillSlot::RightClick: return "RC_Fireball";
+                default:                    return "RC_Fireball";
+                }
+            };
+            const char* effectId = slotToEffectId(vfxSlot);
+
+            // 1차 원소 VFX: EffectRegistry → EffectDef → 색상 오버라이드 후 SpawnEffectDef
+            EffectDef def = EffectRegistry::Get().GetEffect(effectId, runeFlags);
             if (!proj.elementSet.empty())
             {
-                seqDef = WithElementColors(seqDef, primaryElem);
-                if (proj.elementSet.size() > 1)
-                    seqDef.particleCount = max(100, (int)(seqDef.particleCount * 0.6f));
+                FluidElementColor ec = FluidElementColors::Get(primaryElem);
+                def.element = primaryElem;
+                for (auto& l : def.layers) {
+                    l.element   = primaryElem;
+                    l.coreColor = ec.coreColor;
+                    l.edgeColor = ec.edgeColor;
+                    if (proj.elementSet.size() > 1) {
+                        bool isSPH = (l.type >= EmitterType::SPH_Attract &&
+                                      l.type <= EmitterType::SPH_Beam);
+                        if (isSPH)
+                            l.sph.particleCount = max(100, (int)(l.sph.particleCount * 0.6f));
+                        else
+                            l.particleCount = max(100, (int)(l.particleCount * 0.6f));
+                    }
+                }
             }
-            proj.fluidVFXId = m_pFluidVFXManager->SpawnSequenceEffect(
-                proj.position, proj.direction, seqDef);
+            proj.fluidVFXId = m_pVFXManager->GetPlayerVFX()
+                ? m_pVFXManager->GetPlayerVFX()->SpawnEffectDef(proj.position, proj.direction, def, true)
+                : -1;
+            if (proj.fluidVFXId >= 0)
+                proj.fluidVFXId += VFXManager::PLAYER_ID_BASE;
 
-            // 추가 원소 VFX
+            // 추가 원소 VFX (2차 이상)
             for (size_t ei = 1; ei < proj.elementSet.size(); ++ei)
             {
-                VFXSequenceDef extraDef = VFXLibrary::Get().GetDef(vfxSlot, runeFlags, proj.element);
-                extraDef = WithElementColors(extraDef, proj.elementSet[ei]);
-                extraDef.particleCount = max(100, (int)(extraDef.particleCount * 0.6f));
-                int eid = m_pFluidVFXManager->SpawnSequenceEffect(
-                    proj.position, proj.direction, extraDef);
-                if (eid >= 0) proj.extraVFXIds.push_back(eid);
+                EffectDef extraDef = EffectRegistry::Get().GetEffect(effectId, runeFlags);
+                FluidElementColor ec = FluidElementColors::Get(proj.elementSet[ei]);
+                extraDef.element = proj.elementSet[ei];
+                for (auto& l : extraDef.layers) {
+                    l.element   = proj.elementSet[ei];
+                    l.coreColor = ec.coreColor;
+                    l.edgeColor = ec.edgeColor;
+                    bool isSPH = (l.type >= EmitterType::SPH_Attract &&
+                                  l.type <= EmitterType::SPH_Beam);
+                    if (isSPH)
+                        l.sph.particleCount = max(100, (int)(l.sph.particleCount * 0.6f));
+                    else
+                        l.particleCount = max(100, (int)(l.particleCount * 0.6f));
+                }
+                int eid = m_pVFXManager->GetPlayerVFX()
+                    ? m_pVFXManager->GetPlayerVFX()->SpawnEffectDef(proj.position, proj.direction, extraDef, true)
+                    : -1;
+                if (eid >= 0) proj.extraVFXIds.push_back(eid + VFXManager::PLAYER_ID_BASE);
             }
 
-            // 서브 파티클 VFX 스폰
+            // 서브 파티클 VFX 스폰 (EffectRegistry에 등록된 sub_* 이펙트 사용)
             for (const auto& subId : proj.subVFXDefIds)
             {
-                const VFXSequenceDef* subDef = VFXLibrary::Get().GetSubDef(subId);
-                if (!subDef) continue;
-                int sid = m_pFluidVFXManager->SpawnSequenceEffect(
-                    proj.position, proj.direction, *subDef);
+                if (!EffectRegistry::Get().HasEffect(subId)) continue;
+                int sid = m_pVFXManager->Spawn(
+                    subId, proj.position, proj.direction, runeFlags, /*isPlayer*/true);
                 if (sid >= 0) proj.subVFXSlotIds.push_back(sid);
             }
         }
-        else if (!proj.isPlayerProjectile && m_pEnemyFluidVFXManager)
+        else if (!proj.isPlayerProjectile && m_pVFXManager)
         {
             // 적 투사체: 레거시 경로 유지, 파티클 수 축소
             FluidSkillVFXDef vfxDef = FluidSkillVFXManager::GetVFXDef(
@@ -175,7 +215,7 @@ void ProjectileManager::SpawnProjectile(const Projectile& projectile)
                 vfxDef.restDensity = 11.0f;
             }
 
-            proj.fluidVFXId = m_pEnemyFluidVFXManager->SpawnEffect(
+            proj.fluidVFXId = m_pVFXManager->SpawnEffect(
                 proj.position, proj.direction, vfxDef);
         }
     }
@@ -323,20 +363,18 @@ void ProjectileManager::Update(float deltaTime)
         // Update position
         projectile.Update(deltaTime);
 
-        // 투사체 소유 매니저 선택 (플레이어↔적 완전 분리)
-        FluidSkillVFXManager* pVFX = projectile.isPlayerProjectile
-                                   ? m_pFluidVFXManager
-                                   : m_pEnemyFluidVFXManager;
+        // 통합 VFXManager: ID로 player/enemy 슬롯 자동 라우팅
+        VFXManager* pVFX = m_pVFXManager;
 
         // Update fluid VFX position
         if (pVFX && projectile.fluidVFXId >= 0)
-            pVFX->TrackEffect(projectile.fluidVFXId, projectile.position, projectile.direction);
+            pVFX->Track(projectile.fluidVFXId, projectile.position, projectile.direction);
         if (pVFX)
         {
             for (int eid : projectile.extraVFXIds)
-                if (eid >= 0) pVFX->TrackEffect(eid, projectile.position, projectile.direction);
+                if (eid >= 0) pVFX->Track(eid, projectile.position, projectile.direction);
             for (int sid : projectile.subVFXSlotIds)
-                if (sid >= 0) pVFX->TrackEffect(sid, projectile.position, projectile.direction);
+                if (sid >= 0) pVFX->Track(sid, projectile.position, projectile.direction);
         }
 
         // Check collisions
@@ -353,12 +391,12 @@ void ProjectileManager::Update(float deltaTime)
                 if (projectile.wasHit)
                 {
                     if (projectile.isPlayerProjectile)
-                        pVFX->ExplodeEffect(projectile.fluidVFXId, projectile.position);
+                        pVFX->Explode(projectile.fluidVFXId, projectile.position);
                     else
-                        pVFX->ImpactEffect(projectile.fluidVFXId, projectile.position);
+                        pVFX->Impact(projectile.fluidVFXId, projectile.position);
                 }
                 else
-                    pVFX->StopEffect(projectile.fluidVFXId);
+                    pVFX->Stop(projectile.fluidVFXId);
             }
             // Extra element VFX + 서브 파티클 VFX
             if (pVFX)
@@ -367,17 +405,17 @@ void ProjectileManager::Update(float deltaTime)
                 {
                     if (eid < 0) continue;
                     if (projectile.wasHit && projectile.isPlayerProjectile)
-                        pVFX->ExplodeEffect(eid, projectile.position);
+                        pVFX->Explode(eid, projectile.position);
                     else
-                        pVFX->StopEffect(eid);
+                        pVFX->Stop(eid);
                 }
                 for (int sid : projectile.subVFXSlotIds)
                 {
                     if (sid < 0) continue;
                     if (projectile.wasHit && projectile.isPlayerProjectile)
-                        pVFX->ExplodeEffect(sid, projectile.position);
+                        pVFX->Explode(sid, projectile.position);
                     else
-                        pVFX->StopEffect(sid);
+                        pVFX->Stop(sid);
                 }
             }
             // Spawn explosion particles for each element
@@ -777,67 +815,83 @@ XMFLOAT4 ProjectileManager::GetElementColor(ElementType element) const
 
 void ProjectileManager::SpawnExplosionParticles(const XMFLOAT3& position, ElementType element)
 {
-    if (!m_pParticleSystem) return;
+    if (!m_pVFXManager) return;
 
-    ParticleEmitterConfig config;
+    EffectLayer layer;
+    layer.element     = element;
 
-    // Reduced particle counts for better performance
     switch (element)
     {
     case ElementType::Fire:
-        config = FireParticlePresets::FireballExplosion();
+        layer.type          = EmitterType::Burst;
+        layer.particleCount = 24;
+        layer.coreColor     = { 1.0f, 0.8f, 0.3f, 1.0f };  // 노랑-오렌지
+        layer.edgeColor     = { 0.8f, 0.1f, 0.0f, 0.0f };  // 적색 페이드
+        layer.speedMin      = 2.5f;
+        layer.speedMax      = 6.0f;
+        layer.lifetimeMin   = 0.20f;
+        layer.lifetimeMax   = 0.40f;
+        layer.sizeScale     = 0.55f;
+        layer.burst.bounceCoeff = 0.f;
+        layer.burst.fadeOut     = true;
+        layer.burst.fadeSize    = true;
         break;
     case ElementType::Water:
-        config.burstCount = 10;  // Reduced from 25
-        config.emissionRate = 0.0f;
-        config.minLifetime = 0.15f;
-        config.maxLifetime = 0.35f;
-        config.minStartSize = 0.25f;
-        config.maxStartSize = 0.5f;
-        config.minVelocity = { -3.0f, -1.5f, -3.0f };
-        config.maxVelocity = { 3.0f, 3.0f, 3.0f };
-        config.startColor = { 0.4f, 0.7f, 1.0f, 1.0f };
-        config.endColor = { 0.2f, 0.4f, 0.8f, 0.0f };
-        config.gravity = { 0.0f, -5.0f, 0.0f };
+        layer.type          = EmitterType::Burst;
+        layer.particleCount = 20;
+        layer.coreColor     = { 0.4f, 0.7f, 1.0f, 1.0f };
+        layer.edgeColor     = { 0.2f, 0.4f, 0.8f, 0.0f };
+        layer.speedMin      = 2.5f;
+        layer.speedMax      = 5.5f;
+        layer.lifetimeMin   = 0.15f;
+        layer.lifetimeMax   = 0.35f;
+        layer.sizeScale     = 0.5f;
+        layer.burst.fadeOut = true;
+        layer.burst.fadeSize = true;
         break;
     case ElementType::Wind:
-        config.burstCount = 8;  // Reduced from 20
-        config.emissionRate = 0.0f;
-        config.minLifetime = 0.15f;
-        config.maxLifetime = 0.3f;
-        config.minStartSize = 0.18f;
-        config.maxStartSize = 0.4f;
-        config.minVelocity = { -5.0f, -5.0f, -5.0f };
-        config.maxVelocity = { 5.0f, 5.0f, 5.0f };
-        config.startColor = { 0.9f, 1.0f, 0.9f, 0.9f };
-        config.endColor = { 0.7f, 0.95f, 0.7f, 0.0f };
+        layer.type          = EmitterType::Sphere;
+        layer.particleCount = 16;
+        layer.coreColor     = { 0.9f, 1.0f, 0.9f, 0.9f };
+        layer.edgeColor     = { 0.7f, 0.95f, 0.7f, 0.0f };
+        layer.speedMin      = 4.0f;
+        layer.speedMax      = 8.0f;
+        layer.lifetimeMin   = 0.15f;
+        layer.lifetimeMax   = 0.30f;
+        layer.sizeScale     = 0.45f;
+        layer.sphere.radius        = 0.5f;
+        layer.sphere.shellFraction = 0.f;
+        layer.sphere.inward        = false;
         break;
     case ElementType::Earth:
-        config.burstCount = 8;  // Reduced from 20
-        config.emissionRate = 0.0f;
-        config.minLifetime = 0.3f;
-        config.maxLifetime = 0.5f;
-        config.minStartSize = 0.35f;
-        config.maxStartSize = 0.6f;
-        config.minVelocity = { -2.5f, 0.0f, -2.5f };
-        config.maxVelocity = { 2.5f, 4.0f, 2.5f };
-        config.startColor = { 0.8f, 0.6f, 0.4f, 1.0f };
-        config.endColor = { 0.5f, 0.35f, 0.2f, 0.0f };
-        config.gravity = { 0.0f, -8.0f, 0.0f };
+        layer.type          = EmitterType::Burst;
+        layer.particleCount = 18;
+        layer.coreColor     = { 0.8f, 0.6f, 0.4f, 1.0f };
+        layer.edgeColor     = { 0.5f, 0.35f, 0.2f, 0.0f };
+        layer.speedMin      = 2.0f;
+        layer.speedMax      = 5.0f;
+        layer.lifetimeMin   = 0.30f;
+        layer.lifetimeMax   = 0.50f;
+        layer.sizeScale     = 0.6f;
+        layer.burst.bounceCoeff = 0.2f;
+        layer.burst.groundY     = position.y - 0.5f;
+        layer.burst.fadeOut     = true;
+        layer.burst.fadeSize    = true;
         break;
     default:
-        config.burstCount = 6;  // Reduced from 15
-        config.emissionRate = 0.0f;
-        config.startColor = { 1.0f, 1.0f, 1.0f, 1.0f };
-        config.endColor = { 0.5f, 0.5f, 0.5f, 0.0f };
+        layer.type          = EmitterType::Sphere;
+        layer.particleCount = 12;
+        layer.coreColor     = { 1.0f, 1.0f, 1.0f, 1.0f };
+        layer.edgeColor     = { 0.5f, 0.5f, 0.5f, 0.0f };
+        layer.speedMin      = 2.0f;
+        layer.speedMax      = 5.0f;
+        layer.lifetimeMin   = 0.18f;
+        layer.lifetimeMax   = 0.36f;
+        layer.sizeScale     = 0.5f;
+        layer.sphere.radius = 0.4f;
         break;
     }
 
-    int emitterId = m_pParticleSystem->CreateEmitter(config, position);
-    ParticleEmitter* pEmitter = m_pParticleSystem->GetEmitter(emitterId);
-    if (pEmitter)
-    {
-        pEmitter->Burst();
-        pEmitter->Stop();  // Stop continuous emission, let burst particles fade
-    }
+    // 폭발 파티클은 플레이어 슬롯에 스폰 (적도 터질 때 visible)
+    m_pVFXManager->SpawnLightLayer(position, XMFLOAT3(0, 1, 0), layer, /*isPlayer*/true);
 }

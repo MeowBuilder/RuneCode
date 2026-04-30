@@ -128,3 +128,189 @@ struct VFXModifier {
     float speedMult         = 1.f;
     std::optional<std::vector<VFXPhase>> phaseOverride;
 };
+
+// ─── 새 기반 이미터 시스템 ────────────────────────────────────────────────────
+
+#include <unordered_map>
+#include <string>
+
+enum class EmitterType {
+    // 경량 (컴퓨트 셰이더, SPH 없음)
+    Linear,      // 직선 방출: 빔, 광선, 화살
+    Cone,        // 원뿔 확산: 폭발, 화염, 연기
+    Sphere,      // 구형: 오라, 폭발구
+    Ring,        // 링/충격파
+    Burst,       // 중력 영향 폭발 파편
+
+    // SPH 물리 (기존 FluidParticleSystem 래핑)
+    SPH_Attract, // ControlPoint 모드
+    SPH_Gravity, // Gravity 모드
+    SPH_Orbital, // OrbitalCP 모드
+    SPH_Beam,    // Beam 모드
+
+    // 텍스처 이펙트 (향후 구현)
+    Decal,
+    MagicCircle,
+    Sprite,
+};
+
+// ── 경량 이미터 파라미터 ──────────────────────────────────────────────────────
+// 공통 speedMin/speedMax, lifetimeMin/lifetimeMax 는 EffectLayer에서 관리
+
+struct LinearEmitterParams {
+    float length      = 10.f;   // 빔 총 길이
+    float width       = 0.5f;   // 굵기 (반경)
+    float recycleRate = 0.f;    // >0: 끝 도달 후 시작점 재스폰 (흐름 효과)
+    float swirlSpeed  = 0.f;    // 공전 각속도 (rad/s)
+};
+
+struct ConeEmitterParams {
+    float halfAngle     = 30.f;  // 반각 (도)
+    float gravityScale  = 0.f;   // 0: 중력 없음, 1: 기본 중력 (-9.8m/s²)
+    float startSizeMult = 1.f;   // 스폰 시 크기 배율
+    float endSizeMult   = 0.3f;  // 소멸 시 크기 배율
+    bool  fadeAlpha     = true;
+    bool  fadeSize      = false;
+};
+
+struct SphereEmitterParams {
+    float radius         = 2.f;
+    float shellFraction  = 0.f;   // 0=전체 채움, 1=껍데기만
+    bool  inward         = false;  // true: 중심 수렴, false: 발산
+    float rotationSpeed  = 0.f;   // Y축 회전 (rad/s)
+};
+
+struct RingEmitterParams {
+    float radius         = 3.f;
+    float width          = 0.5f;  // 링 두께
+    float expandSpeed    = 0.f;   // 반경 확장 속도 (units/s)
+    float tiltX          = 0.f;   // X축 기울기 (rad)
+    float rotateSpeed    = 0.f;   // 링 회전 속도 (rad/s)
+    float normalSpeedMin = 0.f;   // 링 법선 방향 파티클 속도
+    float normalSpeedMax = 1.f;
+};
+
+struct BurstEmitterParams {
+    float bounceCoeff = 0.f;      // 바닥 반사 계수 (0: 없음)
+    float groundY     = -999.f;   // 바닥 높이
+    bool  fadeOut     = true;     // 수명에 따라 알파 감소
+    bool  fadeSize    = true;     // 수명에 따라 크기 감소
+};
+
+// ── SPH 이미터 래핑 파라미터 ──────────────────────────────────────────────────
+// SPH 시퀀스 기반 이미터(ControlPoint/Gravity/OrbitalCP/Beam) 파라미터를 캡슐화
+
+struct SPHEmitterParams {
+    std::vector<VFXPhase>        phases;
+    std::vector<FluidCPDesc>     cpDescs;
+    std::vector<SatelliteCPDesc> satelliteCPs;
+
+    int   particleCount        = 200;
+    float spawnRadius          = 1.5f;
+
+    float masterCPFallSpeed    = 15.f;
+    float masterCPStrength     = 25.f;
+    float masterCPSphereRadius = 5.f;
+
+    float nucleusSpawnFraction = 0.f;
+    float nucleusSpawnRadius   = 0.4f;
+
+    float maxParticleSpeed     = 0.f;
+
+    bool  overridePhysics      = false;
+    float sphStiffness         = 50.f;
+    float sphNearPressureMult  = 2.f;
+    float sphRestDensity       = 7.f;
+    float sphViscosity         = 0.25f;
+    float sphSmoothingRadius   = 1.2f;
+
+    float cardinalSpawnRadius  = 0.f;
+    float cardinalInwardSpeed  = 12.f;
+
+    float particleSize         = 0.f;
+
+    bool  isWave               = false;
+    float waveSpeed            = 20.f;
+    float wavePushForce        = 60.f;
+    float waveMaxDist          = 22.f;
+    float waveHalfW            = 4.f;
+    float waveHalfH            = 2.5f;
+    float waveDepth            = 2.5f;
+    float waveOscAmplitude     = 0.f;
+    float waveOscFrequency     = 4.f;
+    float waveOscWaveNumber    = 0.8f;
+};
+
+// ── 텍스처 이펙트 파라미터 (향후 구현) ────────────────────────────────────────
+
+struct DecalParams {
+    float radius      = 3.f;
+    float duration    = 2.f;
+    float fadeInTime  = 0.2f;
+    float fadeOutTime = 0.5f;
+    bool  rotate      = false;
+    float rotateSpeed = 0.f;
+    // std::string texturePath;  // 향후 텍스처 시스템 추가 시
+};
+
+struct MagicCircleParams {
+    float radius      = 3.f;
+    float rotateSpeed = 1.f;   // rad/s
+    float duration    = 3.f;
+    bool  pulse       = true;
+    float pulseFreq   = 2.f;
+    // std::string texturePath;
+};
+
+struct SpriteParams {
+    int   frameCount = 1;
+    float frameRate  = 24.f;
+    bool  loop       = true;
+    float duration   = -1.f;
+    // std::string texturePath;
+};
+
+// ── EffectLayer: 단일 이미터 레이어 ──────────────────────────────────────────
+
+struct EffectLayer {
+    EmitterType  type          = EmitterType::Cone;
+    ElementType  element       = ElementType::Fire; // SPH 레이어의 원소 타입
+    int          particleCount = 100;   // 경량 이미터용 (SPH는 sph.particleCount 사용)
+
+    XMFLOAT4     coreColor     = { 1, 1, 1, 1 };
+    XMFLOAT4     edgeColor     = { 1, 1, 1, 0.5f };
+    bool         overrideColors = false;  // true: coreColor/edgeColor를 강제 적용 (false면 element 기본 색상)
+    float        sizeScale     = 1.f;
+
+    // 공용 파라미터 (경량 이미터)
+    float        speedMin      = 5.f;
+    float        speedMax      = 15.f;
+    float        lifetimeMin   = 0.5f;
+    float        lifetimeMax   = 1.5f;
+
+    float        emitDelay     = 0.f;   // 스킬 발동 후 이 레이어 시작 딜레이
+    float        duration      = -1.f;  // -1: 무한, 양수: 이 레이어 유효 시간
+    float        emitRate      = 0.f;   // 0: 즉시 전부, >0: 초당 방출 수
+
+    bool         attachToProjectile = false; // 투사체 위치/방향 추적
+    bool         useSSF             = false; // SSF 파이프라인 사용
+
+    // 이미터별 파라미터 (type에 따라 해당 필드 사용)
+    LinearEmitterParams   linear;
+    ConeEmitterParams     cone;
+    SphereEmitterParams   sphere;
+    RingEmitterParams     ring;
+    BurstEmitterParams    burst;
+    SPHEmitterParams      sph;         // SPH_* 타입 전용
+    DecalParams           decal;       // 향후
+    MagicCircleParams     magicCircle; // 향후
+    SpriteParams          sprite;      // 향후
+};
+
+// ── EffectDef: 레이어 조합으로 이루어진 이펙트 정의 ──────────────────────────
+
+struct EffectDef {
+    std::string              name;
+    ElementType              element = ElementType::Fire;
+    std::vector<EffectLayer> layers;
+};

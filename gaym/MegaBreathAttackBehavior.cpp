@@ -16,7 +16,7 @@
 #include "Camera.h"
 #include "MapLoader.h"
 #include "FluidSkillVFXManager.h"
-#include "VFXLibrary.h"
+#include "EffectRegistry.h"
 
 MegaBreathAttackBehavior::MegaBreathAttackBehavior(
     float fDamagePerTick,
@@ -1109,16 +1109,23 @@ void MegaBreathAttackBehavior::SpawnFireWave(EnemyComponent* pEnemy)
     float perpExtent = (fabsf(m_xmf3BeamDirection.x) > 0.5f) ? rb.Extents.z : rb.Extents.x;
     m_fBeamEndRadius = perpExtent * 1.4f;
 
-    // ── Beam 모드 VFXSequenceDef — 입에서 끝까지 연속 분사 ─────────────────
-    // 이름 "Dragon_MegaBreath" 매칭 시 enableFlow 자동 + 120m 하드코딩이었으나
-    // swirlFadeEnd 를 빔 길이로 쓰도록 수정 완료 — 어떤 이름이든 맵 전체 커버 가능
-    VFXSequenceDef def;
-    def.name          = "Dragon_MegaBreath";
-    def.element       = ElementType::Fire;
-    def.particleCount = 6000;
-    def.spawnRadius   = 3.0f;
-    // 과거 efa81e2 커밋의 검증된 값으로 복원 (smooth flame sheet 느낌)
-    def.particleSize  = 1.8f;
+    // ── Beam 모드 EffectDef — 입에서 끝까지 연속 분사 ───────────────────────
+    EffectDef def;
+    def.name    = "Dragon_MegaBreath";
+    def.element = ElementType::Fire;
+
+    EffectLayer layer;
+    layer.type      = EmitterType::SPH_Beam;
+    layer.element   = ElementType::Fire;
+    // ColorWeightedRT 아키텍처: core ≈ edge 로 동색상 유지 (구슬 경계 방지)
+    layer.coreColor = { 1.0f, 0.45f, 0.1f, 1.0f };
+    layer.edgeColor = { 0.95f, 0.35f, 0.08f, 0.95f };
+    layer.useSSF    = true;
+
+    SPHEmitterParams& s = layer.sph;
+    s.particleCount    = 6000;
+    s.spawnRadius      = 3.0f;
+    s.particleSize     = 1.8f;
 
     VFXPhase p;
     p.startTime             = 0.f;
@@ -1128,27 +1135,20 @@ void MegaBreathAttackBehavior::SpawnFireWave(EnemyComponent* pEnemy)
     p.beamDesc.speedMax     = p.beamDesc.speedMin * 1.4f;
     p.beamDesc.spreadRadius = m_fBeamEndRadius;
     p.beamDesc.swirlExpand  = true;
-    p.beamDesc.swirlSpeed   = 0.6f;               // 0.8→0.6: 회전 줄여 위로 솟는 느낌 완화
+    p.beamDesc.swirlSpeed   = 0.6f;
     p.beamDesc.beamLength   = m_fBeamLength;
     p.beamDesc.swirlFadeEnd = 0.f;
     p.beamDesc.enableFlow   = true;
-    p.beamDesc.verticalScale = 0.18f;             // 0.25→0.18: 수직 더 납작하게
-    def.phases.push_back(p);
+    p.beamDesc.verticalScale = 0.18f;
+    s.phases.push_back(p);
 
-    // ColorWeightedRT(e51dda1) 아키텍처 하에서 per-particle 색상 변이가 구슬 경계를 드러냄.
-    //  FluidParticleSystem::UploadRenderData 의 edgeWeight 수식(tBeam+rRatio+jitter)이
-    //  파티클마다 다른 lerp(edge, core, t) 색을 만들기 때문.
-    //  → core ≈ edge 로 맞춰 모든 파티클이 거의 동일 색상 → per-pixel 평균도 단일 색.
-    //  그라디언트는 SSF composite의 thickness 기반 brightness lerp(0.55, 1.35) 로 자연스럽게 나옴.
-    def.overrideColors    = true;
-    def.overrideCoreColor = { 1.0f, 0.45f, 0.1f, 1.0f };    // 주황
-    def.overrideEdgeColor = { 0.95f, 0.35f, 0.08f, 0.95f };  // 거의 같은 주황 (변이 최소)
-    def.maxParticleSpeed = p.beamDesc.speedMax * 1.2f;
-    def.useSSFBlur       = true;
+    s.maxParticleSpeed = p.beamDesc.speedMax * 1.2f;
+
+    def.layers.push_back(std::move(layer));
 
     // 5개 빔을 팬-아웃 스폰 — -12°, -6°, 0°, +6°, +12°
     const float kFanAnglesDeg[NUM_BEAMS]   = { -12.0f, -6.0f, 0.0f, 6.0f, 12.0f };
-    const int   kParticleCounts[NUM_BEAMS] = { 2800, 3600, 4400, 3600, 2800 };   // efa81e2 검증값
+    const int   kParticleCounts[NUM_BEAMS] = { 2800, 3600, 4400, 3600, 2800 };
     const float kSpreadMults[NUM_BEAMS]    = { 0.85f, 0.95f, 1.00f, 0.95f, 0.85f };
 
     for (int i = 0; i < NUM_BEAMS; ++i)
@@ -1160,15 +1160,13 @@ void MegaBreathAttackBehavior::SpawnFireWave(EnemyComponent* pEnemy)
         dir.y = 0.f;
         dir.z = m_xmf3BeamDirection.x * sn + m_xmf3BeamDirection.z * cs;
 
-        VFXSequenceDef beamDef = def;
-        beamDef.particleCount                   = kParticleCounts[i];
-        beamDef.spawnRadius                     = (i == NUM_BEAMS / 2) ? 3.0f : 2.5f;
-        beamDef.phases[0].beamDesc.spreadRadius = m_fBeamEndRadius * kSpreadMults[i];
-        // 빔별 색상 차등화 제거 — 전체 단일 core/edge 로 통일
+        EffectDef beamDef = def;
+        EffectLayer& bl   = beamDef.layers[0];
+        bl.sph.particleCount               = kParticleCounts[i];
+        bl.sph.spawnRadius                 = (i == NUM_BEAMS / 2) ? 3.0f : 2.5f;
+        bl.sph.phases[0].beamDesc.spreadRadius = m_fBeamEndRadius * kSpreadMults[i];
 
-        // 과거(230dd05)엔 기본값(true=SSF) 썼던 게 매끈한 빔. false는 빌보드 = 구슬.
-        // e51dda1에서 per-pixel 색상 누적으로 스킬 간 충돌 해결됐으니 SSF 복귀 안전.
-        m_nFluidVFXIds[i] = m_pFluidVFXManager->SpawnSequenceEffect(
+        m_nFluidVFXIds[i] = m_pFluidVFXManager->SpawnEffectDef(
             m_xmf3BeamOrigin, dir, beamDef, true);
     }
 
@@ -1219,25 +1217,32 @@ void MegaBreathAttackBehavior::SpawnChargeVFX(EnemyComponent* pEnemy)
     mouth.z = bossPos.z + cosf(yawRad) * 17.0f;
     XMFLOAT3 forward = { sinf(yawRad), 0.0f, cosf(yawRad) };
 
-    // 플레이어 RightClick 의 def 를 가져와서 보스 스케일로 확대.
-    VFXSequenceDef def = VFXLibrary::Get().GetDef(SkillSlot::RightClick, RUNE_NONE, ElementType::Fire);
+    // 플레이어 RightClick 의 EffectDef 를 가져와서 보스 스케일로 확대.
+    EffectDef def = EffectRegistry::Get().GetEffect("RC_Fireball", RUNE_NONE);
     def.name = "Dragon_MegaBreath_Charge";
 
-    // 보스용 스케일 업 — 입 앞에 맺히는 거대 화염구 느낌
-    def.particleCount      = static_cast<int>(def.particleCount * 4);  // 420 → 1680
-    def.spawnRadius       *= 2.0f;   // 0.8 → 1.6
-    def.cardinalSpawnRadius *= 2.0f; // 4.0 → 8.0
-    def.particleSize      *= 1.3f;   // 존재감 증대
-
-    // CP 조정: 인력은 완만하게(Windup 1.2s 동안 빨려드는 타임), 목표 구체 크게
-    if (!def.cpDescs.empty())
+    if (!def.layers.empty())
     {
-        def.cpDescs[0].attractionStrength *= 0.6f;  // 너무 빨리 수렴 방지
-        def.cpDescs[0].sphereRadius       *= 2.0f;  // 1.2 → 2.4
+        EffectLayer& l = def.layers[0];
+        SPHEmitterParams& s = l.sph;
+
+        // 보스용 스케일 업 — 입 앞에 맺히는 거대 화염구 느낌
+        s.particleCount      = static_cast<int>(s.particleCount * 4);  // 420 → 1680
+        s.spawnRadius       *= 2.0f;
+        s.cardinalSpawnRadius *= 2.0f;
+        if (s.particleSize > 0.f) s.particleSize *= 1.3f;
+        else                       s.particleSize  = 0.35f * 1.3f;
+
+        // CP 조정: 인력은 완만하게(Windup 1.2s 동안 빨려드는 타임), 목표 구체 크게
+        if (!s.cpDescs.empty())
+        {
+            s.cpDescs[0].attractionStrength *= 0.6f;
+            s.cpDescs[0].sphereRadius       *= 2.0f;
+        }
     }
 
     // origin 고정 — offsetParticlesWithOrigin=true 이지만 origin 자체가 안 움직이므로 제자리
-    m_nChargeVFXId = m_pFluidVFXManager->SpawnSequenceEffect(mouth, forward, def, true);
+    m_nChargeVFXId = m_pFluidVFXManager->SpawnEffectDef(mouth, forward, def, true);
 }
 
 void MegaBreathAttackBehavior::UpdateChargeVFX(EnemyComponent* /*pEnemy*/)
