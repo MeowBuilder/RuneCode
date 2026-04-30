@@ -390,6 +390,7 @@ PS_INPUT VS(VS_INPUT input)
 struct VS_OUTLINE_OUTPUT
 {
     float4 position : SV_POSITION;
+    float2 uv : TEXCOORD;
 };
 
 VS_OUTLINE_OUTPUT VS_Outline(VS_INPUT input)
@@ -402,8 +403,10 @@ VS_OUTLINE_OUTPUT VS_Outline(VS_INPUT input)
     if (g_ToonEnabled == 0 || !bIsSkinned)
     {
         output.position = float4(2.0f, 2.0f, 2.0f, 1.0f);
+        output.uv = float2(0.0f, 0.0f);
         return output;
     }
+    output.uv = input.uv;
 
     float3 posL    = float3(0.0f, 0.0f, 0.0f);
     float3 normalL = float3(0.0f, 0.0f, 0.0f);
@@ -436,8 +439,27 @@ VS_OUTLINE_OUTPUT VS_Outline(VS_INPUT input)
 
 float4 PS_Outline(VS_OUTLINE_OUTPUT input) : SV_TARGET
 {
-    // Near-black with faint cool tint.
-    return float4(0.02f, 0.02f, 0.04f, 1.0f);
+    // Genshin-style tinted outline: take the local base color (material *
+    // albedo if textured), darken hard, and pull slightly toward cool-black
+    // so it still reads as an "ink" line — but parts now keep their hue
+    // (red coat → maroon line, skin → dark warm line, etc.).
+    float3 baseColor = gMaterial.m_cDiffuse.rgb;
+    if (bHasTexture != 0)
+    {
+        float3 alb = gAlbedoMap.Sample(gSampler, input.uv).rgb;
+        baseColor *= alb;
+    }
+
+    // Slight saturation bump before darkening so washed-out albedos still
+    // show their hue in the line.
+    float lum = dot(baseColor, float3(0.299f, 0.587f, 0.114f));
+    baseColor = lerp(float3(lum, lum, lum), baseColor, 1.20f);
+
+    float3 tint = baseColor * 0.50f;
+    tint = lerp(tint, float3(0.03f, 0.03f, 0.06f), 0.15f);
+    tint = max(tint, 0.0f);
+
+    return float4(tint, 1.0f);
 }
 
 // Shadow Pass Vertex Shader (depth only)

@@ -50,7 +50,22 @@
       "Bash(grep -iE \"^\\(MagmaElemental_Rd|MoltenElemental_Rd|ChaosElemental_Rd|FireGolem_Rd|LavaMan_Rd\\)$\")",
       "PowerShell(& \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" \"C:\\\\Users\\\\khj16\\\\Downloads\\\\gaym\\\\gaym\\\\gaym.sln\" /t:Build /p:Configuration=Release /p:Platform=x64 /m /nologo /v:minimal /clp:ErrorsOnly`;WarningsOnly`;Summary 2>&1 | Select-Object -Last 40)",
       "Bash(git commit -m ' *)",
-      "Bash(grep -E \"\\\\.cpp$|\\\\.h$\")"
+      "Bash(grep -E \"\\\\.cpp$|\\\\.h$\")",
+      "Read(//c/Program Files/Microsoft Visual Studio/2022//**)",
+      "Read(//c/Program Files \\(x86\\)/Microsoft Visual Studio/**)",
+      "Bash('/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe' gaym/gaym.sln //p:Configuration=Release //p:Platform=x64 //m //v:minimal //nologo)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(grep -E \"^[A-Z][A-Za-z0-9_]+$\" \"C:/Users/khj16/Downloads/gaym/gaym/Assets/Enemies/Demon/Demon_Anim.txt\")",
+      "Bash(\"/c/Program Files \\(x86\\)/Windows Kits/10/bin/10.0.26100.0/x64/fxc.exe\" /T ps_5_1 /E PS /nologo \"C:/Users/khj16/Downloads/gaym/gaym/shaders.hlsl\" /Fo /tmp/ps_test.cso)",
+      "Bash(\"/c/Program Files \\(x86\\)/Windows Kits/10/bin/10.0.26100.0/x64/fxc.exe\" /Tps_5_1 /EPS /nologo /Fo/tmp/ps_test.cso \"C:/Users/khj16/Downloads/gaym/gaym/shaders.hlsl\")",
+      "PowerShell(& \"C:\\\\Program Files \\(x86\\)\\\\Windows Kits\\\\10\\\\bin\\\\10.0.26100.0\\\\x64\\\\fxc.exe\" /T ps_5_1 /E PS /nologo \"C:\\\\Users\\\\khj16\\\\Downloads\\\\gaym\\\\gaym\\\\shaders.hlsl\" /Fo \"$env:TEMP\\\\ps_test.cso\" 2>&1 | Select-Object -First 30)",
+      "PowerShell(& \"C:\\\\Program Files \\(x86\\)\\\\Windows Kits\\\\10\\\\bin\\\\10.0.26100.0\\\\x64\\\\fxc.exe\" /T vs_5_1 /E VS /nologo \"C:\\\\Users\\\\khj16\\\\Downloads\\\\gaym\\\\gaym\\\\shaders.hlsl\" /Fo \"$env:TEMP\\\\vs_test.cso\" 2>&1 | Select-Object -First 10)",
+      "PowerShell(& \"C:\\\\Program Files \\(x86\\)\\\\Windows Kits\\\\10\\\\bin\\\\10.0.26100.0\\\\x64\\\\fxc.exe\" /T ps_5_1 /E PS /nologo \"C:\\\\Users\\\\khj16\\\\Downloads\\\\gaym\\\\gaym\\\\shaders.hlsl\" /Fo \"$env:TEMP\\\\ps_test.cso\" 2>&1 | Select-Object -First 10)",
+      "PowerShell(& \"C:\\\\Program Files \\(x86\\)\\\\Windows Kits\\\\10\\\\bin\\\\10.0.26100.0\\\\x64\\\\fxc.exe\" /T ps_5_1 /E PS /nologo \"C:\\\\Users\\\\khj16\\\\Downloads\\\\gaym\\\\gaym\\\\shaders.hlsl\" /Fo \"$env:TEMP\\\\ps_test.cso\" 2>&1 | Select-String -Pattern \"error|succeeded\" | Select-Object -First 3)",
+      "PowerShell(& \"C:\\\\Program Files \\(x86\\)\\\\Windows Kits\\\\10\\\\bin\\\\10.0.26100.0\\\\x64\\\\fxc.exe\" /T vs_5_1 /E VS_Outline /nologo \"C:\\\\Users\\\\khj16\\\\Downloads\\\\gaym\\\\gaym\\\\shaders.hlsl\" /Fo \"$env:TEMP\\\\v.cso\" 2>&1 | Select-String \"error|succeeded\" | Select-Object -First 1)",
+      "PowerShell($fxc = \"C:\\\\Program Files \\(x86\\)\\\\Windows Kits\\\\10\\\\bin\\\\10.0.26100.0\\\\x64\\\\fxc.exe\"; & $fxc /T vs_5_1 /E VS_Outline /nologo \"C:\\\\Users\\\\khj16\\\\Downloads\\\\gaym\\\\gaym\\\\shaders.hlsl\" /Fo \"$env:TEMP\\\\v.cso\" 2>&1 | Select-String \"error|succeeded\" | Select-Object -First 1; & $fxc /T ps_5_1 /E PS_Outline /nologo \"C:\\\\Users\\\\khj16\\\\Downloads\\\\gaym\\\\gaym\\\\shaders.hlsl\" /Fo \"$env:TEMP\\\\p.cso\" 2>&1 | Select-String \"error|succeeded\" | Select-Object -First 1)",
+      "PowerShell(& \"C:\\\\Program Files \\(x86\\)\\\\Windows Kits\\\\10\\\\bin\\\\10.0.26100.0\\\\x64\\\\fxc.exe\" /T ps_5_1 /E PS /nologo \"C:\\\\Users\\\\khj16\\\\Downloads\\\\gaym\\\\gaym\\\\shaders.hlsl\" /Fo \"$env:TEMP\\\\p.cso\" 2>&1 | Select-String \"error|succeeded\" | Select-Object -First 1)",
+      "Bash(git *)"
     ]
   }
 }

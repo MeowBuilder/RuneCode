@@ -599,7 +599,7 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         }
         else if (r == 1)
         {
-            // 광역 내려찍기 (radius 85) — Primary 와 같은 slam 피크 타이밍
+            // 광역 내려찍기 (dddradius 85) — Primary 와 같은 slam 피크 타이밍
             return std::make_unique<JumpSlamAttackBehavior>(
                 150.0f, 0.0f, 0.3f, 85.0f,
                 3.6f, 1.8f,                 // windup 2.3→3.6 (피크 타이밍), recovery 2.0→1.8
