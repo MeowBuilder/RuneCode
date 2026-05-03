@@ -183,6 +183,15 @@ void VFXManager::RenderEnemyEffects(ID3D12GraphicsCommandList* pCmdList,
         m_pEnemyVFX->RenderEnemyEffects(pCmdList, viewProj, camRight, camUp);
 }
 
+void VFXManager::RenderPlayerLightEmitters(ID3D12GraphicsCommandList* pCmdList,
+                                            const XMFLOAT4X4& viewProj,
+                                            const XMFLOAT3& camRight,
+                                            const XMFLOAT3& camUp)
+{
+    if (m_pPlayerVFX)
+        m_pPlayerVFX->RenderPlayerLightEmitters(pCmdList, viewProj, camRight, camUp);
+}
+
 // ─── 색상 쿼리 ───────────────────────────────────────────────────────────────
 
 XMFLOAT4 VFXManager::GetDominantFluidColor() const

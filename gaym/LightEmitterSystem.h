@@ -65,10 +65,10 @@ struct alignas(256) LightEmitterConstants
     float    ringNormalSpeedMax;
     float    _rpad;
 
-    // [240-255] Burst
+    // [240-255] Burst + Cone spawn radius
     float    burstBounceCoeff;
     float    burstGroundY;
-    float    _bpad0;
+    float    coneSpawnRadius; // Cone 스폰 분산 반경 (0=점 스폰)
     float    _bpad1;
 };
 static_assert(sizeof(LightEmitterConstants) == 256, "LightEmitterConstants must be 256 bytes");

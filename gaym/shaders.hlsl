@@ -939,5 +939,5 @@ float4 PS(PS_INPUT input) : SV_TARGET
         finalColor.rgb += outline * g_HitFlash * 1.2f;
     }
 
-    return float4(finalColor.rgb, 1.0f);
+    return float4(finalColor.rgb, gMaterial.m_cDiffuse.a);
 }

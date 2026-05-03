@@ -135,56 +135,201 @@ void EffectRegistry::Initialize()
         RegisterRuneMod("E_FireBeam_Core", RUNE_ENHANCE, enhMod);
     }
 
+    // R_Meteor는 제거 — 낙하 중에는 큐브 메쉬 + Trail만 사용
+
     // ──────────────────────────────────────────────────────────────────────────
-    // R_Meteor — 메테오 (단일 거대 덩어리 낙하 + 충돌 폭발)
+    // R_MeteorTrail — 불타는 파편 코어: 낙하 중 튀는 뜨거운 잔해들
+    // halfAngle 65° + 높은 중력 → 파편이 사방으로 튀며 곡선으로 낙하
     // ──────────────────────────────────────────────────────────────────────────
     {
-        EffectLayer layer = MakeSPHLayer(ElementType::Fire);
-        layer.overrideColors = true;
-        layer.coreColor = { 1.0f, 0.92f, 0.45f, 1.0f };
-        layer.edgeColor = { 0.72f, 0.04f, 0.01f, 0.65f };
+        EffectLayer inner;
+        inner.type           = EmitterType::Cone;
+        inner.element        = ElementType::Fire;
+        inner.overrideColors = true;
+        inner.coreColor      = { 1.00f, 0.88f, 0.55f, 1.00f };  // 밝은 황금-오렌지 (뜨거운 파편)
+        inner.edgeColor      = { 0.90f, 0.22f, 0.02f, 0.00f };  // 진한 주황-적 → 투명 소멸
+        inner.particleCount  = 700;
+        inner.speedMin       = 5.f;
+        inner.speedMax       = 30.f;
+        inner.lifetimeMin    = 0.25f;
+        inner.lifetimeMax    = 0.65f;
+        inner.sizeScale      = 2.8f;   // 0.35 * 2.8 * 1.5 ≈ 1.47 유닛
+        inner.duration       = -1.f;
+        inner.attachToProjectile = true;
 
-        SPHEmitterParams& s = layer.sph;
-        s.particleCount        = 2400;
-        s.spawnRadius          = 3.f;
-        s.nucleusSpawnFraction = 0.85f;
-        s.nucleusSpawnRadius   = 1.5f;
-        s.masterCPStrength     = 65.f;
-        s.masterCPSphereRadius = 6.f;
-        s.masterCPFallSpeed    = 22.f;
-
-        VFXPhase p0;
-        p0.startTime             = 0.f;
-        p0.duration              = 3.f;
-        p0.motionMode            = ParticleMotionMode::OrbitalCP;
-        p0.globalGravityStrength = 18.f;
-        s.phases.push_back(p0);
-
-        VFXPhase p1;
-        p1.startTime  = 3.f;
-        p1.duration   = 2.5f;
-        p1.motionMode = ParticleMotionMode::Gravity;
-        p1.gravityDesc.gravity         = { 0.f, -18.f, 0.f };
-        p1.gravityDesc.initialSpeedMin = 22.f;
-        p1.gravityDesc.initialSpeedMax = 55.f;
-        p1.phaseMaxSpeed               = 80.f;
-        p1.triggerExplodeFadeOnEnter   = true;
-        s.phases.push_back(p1);
-
-        FinalizeSPHLayer(layer);
+        inner.cone.halfAngle     = 65.f;
+        inner.cone.gravityScale  = 0.40f;
+        inner.cone.startSizeMult = 1.5f;
+        inner.cone.endSizeMult   = 0.08f;
+        inner.cone.fadeAlpha     = true;
+        inner.cone.fadeSize      = true;
+        inner.cone.spawnRadius   = 3.0f;  // 큐브 크기(3.5) 이내 랜덤 위치에서 스폰
 
         EffectDef def;
-        def.name    = "R_Meteor";
+        def.name    = "R_MeteorTrail";
         def.element = ElementType::Fire;
-        def.layers.push_back(std::move(layer));
+        def.layers.push_back(std::move(inner));
         Register(std::move(def));
-
-        VFXModifier enhMod;
-        enhMod.particleCountMult = 1.6f;
-        enhMod.strengthMult      = 1.3f;
-        enhMod.sizeScaleMult     = 1.4f;
-        RegisterRuneMod("R_Meteor", RUNE_ENHANCE, enhMod);
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // R_MeteorTrailOuter — 잔불 스파크: 더 넓게, 더 작게 퍼지는 불씨들
+    // halfAngle 82° + 강한 중력 → 큐브 주변 전방위로 작은 불씨 산란
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectLayer outer;
+        outer.type           = EmitterType::Cone;
+        outer.element        = ElementType::Fire;
+        outer.overrideColors = true;
+        outer.coreColor      = { 1.00f, 0.50f, 0.08f, 0.85f };  // 주황 불씨
+        outer.edgeColor      = { 0.50f, 0.03f, 0.00f, 0.00f };  // 어두운 적 → 투명
+        outer.particleCount  = 500;
+        outer.speedMin       = 3.f;
+        outer.speedMax       = 20.f;
+        outer.lifetimeMin    = 0.30f;
+        outer.lifetimeMax    = 0.75f;
+        outer.sizeScale      = 1.8f;   // 0.35 * 1.8 * 1.2 ≈ 0.76 유닛
+        outer.duration       = -1.f;
+        outer.attachToProjectile = true;
+
+        outer.cone.halfAngle     = 82.f;
+        outer.cone.gravityScale  = 0.50f;
+        outer.cone.startSizeMult = 1.2f;
+        outer.cone.endSizeMult   = 0.0f;
+        outer.cone.fadeAlpha     = true;
+        outer.cone.fadeSize      = true;
+        outer.cone.spawnRadius   = 4.0f;  // 큐브 표면 너머까지 넓게 분산
+
+        EffectDef def;
+        def.name    = "R_MeteorTrailOuter";
+        def.element = ElementType::Fire;
+        def.layers.push_back(std::move(outer));
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // R_MeteorImpact — 충격파 링 + 구형 폭발 + 화염 기둥 (3레이어)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "R_MeteorImpact";
+        def.element = ElementType::Fire;
+
+        // Layer 0 — 충격파 링: 빠르게 퍼지는 불꽃 고리
+        {
+            EffectLayer ring;
+            ring.type           = EmitterType::Ring;
+            ring.element        = ElementType::Fire;
+            ring.overrideColors = true;
+            ring.coreColor      = { 1.00f, 0.85f, 0.45f, 1.00f };
+            ring.edgeColor      = { 0.90f, 0.15f, 0.00f, 0.00f };
+            ring.particleCount  = 500;
+            ring.duration       = 1.5f;
+            ring.speedMin       = 5.f;
+            ring.speedMax       = 22.f;
+            ring.lifetimeMin    = 0.7f;
+            ring.lifetimeMax    = 1.5f;
+            ring.sizeScale      = 5.0f;  // 0.35 * 5.0 = 1.75 유닛/파티클
+
+            ring.ring.radius         = 0.5f;
+            ring.ring.width          = 4.0f;
+            ring.ring.expandSpeed    = 40.f;
+            ring.ring.tiltX          = 0.f;
+            ring.ring.rotateSpeed    = 0.f;
+            ring.ring.normalSpeedMin = 10.f;
+            ring.ring.normalSpeedMax = 28.f;
+
+            def.layers.push_back(ring);
+        }
+
+        // Layer 1 — 구형 폭발: 전방위 순간 팽창
+        {
+            EffectLayer burst;
+            burst.type           = EmitterType::Sphere;
+            burst.element        = ElementType::Fire;
+            burst.overrideColors = true;
+            burst.coreColor      = { 1.00f, 0.96f, 0.70f, 1.00f };
+            burst.edgeColor      = { 1.00f, 0.35f, 0.00f, 0.30f };
+            burst.particleCount  = 400;
+            burst.duration       = 0.5f;
+            burst.speedMin       = 30.f;
+            burst.speedMax       = 70.f;
+            burst.lifetimeMin    = 0.20f;
+            burst.lifetimeMax    = 0.50f;
+            burst.sizeScale      = 7.0f;  // 0.35 * 7.0 = 2.45 유닛/파티클
+
+            burst.sphere.radius        = 1.5f;
+            burst.sphere.shellFraction = 0.5f;
+            burst.sphere.inward        = false;
+
+            def.layers.push_back(burst);
+        }
+
+        // Layer 2 — 수직 화염 기둥
+        {
+            EffectLayer pillar;
+            pillar.type           = EmitterType::Cone;
+            pillar.element        = ElementType::Fire;
+            pillar.overrideColors = true;
+            pillar.coreColor      = { 1.00f, 0.75f, 0.20f, 1.00f };
+            pillar.edgeColor      = { 0.80f, 0.08f, 0.00f, 0.00f };
+            pillar.particleCount  = 350;
+            pillar.duration       = 2.0f;
+            pillar.emitRate       = 250.f;
+            pillar.speedMin       = 18.f;
+            pillar.speedMax       = 42.f;
+            pillar.lifetimeMin    = 0.50f;
+            pillar.lifetimeMax    = 1.10f;
+            pillar.sizeScale      = 5.0f;  // 0.35 * 5.0 * 1.6 ≈ 2.8 유닛/파티클
+
+            pillar.cone.halfAngle     = 22.f;
+            pillar.cone.gravityScale  = 0.20f;
+            pillar.cone.startSizeMult = 1.6f;
+            pillar.cone.endSizeMult   = 0.15f;
+            pillar.cone.fadeAlpha     = true;
+            pillar.cone.fadeSize      = true;
+
+            def.layers.push_back(pillar);
+        }
+
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // R_MeteorGroundFire — 충돌 후 남는 잔불 (짧게)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "R_MeteorGroundFire";
+        def.element = ElementType::Fire;
+
+        EffectLayer cone;
+        cone.type           = EmitterType::Cone;
+        cone.element        = ElementType::Fire;
+        cone.overrideColors = true;
+        cone.coreColor      = { 1.00f, 0.50f, 0.10f, 1.00f };
+        cone.edgeColor      = { 0.55f, 0.04f, 0.00f, 0.00f };
+        cone.particleCount  = 300;
+        cone.duration       = 2.5f;
+        cone.emitRate       = 100.f;
+        cone.speedMin       = 3.f;
+        cone.speedMax       = 10.f;
+        cone.lifetimeMin    = 0.8f;
+        cone.lifetimeMax    = 2.5f;
+        cone.sizeScale      = 4.0f;  // 0.35 * 4.0 * 1.4 ≈ 1.96 유닛/파티클
+
+        cone.cone.halfAngle     = 50.f;
+        cone.cone.gravityScale  = 0.35f;
+        cone.cone.startSizeMult = 1.4f;
+        cone.cone.endSizeMult   = 0.15f;
+        cone.cone.fadeAlpha     = true;
+        cone.cone.fadeSize      = true;
+
+        def.layers.push_back(cone);
+        Register(std::move(def));
+    }
+
+    // R_MeteorFrontFire는 제거 — Trail로 충분
 
     // ──────────────────────────────────────────────────────────────────────────
     // RC_Fireball — 우클릭 화염구 투사체

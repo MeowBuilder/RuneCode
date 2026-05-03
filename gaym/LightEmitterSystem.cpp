@@ -37,7 +37,7 @@ cbuffer LightEmitterCB : register(b0) {
     float  sphereRadius; float sphereShellFraction; int sphereInward; float sphereRotationSpeed;
     float  ringRadius; float ringWidth; float ringExpandSpeed; float ringTiltX;
     float  ringRotateSpeed; float ringNormalSpeedMin; float ringNormalSpeedMax; float _rpad;
-    float  burstBounceCoeff; float burstGroundY; float _bpad0; float _bpad1;
+    float  burstBounceCoeff; float burstGroundY; float coneSpawnRadius; float _bpad1;
 };
 
 RWStructuredBuffer<LightParticle>           gParticles : register(u0);
@@ -77,7 +77,13 @@ void CS_LightEmit(uint3 DTid:SV_DispatchThreadID) {
         p.size=sizeBase*sizeScale; p.startSize=p.size;
     } else if(emitterType==1){ // Cone
         float3 d=RandomInCone(coneHalfAngleDeg,direction,rightAxis,upAxis,seed);
-        p.pos=origin; p.vel=d*speed;
+        float3 spawnOff=float3(0,0,0);
+        if(coneSpawnRadius>0.001f){
+            float3 rs=RandomOnSphere(seed);
+            float rf=pow(Rand01(seed),0.333f); // 구체 볼륨에 균일 분포
+            spawnOff=rs*rf*coneSpawnRadius;
+        }
+        p.pos=origin+spawnOff; p.vel=d*speed;
         p.size=sizeBase*sizeScale*coneStartSizeMult; p.startSize=p.size;
     } else if(emitterType==2){ // Sphere
         float3 sdir=RandomOnSphere(seed);
@@ -104,7 +110,27 @@ void CS_LightEmit(uint3 DTid:SV_DispatchThreadID) {
 void CS_LightUpdate(uint3 DTid:SV_DispatchThreadID) {
     uint idx=DTid.x; if((int)idx>=particleCount)return;
     LightParticle p=gParticles[idx];
-    if(p.life<0.f){gParticles[idx]=p;return;}
+    if(p.life<0.f){
+        // Cone: 죽은 파티클을 현재 origin에서 재스폰 → 연속 방출 꼬리 효과
+        if(emitterType==1){
+            uint s2=WangHash(p.seed^asuint(elapsed)^(idx*2654435761u));
+            float3 d=RandomInCone(coneHalfAngleDeg,direction,rightAxis,upAxis,s2);
+            float sp=lerp(speedMin,speedMax,Rand01(s2));
+            float lt=lerp(lifetimeMin,lifetimeMax,Rand01(s2));
+            float3 spawnOff=float3(0,0,0);
+            if(coneSpawnRadius>0.001f){
+                float3 rs=RandomOnSphere(s2);
+                float rf=pow(Rand01(s2),0.333f);
+                spawnOff=rs*rf*coneSpawnRadius;
+            }
+            p.pos=origin+spawnOff; p.vel=d*sp;
+            p.life=lt; p.maxLife=lt;
+            p.startColor=lerp(edgeColor,coreColor,Rand01(s2));
+            p.size=sizeBase*sizeScale*coneStartSizeMult; p.startSize=p.size;
+            p.seed=s2;
+        }
+        gParticles[idx]=p; return;
+    }
     p.vel+=gravity*dt;
     if(emitterType==0){
         float proj=dot(p.pos-origin,direction);
@@ -425,9 +451,10 @@ void LightEmitterSystem::FillConstants(LightEmitterConstants& cb, float dt, bool
     cb._rpad             = 0;
 
     // Burst
-    cb.burstBounceCoeff = m_Layer.burst.bounceCoeff;
-    cb.burstGroundY     = m_Layer.burst.groundY;
-    cb._bpad0 = cb._bpad1 = 0;
+    cb.burstBounceCoeff  = m_Layer.burst.bounceCoeff;
+    cb.burstGroundY      = m_Layer.burst.groundY;
+    cb.coneSpawnRadius   = m_Layer.cone.spawnRadius;
+    cb._bpad1            = 0;
 }
 
 // ── 배리어 헬퍼 ───────────────────────────────────────────────────────────────
@@ -525,9 +552,40 @@ void LightEmitterSystem::Render(ID3D12GraphicsCommandList* pCmdList,
                                  const XMFLOAT4X4& viewProj,
                                  const XMFLOAT3& camRight, const XMFLOAT3& camUp)
 {
-    if (!m_bActive || !m_bInited || m_ParticleCount == 0) return;
-    if (!FluidParticleSystem::SharedRootSig() || !FluidParticleSystem::SharedPSO()) return;
-    if (m_eRenderBufState != D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE) return;
+    static bool s_bLoggedOnce = false;
+    if (!m_bActive || !m_bInited || m_ParticleCount == 0)
+    {
+        if (!s_bLoggedOnce) {
+            char msg[128];
+            sprintf_s(msg, "[LightEmitter::Render] SKIP: active=%d inited=%d count=%d\n",
+                      m_bActive, m_bInited, m_ParticleCount);
+            OutputDebugStringA(msg);
+            s_bLoggedOnce = true;
+        }
+        return;
+    }
+    if (!FluidParticleSystem::SharedRootSig() || !FluidParticleSystem::SharedPSO())
+    {
+        static bool s_bLoggedPSO = false;
+        if (!s_bLoggedPSO) {
+            OutputDebugStringA("[LightEmitter::Render] SKIP: SharedRootSig or SharedPSO is NULL!\n");
+            s_bLoggedPSO = true;
+        }
+        return;
+    }
+    if (m_eRenderBufState != D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+    {
+        static bool s_bLoggedState = false;
+        if (!s_bLoggedState) {
+            char msg[128];
+            sprintf_s(msg, "[LightEmitter::Render] SKIP: renderBufState=%d (expected %d)\n",
+                      (int)m_eRenderBufState,
+                      (int)D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            OutputDebugStringA(msg);
+            s_bLoggedState = true;
+        }
+        return;
+    }
 
     // 패스 CB 업데이트
     LightPassCB pcb = {};
@@ -547,4 +605,12 @@ void LightEmitterSystem::Render(ID3D12GraphicsCommandList* pCmdList,
 
     pCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     pCmdList->DrawInstanced(4, static_cast<UINT>(m_ParticleCount), 0, 0);
+
+    static bool s_bLoggedDraw = false;
+    if (!s_bLoggedDraw) {
+        char msg[128];
+        sprintf_s(msg, "[LightEmitter::Render] OK — DrawInstanced %d particles\n", m_ParticleCount);
+        OutputDebugStringA(msg);
+        s_bLoggedDraw = true;
+    }
 }

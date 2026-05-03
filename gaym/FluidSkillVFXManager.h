@@ -142,8 +142,18 @@ public:
                             const XMFLOAT3& camRight,
                             const XMFLOAT3& camUp);
 
+    // 플레이어 LightEmitter 슬롯만 빌보드 렌더 (SSF 브랜치에서 SPH와 분리 렌더)
+    void RenderPlayerLightEmitters(ID3D12GraphicsCommandList* pCommandList,
+                                   const XMFLOAT4X4& viewProj,
+                                   const XMFLOAT3& camRight,
+                                   const XMFLOAT3& camUp);
+
     // 원소별 내장 VFX 정의 반환 (룬 combo에 따라 파라미터 조정)
     static FluidSkillVFXDef GetVFXDef(ElementType element, const RuneCombo& combo = {}, float chargeRatio = 0.0f);
+
+    // 슬롯의 현재 페이즈 인덱스 조회 (-1: 비활성/미시작/유효하지 않은 ID)
+    // MeteorBehavior 등 외부 로직에서 VFX 페이즈 전환 시점에 동기화하기 위해 사용
+    int GetSlotPhase(int id) const;
 
     // 현재 활성 슬롯의 대표 유체 색상 (composite fluidColor용)
     // blurOnly=true 시 useBlur 슬롯만 대상, false 시 비blur 슬롯 우선(전체 fallback)

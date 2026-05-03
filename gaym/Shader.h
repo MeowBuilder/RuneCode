@@ -23,6 +23,9 @@ public:
 
     ID3D12RootSignature* GetRootSignature() const { return m_pd3dRootSignature.Get(); }
 
+    // Water PSO getter (alpha blend, depth write off) — 메테오 큐브 반투명 렌더에 재사용
+    ID3D12PipelineState* GetWaterPSO() const { return m_pd3dWaterPSO.Get(); }
+
 private:
     ComPtr<ID3D12RootSignature> m_pd3dRootSignature;
     ComPtr<ID3D12PipelineState> m_pd3dPipelineState;

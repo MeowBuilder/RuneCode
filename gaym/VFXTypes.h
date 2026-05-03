@@ -171,6 +171,7 @@ struct ConeEmitterParams {
     float endSizeMult   = 0.3f;  // 소멸 시 크기 배율
     bool  fadeAlpha     = true;
     bool  fadeSize      = false;
+    float spawnRadius   = 0.f;   // > 0: 이 반경 구체 안 랜덤 위치에서 스폰 (파편 효과)
 };
 
 struct SphereEmitterParams {

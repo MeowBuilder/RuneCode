@@ -81,6 +81,12 @@ public:
                             const XMFLOAT3& camRight,
                             const XMFLOAT3& camUp);
 
+    // SSF 브랜치 전용: 플레이어 LightEmitter 빌보드 렌더 (SPH는 SSF가 처리)
+    void RenderPlayerLightEmitters(ID3D12GraphicsCommandList* pCmdList,
+                                   const XMFLOAT4X4& viewProj,
+                                   const XMFLOAT3& camRight,
+                                   const XMFLOAT3& camUp);
+
     // ─── 색상 쿼리 (SSF composite용) ──────────────────────────────────────
     XMFLOAT4 GetDominantFluidColor() const;
     FluidElementColor GetDominantFluidColors(bool blurOnly) const;

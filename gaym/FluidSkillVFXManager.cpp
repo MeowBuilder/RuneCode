@@ -429,8 +429,27 @@ int FluidSkillVFXManager::SpawnEffectLayer(const XMFLOAT3& origin, const XMFLOAT
         {
             slot.pLightEmitter->Init(m_pDevice, nullptr, m_pDescHeap,
                                      m_nStartDesc + MAX_EFFECTS + i);
+            if (!slot.pLightEmitter->IsInited())
+            {
+                char msg[128];
+                sprintf_s(msg, "[FluidVFXMgr] LightEmitter Init FAILED for slot %d\n", i);
+                OutputDebugStringA(msg);
+                slot.isActive = false;
+                return -1;
+            }
         }
         slot.pLightEmitter->Spawn(origin, direction, layer);
+        {
+            char msg[256];
+            sprintf_s(msg,
+                "[FluidVFXMgr] SpawnEffectLayer LightEmitter slot=%d name=%s "
+                "pos=(%.1f,%.1f,%.1f) dir=(%.1f,%.1f,%.1f) count=%d\n",
+                i, effectName.c_str(),
+                origin.x, origin.y, origin.z,
+                direction.x, direction.y, direction.z,
+                layer.particleCount);
+            OutputDebugStringA(msg);
+        }
         return i;
     }
 
@@ -1524,4 +1543,26 @@ bool FluidSkillVFXManager::IsPointInWave(int id, const XMFLOAT3& point) const
     if (upDist    > slot.sphLayer.sph.waveHalfH * 2.0f) return false; // 높이는 여유 있게
 
     return true;
+}
+
+void FluidSkillVFXManager::RenderPlayerLightEmitters(ID3D12GraphicsCommandList* pCommandList,
+                                                      const XMFLOAT4X4& viewProj,
+                                                      const XMFLOAT3& camRight, const XMFLOAT3& camUp)
+{
+    for (auto& slot : m_Slots)
+    {
+        if (!slot.isActive)       continue;
+        if (!slot.isPlayerEffect) continue;
+        if (!slot.useLightEmitter) continue;
+        slot.pLightEmitter->Render(pCommandList, viewProj, camRight, camUp);
+    }
+}
+
+// ─── 외부 동기화: 슬롯의 현재 페이즈 인덱스 조회 ─────────────────────────────
+int FluidSkillVFXManager::GetSlotPhase(int id) const
+{
+    if (id < 0 || id >= MAX_EFFECTS) return -1;
+    const FluidVFXSlot& slot = m_Slots[id];
+    if (!slot.isActive) return -1;
+    return slot.currentPhaseIndex;
 }

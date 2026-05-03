@@ -213,6 +213,27 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
     m_pProjectileManager->Init(this, pDevice, pCommandList, m_pDescriptorHeap.get(), nProjectileDescriptorStart);
     OutputDebugString(L"[Scene] Projectile system initialized\n");
 
+    // MeteorBehavior 큐브 코어 렌더링 리소스 초기화 (큐브 2개 = CBV 2개)
+    {
+        UINT nMeteorDescStart = m_nNextDescriptorIndex;
+        m_nNextDescriptorIndex += 2;
+        if (m_pPlayerGameObject)
+        {
+            if (auto* pSC2 = m_pPlayerGameObject->GetComponent<SkillComponent>())
+            {
+                if (auto* pR2 = dynamic_cast<MeteorBehavior*>(pSC2->GetSkill(SkillSlot::R)))
+                {
+                    pR2->SetDeviceResources(pDevice, pCommandList,
+                                            m_pDescriptorHeap.get(), nMeteorDescStart);
+                    // 큐브 반투명 렌더링용 PSO 주입 (alpha blend, depth write off)
+                    // 반드시 pShader가 m_vShaders로 std::move 되기 전에 호출
+                    pR2->SetBlendedPSO(pShader->GetWaterPSO());
+                    OutputDebugString(L"[Scene] MeteorBehavior core cube resources bound\n");
+                }
+            }
+        }
+    }
+
     // Debug Renderer (no descriptors)
     m_pDebugRenderer->Init(pDevice, pCommandList);
     OutputDebugString(L"[Scene] Debug renderer initialized (F1 to toggle)\n");
@@ -1530,6 +1551,10 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
 
         // ── 적 투사체 빌보드 렌더 (SSF 완료 후, 적 슬롯 풀 전용) ──
         m_pVFXManager->RenderEnemyEffects(pCommandList, viewProjT, camRight, camUp);
+
+        // ── 플레이어 LightEmitter 빌보드 렌더 (SSF 미사용 효과: Trail, Impact 등) ──
+        // SPH 플레이어 효과는 SSF로 처리되었으므로 LightEmitter 슬롯만 별도 렌더
+        m_pVFXManager->RenderPlayerLightEmitters(pCommandList, viewProjT, camRight, camUp);
     }
     else
     {
