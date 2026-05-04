@@ -2294,36 +2294,61 @@ void Scene::TransitionToBossRoom()
         RoomSpawnConfig emptyConfig;
         m_pCurrentRoom->SetSpawnConfig(emptyConfig);
 
-        OutputDebugString(L"[Scene] Spawning Dragon boss\n");
-        XMFLOAT3 dragonPos = XMFLOAT3(0.0f, 0.0f, 20.0f);
-        if (m_pPlayerGameObject)
-        {
-            XMFLOAT3 playerPos = m_pPlayerGameObject->GetTransform()->GetPosition();
-            dragonPos = XMFLOAT3(playerPos.x, playerPos.y, playerPos.z + 15.0f);
-        }
-        GameObject* pDragon = m_pEnemySpawner->SpawnEnemy(m_pCurrentRoom, "Dragon", dragonPos, m_pPlayerGameObject);
+        NetworkManager* pNet = NetworkManager::GetInstance();
+        bool bOnline = (pNet && pNet->IsConnected());
 
-        // 보스 인트로 컷씬 시작
-        if (pDragon)
+        if (bOnline)
         {
-            // 보스는 애니 LOD(phase/frustum skip) 면제 — 찍기 등 긴 모션의 끊김 방지
-            if (auto* pA = pDragon->GetComponent<AnimationComponent>()) pA->SetCullEnabled(false);
-            EnemyComponent* pEnemy = pDragon->GetComponent<EnemyComponent>();
-            if (pEnemy)
+            // 온라인 모드에서는 서버가 S_MONSTER_SPAWN으로 보스를 생성함
+            // 따라서 클라에서 로컬 Dragon을 직접 생성하면 보스가 2마리 생기므로 스폰하지 않음
+            OutputDebugString(L"[Scene] Online mode - skip local Dragon boss spawn\n");
+
+            // 방 상태만 활성화
+            m_pCurrentRoom->SetState(RoomState::Active);
+        }
+        else
+        {
+            // 오프라인/싱글 모드에서만 클라가 직접 Dragon 보스를 생성
+            OutputDebugString(L"[Scene] Offline mode - Spawning Dragon boss\n");
+
+            XMFLOAT3 dragonPos = XMFLOAT3(0.0f, 0.0f, 20.0f);
+            if (m_pPlayerGameObject)
             {
-                pEnemy->StartBossIntro(25.0f);  // 25유닛 위에서 착지
-
-                // Camera cinematic: wide-angle shot looking up at the sky where dragon appears
-                XMFLOAT3 landPos = dragonPos;
-                landPos.y = 0.0f;
-                m_pCamera->StartCinematic(landPos, 55.0f, 15.0f, 180.0f);
-                m_pDragonIntroEnemy = pEnemy;
-                m_eLastDragonPhase  = BossIntroPhase::None;
+                XMFLOAT3 playerPos = m_pPlayerGameObject->GetTransform()->GetPosition();
+                dragonPos = XMFLOAT3(playerPos.x, playerPos.y, playerPos.z + 15.0f);
             }
-        }
 
-        // 방 활성화
-        m_pCurrentRoom->SetState(RoomState::Active);
+            GameObject* pDragon = m_pEnemySpawner->SpawnEnemy(
+                m_pCurrentRoom,
+                "Dragon",
+                dragonPos,
+                m_pPlayerGameObject
+            );
+
+            // 보스 인트로 컷씬 시작
+            if (pDragon)
+            {
+                // 보스는 애니 LOD(phase/frustum skip) 면제 — 찍기 등 긴 모션의 끊김 방지
+                if (auto* pA = pDragon->GetComponent<AnimationComponent>())
+                    pA->SetCullEnabled(false);
+
+                EnemyComponent* pEnemy = pDragon->GetComponent<EnemyComponent>();
+                if (pEnemy)
+                {
+                    pEnemy->StartBossIntro(25.0f);  // 25유닛 위에서 착지
+
+                    // Camera cinematic: wide-angle shot looking up at the sky where dragon appears
+                    XMFLOAT3 landPos = dragonPos;
+                    landPos.y = 0.0f;
+                    m_pCamera->StartCinematic(landPos, 55.0f, 15.0f, 180.0f);
+                    m_pDragonIntroEnemy = pEnemy;
+                    m_eLastDragonPhase = BossIntroPhase::None;
+                }
+            }
+
+            // 방 활성화
+            m_pCurrentRoom->SetState(RoomState::Active);
+        }
     }
 
     // ── 9. 인터랙션 큐브 숨김
