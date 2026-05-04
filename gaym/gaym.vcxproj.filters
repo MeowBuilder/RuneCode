@@ -378,6 +378,18 @@
     <ClInclude Include="Terrain.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="EffectRegistry.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="LightEmitterSystem.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="RuneDef.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="RuneRegistry.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="gaym.cpp">
@@ -681,6 +693,15 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="Terrain.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="EffectRegistry.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="LightEmitterSystem.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="RuneRegistry.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>

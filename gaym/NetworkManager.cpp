@@ -523,8 +523,29 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
 
     if (isBossRoom)
     {
-        // A단계: 현재는 불 보스만 연결 (스테이지별 보스는 차후 작업)
-        pScene->TransitionToBossRoom();
+        // 스테이지별 보스방 전환 처리
+        switch (stageIndex)
+        {
+        case 1:
+            pScene->TransitionToBossRoom(); 
+            break;
+
+        case 2:
+            pScene->TransitionToWaterBossRoom(); 
+            break;
+
+        case 3:
+            pScene->TransitionToEarthBossRoom();
+            break;
+
+        case 4:
+            pScene->TransitionToGrassBossRoom();
+            break;
+
+        default:
+            pScene->TransitionToBossRoom();
+            break;
+        }
     }
     else
     {
