@@ -89,6 +89,7 @@ int FluidSkillVFXManager::SpawnSPHLayer(const XMFLOAT3& origin, const XMFLOAT3& 
             FluidVFXSlot& slot = m_Slots[i];
             slot.isActive         = true;
             slot.isFadingOut      = false;
+            slot.useLightEmitter  = false;  // LightEmitter 슬롯 재사용 시 오염 방지
             slot.elapsed          = 0.0f;
             slot.origin           = origin;
             slot.prevOrigin       = origin;
@@ -551,8 +552,9 @@ void FluidSkillVFXManager::Update(float deltaTime)
                 slot.fadeTimer -= deltaTime;
                 if (slot.fadeTimer <= 0.0f)
                 {
-                    slot.isActive    = false;
-                    slot.isFadingOut = false;
+                    slot.isActive       = false;
+                    slot.isFadingOut    = false;
+                    slot.useLightEmitter = false;
                     slot.pLightEmitter->Clear();
                 }
                 continue;
@@ -561,7 +563,8 @@ void FluidSkillVFXManager::Update(float deltaTime)
             // 유한 duration 자동 소멸
             if (slot.lightLayer.duration > 0.f && slot.elapsed >= slot.lightLayer.duration)
             {
-                slot.isActive = false;
+                slot.isActive        = false;
+                slot.useLightEmitter = false;
                 slot.pLightEmitter->Clear();
                 continue;
             }

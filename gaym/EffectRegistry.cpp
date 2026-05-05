@@ -332,6 +332,101 @@ void EffectRegistry::Initialize()
     // R_MeteorFrontFire는 제거 — Trail로 충분
 
     // ──────────────────────────────────────────────────────────────────────────
+    // R_MeteorSmallTrail — 소형 메테오 낙하 Trail (R_MeteorTrail 축소판)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectLayer inner;
+        inner.type           = EmitterType::Cone;
+        inner.element        = ElementType::Fire;
+        inner.overrideColors = true;
+        inner.coreColor      = { 1.00f, 0.80f, 0.40f, 1.00f };
+        inner.edgeColor      = { 0.80f, 0.18f, 0.02f, 0.00f };
+        inner.particleCount  = 250;
+        inner.speedMin       = 4.f;
+        inner.speedMax       = 18.f;
+        inner.lifetimeMin    = 0.15f;
+        inner.lifetimeMax    = 0.40f;
+        inner.sizeScale      = 1.5f;
+        inner.duration       = -1.f;
+        inner.attachToProjectile = true;
+
+        inner.cone.halfAngle     = 55.f;
+        inner.cone.gravityScale  = 0.35f;
+        inner.cone.startSizeMult = 1.3f;
+        inner.cone.endSizeMult   = 0.06f;
+        inner.cone.fadeAlpha     = true;
+        inner.cone.fadeSize      = true;
+        inner.cone.spawnRadius   = 1.5f;
+
+        EffectDef def;
+        def.name    = "R_MeteorSmallTrail";
+        def.element = ElementType::Fire;
+        def.layers.push_back(std::move(inner));
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // R_MeteorSmallImpact — 소형 메테오 착지 폭발 (링 + 버스트)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "R_MeteorSmallImpact";
+        def.element = ElementType::Fire;
+
+        // Layer 0 — 작은 충격파 링
+        {
+            EffectLayer ring;
+            ring.type           = EmitterType::Ring;
+            ring.element        = ElementType::Fire;
+            ring.overrideColors = true;
+            ring.coreColor      = { 1.00f, 0.80f, 0.35f, 1.00f };
+            ring.edgeColor      = { 0.80f, 0.12f, 0.00f, 0.00f };
+            ring.particleCount  = 150;
+            ring.duration       = 0.6f;
+            ring.speedMin       = 4.f;
+            ring.speedMax       = 14.f;
+            ring.lifetimeMin    = 0.3f;
+            ring.lifetimeMax    = 0.7f;
+            ring.sizeScale      = 2.5f;
+
+            ring.ring.radius         = 0.3f;
+            ring.ring.width          = 2.0f;
+            ring.ring.expandSpeed    = 20.f;
+            ring.ring.tiltX          = 0.f;
+            ring.ring.rotateSpeed    = 0.f;
+            ring.ring.normalSpeedMin = 5.f;
+            ring.ring.normalSpeedMax = 14.f;
+
+            def.layers.push_back(ring);
+        }
+
+        // Layer 1 — 순간 방사 버스트
+        {
+            EffectLayer burst;
+            burst.type           = EmitterType::Sphere;
+            burst.element        = ElementType::Fire;
+            burst.overrideColors = true;
+            burst.coreColor      = { 1.00f, 0.90f, 0.55f, 1.00f };
+            burst.edgeColor      = { 1.00f, 0.30f, 0.00f, 0.20f };
+            burst.particleCount  = 120;
+            burst.duration       = 0.3f;
+            burst.speedMin       = 15.f;
+            burst.speedMax       = 35.f;
+            burst.lifetimeMin    = 0.15f;
+            burst.lifetimeMax    = 0.35f;
+            burst.sizeScale      = 3.5f;
+
+            burst.sphere.radius        = 0.8f;
+            burst.sphere.shellFraction = 0.4f;
+            burst.sphere.inward        = false;
+
+            def.layers.push_back(burst);
+        }
+
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // RC_Fireball — 우클릭 화염구 투사체
     // ──────────────────────────────────────────────────────────────────────────
     {
