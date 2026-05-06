@@ -968,6 +968,22 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         }
     }
 
+    // F8: [DEBUG] 현재 방 살아있는 몬스터 전체 즉사 (서버 권위) — 온라인 모드만 의미 있음
+    // F11 은 전체화면 토글과 겹쳐서 F8 사용
+    if (pInputSystem && pInputSystem->IsKeyPressed(VK_F8))
+    {
+        NetworkManager* pNet = NetworkManager::GetInstance();
+        if (pNet && pNet->IsConnected())
+        {
+            pNet->SendDebugKillAll();
+            OutputDebugString(L"[Scene] F8 - C_DEBUG_KILL_ALL requested\n");
+        }
+        else
+        {
+            OutputDebugString(L"[Scene] F8 ignored - not online (offline 즉사 미구현)\n");
+        }
+    }
+
     // B 키: 현재 테마에 맞는 보스전
     if (pInputSystem && pInputSystem->IsKeyPressed('B'))
     {
@@ -3027,48 +3043,62 @@ void Scene::TransitionToWaterBossRoom()
         RoomSpawnConfig emptyConfig;
         m_pCurrentRoom->SetSpawnConfig(emptyConfig);
 
-        // 보스 스폰 위치 = 맵 중앙 (공용 보스 맵 기준)
-        const BoundingBox& bossBB = m_pCurrentRoom->GetBoundingBox();
-        XMFLOAT3 bossPos = XMFLOAT3(bossBB.Center.x, 0.0f, bossBB.Center.z);
+        NetworkManager* pNet = NetworkManager::GetInstance();
+        bool bOnline = (pNet && pNet->IsConnected());
 
-        // Pre-spawn Kraken hidden underground (no target) to avoid mid-combat GPU upload lag
-        // Y=-10000: 시야/프러스텀 밖으로 완전히 숨김 (다른 숨긴 오브젝트들과 동일 깊이)
-        XMFLOAT3 hidePos = XMFLOAT3(bossPos.x, -10000.0f, bossPos.z);
-        GameObject* pKraken = m_pEnemySpawner->SpawnEnemy(m_pCurrentRoom, "Kraken", hidePos, nullptr);
-        if (pKraken)
+        if (bOnline)
         {
-            pKraken->GetTransform()->SetScale(0.05f, 0.05f, 0.05f);
-            if (auto* pA = pKraken->GetComponent<AnimationComponent>()) pA->SetCullEnabled(false);
-            m_pPreloadedKraken = pKraken->GetComponent<EnemyComponent>();
+            // 온라인 모드에서는 서버가 S_MONSTER_SPAWN으로 Kraken 보스를 생성함
+            // 클라가 BlueDragon/Kraken 을 직접 스폰하면 보스가 중복 생성되므로 스킵
+            OutputDebugString(L"[Scene] Online mode - skip local Water boss spawn (BlueDragon/Kraken)\n");
+            m_pCurrentRoom->SetState(RoomState::Active);
         }
-
-        OutputDebugString(L"[Scene] Spawning Blue Dragon (Phase 1)\n");
-        GameObject* pDragon = m_pEnemySpawner->SpawnEnemy(m_pCurrentRoom, "BlueDragon", bossPos, m_pPlayerGameObject);
-
-        if (pDragon)
+        else
         {
-            if (auto* pA = pDragon->GetComponent<AnimationComponent>()) pA->SetCullEnabled(false);
-            EnemyComponent* pDragonEnemy = pDragon->GetComponent<EnemyComponent>();
-            if (pDragonEnemy)
+            // 오프라인/싱글 모드 — 클라가 2페이즈 보스 직접 관리
+            // 보스 스폰 위치 = 맵 중앙 (공용 보스 맵 기준)
+            const BoundingBox& bossBB = m_pCurrentRoom->GetBoundingBox();
+            XMFLOAT3 bossPos = XMFLOAT3(bossBB.Center.x, 0.0f, bossBB.Center.z);
+
+            // Pre-spawn Kraken hidden underground (no target) to avoid mid-combat GPU upload lag
+            // Y=-10000: 시야/프러스텀 밖으로 완전히 숨김 (다른 숨긴 오브젝트들과 동일 깊이)
+            XMFLOAT3 hidePos = XMFLOAT3(bossPos.x, -10000.0f, bossPos.z);
+            GameObject* pKraken = m_pEnemySpawner->SpawnEnemy(m_pCurrentRoom, "Kraken", hidePos, nullptr);
+            if (pKraken)
             {
-                pDragonEnemy->StartBossIntro(5.0f);
-
-                CRoom* pRoom = m_pCurrentRoom;
-                pDragonEnemy->SetOnDeathCallback([this, pRoom](EnemyComponent* pDeadEnemy)
-                {
-                    if (pRoom)
-                        pRoom->OnEnemyDeath(pDeadEnemy);
-
-                    OutputDebugString(L"[Scene] Blue Dragon defeated - Kraken emerges! (Phase 2)\n");
-                    m_xmf3PendingKrakenPos = { 0.0f, 0.0f, 0.0f };
-                    if (pDeadEnemy && pDeadEnemy->GetOwner())
-                        m_xmf3PendingKrakenPos = pDeadEnemy->GetOwner()->GetTransform()->GetPosition();
-                    m_bPendingKrakenSpawn = true;
-                });
+                pKraken->GetTransform()->SetScale(0.05f, 0.05f, 0.05f);
+                if (auto* pA = pKraken->GetComponent<AnimationComponent>()) pA->SetCullEnabled(false);
+                m_pPreloadedKraken = pKraken->GetComponent<EnemyComponent>();
             }
-        }
 
-        m_pCurrentRoom->SetState(RoomState::Active);
+            OutputDebugString(L"[Scene] Offline mode - Spawning Blue Dragon (Phase 1)\n");
+            GameObject* pDragon = m_pEnemySpawner->SpawnEnemy(m_pCurrentRoom, "BlueDragon", bossPos, m_pPlayerGameObject);
+
+            if (pDragon)
+            {
+                if (auto* pA = pDragon->GetComponent<AnimationComponent>()) pA->SetCullEnabled(false);
+                EnemyComponent* pDragonEnemy = pDragon->GetComponent<EnemyComponent>();
+                if (pDragonEnemy)
+                {
+                    pDragonEnemy->StartBossIntro(5.0f);
+
+                    CRoom* pRoom = m_pCurrentRoom;
+                    pDragonEnemy->SetOnDeathCallback([this, pRoom](EnemyComponent* pDeadEnemy)
+                    {
+                        if (pRoom)
+                            pRoom->OnEnemyDeath(pDeadEnemy);
+
+                        OutputDebugString(L"[Scene] Blue Dragon defeated - Kraken emerges! (Phase 2)\n");
+                        m_xmf3PendingKrakenPos = { 0.0f, 0.0f, 0.0f };
+                        if (pDeadEnemy && pDeadEnemy->GetOwner())
+                            m_xmf3PendingKrakenPos = pDeadEnemy->GetOwner()->GetTransform()->GetPosition();
+                        m_bPendingKrakenSpawn = true;
+                    });
+                }
+            }
+
+            m_pCurrentRoom->SetState(RoomState::Active);
+        }
     }
 
     // ── 13. 인터랙션 큐브 숨김
@@ -3319,19 +3349,31 @@ void Scene::TransitionToEarthBossRoom()
         RoomSpawnConfig emptyConfig;
         m_pCurrentRoom->SetSpawnConfig(emptyConfig);
 
-        OutputDebugString(L"[Scene] Spawning Golem boss at room center\n");
-        // 골렘은 고정형 → 방 중앙에 바로 배치 (인트로 비행 없음 — "순간이동" 처럼 보이던 이슈 제거)
-        const BoundingBox& roomBB = m_pCurrentRoom->GetBoundingBox();
-        XMFLOAT3 golemPos = { roomBB.Center.x, 0.0f, roomBB.Center.z };  // XZ 중앙, Y=0(지면)
+        NetworkManager* pNet = NetworkManager::GetInstance();
+        bool bOnline = (pNet && pNet->IsConnected());
 
-        GameObject* pGolem = m_pEnemySpawner->SpawnEnemy(m_pCurrentRoom, "Golem", golemPos, m_pPlayerGameObject);
-        if (pGolem)
+        if (bOnline)
         {
-            if (auto* pA = pGolem->GetComponent<AnimationComponent>()) pA->SetCullEnabled(false);
+            // 온라인 모드에서는 서버가 S_MONSTER_SPAWN으로 Golem 보스를 생성함
+            OutputDebugString(L"[Scene] Online mode - skip local Earth boss spawn (Golem)\n");
+            m_pCurrentRoom->SetState(RoomState::Active);
         }
-        // 인트로 호출 제거 — 골렘은 제단에 박혀있는 석상 컨셉이라 내려오는 연출 불필요
+        else
+        {
+            OutputDebugString(L"[Scene] Offline mode - Spawning Golem boss at room center\n");
+            // 골렘은 고정형 → 방 중앙에 바로 배치 (인트로 비행 없음 — "순간이동" 처럼 보이던 이슈 제거)
+            const BoundingBox& roomBB = m_pCurrentRoom->GetBoundingBox();
+            XMFLOAT3 golemPos = { roomBB.Center.x, 0.0f, roomBB.Center.z };  // XZ 중앙, Y=0(지면)
 
-        m_pCurrentRoom->SetState(RoomState::Active);
+            GameObject* pGolem = m_pEnemySpawner->SpawnEnemy(m_pCurrentRoom, "Golem", golemPos, m_pPlayerGameObject);
+            if (pGolem)
+            {
+                if (auto* pA = pGolem->GetComponent<AnimationComponent>()) pA->SetCullEnabled(false);
+            }
+            // 인트로 호출 제거 — 골렘은 제단에 박혀있는 석상 컨셉이라 내려오는 연출 불필요
+
+            m_pCurrentRoom->SetState(RoomState::Active);
+        }
     }
 
     if (m_pInteractionCube) {
@@ -3423,50 +3465,64 @@ void Scene::TransitionToGrassBossRoom()
         RoomSpawnConfig emptyConfig;
         m_pCurrentRoom->SetSpawnConfig(emptyConfig);
 
-        OutputDebugString(L"[Scene] Spawning Demon boss\n");
-        // 맵 중앙 스폰 (공용 보스 맵 기준)
-        const BoundingBox& demonBB = m_pCurrentRoom->GetBoundingBox();
-        XMFLOAT3 demonPos = XMFLOAT3(demonBB.Center.x, 0.0f, demonBB.Center.z);
+        NetworkManager* pNet = NetworkManager::GetInstance();
+        bool bOnline = (pNet && pNet->IsConnected());
 
-        GameObject* pDemon = m_pEnemySpawner->SpawnEnemy(m_pCurrentRoom, "Demon", demonPos, m_pPlayerGameObject);
-        if (pDemon)
+        if (bOnline)
         {
-            if (auto* pA = pDemon->GetComponent<AnimationComponent>()) pA->SetCullEnabled(false);
-
-            // ── 4스테이지 바람 보스 = 레일 슈팅 (인트로 대신 비행 모드 자동 진입) ──
-            if (auto* pE = pDemon->GetComponent<EnemyComponent>()) pE->SetAIPaused(true);
-
-            // 비행 보스 크기/고도 (3.5x → 7.0x, Y=38 공중 부양)
-            pDemon->GetTransform()->SetScale(7.0f, 7.0f, 7.0f);
-            pDemon->GetTransform()->SetPosition(XMFLOAT3(demonPos.x, 38.0f, demonPos.z));
-            // 초기 visual yaw = 180 (motion yaw 0 + 180 보정)
-            pDemon->GetTransform()->SetRotation(0.0f, 180.0f, 0.0f);
-
-            // 비행 중 idle 루프 — Demon_Anim.txt 기준 사용 가능 클립 중 가장 자연스러움
-            if (auto* pA = pDemon->GetComponent<AnimationComponent>())
-                pA->CrossFade("Idle1", 0.3f, true);
-
-            // Flight 시스템에 보스 등록 (테스트용 m_pFlightBossDummy 슬롯 재사용)
-            m_pFlightBossDummy = pDemon;
-            m_fFlightBossYawDeg = 0.0f;
-            m_fFlightCurveTime  = 0.0f;
-            m_fFlightBossHitFlashTimer = 0.0f;
-            m_nFlightHitCount = 0;
-
-            // 플레이어를 보스 뒤쪽 30단위, 같은 고도에 배치
-            if (m_pPlayerGameObject)
-            {
-                m_pPlayerGameObject->GetTransform()->SetPosition(
-                    XMFLOAT3(demonPos.x, 38.0f, demonPos.z - 30.0f));
-                if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
-                    pPC->EnterFlightMode(pDemon);
-            }
-            if (m_pCamera) m_pCamera->SetFlightMode(true, pDemon);
-
-            OutputDebugString(L"[Scene] Grass boss: rail flight mode auto-entered\n");
+            // 온라인 모드에서는 서버가 S_MONSTER_SPAWN으로 Demon 보스를 생성함
+            // 비행 모드(레일 슈팅) 자동 진입은 클라 전용 연출이므로 서버 보스가 도착한 뒤
+            // 별도 경로(예: S_MONSTER_SPAWN 핸들러)에서 트리거해야 함 — 여기서는 스폰만 스킵
+            OutputDebugString(L"[Scene] Online mode - skip local Grass boss spawn (Demon)\n");
+            m_pCurrentRoom->SetState(RoomState::Active);
         }
+        else
+        {
+            OutputDebugString(L"[Scene] Offline mode - Spawning Demon boss\n");
+            // 맵 중앙 스폰 (공용 보스 맵 기준)
+            const BoundingBox& demonBB = m_pCurrentRoom->GetBoundingBox();
+            XMFLOAT3 demonPos = XMFLOAT3(demonBB.Center.x, 0.0f, demonBB.Center.z);
 
-        m_pCurrentRoom->SetState(RoomState::Active);
+            GameObject* pDemon = m_pEnemySpawner->SpawnEnemy(m_pCurrentRoom, "Demon", demonPos, m_pPlayerGameObject);
+            if (pDemon)
+            {
+                if (auto* pA = pDemon->GetComponent<AnimationComponent>()) pA->SetCullEnabled(false);
+
+                // ── 4스테이지 바람 보스 = 레일 슈팅 (인트로 대신 비행 모드 자동 진입) ──
+                if (auto* pE = pDemon->GetComponent<EnemyComponent>()) pE->SetAIPaused(true);
+
+                // 비행 보스 크기/고도 (3.5x → 7.0x, Y=38 공중 부양)
+                pDemon->GetTransform()->SetScale(7.0f, 7.0f, 7.0f);
+                pDemon->GetTransform()->SetPosition(XMFLOAT3(demonPos.x, 38.0f, demonPos.z));
+                // 초기 visual yaw = 180 (motion yaw 0 + 180 보정)
+                pDemon->GetTransform()->SetRotation(0.0f, 180.0f, 0.0f);
+
+                // 비행 중 idle 루프 — Demon_Anim.txt 기준 사용 가능 클립 중 가장 자연스러움
+                if (auto* pA = pDemon->GetComponent<AnimationComponent>())
+                    pA->CrossFade("Idle1", 0.3f, true);
+
+                // Flight 시스템에 보스 등록 (테스트용 m_pFlightBossDummy 슬롯 재사용)
+                m_pFlightBossDummy = pDemon;
+                m_fFlightBossYawDeg = 0.0f;
+                m_fFlightCurveTime  = 0.0f;
+                m_fFlightBossHitFlashTimer = 0.0f;
+                m_nFlightHitCount = 0;
+
+                // 플레이어를 보스 뒤쪽 30단위, 같은 고도에 배치
+                if (m_pPlayerGameObject)
+                {
+                    m_pPlayerGameObject->GetTransform()->SetPosition(
+                        XMFLOAT3(demonPos.x, 38.0f, demonPos.z - 30.0f));
+                    if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
+                        pPC->EnterFlightMode(pDemon);
+                }
+                if (m_pCamera) m_pCamera->SetFlightMode(true, pDemon);
+
+                OutputDebugString(L"[Scene] Grass boss: rail flight mode auto-entered\n");
+            }
+
+            m_pCurrentRoom->SetState(RoomState::Active);
+        }
     }
 
     if (m_pInteractionCube) {

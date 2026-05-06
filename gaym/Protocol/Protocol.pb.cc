@@ -213,7 +213,8 @@ struct C_TORCH_INTERACTDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT C_TORCH_INTERACTDefaultTypeInternal _C_TORCH_INTERACT_default_instance_;
 constexpr S_ROOM_TRANSITION::S_ROOM_TRANSITION(
   ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
-  : stageindex_(0u)
+  : mapid_(&::PROTOBUF_NAMESPACE_ID::internal::fixed_address_empty_string)
+  , stageindex_(0u)
   , roomindex_(0u)
   , isbossroom_(false){}
 struct S_ROOM_TRANSITIONDefaultTypeInternal {
@@ -495,6 +496,7 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_Protocol_2eproto::offsets[] PR
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_TRANSITION, stageindex_),
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_TRANSITION, roomindex_),
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_TRANSITION, isbossroom_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_TRANSITION, mapid_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::MonsterInfo, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -604,15 +606,15 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOB
   { 98, -1, sizeof(::Protocol::C_PORTAL_INTERACT)},
   { 103, -1, sizeof(::Protocol::C_TORCH_INTERACT)},
   { 108, -1, sizeof(::Protocol::S_ROOM_TRANSITION)},
-  { 116, -1, sizeof(::Protocol::MonsterInfo)},
-  { 129, -1, sizeof(::Protocol::S_MONSTER_SPAWN)},
-  { 135, -1, sizeof(::Protocol::S_MONSTER_MOVE)},
-  { 145, -1, sizeof(::Protocol::S_MONSTER_DESPAWN)},
-  { 151, -1, sizeof(::Protocol::S_MONSTER_ATTACK)},
-  { 164, -1, sizeof(::Protocol::S_PLAYER_DAMAGE)},
-  { 174, -1, sizeof(::Protocol::C_PLAYER_ATTACK)},
-  { 190, -1, sizeof(::Protocol::S_MONSTER_DAMAGE)},
-  { 201, -1, sizeof(::Protocol::S_ROOM_CLEARED)},
+  { 117, -1, sizeof(::Protocol::MonsterInfo)},
+  { 130, -1, sizeof(::Protocol::S_MONSTER_SPAWN)},
+  { 136, -1, sizeof(::Protocol::S_MONSTER_MOVE)},
+  { 146, -1, sizeof(::Protocol::S_MONSTER_DESPAWN)},
+  { 152, -1, sizeof(::Protocol::S_MONSTER_ATTACK)},
+  { 165, -1, sizeof(::Protocol::S_PLAYER_DAMAGE)},
+  { 175, -1, sizeof(::Protocol::C_PLAYER_ATTACK)},
+  { 191, -1, sizeof(::Protocol::S_MONSTER_DAMAGE)},
+  { 202, -1, sizeof(::Protocol::S_ROOM_CLEARED)},
 };
 
 static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] = {
@@ -664,34 +666,34 @@ const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABL
   "Protocol.SkillType\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002"
   "\022\t\n\001z\030\005 \001(\002\022\014\n\004dirX\030\006 \001(\002\022\014\n\004dirY\030\007 \001(\002\022"
   "\014\n\004dirZ\030\010 \001(\002\"\023\n\021C_PORTAL_INTERACT\"\022\n\020C_"
-  "TORCH_INTERACT\"N\n\021S_ROOM_TRANSITION\022\022\n\ns"
+  "TORCH_INTERACT\"]\n\021S_ROOM_TRANSITION\022\022\n\ns"
   "tageIndex\030\001 \001(\r\022\021\n\troomIndex\030\002 \001(\r\022\022\n\nis"
-  "BossRoom\030\003 \001(\010\"\177\n\013MonsterInfo\022\021\n\tmonster"
-  "Id\030\001 \001(\004\022\023\n\013monsterType\030\002 \001(\r\022\t\n\001x\030\003 \001(\002"
-  "\022\t\n\001y\030\004 \001(\002\022\t\n\001z\030\005 \001(\002\022\013\n\003yaw\030\006 \001(\002\022\n\n\002h"
-  "p\030\007 \001(\002\022\016\n\006isBoss\030\010 \001(\010\"9\n\017S_MONSTER_SPA"
-  "WN\022&\n\007monster\030\001 \001(\0132\025.Protocol.MonsterIn"
-  "fo\"Q\n\016S_MONSTER_MOVE\022\021\n\tmonsterId\030\001 \001(\004\022"
-  "\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\013\n\003yaw\030"
-  "\005 \001(\002\"&\n\021S_MONSTER_DESPAWN\022\021\n\tmonsterId\030"
-  "\001 \001(\004\"\222\001\n\020S_MONSTER_ATTACK\022\021\n\tmonsterId\030"
-  "\001 \001(\004\022\026\n\016targetPlayerId\030\002 \001(\004\022\022\n\nattackT"
-  "ype\030\003 \001(\r\022\t\n\001x\030\004 \001(\002\022\t\n\001y\030\005 \001(\002\022\t\n\001z\030\006 \001"
-  "(\002\022\013\n\003yaw\030\007 \001(\002\022\021\n\twindupSec\030\010 \001(\002\"q\n\017S_"
-  "PLAYER_DAMAGE\022\020\n\010playerId\030\001 \001(\004\022\016\n\006damag"
-  "e\030\002 \001(\002\022\021\n\tcurrentHp\030\003 \001(\002\022\016\n\006isDead\030\004 \001"
-  "(\010\022\031\n\021attackerMonsterId\030\005 \001(\004\"\311\001\n\017C_PLAY"
-  "ER_ATTACK\022\020\n\010playerId\030\001 \001(\004\022&\n\tskillType"
-  "\030\002 \001(\0162\023.Protocol.SkillType\022\t\n\001x\030\003 \001(\002\022\t"
-  "\n\001y\030\004 \001(\002\022\t\n\001z\030\005 \001(\002\022\014\n\004dirX\030\006 \001(\002\022\014\n\004di"
-  "rY\030\007 \001(\002\022\014\n\004dirZ\030\010 \001(\002\022\017\n\007targetX\030\t \001(\002\022"
-  "\017\n\007targetY\030\n \001(\002\022\017\n\007targetZ\030\013 \001(\002\"\232\001\n\020S_"
-  "MONSTER_DAMAGE\022\021\n\tmonsterId\030\001 \001(\004\022\016\n\006dam"
-  "age\030\002 \001(\002\022\021\n\tcurrentHp\030\003 \001(\002\022\016\n\006isDead\030\004"
-  " \001(\010\022\030\n\020attackerPlayerId\030\005 \001(\004\022&\n\tskillT"
-  "ype\030\006 \001(\0162\023.Protocol.SkillType\"7\n\016S_ROOM"
-  "_CLEARED\022\022\n\nstageIndex\030\001 \001(\r\022\021\n\troomInde"
-  "x\030\002 \001(\rb\006proto3"
+  "BossRoom\030\003 \001(\010\022\r\n\005mapId\030\004 \001(\t\"\177\n\013Monster"
+  "Info\022\021\n\tmonsterId\030\001 \001(\004\022\023\n\013monsterType\030\002"
+  " \001(\r\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\t\n\001z\030\005 \001(\002\022\013\n"
+  "\003yaw\030\006 \001(\002\022\n\n\002hp\030\007 \001(\002\022\016\n\006isBoss\030\010 \001(\010\"9"
+  "\n\017S_MONSTER_SPAWN\022&\n\007monster\030\001 \001(\0132\025.Pro"
+  "tocol.MonsterInfo\"Q\n\016S_MONSTER_MOVE\022\021\n\tm"
+  "onsterId\030\001 \001(\004\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001"
+  "z\030\004 \001(\002\022\013\n\003yaw\030\005 \001(\002\"&\n\021S_MONSTER_DESPAW"
+  "N\022\021\n\tmonsterId\030\001 \001(\004\"\222\001\n\020S_MONSTER_ATTAC"
+  "K\022\021\n\tmonsterId\030\001 \001(\004\022\026\n\016targetPlayerId\030\002"
+  " \001(\004\022\022\n\nattackType\030\003 \001(\r\022\t\n\001x\030\004 \001(\002\022\t\n\001y"
+  "\030\005 \001(\002\022\t\n\001z\030\006 \001(\002\022\013\n\003yaw\030\007 \001(\002\022\021\n\twindup"
+  "Sec\030\010 \001(\002\"q\n\017S_PLAYER_DAMAGE\022\020\n\010playerId"
+  "\030\001 \001(\004\022\016\n\006damage\030\002 \001(\002\022\021\n\tcurrentHp\030\003 \001("
+  "\002\022\016\n\006isDead\030\004 \001(\010\022\031\n\021attackerMonsterId\030\005"
+  " \001(\004\"\311\001\n\017C_PLAYER_ATTACK\022\020\n\010playerId\030\001 \001"
+  "(\004\022&\n\tskillType\030\002 \001(\0162\023.Protocol.SkillTy"
+  "pe\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\t\n\001z\030\005 \001(\002\022\014\n\004d"
+  "irX\030\006 \001(\002\022\014\n\004dirY\030\007 \001(\002\022\014\n\004dirZ\030\010 \001(\002\022\017\n"
+  "\007targetX\030\t \001(\002\022\017\n\007targetY\030\n \001(\002\022\017\n\007targe"
+  "tZ\030\013 \001(\002\"\232\001\n\020S_MONSTER_DAMAGE\022\021\n\tmonster"
+  "Id\030\001 \001(\004\022\016\n\006damage\030\002 \001(\002\022\021\n\tcurrentHp\030\003 "
+  "\001(\002\022\016\n\006isDead\030\004 \001(\010\022\030\n\020attackerPlayerId\030"
+  "\005 \001(\004\022&\n\tskillType\030\006 \001(\0162\023.Protocol.Skil"
+  "lType\"7\n\016S_ROOM_CLEARED\022\022\n\nstageIndex\030\001 "
+  "\001(\r\022\021\n\troomIndex\030\002 \001(\rb\006proto3"
   ;
 static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor_table_Protocol_2eproto_deps[2] = {
   &::descriptor_table_Enum_2eproto,
@@ -699,7 +701,7 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor
 };
 static ::PROTOBUF_NAMESPACE_ID::internal::once_flag descriptor_table_Protocol_2eproto_once;
 const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_Protocol_2eproto = {
-  false, false, 1935, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
+  false, false, 1950, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
   &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 24,
   schemas, file_default_instances, TableStruct_Protocol_2eproto::offsets,
   file_level_metadata_Protocol_2eproto, file_level_enum_descriptors_Protocol_2eproto, file_level_service_descriptors_Protocol_2eproto,
@@ -3989,6 +3991,11 @@ S_ROOM_TRANSITION::S_ROOM_TRANSITION(::PROTOBUF_NAMESPACE_ID::Arena* arena)
 S_ROOM_TRANSITION::S_ROOM_TRANSITION(const S_ROOM_TRANSITION& from)
   : ::PROTOBUF_NAMESPACE_ID::Message() {
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  mapid_.UnsafeSetDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
+  if (!from._internal_mapid().empty()) {
+    mapid_.Set(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, from._internal_mapid(), 
+      GetArenaForAllocation());
+  }
   ::memcpy(&stageindex_, &from.stageindex_,
     static_cast<size_t>(reinterpret_cast<char*>(&isbossroom_) -
     reinterpret_cast<char*>(&stageindex_)) + sizeof(isbossroom_));
@@ -3996,6 +4003,7 @@ S_ROOM_TRANSITION::S_ROOM_TRANSITION(const S_ROOM_TRANSITION& from)
 }
 
 void S_ROOM_TRANSITION::SharedCtor() {
+mapid_.UnsafeSetDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
 ::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
     reinterpret_cast<char*>(&stageindex_) - reinterpret_cast<char*>(this)),
     0, static_cast<size_t>(reinterpret_cast<char*>(&isbossroom_) -
@@ -4010,6 +4018,7 @@ S_ROOM_TRANSITION::~S_ROOM_TRANSITION() {
 
 void S_ROOM_TRANSITION::SharedDtor() {
   GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
+  mapid_.DestroyNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
 }
 
 void S_ROOM_TRANSITION::ArenaDtor(void* object) {
@@ -4028,6 +4037,7 @@ void S_ROOM_TRANSITION::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  mapid_.ClearToEmpty();
   ::memset(&stageindex_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&isbossroom_) -
       reinterpret_cast<char*>(&stageindex_)) + sizeof(isbossroom_));
@@ -4058,6 +4068,15 @@ const char* S_ROOM_TRANSITION::_InternalParse(const char* ptr, ::PROTOBUF_NAMESP
       case 3:
         if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 24)) {
           isbossroom_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // string mapId = 4;
+      case 4:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 34)) {
+          auto str = _internal_mutable_mapid();
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(::PROTOBUF_NAMESPACE_ID::internal::VerifyUTF8(str, "Protocol.S_ROOM_TRANSITION.mapId"));
           CHK_(ptr);
         } else goto handle_unusual;
         continue;
@@ -4108,6 +4127,16 @@ failure:
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteBoolToArray(3, this->_internal_isbossroom(), target);
   }
 
+  // string mapId = 4;
+  if (!this->mapid().empty()) {
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      this->_internal_mapid().data(), static_cast<int>(this->_internal_mapid().length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "Protocol.S_ROOM_TRANSITION.mapId");
+    target = stream->WriteStringMaybeAliased(
+        4, this->_internal_mapid(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -4123,6 +4152,13 @@ size_t S_ROOM_TRANSITION::ByteSizeLong() const {
   ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
+
+  // string mapId = 4;
+  if (!this->mapid().empty()) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+        this->_internal_mapid());
+  }
 
   // uint32 stageIndex = 1;
   if (this->stageindex() != 0) {
@@ -4174,6 +4210,9 @@ void S_ROOM_TRANSITION::MergeFrom(const S_ROOM_TRANSITION& from) {
   ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  if (!from.mapid().empty()) {
+    _internal_set_mapid(from._internal_mapid());
+  }
   if (from.stageindex() != 0) {
     _internal_set_stageindex(from._internal_stageindex());
   }
@@ -4206,6 +4245,11 @@ bool S_ROOM_TRANSITION::IsInitialized() const {
 void S_ROOM_TRANSITION::InternalSwap(S_ROOM_TRANSITION* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(),
+      &mapid_, GetArenaForAllocation(),
+      &other->mapid_, other->GetArenaForAllocation()
+  );
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
       PROTOBUF_FIELD_OFFSET(S_ROOM_TRANSITION, isbossroom_)
       + sizeof(S_ROOM_TRANSITION::isbossroom_)

@@ -106,6 +106,7 @@ message S_ROOM_TRANSITION // ���� -> Ŭ�� �� ��ȯ ����
 	uint32 stageIndex = 1; // ���� �������� ��ȣ
 	uint32 roomIndex = 2;  // ���� �� ��ȣ
 	bool isBossRoom = 3;   // ������ ����
+	string mapId = 4;      // Ŭ�� �ε��� �� ID
 }
 
 message MonsterInfo // ���� -> Ŭ�� ���� �⺻ ����

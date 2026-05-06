@@ -2401,10 +2401,25 @@ class S_ROOM_TRANSITION final :
   // accessors -------------------------------------------------------
 
   enum : int {
+    kMapIdFieldNumber = 4,
     kStageIndexFieldNumber = 1,
     kRoomIndexFieldNumber = 2,
     kIsBossRoomFieldNumber = 3,
   };
+  // string mapId = 4;
+  void clear_mapid();
+  const std::string& mapid() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_mapid(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_mapid();
+  PROTOBUF_FUTURE_MUST_USE_RESULT std::string* release_mapid();
+  void set_allocated_mapid(std::string* mapid);
+  private:
+  const std::string& _internal_mapid() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_mapid(const std::string& value);
+  std::string* _internal_mutable_mapid();
+  public:
+
   // uint32 stageIndex = 1;
   void clear_stageindex();
   ::PROTOBUF_NAMESPACE_ID::uint32 stageindex() const;
@@ -2439,6 +2454,7 @@ class S_ROOM_TRANSITION final :
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr mapid_;
   ::PROTOBUF_NAMESPACE_ID::uint32 stageindex_;
   ::PROTOBUF_NAMESPACE_ID::uint32 roomindex_;
   bool isbossroom_;
@@ -5070,6 +5086,51 @@ inline void S_ROOM_TRANSITION::_internal_set_isbossroom(bool value) {
 inline void S_ROOM_TRANSITION::set_isbossroom(bool value) {
   _internal_set_isbossroom(value);
   // @@protoc_insertion_point(field_set:Protocol.S_ROOM_TRANSITION.isBossRoom)
+}
+
+// string mapId = 4;
+inline void S_ROOM_TRANSITION::clear_mapid() {
+  mapid_.ClearToEmpty();
+}
+inline const std::string& S_ROOM_TRANSITION::mapid() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ROOM_TRANSITION.mapId)
+  return _internal_mapid();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void S_ROOM_TRANSITION::set_mapid(ArgT0&& arg0, ArgT... args) {
+ 
+ mapid_.Set(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:Protocol.S_ROOM_TRANSITION.mapId)
+}
+inline std::string* S_ROOM_TRANSITION::mutable_mapid() {
+  // @@protoc_insertion_point(field_mutable:Protocol.S_ROOM_TRANSITION.mapId)
+  return _internal_mutable_mapid();
+}
+inline const std::string& S_ROOM_TRANSITION::_internal_mapid() const {
+  return mapid_.Get();
+}
+inline void S_ROOM_TRANSITION::_internal_set_mapid(const std::string& value) {
+  
+  mapid_.Set(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, value, GetArenaForAllocation());
+}
+inline std::string* S_ROOM_TRANSITION::_internal_mutable_mapid() {
+  
+  return mapid_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
+}
+inline std::string* S_ROOM_TRANSITION::release_mapid() {
+  // @@protoc_insertion_point(field_release:Protocol.S_ROOM_TRANSITION.mapId)
+  return mapid_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
+}
+inline void S_ROOM_TRANSITION::set_allocated_mapid(std::string* mapid) {
+  if (mapid != nullptr) {
+    
+  } else {
+    
+  }
+  mapid_.SetAllocated(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), mapid,
+      GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set_allocated:Protocol.S_ROOM_TRANSITION.mapId)
 }
 
 // -------------------------------------------------------------------

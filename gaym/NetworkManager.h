@@ -59,6 +59,7 @@ struct NetworkCommandData
     uint32 stageIndex;
     uint32 roomIndex;
     bool isBossRoom;
+    std::string mapId;
 
     // Monster fields
     uint64 monsterId;
@@ -141,6 +142,10 @@ public:
                           float dirX, float dirY, float dirZ,
                           float targetX, float targetY, float targetZ);
 
+    // [DEBUG] 현재 방 전체 즉사 (서버 권위) — F8 키 (F11 은 전체화면과 겹침). 서버가 모든 살아있는 몬스터에
+    // 9999 데미지 적용 후 정상적인 S_MONSTER_DAMAGE(isDead=true) → 사망 애니 → S_ROOM_CLEARED 자연 진행
+    void SendDebugKillAll();
+
     // 로컬 플레이어 ID 설정/조회 (atomic으로 스레드 안전)
     void SetLocalPlayerId(uint64 playerId) { m_nLocalPlayerId.store(playerId); }
     uint64 GetLocalPlayerId() const { return m_nLocalPlayerId.load(); }
@@ -155,7 +160,7 @@ public:
     void QueueMovePlayer(uint64 playerId, float x, float y, float z, float dirX, float dirY, float dirZ);
     void QueueSkill(uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ);
     void QueueSetLocalPlayerId(uint64 playerId);
-    void QueueRoomTransition(uint32 stageIndex, uint32 roomIndex, bool isBossRoom);
+    void QueueRoomTransition(uint32 stageIndex, uint32 roomIndex, bool isBossRoom, const std::string& mapId);
 
     // 몬스터 큐잉 (네트워크 스레드에서 호출 → 메인 스레드에서 처리)
     void QueueMonsterSpawn(uint64 monsterId, uint32 monsterType,
@@ -212,7 +217,7 @@ private:
     void ProcessDespawnPlayer(Scene* pScene, uint64 playerId);
     void ProcessMovePlayer(uint64 playerId, float x, float y, float z, float dirX, float dirY, float dirZ);
     void ProcessSkill(Scene* pScene, uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ);
-    void ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uint32 roomIndex, bool isBossRoom);
+    void ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uint32 roomIndex, bool isBossRoom, const std::string& mapId);
 
     // 몬스터 처리 (메인 스레드)
     void ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList,

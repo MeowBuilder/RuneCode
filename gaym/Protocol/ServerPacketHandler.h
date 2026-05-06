@@ -29,6 +29,9 @@ enum : uint16
 	PKT_C_PLAYER_ATTACK = 1020,
 	PKT_S_MONSTER_DAMAGE = 1021,
 	PKT_S_ROOM_CLEARED = 1022,
+	// [DEBUG] 현재 방 안 살아있는 몬스터 전체 즉사. 본문 비어있음 — 빈 메시지 형식 C_PORTAL_INTERACT 재활용.
+	// 정식 패치 시 별도 message 로 분리할 것.
+	PKT_C_DEBUG_KILL_ALL = 1023,
 };
 
 // Custom Handlers
@@ -86,6 +89,12 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::C_PORTAL_INTERACT& pkt) { return MakeSendBuffer(pkt, PKT_C_PORTAL_INTERACT); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_TORCH_INTERACT& pkt) { return MakeSendBuffer(pkt, PKT_C_TORCH_INTERACT); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_PLAYER_ATTACK& pkt) { return MakeSendBuffer(pkt, PKT_C_PLAYER_ATTACK); }
+	// [DEBUG] 빈 본문 — C_PORTAL_INTERACT 메시지 형식만 빌려서 ID 만 다르게 보냄
+	static SendBufferRef MakeDebugKillAllSendBuffer()
+	{
+		Protocol::C_PORTAL_INTERACT pkt;
+		return MakeSendBuffer(pkt, PKT_C_DEBUG_KILL_ALL);
+	}
 
 private:
 	template<typename PacketType, typename ProcessFunc>

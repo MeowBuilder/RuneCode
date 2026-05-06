@@ -251,16 +251,17 @@ bool Handle_S_ROOM_TRANSITION(PacketSessionRef& session, Protocol::S_ROOM_TRANSI
     uint32 stageIndex = pkt.stageindex();
     uint32 roomIndex = pkt.roomindex();
     bool isBossRoom = pkt.isbossroom();
+    std::string mapId = pkt.mapid();
 
-    char buf[256];
-    sprintf_s(buf, "[Network] S_ROOM_TRANSITION received: stage=%u room=%u boss=%d",
-        stageIndex, roomIndex, isBossRoom ? 1 : 0);
+    char buf[512];
+    sprintf_s(buf, "[Network] S_ROOM_TRANSITION received: stage=%u room=%u boss=%d mapId=%s",
+        stageIndex, roomIndex, isBossRoom ? 1 : 0, mapId.c_str());
     WriteNetworkLog(buf);
 
     NetworkManager* pNetMgr = NetworkManager::GetInstance();
     if (pNetMgr)
     {
-        pNetMgr->QueueRoomTransition(stageIndex, roomIndex, isBossRoom);
+        pNetMgr->QueueRoomTransition(stageIndex, roomIndex, isBossRoom, mapId);
     }
 
     return true;

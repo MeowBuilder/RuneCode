@@ -268,7 +268,7 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             break;
 
         case NetworkCommand::RoomTransition:
-            ProcessRoomTransition(pScene, cmd.stageIndex, cmd.roomIndex, cmd.isBossRoom);
+            ProcessRoomTransition(pScene, cmd.stageIndex, cmd.roomIndex, cmd.isBossRoom, cmd.mapId);
             break;
 
         case NetworkCommand::MonsterSpawn:
@@ -375,6 +375,22 @@ void NetworkManager::SendTorchInteract()
     WriteNetworkLog("[Network] C_TORCH_INTERACT sent");
 }
 
+void NetworkManager::SendDebugKillAll()
+{
+    if (!m_bConnected || !m_pSession)
+    {
+        WriteNetworkLog("[Network] SendDebugKillAll BLOCKED (not connected or no session)");
+        OutputDebugString(L"[CLIENT][SendDebugKillAll] blocked - not connected\n");
+        return;
+    }
+
+    auto sendBuffer = ServerPacketHandler::MakeDebugKillAllSendBuffer();
+    m_pSession->Send(sendBuffer);
+
+    OutputDebugString(L"[CLIENT][SendDebugKillAll] sent (F11 debug)\n");
+    WriteNetworkLog("[Network] C_DEBUG_KILL_ALL sent");
+}
+
 void NetworkManager::SendPlayerAttack(int skillType,
                                       float x, float y, float z,
                                       float dirX, float dirY, float dirZ,
@@ -404,7 +420,7 @@ void NetworkManager::SendPlayerAttack(int skillType,
     WriteNetworkLog(buf);
 }
 
-void NetworkManager::QueueRoomTransition(uint32 stageIndex, uint32 roomIndex, bool isBossRoom)
+void NetworkManager::QueueRoomTransition(uint32 stageIndex, uint32 roomIndex, bool isBossRoom, const std::string& mapId)
 {
     std::lock_guard<std::mutex> lock(m_queueMutex);
 
@@ -413,6 +429,7 @@ void NetworkManager::QueueRoomTransition(uint32 stageIndex, uint32 roomIndex, bo
     cmd.stageIndex = stageIndex;
     cmd.roomIndex = roomIndex;
     cmd.isBossRoom = isBossRoom;
+    cmd.mapId = mapId;
 
     m_vCommandQueue.push_back(cmd);
 }
@@ -488,7 +505,7 @@ GameObject* NetworkManager::GetServerMonster(uint64 monsterId)
     return (it != m_mapServerMonsters.end()) ? it->second : nullptr;
 }
 
-void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uint32 roomIndex, bool isBossRoom)
+void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uint32 roomIndex, bool isBossRoom, const std::string& mapId)
 {
     if (!pScene)
         return;
@@ -502,9 +519,9 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     }
     m_bInRoomTransition = true;
 
-    wchar_t buf[256];
-    swprintf_s(buf, L"[Network] ProcessRoomTransition stage=%u room=%u boss=%d\n",
-        stageIndex, roomIndex, isBossRoom ? 1 : 0);
+    wchar_t buf[512];
+    swprintf_s(buf, L"[Network] ProcessRoomTransition stage=%u room=%u boss=%d mapId=%S\n",
+        stageIndex, roomIndex, isBossRoom ? 1 : 0, mapId.c_str());
     OutputDebugString(buf);
 
     // 이전 방 서버 몬스터 전부 정리 — GameObject 는 Scene 에 MarkForDeletion 으로 삭제 예약,
@@ -521,36 +538,38 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     m_mapServerMonsterHitFlashTimer.clear();
     m_setDeadServerMonsters.clear();
 
-    if (isBossRoom)
+    // 서버가 내려준 mapId 우선 분기. mapId 가 비었거나 미매칭이면 stageIndex/roomIndex 기반 fallback.
+    bool bHandled = false;
+    if (!mapId.empty())
     {
-        // 스테이지별 보스방 전환 처리
-        switch (stageIndex)
-        {
-        case 1:
-            pScene->TransitionToBossRoom(); 
-            break;
-
-        case 2:
-            pScene->TransitionToWaterBossRoom(); 
-            break;
-
-        case 3:
-            pScene->TransitionToEarthBossRoom();
-            break;
-
-        case 4:
-            pScene->TransitionToGrassBossRoom();
-            break;
-
-        default:
-            pScene->TransitionToBossRoom();
-            break;
-        }
+        if (mapId == "fire_boss")           { pScene->TransitionToBossRoom();        bHandled = true; }
+        else if (mapId == "water_boss")     { pScene->TransitionToWaterBossRoom();   bHandled = true; }
+        else if (mapId == "earth_boss")     { pScene->TransitionToEarthBossRoom();   bHandled = true; }
+        else if (mapId == "grass_boss")     { pScene->TransitionToGrassBossRoom();   bHandled = true; }
+        else if (mapId == "water_room_01")  { pScene->TransitionToWaterStage();      bHandled = true; }
+        else if (mapId == "earth_room_01")  { pScene->TransitionToEarthStage();      bHandled = true; }
+        else if (mapId == "grass_room_01")  { pScene->TransitionToGrassStage();      bHandled = true; }
+        else if (mapId == "fire_room_01")   { pScene->TransitionToRoomByIndex(static_cast<int>(roomIndex)); bHandled = true; }
     }
-    else
+
+    if (!bHandled)
     {
-        // roomIndex를 풀 인덱스로 사용 → 모든 클라가 동일한 맵 로드
-        pScene->TransitionToRoomByIndex(static_cast<int>(roomIndex));
+        // legacy / unknown mapId fallback
+        if (isBossRoom)
+        {
+            switch (stageIndex)
+            {
+            case 1: pScene->TransitionToBossRoom();        break;
+            case 2: pScene->TransitionToWaterBossRoom();   break;
+            case 3: pScene->TransitionToEarthBossRoom();   break;
+            case 4: pScene->TransitionToGrassBossRoom();   break;
+            default: pScene->TransitionToBossRoom();       break;
+            }
+        }
+        else
+        {
+            pScene->TransitionToRoomByIndex(static_cast<int>(roomIndex));
+        }
     }
 
     // 원격 플레이어 좌표 리셋 — 서버 HandlePortalInteract 는 좌표를 건드리지 않으므로
