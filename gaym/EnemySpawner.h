@@ -39,6 +39,19 @@ public:
     // Get registered presets
     bool HasPreset(const std::string& name) const;
 
+    // ── 네트워크 보스용 인디케이터 ─────────────────────────────────────────
+    //   서버 권위 보스(EnemyComponent 없음)가 공격 시 텔레그래프(Circle/ForwardBox) 표시할 수 있게
+    //   border + fill 4개를 미리 생성. NetworkManager 가 보스 스폰 시 호출 → ProcessMonsterAttack 에서
+    //   타입별로 위치/스케일 갱신.
+    struct NetBossIndicatorSet
+    {
+        GameObject* circleBorder = nullptr;   // 원형 테두리 링
+        GameObject* circleFill   = nullptr;   // 원형 fill (원판)
+        GameObject* boxBorder    = nullptr;   // ForwardBox 외곽
+        GameObject* boxFill      = nullptr;   // ForwardBox 내부 fill
+    };
+    NetBossIndicatorSet CreateNetBossIndicators();
+
 private:
     // Create a cube mesh enemy for testing
     GameObject* CreateCubeEnemy(CRoom* pRoom, const XMFLOAT3& position, const XMFLOAT3& scale, const XMFLOAT4& color);

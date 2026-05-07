@@ -70,12 +70,36 @@ void ProjectileManager::SpawnProjectile(const Projectile& projectile)
 {
     if (m_Projectiles.size() >= MAX_PROJECTILES)
     {
-        // Remove oldest inactive projectile or skip
+        // 1차: inactive 정리
         CleanupInactiveProjectiles();
         if (m_Projectiles.size() >= MAX_PROJECTILES)
         {
-            OutputDebugString(L"[ProjectileManager] Max projectiles reached!\n");
-            return;
+            // 2차: 들어올 게 player projectile 이면 oldest non-player 강제 evict 해서 자리 만들어 줌.
+            //   (보스 VFX 가 풀 채워서 플레이어 스킬 시각이 reject 되는 케이스 방지)
+            if (projectile.isPlayerProjectile)
+            {
+                bool bEvicted = false;
+                for (auto eIt = m_Projectiles.begin(); eIt != m_Projectiles.end(); ++eIt)
+                {
+                    if (!eIt->isPlayerProjectile)
+                    {
+                        eIt->isActive = false;        // 안전하게 inactive 표시
+                        m_Projectiles.erase(eIt);     // 자리 비우기
+                        bEvicted = true;
+                        break;
+                    }
+                }
+                if (!bEvicted)
+                {
+                    OutputDebugString(L"[ProjectileManager] Pool full, no non-player to evict, drop player projectile\n");
+                    return;
+                }
+            }
+            else
+            {
+                OutputDebugString(L"[ProjectileManager] Max projectiles reached, drop non-player\n");
+                return;
+            }
         }
     }
 

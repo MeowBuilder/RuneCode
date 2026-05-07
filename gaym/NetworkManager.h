@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <mutex>
 #include <DirectXMath.h>
+#include "SkillTypes.h"   // ElementType (PendingMonsterVFX)
 
 // 전방 선언
 struct ID3D12Device;
@@ -41,7 +42,8 @@ enum class NetworkCommand
     MonsterAttack,
     PlayerDamage,
     MonsterDamage,
-    RoomCleared
+    RoomCleared,
+    BossEvent
 };
 
 // 네트워크 명령 구조체
@@ -77,6 +79,10 @@ struct NetworkCommandData
     bool  isDead;
     uint64 attackerMonsterId;
     uint64 attackerPlayerId;
+
+    // Boss event fields (S_BOSS_EVENT)
+    uint32 bossEventType;   // Protocol::BossEventType (1=Intro, 2=PhaseChange, 3=Death)
+    uint32 phaseIndex;
 };
 
 // =============================================================================
@@ -179,6 +185,9 @@ public:
                             uint64 attackerPlayerId, int skillType);
     void QueueRoomCleared(uint32 stageIndex, uint32 roomIndex);
 
+    // 보스 이벤트 (인트로/페이즈 전환/사망 컷씬)
+    void QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 phaseIndex);
+
     // 서버 몬스터 조회
     GameObject* GetServerMonster(uint64 monsterId);
     bool HasServerMonsters() const { return !m_mapServerMonsters.empty(); }
@@ -234,12 +243,19 @@ private:
     void ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float damage, float currentHp, bool isDead,
                               uint64 attackerPlayerId, int skillType);
     void ProcessRoomCleared(Scene* pScene, uint32 stageIndex, uint32 roomIndex);
+    void ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 eventType, uint32 phaseIndex);
 
     // 서버 몬스터 관리 (메인 스레드에서만 접근)
     std::unordered_map<uint64, GameObject*> m_mapServerMonsters;
 
     // 몬스터별 preset 클립 이름 (Idle/Walk/Attack/Death 각 모델별로 다름)
-    struct ServerMonsterClips { std::string idle; std::string walk; std::string attack; std::string death; };
+    // monsterType 도 함께 보관 — ProcessMonsterAttack 에서 (monsterType, attackType) 별 클립 분기에 사용
+    struct ServerMonsterClips
+    {
+        std::string idle, walk, attack, death;
+        uint32 monsterType = 0;
+        bool   isBoss = false;
+    };
     std::unordered_map<uint64, ServerMonsterClips> m_mapServerMonsterClips;
 
     // 공격 애니 재생 중인 몬스터 — 이 시간 동안은 Move 와서도 Walk 로 덮어쓰지 않음
@@ -269,8 +285,73 @@ private:
     std::unordered_map<uint64, ServerMonsterTarget> m_mapServerMonsterTarget;
 
 public:
+    // ── 서버 보스 인디케이터 (Circle / ForwardBox) ──────────────────────────
+    //   isBoss=true 로 스폰된 NetMonster 마다 4개의 인디케이터 GameObject(원/박스 × border/fill) 사전 할당.
+    //   ProcessMonsterAttack 에서 (monsterType, attackType) 로 타입/크기 결정 → activeType 세팅 + windup 시작.
+    //   CheckServerMonsterIdle 매 프레임 fill 스케일 갱신, windup 종료 시 hide.
+    //   public — GetIndicatorParamsForAttack 자유 함수에서 사용
+    enum class NetIndicatorType { None = 0, Circle = 1, ForwardBox = 2 };
+private:
+    struct ServerMonsterIndicators
+    {
+        GameObject* circleBorder = nullptr;
+        GameObject* circleFill   = nullptr;
+        GameObject* boxBorder    = nullptr;
+        GameObject* boxFill      = nullptr;
+
+        NetIndicatorType activeType = NetIndicatorType::None;
+        float windupTotal = 0.0f;
+        float windupTimer = 0.0f;     // 0..windupTotal, 만료 시 hide
+        float hitRadius = 0.0f;        // Circle: r, ForwardBox: half-width
+        float hitLength = 0.0f;        // ForwardBox: 전방 길이
+        float anchorX = 0.0f;
+        float anchorY = 0.0f;
+        float anchorZ = 0.0f;
+        float yawDeg  = 0.0f;          // ForwardBox 회전
+    };
+    std::unordered_map<uint64, ServerMonsterIndicators> m_mapServerMonsterIndicators;
+
+    // 인디케이터 모두 hide (지면 아래 + scale 0)
+    void HideMonsterIndicators(ServerMonsterIndicators& ind);
+
+    // ── 보스 VFX 지연 스폰 큐 ─────────────────────────────────────────────
+    //   오프라인 IAttackBehavior 처럼 windup 후 + breathDuration 동안 staggered 발사 재현.
+    //   ProcessMonsterAttack 에서 attackType 별로 delay 가 다른 여러 항목을 push.
+    //   매 프레임 delay 감소 → 0 도달 시 ProjectileManager / SpawnExplosionParticles 호출.
+    enum class PendingVFXKind { Projectile, Explosion, CameraShake };
+    struct PendingMonsterVFX
+    {
+        PendingVFXKind kind = PendingVFXKind::Projectile;
+        float    delay     = 0.0f;
+        // 보스 실시간 위치 추적 (0 이면 추적 안 함 — 캐시된 startPos 사용).
+        //   Projectile 의 경우: 보스가 windup/breath 동안 움직여도 입에서 발사되도록 매 스폰 시점에 위치 재조회.
+        uint64   monsterId = 0;
+        DirectX::XMFLOAT3 startPos  = { 0.f, 0.f, 0.f };  // 캐시된 fallback 위치
+        DirectX::XMFLOAT3 targetPos = { 0.f, 0.f, 0.f };  // 캐시된 타겟 (player at packet time)
+        float    yOffset   = 2.0f;       // 보스 base 에서 입 높이 (Projectile 만)
+        float    fanAngleDeg = 0.0f;     // 정면 forward 기준 ± offset (Projectile 만)
+        float    fireRange = 60.0f;      // 타겟까지 투영 거리 (Projectile 만)
+        float    speed     = 18.0f;
+        float    radius    = 0.5f;
+        float    scale     = 1.0f;
+        float    maxDist   = 60.0f;
+        ElementType element = ElementType::Fire;
+        // CameraShake 전용
+        float    shakeIntensity = 0.0f;
+        float    shakeDuration  = 0.0f;
+    };
+    std::vector<PendingMonsterVFX> m_vPendingMonsterVFX;
+
+public:
     // 매 프레임 타겟을 향해 몬스터 transform 보간 (Dx12App 메인 루프에서 호출)
     void InterpolateServerMonsters(float deltaTime);
+
+    // 서버 보스 인디케이터(Circle/ForwardBox) fill 진행도 갱신 (Dx12App 메인 루프에서 호출)
+    //   ProcessMonsterAttack 에서 windup 시작, 매 프레임 0→1 차오르고 종료 시 hide.
+    void UpdateServerMonsterIndicators(float deltaTime);
+
+    // 지연 VFX 큐 tick — windup 후/동안 스폰. 매 프레임 호출.
+    void UpdatePendingMonsterVFX(Scene* pScene, float deltaTime);
 
 private:
     std::unordered_map<uint64, float> m_mapServerMonsterMoveTime;  // idle 전환용

@@ -28,12 +28,58 @@ void FluidSkillVFXManager::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList
     OutputDebugStringA("[FluidSkillVFXManager] Initialized\n");
 }
 
+int FluidSkillVFXManager::FindSlotForSpawn(bool isPlayerEffect)
+{
+    // VFXManager 가 player/enemy 풀을 별도 인스턴스로 운영하므로,
+    //   이 매니저 안의 슬롯은 모두 같은 owner (player 또는 enemy 한 종류).
+    //   풀 가득 차면 가장 오래된 슬롯 evict — 새 스폰을 우선 보장.
+
+    // 1차: 비활성 슬롯
+    for (int i = 0; i < MAX_EFFECTS; ++i)
+        if (!m_Slots[i].isActive) return i;
+
+    // 2차: 가장 오래된 active 슬롯 evict (spawnGeneration 작을수록 오래됨).
+    //   player 매니저: 가장 오래된 player VFX 슬롯 회수 → 신규 player 스킬 시각 보장
+    //   enemy 매니저: 가장 오래된 enemy VFX 슬롯 회수 → 신규 보스 패턴 시각 보장
+    (void)isPlayerEffect;  // 현재 분기 안 함 (양 매니저 모두 동일 정책)
+    int evictIdx = -1;
+    uint32_t oldestGen = UINT32_MAX;
+    for (int i = 0; i < MAX_EFFECTS; ++i)
+    {
+        if (m_Slots[i].isActive && m_Slots[i].spawnGeneration < oldestGen)
+        {
+            oldestGen = m_Slots[i].spawnGeneration;
+            evictIdx = i;
+        }
+    }
+    if (evictIdx >= 0)
+    {
+        // 슬롯 재사용 시 이전 상태 잔존 방지 — 모든 모드 플래그 초기화
+        FluidVFXSlot& s = m_Slots[evictIdx];
+        s.isActive          = false;
+        s.isFadingOut       = false;
+        s.useLightEmitter   = false;
+        s.useSequence       = false;
+        s.useBlur           = false;
+        s.isWaveMode        = false;
+        s.waveStopped       = false;
+        s.isExplodeMode     = false;
+        return evictIdx;
+    }
+    return -1;
+}
+
 int FluidSkillVFXManager::SpawnEffect(const XMFLOAT3& origin, const XMFLOAT3& direction,
                                        const FluidSkillVFXDef& def)
 {
-    for (int i = 0; i < MAX_EFFECTS; ++i)
+    int slotIdx = FindSlotForSpawn(false);  // 적 투사체 trail
+    if (slotIdx < 0)
     {
-        if (!m_Slots[i].isActive)
+        OutputDebugStringA("[FluidSkillVFXManager] No free slot (and no evictable)!\n");
+        return -1;
+    }
+    {
+        int i = slotIdx;
         {
             FluidVFXSlot& slot = m_Slots[i];
             slot.isActive       = true;
@@ -72,8 +118,7 @@ int FluidSkillVFXManager::SpawnEffect(const XMFLOAT3& origin, const XMFLOAT3& di
             return i;
         }
     }
-    OutputDebugStringA("[FluidSkillVFXManager] No free slot!\n");
-    return -1;
+    return -1;  // unreachable — FindSlotForSpawn handled both paths
 }
 
 int FluidSkillVFXManager::SpawnSPHLayer(const XMFLOAT3& origin, const XMFLOAT3& direction,
@@ -82,9 +127,14 @@ int FluidSkillVFXManager::SpawnSPHLayer(const XMFLOAT3& origin, const XMFLOAT3& 
 {
     const SPHEmitterParams& sph = layer.sph;
 
-    for (int i = 0; i < MAX_EFFECTS; ++i)
+    int slotIdx = FindSlotForSpawn(isPlayerEffect);
+    if (slotIdx < 0)
     {
-        if (!m_Slots[i].isActive)
+        OutputDebugStringA("[FluidSkillVFXManager] No free slot for SPH layer (and no evictable)!\n");
+        return -1;
+    }
+    {
+        int i = slotIdx;
         {
             FluidVFXSlot& slot = m_Slots[i];
             slot.isActive         = true;
@@ -292,8 +342,7 @@ int FluidSkillVFXManager::SpawnSPHLayer(const XMFLOAT3& origin, const XMFLOAT3& 
             return i;
         }
     }
-    OutputDebugStringA("[FluidSkillVFXManager] No free slot for SPH layer!\n");
-    return -1;
+    return -1;  // unreachable — FindSlotForSpawn handled both paths
 }
 
 void FluidSkillVFXManager::TrackEffect(int id, const XMFLOAT3& origin, const XMFLOAT3& direction)
@@ -402,11 +451,15 @@ int FluidSkillVFXManager::SpawnEffectLayer(const XMFLOAT3& origin, const XMFLOAT
     if (isSPH)
         return SpawnSPHLayer(origin, direction, effectName, layer, isPlayerEffect);
 
-    // 경량 이미터 슬롯 탐색
-    for (int i = 0; i < MAX_EFFECTS; ++i)
+    // 경량 이미터 슬롯 탐색 — Player 우선 eviction 적용
+    int slotIdx = FindSlotForSpawn(isPlayerEffect);
+    if (slotIdx < 0)
     {
-        if (m_Slots[i].isActive) continue;
-
+        OutputDebugStringA("[FluidSkillVFXManager] SpawnEffectLayer: no free slot (and no evictable)\n");
+        return -1;
+    }
+    {
+        int i = slotIdx;
         FluidVFXSlot& slot      = m_Slots[i];
         slot.isActive           = true;
         slot.isFadingOut        = false;
@@ -453,9 +506,7 @@ int FluidSkillVFXManager::SpawnEffectLayer(const XMFLOAT3& origin, const XMFLOAT
         }
         return i;
     }
-
-    OutputDebugStringA("[FluidSkillVFXManager] SpawnEffectLayer: no free slot\n");
-    return -1;
+    return -1;  // unreachable — FindSlotForSpawn handled both paths
 }
 
 int FluidSkillVFXManager::SpawnEffectDef(const XMFLOAT3& origin, const XMFLOAT3& direction,

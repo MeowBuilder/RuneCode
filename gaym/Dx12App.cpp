@@ -1892,6 +1892,12 @@ void Dx12App::UpdateNetwork(float deltaTime)
     // 서버 몬스터 idle 전환 체크
     m_pNetworkManager->CheckServerMonsterIdle(deltaTime);
 
+    // 서버 보스 인디케이터 fill 진행도 갱신 (windup 동안 0→1 차오름)
+    m_pNetworkManager->UpdateServerMonsterIndicators(deltaTime);
+
+    // 보스 VFX 지연 스폰 처리 (windup 후/동안 staggered 발사)
+    m_pNetworkManager->UpdatePendingMonsterVFX(m_pScene.get(), deltaTime);
+
     // 서버 몬스터 위치/회전 보간 (MOVE 패킷 간격 사이 부드럽게 이동)
     m_pNetworkManager->InterpolateServerMonsters(deltaTime);
 

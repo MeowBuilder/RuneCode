@@ -400,8 +400,11 @@ bool Handle_S_BOSS_EVENT(PacketSessionRef& session, Protocol::S_BOSS_EVENT& pkt)
         phaseIndex);
     WriteNetworkLog(buf);
 
-    // 아직 클라 컷씬 연결은 하지 않고, 수신 로그만 확인
-    // 이후 NetworkManager::QueueBossEvent(...)로 연결 예정
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr)
+    {
+        pNetMgr->QueueBossEvent(monsterId, static_cast<uint32>(eventType), phaseIndex);
+    }
 
     return true;
 }

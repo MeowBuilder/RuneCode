@@ -1332,3 +1332,14 @@ void EnemySpawner::SetupAttackIndicators(GameObject* pEnemy, EnemyComponent* pEn
         }
     }
 }
+
+EnemySpawner::NetBossIndicatorSet EnemySpawner::CreateNetBossIndicators()
+{
+    // 네트워크 보스용 — Room 소속 X (전역 GameObject). CreateIndicatorObject 가 nullptr Room 도 처리.
+    NetBossIndicatorSet set;
+    set.circleBorder = CreateIndicatorObject(nullptr, m_pRingMesh);
+    set.circleFill   = CreateIndicatorObject(nullptr, m_pDiscMesh);
+    set.boxBorder    = CreateIndicatorObject(nullptr, m_pBoxMesh);
+    set.boxFill      = CreateIndicatorObject(nullptr, m_pBoxMesh);
+    return set;
+}

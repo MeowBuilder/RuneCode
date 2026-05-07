@@ -16,6 +16,7 @@
 #include "Camera.h"
 #include "DamageNumberManager.h"
 #include "Room.h"
+#include "EnemySpawner.h"
 
 // ServerPacketHandler.cpp에 정의된 파일 로그 함수 — network_log.txt에 append
 extern void WriteNetworkLog(const std::string& msg);
@@ -303,6 +304,10 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
         case NetworkCommand::RoomCleared:
             ProcessRoomCleared(pScene, cmd.stageIndex, cmd.roomIndex);
             break;
+
+        case NetworkCommand::BossEvent:
+            ProcessBossEvent(pScene, cmd.monsterId, cmd.bossEventType, cmd.phaseIndex);
+            break;
         }
     }
 }
@@ -537,6 +542,19 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     m_mapServerMonsterAttackTimer.clear();
     m_mapServerMonsterHitFlashTimer.clear();
     m_setDeadServerMonsters.clear();
+
+    // 인디케이터도 같이 정리 (보스 방 → 일반 방 또는 방 전환 시 잔존 막기)
+    for (auto& kv : m_mapServerMonsterIndicators)
+    {
+        if (kv.second.circleBorder) pScene->MarkForDeletion(kv.second.circleBorder);
+        if (kv.second.circleFill)   pScene->MarkForDeletion(kv.second.circleFill);
+        if (kv.second.boxBorder)    pScene->MarkForDeletion(kv.second.boxBorder);
+        if (kv.second.boxFill)      pScene->MarkForDeletion(kv.second.boxFill);
+    }
+    m_mapServerMonsterIndicators.clear();
+
+    // 지연 VFX 큐도 비워야 이전 방의 미발사 투사체가 새 방에서 튀지 않음
+    m_vPendingMonsterVFX.clear();
 
     // 서버가 내려준 mapId 우선 분기. mapId 가 비었거나 미매칭이면 stageIndex/roomIndex 기반 fallback.
     bool bHandled = false;
@@ -1346,9 +1364,33 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
     pMonster->Init(pDevice, pCommandList);
 
     m_mapServerMonsters[monsterId] = pMonster;
-    m_mapServerMonsterClips[monsterId] = {
-        preset.idleClip, preset.walkClip, preset.attackClip, preset.deathClip
-    };
+    {
+        ServerMonsterClips clips;
+        clips.idle        = preset.idleClip;
+        clips.walk        = preset.walkClip;
+        clips.attack      = preset.attackClip;
+        clips.death       = preset.deathClip;
+        clips.monsterType = monsterType;
+        clips.isBoss      = isBoss;
+        m_mapServerMonsterClips[monsterId] = clips;
+    }
+
+    // 보스 인디케이터 4개 사전 할당 (Circle border/fill, Box border/fill) — 모두 hidden.
+    //   ProcessMonsterAttack 에서 (monsterType, attackType) 로 타입/크기 결정해서 위치/스케일 갱신.
+    if (isBoss)
+    {
+        if (EnemySpawner* pSpawner = pScene ? pScene->GetEnemySpawner() : nullptr)
+        {
+            auto set = pSpawner->CreateNetBossIndicators();
+            ServerMonsterIndicators ind;
+            ind.circleBorder = set.circleBorder;
+            ind.circleFill   = set.circleFill;
+            ind.boxBorder    = set.boxBorder;
+            ind.boxFill      = set.boxFill;
+            HideMonsterIndicators(ind);
+            m_mapServerMonsterIndicators[monsterId] = ind;
+        }
+    }
 
     // 보간 타겟 초기값 = 스폰 위치 (첫 MOVE 전까진 제자리)
     ServerMonsterTarget initTgt;
@@ -1508,6 +1550,401 @@ void NetworkManager::CheckServerMonsterIdle(float deltaTime)
     }
 }
 
+// (monsterType, attackType) → VFX 가 실제 스폰돼야 할 delay (애니 release/peak frame 기준).
+//   서버 windupSec 는 데미지 타이밍을 정함. 클라 애니메이션의 "뿜기" 모션은 그것보다 빠를 수 있어,
+//   windupSec 그대로 쓰면 애니가 다 끝난 뒤 VFX 가 튀는 케이스 발생.
+//   여기 값은 오프라인 EnemySpawner 의 IAttackBehavior windup 값 + 애니 클립 peak frame 추정값.
+static float GetVfxStartDelay(uint32 monsterType, uint32 attackType, float serverWindupSec)
+{
+    switch (attackType)
+    {
+    case 5: // Breath — 보스 입 벌리고 분사 시작 frame
+        if (monsterType == 6)  return 0.4f;   // Dragon "Flame Attack"
+        if (monsterType == 7)  return 0.4f;   // Kraken "Attack_Forward_RM"
+        if (monsterType == 10) return 0.5f;   // BlueDragon "Fireball Shoot"
+        return 0.4f;
+    case 6: // MegaBreath — 충전 길게 → release. 서버 windup 2.0s 이지만 애니상 1.5s 정도가 자연스러움
+        return 1.5f;
+    case 7: // JumpSlam — 점프 후 착지 임팩트. 서버 windup 1.5s
+        return 1.0f;
+    case 8: // TailSweep — 빠른 휩쓸기 (서버 windup 0)
+        return 0.3f;
+    case 9: // GroundRupture — 콤보 첫 hit
+        return 0.5f;
+    case 4: // RushFront — 즉시 (이동기)
+        return 0.0f;
+    case 10: // FlyingBarrage — 약간 지연
+        return 0.5f;
+    case 2: // Ranged
+        return 0.3f;
+    default:
+        // 알 수 없으면 서버 windupSec 의 절반 (안전한 절충값)
+        return fmaxf(serverWindupSec * 0.5f, 0.1f);
+    }
+}
+
+// (monsterType, attackType) → 인디케이터 타입/크기. 오프라인 EnemySpawner 의 m_IndicatorConfig +
+//   IAttackBehavior::GetIndicatorRadius/Length override 를 시각만 미러.
+//   ShouldShowHitZone() == false 인 케이스(360° spread, RushFront 등)는 type=None 으로 억제.
+struct NetIndicatorParams
+{
+    NetworkManager::NetIndicatorType type = NetworkManager::NetIndicatorType::None;
+    float radius = 0.0f;
+    float length = 0.0f;   // ForwardBox 전방 길이
+};
+
+static NetIndicatorParams GetIndicatorParamsForAttack(uint32 monsterType, uint32 attackType)
+{
+    NetIndicatorParams p;
+    switch (monsterType)
+    {
+    case 6: // Dragon — preset Circle r=15, JumpSlam r 7~9
+        p.type = NetworkManager::NetIndicatorType::Circle;
+        switch (attackType)
+        {
+        case 5:  p.radius = 15.0f; break;       // Breath
+        case 6:  p.radius = 30.0f; break;       // MegaBreath (광역)
+        case 7:  p.radius = 9.0f;  break;       // JumpSlam
+        case 8:  p.radius = 12.0f; break;       // TailSweep (Circle 폴백)
+        case 10: p.type = NetworkManager::NetIndicatorType::None; break;  // FlyingBarrage 억제
+        default: p.radius = 12.0f; break;
+        }
+        break;
+
+    case 7: // Kraken — preset ForwardBox 14×30
+        switch (attackType)
+        {
+        case 5:  // Breath (잉크) — 좁은 spread 면 표시, 넓으면 억제. 서버는 spread 안 보내므로 표시.
+            p.type = NetworkManager::NetIndicatorType::ForwardBox;
+            p.radius = 14.0f; p.length = 30.0f; break;
+        case 8:  // TailSweep
+            p.type = NetworkManager::NetIndicatorType::ForwardBox;
+            p.radius = 14.0f; p.length = 30.0f; break;
+        case 9:  // GroundRupture (3연타 콤보)
+            p.type = NetworkManager::NetIndicatorType::ForwardBox;
+            p.radius = 14.0f; p.length = 30.0f; break;
+        default: p.type = NetworkManager::NetIndicatorType::None; break;
+        }
+        break;
+
+    case 8: // Golem — preset Circle r=30, JumpSlam r 7~9, RockBarrage 등 r=30~85
+        p.type = NetworkManager::NetIndicatorType::Circle;
+        switch (attackType)
+        {
+        case 7:  p.radius = 9.0f;  break;       // JumpSlam (내려찍기)
+        case 9:  p.radius = 30.0f; break;       // GroundRupture (광역 균열)
+        case 8:  p.radius = 30.0f; break;       // TailSweep 도 광역
+        default: p.radius = 30.0f; break;
+        }
+        break;
+
+    case 9: // Demon — Circle r=10, RushFront 는 인디케이터 억제 (보스 위치가 아닌 돌진 라인이라)
+        switch (attackType)
+        {
+        case 1:  p.type = NetworkManager::NetIndicatorType::Circle; p.radius = 10.0f; break;  // Melee
+        case 4:  p.type = NetworkManager::NetIndicatorType::None;   break;                    // RushFront
+        default: p.type = NetworkManager::NetIndicatorType::Circle; p.radius = 10.0f; break;
+        }
+        break;
+
+    case 10: // BlueDragon — preset Circle r=14
+        switch (attackType)
+        {
+        case 5:  p.type = NetworkManager::NetIndicatorType::Circle; p.radius = 14.0f; break;
+        case 7:  p.type = NetworkManager::NetIndicatorType::Circle; p.radius = 9.0f;  break;
+        case 8:  p.type = NetworkManager::NetIndicatorType::Circle; p.radius = 14.0f; break;
+        case 4:  p.type = NetworkManager::NetIndicatorType::None;   break;
+        default: p.type = NetworkManager::NetIndicatorType::Circle; p.radius = 14.0f; break;
+        }
+        break;
+
+    default:
+        p.type = NetworkManager::NetIndicatorType::None;
+        break;
+    }
+    return p;
+}
+
+void NetworkManager::HideMonsterIndicators(ServerMonsterIndicators& ind)
+{
+    auto hide = [](GameObject* go) {
+        if (!go) return;
+        if (auto* pT = go->GetTransform())
+        {
+            pT->SetPosition(0.0f, -1000.0f, 0.0f);
+            pT->SetScale(0.0f, 0.0f, 0.0f);
+        }
+    };
+    hide(ind.circleBorder);
+    hide(ind.circleFill);
+    hide(ind.boxBorder);
+    hide(ind.boxFill);
+    ind.activeType = NetIndicatorType::None;
+    ind.windupTimer = 0.0f;
+}
+
+void NetworkManager::UpdatePendingMonsterVFX(Scene* pScene, float deltaTime)
+{
+    if (m_vPendingMonsterVFX.empty()) return;
+
+    ProjectileManager* pProj = pScene ? pScene->GetProjectileManager() : nullptr;
+
+    for (auto it = m_vPendingMonsterVFX.begin(); it != m_vPendingMonsterVFX.end();)
+    {
+        it->delay -= deltaTime;
+        if (it->delay <= 0.0f)
+        {
+            if (pProj)
+            {
+                if (it->kind == PendingVFXKind::Projectile)
+                {
+                    // 보스 실시간 위치 재조회 — windup/breath 동안 보스가 움직였어도 입에서 발사
+                    DirectX::XMFLOAT3 spawnPos = it->startPos;
+                    DirectX::XMFLOAT3 finalTarget = it->targetPos;
+                    if (it->monsterId != 0)
+                    {
+                        auto mIt = m_mapServerMonsters.find(it->monsterId);
+                        if (mIt != m_mapServerMonsters.end() && mIt->second)
+                        {
+                            if (auto* pT = mIt->second->GetTransform())
+                            {
+                                spawnPos = pT->GetPosition();
+                                spawnPos.y += it->yOffset;
+
+                                // 현재 위치에서 캐시된 타겟까지 forward 재계산 + fanAngle 적용
+                                float dx = it->targetPos.x - spawnPos.x;
+                                float dz = it->targetPos.z - spawnPos.z;
+                                float len = sqrtf(dx*dx + dz*dz);
+                                if (len < 0.001f) { dx = 0.f; dz = 1.f; }
+                                else              { dx /= len; dz /= len; }
+                                float ang = it->fanAngleDeg * (3.14159265f / 180.0f);
+                                float c = cosf(ang), s = sinf(ang);
+                                float rdx = dx * c - dz * s;
+                                float rdz = dx * s + dz * c;
+                                finalTarget.x = spawnPos.x + rdx * it->fireRange;
+                                finalTarget.z = spawnPos.z + rdz * it->fireRange;
+                                finalTarget.y = it->targetPos.y;
+                            }
+                        }
+                    }
+
+                    pProj->SpawnProjectile(
+                        spawnPos, finalTarget,
+                        0.0f,                                  // 데미지 0 (서버 권위)
+                        it->speed, it->radius, 0.0f,
+                        it->element, nullptr, false,
+                        it->scale, RuneCombo{}, 0.0f,
+                        it->maxDist,
+                        false, false, 0.f, 0.f, 0.f,
+                        SkillSlot::Count);
+                }
+                else if (it->kind == PendingVFXKind::Explosion)
+                {
+                    pProj->SpawnExplosionParticles(it->startPos, it->element);
+                }
+            }
+            // CameraShake 는 ProjectileManager 와 무관 — Scene 카메라 직접 호출
+            if (it->kind == PendingVFXKind::CameraShake)
+            {
+                if (CCamera* pCam = pScene ? pScene->GetCamera() : nullptr)
+                    pCam->StartShake(it->shakeIntensity, it->shakeDuration);
+            }
+            it = m_vPendingMonsterVFX.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
+void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
+{
+    for (auto it = m_mapServerMonsterIndicators.begin(); it != m_mapServerMonsterIndicators.end(); ++it)
+    {
+        ServerMonsterIndicators& ind = it->second;
+        if (ind.activeType == NetIndicatorType::None) continue;
+
+        // 사망/Despawn 후엔 hide 만 해주고 패스
+        if (m_setDeadServerMonsters.find(it->first) != m_setDeadServerMonsters.end())
+        {
+            HideMonsterIndicators(ind);
+            continue;
+        }
+
+        // 보스 현재 transform 추적해서 인디케이터를 보스 위치에 부착 (보스가 움직이는 동안 따라옴)
+        auto mIt = m_mapServerMonsters.find(it->first);
+        if (mIt != m_mapServerMonsters.end() && mIt->second)
+        {
+            if (auto* pT = mIt->second->GetTransform())
+            {
+                XMFLOAT3 pos = pT->GetPosition();
+                ind.anchorX = pos.x; ind.anchorZ = pos.z;
+                ind.anchorY = pos.y;
+                if (ind.activeType == NetIndicatorType::ForwardBox)
+                    ind.yawDeg = pT->GetRotation().y;
+            }
+        }
+
+        ind.windupTimer += deltaTime;
+        float fillProgress = (ind.windupTotal > 0.0f) ? (ind.windupTimer / ind.windupTotal) : 1.0f;
+        if (fillProgress > 1.0f) fillProgress = 1.0f;
+
+        const float indY = ind.anchorY + 1.2f;
+
+        if (ind.activeType == NetIndicatorType::Circle)
+        {
+            // 작은 반경도 잘 보이게 최소값 보장 (전투 중 묻히지 않도록)
+            float fullR = (ind.hitRadius < 7.0f) ? 7.0f : ind.hitRadius;
+            // border (테두리) — 고정 외곽, 두께 키움 (1.03 → 1.12)
+            if (ind.circleBorder)
+            {
+                if (auto* pT = ind.circleBorder->GetTransform())
+                {
+                    pT->SetPosition(ind.anchorX, indY + 0.05f, ind.anchorZ);
+                    float borderR = fullR * 1.12f;
+                    pT->SetScale(borderR, 1.0f, borderR);
+                    MATERIAL mat;
+                    mat.m_cAmbient  = XMFLOAT4(0.6f, 0.02f, 0.02f, 1.0f);
+                    mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.15f, 0.1f,  1.0f);
+                    mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f,  0.0f,  1.0f);
+                    mat.m_cEmissive = XMFLOAT4(3.5f, 0.4f, 0.15f, 1.0f);   // 2.0→3.5 더 밝게
+                    ind.circleBorder->SetMaterial(mat);
+                }
+            }
+            // fill — 항상 full 반경으로 표시되되 emissive 가 진행도에 따라 밝아짐.
+            //   기존엔 progress=0 일 때 사실상 안 보였음 → 처음부터 위험 영역이 보이도록 변경.
+            if (ind.circleFill)
+            {
+                if (auto* pT = ind.circleFill->GetTransform())
+                {
+                    pT->SetPosition(ind.anchorX, indY, ind.anchorZ);
+                    pT->SetScale(fullR, 1.0f, fullR);
+                    MATERIAL mat;
+                    mat.m_cAmbient  = XMFLOAT4(0.3f, 0.02f, 0.0f, 1.0f);
+                    mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.2f + 0.6f * fillProgress, 0.05f, 1.0f);
+                    mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                    // 처음 0.5 → 끝 2.5 (붉음 → 노란 가열)
+                    mat.m_cEmissive = XMFLOAT4(
+                        0.5f + 2.0f * fillProgress,
+                        0.1f + 1.4f * fillProgress,
+                        0.05f, 1.0f);
+                    ind.circleFill->SetMaterial(mat);
+                }
+            }
+        }
+        else if (ind.activeType == NetIndicatorType::ForwardBox)
+        {
+            // 작은 박스도 잘 보이게 최소 반폭/길이 보장
+            float fHalfW = (ind.hitRadius < 5.0f) ? 5.0f : ind.hitRadius;
+            float fLen   = (ind.hitLength < 10.0f) ? 10.0f : ind.hitLength;
+            float yawRad = ind.yawDeg * (3.14159265f / 180.0f);
+            float fwdX = sinf(yawRad);
+            float fwdZ = cosf(yawRad);
+            float centerX = ind.anchorX + fwdX * (fLen * 0.5f);
+            float centerZ = ind.anchorZ + fwdZ * (fLen * 0.5f);
+
+            if (ind.boxBorder)
+            {
+                if (auto* pT = ind.boxBorder->GetTransform())
+                {
+                    pT->SetPosition(centerX, indY + 0.02f, centerZ);
+                    pT->SetRotation(0.0f, ind.yawDeg, 0.0f);
+                    // 외곽 1.06 → 1.12 (두께 ↑)
+                    pT->SetScale(fHalfW * 2.0f * 1.12f, 1.0f, fLen * 1.12f);
+                    MATERIAL mat;
+                    mat.m_cAmbient  = XMFLOAT4(0.6f, 0.02f, 0.02f, 1.0f);
+                    mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.15f, 0.1f,  1.0f);
+                    mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f,  0.0f,  1.0f);
+                    mat.m_cEmissive = XMFLOAT4(3.5f, 0.4f, 0.15f, 1.0f);
+                    ind.boxBorder->SetMaterial(mat);
+                }
+            }
+            // fill — 박스도 항상 full 길이/너비 표시, emissive 만 진행도 반영
+            if (ind.boxFill)
+            {
+                if (auto* pT = ind.boxFill->GetTransform())
+                {
+                    pT->SetPosition(centerX, indY, centerZ);
+                    pT->SetRotation(0.0f, ind.yawDeg, 0.0f);
+                    pT->SetScale(fHalfW * 2.0f, 1.0f, fLen);
+                    MATERIAL mat;
+                    mat.m_cAmbient  = XMFLOAT4(0.3f, 0.02f, 0.0f, 1.0f);
+                    mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.2f + 0.6f * fillProgress, 0.05f, 1.0f);
+                    mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                    mat.m_cEmissive = XMFLOAT4(
+                        0.5f + 2.0f * fillProgress,
+                        0.1f + 1.4f * fillProgress,
+                        0.05f, 1.0f);
+                    ind.boxFill->SetMaterial(mat);
+                }
+            }
+        }
+
+        // windup 종료 → hide
+        if (ind.windupTimer >= ind.windupTotal)
+            HideMonsterIndicators(ind);
+    }
+}
+
+// (monsterType, attackType) → 재생할 애니 클립 매핑.
+//   서버는 attackType (1=Melee,2=Ranged,4=RushFront,5=Breath,6=MegaBreath,7=JumpSlam,
+//   8=TailSweep,9=GroundRupture,10=FlyingBarrage) 만 보내므로 보스별 실제 클립 이름은 클라가 결정.
+//   오프라인 EnemySpawner.cpp 의 IAttackBehavior 인스턴스가 사용하는 클립과 동일하게 맞춤.
+//   매핑 누락 시 nullptr → preset 기본 attack 클립으로 폴백.
+static const char* GetMonsterAttackClipForType(uint32 monsterType, uint32 attackType)
+{
+    // monsterType: 6 Dragon, 7 Kraken, 8 Golem, 9 Demon, 10 BlueDragon
+    switch (monsterType)
+    {
+    case 6:  // Dragon (Red) — Anim: Flame Attack / Tail Attack / (보유 클립 한정)
+        switch (attackType)
+        {
+        case 5:  return "Flame Attack";       // Breath
+        case 6:  return "Flame Attack";       // MegaBreath (전용 클립 없음 → Flame Attack 유지)
+        case 7:  return "Flame Attack";       // JumpSlam (Red 클립 한정 — 점프 클립 없음)
+        case 8:  return "Tail Attack";        // TailSweep
+        case 10: return "Flame Attack";       // FlyingBarrage
+        default: return "Flame Attack";
+        }
+    case 7:  // Kraken — Anim: Attack_Forward_RM / Sweep_Attack / Sweep_Smash_Attack_3_HIt_Combo / Unreal Take
+        switch (attackType)
+        {
+        case 5:  return "Attack_Forward_RM";                  // Breath (잉크)
+        case 8:  return "Sweep_Attack";                       // TailSweep
+        case 9:  return "Sweep_Smash_Attack_3_HIt_Combo";     // GroundRupture (3연타 콤보)
+        case 4:  return "Sweep_Attack";                       // RushFront → 휩쓸기로 대체
+        default: return "Attack_Forward_RM";
+        }
+    case 8:  // Golem — Anim: Golem_battle_attack01_ge / attack02 / jump_ge
+        switch (attackType)
+        {
+        case 7:  return "Golem_battle_attack01_ge";   // JumpSlam (내려찍기)
+        case 9:  return "Golem_battle_attack02_ge";   // GroundRupture / RockBarrage / RockFall (팔 휘두르기)
+        case 8:  return "Golem_battle_attack02_ge";   // TailSweep 도 attack02 로 처리
+        default: return "Golem_battle_attack01_ge";
+        }
+    case 9:  // Demon — Anim: attack1 / Run (RushFront 는 Run 클립으로 돌진)
+        switch (attackType)
+        {
+        case 4:  return "Run";        // RushFront
+        case 1:  return "attack1";    // Melee
+        default: return "attack1";
+        }
+    case 10: // BlueDragon — Anim: Fireball Shoot / Tail Attack / Run
+        switch (attackType)
+        {
+        case 5:  return "Fireball Shoot";    // Breath
+        case 4:  return "Run";               // RushFront
+        case 8:  return "Tail Attack";       // TailSweep
+        case 7:  return "Fireball Shoot";    // JumpSlam (대체 클립 없음)
+        default: return "Fireball Shoot";
+        }
+    default:
+        return nullptr;  // 일반 몹 → preset 기본
+    }
+}
+
 void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint32 attackType, float windupSec,
                                           uint64 targetPlayerId, float atkX, float atkY, float atkZ)
 {
@@ -1528,10 +1965,14 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
     auto* pAnim = pMonster->GetComponent<AnimationComponent>();
     if (!pAnim) return;
 
-    // preset 기본 attack 클립 (attackType 별 세분화는 추후 확장 포인트)
+    // (monsterType, attackType) 별 클립 우선 사용. 매핑 없으면 preset 의 기본 attack 클립으로 폴백.
     auto clipIt = m_mapServerMonsterClips.find(monsterId);
-    const char* attackClip = (clipIt != m_mapServerMonsterClips.end() && !clipIt->second.attack.empty())
-        ? clipIt->second.attack.c_str() : "Attack";
+    uint32 mt = (clipIt != m_mapServerMonsterClips.end()) ? clipIt->second.monsterType : 0;
+    const char* perTypeClip = GetMonsterAttackClipForType(mt, attackType);
+    const char* attackClip =
+        (perTypeClip && perTypeClip[0] != '\0') ? perTypeClip
+        : ((clipIt != m_mapServerMonsterClips.end() && !clipIt->second.attack.empty())
+            ? clipIt->second.attack.c_str() : "Attack");
 
     pAnim->CrossFade(attackClip, 0.1f, false, true);  // forceRestart — 연속 공격도 처음부터
 
@@ -1542,59 +1983,226 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
     // 공격 중엔 idle 전환 억제
     m_mapServerMonsterMoveTime.erase(monsterId);
 
-    // 원거리 공격 (MonsterAttackType::Ranged = 2) 이면 비쥬얼 투사체 스폰.
-    //   - 데미지는 서버가 S_PLAYER_DAMAGE 로 별도 처리 → 여기선 damage=0 으로 시각만 재현.
-    //   - CheckProjectileCollisions 의 enemy projectile 경로가 로컬 플레이어 충돌 시 projectile 제거해줌.
-    if (attackType == 2)
+    // 인디케이터 활성화 (windupSec > 0 이고 보스로 등록된 경우만)
+    auto indIt = m_mapServerMonsterIndicators.find(monsterId);
+    if (indIt != m_mapServerMonsterIndicators.end() && windupSec > 0.05f)
     {
-        ProjectileManager* pProj = pScene ? pScene->GetProjectileManager() : nullptr;
-        if (pProj)
+        ServerMonsterIndicators& ind = indIt->second;
+        NetIndicatorParams params = GetIndicatorParamsForAttack(mt, attackType);
+        if (params.type != NetIndicatorType::None)
         {
-            XMFLOAT3 startPos{ atkX, atkY + 1.5f, atkZ };
-
-            // 타겟 플레이어 위치 (로컬 or 원격)
-            XMFLOAT3 targetPos = startPos;
-            uint64 localId = GetLocalPlayerId();
-            if (targetPlayerId == localId)
+            HideMonsterIndicators(ind);   // 이전 인디케이터 정리
+            ind.activeType  = params.type;
+            ind.windupTotal = windupSec;
+            ind.windupTimer = 0.0f;
+            ind.hitRadius   = params.radius;
+            ind.hitLength   = params.length;
+            ind.anchorX = atkX; ind.anchorY = atkY; ind.anchorZ = atkZ;
+            // ForwardBox: 보스의 현재 yaw 사용 (transform 에서 직접 읽기)
+            if (ind.activeType == NetIndicatorType::ForwardBox)
             {
-                if (GameObject* pLocal = pScene->GetPlayer())
+                if (auto* pT = pMonster->GetTransform())
+                    ind.yawDeg = pT->GetRotation().y;
+            }
+        }
+        else
+        {
+            HideMonsterIndicators(ind);
+        }
+    }
+
+    // ── attackType 별 비쥬얼 (VFX/투사체) — 데미지 0, 서버 권위 ──
+    //   오프라인 IAttackBehavior 처럼 windupSec 동안 인디케이터/wind-up 애니만 보이고,
+    //   실제 발사는 windupSec 후부터 breathDuration 동안 staggered. delay 큐로 재현.
+    {
+        // 몬스터 입/포구 시작 위치 (몸통 위쪽)
+        XMFLOAT3 startPos{ atkX, atkY + 2.0f, atkZ };
+
+        // 타겟 플레이어 위치 (로컬 or 원격) — 없으면 yaw 방향으로 fallback
+        XMFLOAT3 targetPos = startPos;
+        bool bHasTarget = false;
+        uint64 localId = GetLocalPlayerId();
+        if (targetPlayerId == localId)
+        {
+            if (GameObject* pLocal = pScene ? pScene->GetPlayer() : nullptr)
+                if (auto* pT = pLocal->GetTransform())
+                { targetPos = pT->GetPosition(); targetPos.y += 1.5f; bHasTarget = true; }
+        }
+        else
+        {
+            auto rIt = m_mapRemotePlayers.find(targetPlayerId);
+            if (rIt != m_mapRemotePlayers.end() && rIt->second)
+                if (auto* pT = rIt->second->GetTransform())
+                { targetPos = pT->GetPosition(); targetPos.y += 1.5f; bHasTarget = true; }
+        }
+        if (!bHasTarget)
+        {
+            // 타겟 못 잡으면 monster 정면(+Z) 으로 fallback — 적어도 화염은 나오게
+            targetPos = { atkX, atkY + 1.5f, atkZ + 10.0f };
+        }
+
+        // monsterType → 원소
+        ElementType elem = ElementType::Fire;
+        if (mt == 7 || mt == 10) elem = ElementType::Water;
+        else if (mt == 8)        elem = ElementType::Earth;
+
+        // 부채꼴 staggered 큐잉 — 첫 발사 = startDelay, 이후 fireInterval 간격으로 N 발.
+        //   각 발사 항목에 monsterId + fanAngleDeg 저장 → 실제 스폰 시점에 보스 현재 위치/yaw 로 재계산.
+        //   결과: 보스가 windup/breath 동안 움직여도 VFX 가 보스 입에서 정확히 발사됨.
+        auto QueueFan = [&](int count, float spreadDeg, float speed,
+                            float radius, float scale, float maxDist,
+                            float startDelay, float dur)
+        {
+            float halfSpread   = (count > 1) ? (spreadDeg * 0.5f) : 0.0f;
+            float fireInterval = (count > 0) ? (dur / (float)count) : 0.0f;
+
+            for (int i = 0; i < count; ++i)
+            {
+                float t = (count > 1) ? ((float)i / (count - 1)) : 0.5f;
+                float angDeg = -halfSpread + spreadDeg * t;
+
+                PendingMonsterVFX p;
+                p.kind        = PendingVFXKind::Projectile;
+                p.delay       = startDelay + i * fireInterval;
+                p.monsterId   = monsterId;          // 실시간 위치 추적
+                p.startPos    = startPos;           // fallback (보스 사라지면 사용)
+                p.targetPos   = targetPos;          // 패킷 시점 타겟 위치
+                p.yOffset     = 2.0f;
+                p.fanAngleDeg = angDeg;
+                p.fireRange   = 60.0f;
+                p.speed     = speed;
+                p.radius    = radius;
+                p.scale     = scale;
+                p.maxDist   = maxDist;
+                p.element   = elem;
+                m_vPendingMonsterVFX.push_back(p);
+            }
+        };
+
+        auto QueueExplosion = [&](const XMFLOAT3& pos, float delaySec)
+        {
+            PendingMonsterVFX p;
+            p.kind     = PendingVFXKind::Explosion;
+            p.delay    = delaySec;
+            p.startPos = pos;
+            p.element  = elem;
+            m_vPendingMonsterVFX.push_back(p);
+        };
+
+        auto QueueShake = [&](float delaySec, float intensity, float duration)
+        {
+            PendingMonsterVFX p;
+            p.kind     = PendingVFXKind::CameraShake;
+            p.delay    = delaySec;
+            p.shakeIntensity = intensity;
+            p.shakeDuration  = duration;
+            m_vPendingMonsterVFX.push_back(p);
+        };
+
+        // VFX 가 실제 스폰될 delay — 서버 windupSec 가 아닌 애니 release frame 기준 (sync 문제 해결).
+        //   서버 windupSec 는 데미지 타이밍이고 클라 애니 peak 와 다름. 위 GetVfxStartDelay 참고.
+        const float startDelay = GetVfxStartDelay(mt, attackType, windupSec);
+
+        switch (attackType)
+        {
+        case 2:   // Ranged — 단발 직선
+            {
+                PendingMonsterVFX p;
+                p.kind = PendingVFXKind::Projectile;
+                p.delay = startDelay;
+                p.startPos = startPos; p.targetPos = targetPos;
+                p.speed = 18.0f; p.radius = 0.5f; p.scale = 1.0f; p.maxDist = 80.0f;
+                p.element = elem;
+                m_vPendingMonsterVFX.push_back(p);
+            }
+            break;
+
+        case 5:   // Breath
+            // Red Dragon (6): 5발 50° 큰 화염 — 전투 중 잘 보이게 scale 3.0
+            // Kraken  (7):   10발 55° 잉크 다발 — 다발이라 개별 scale 1.5
+            // BlueDragon(10): 5발 50° scale 2.5
+            if (mt == 6)      QueueFan(5,  50.0f, 35.0f, 1.2f, 3.0f, 70.0f, startDelay, 0.8f);
+            else if (mt == 7) QueueFan(10, 55.0f, 32.0f, 0.8f, 1.5f, 60.0f, startDelay, 1.1f);
+            else              QueueFan(5,  50.0f, 35.0f, 1.0f, 2.5f, 70.0f, startDelay, 0.8f);
+            break;
+
+        case 6:   // MegaBreath
+            if (mt == 6)
+            {
+                // Red Dragon — "오프라인 MegaBreathAttackBehavior" 임시 미러:
+                //   서버 windup 2.0s 동안 입에 모이는 분위기(쉐이크 + 작은 폭발),
+                //   이후 4.0s 동안 25발 빔 분사 + 5발의 큰 폭발이 보스 전방 쭉 이어짐.
+                const float breathDur = 4.0f;
+                // 25→15 감량 (풀 부담 ↓ + scale ↑ 으로 시각 임팩트 유지)
+                QueueFan(15, 35.0f, 45.0f, 1.5f, 4.5f, 80.0f, startDelay, breathDur);
+
+                // 입가 충전 — windup 동안 작은 폭발 4번 (분위기)
+                for (int i = 0; i < 4; ++i)
                 {
-                    if (auto* pT = pLocal->GetTransform())
-                    {
-                        targetPos = pT->GetPosition();
-                        targetPos.y += 1.5f;
-                    }
+                    float t = (float)i / 4.0f;
+                    QueueExplosion(startPos, startDelay * t);
                 }
+                // 분사 동안 보스 전방 5지점에 큰 폭발 (빔이 지면을 훑는 느낌)
+                float dx = targetPos.x - startPos.x;
+                float dz = targetPos.z - startPos.z;
+                float len = sqrtf(dx*dx + dz*dz);
+                if (len > 0.001f) { dx /= len; dz /= len; }
+                else              { dx = 0.f; dz = 1.f; }
+                for (int i = 0; i < 5; ++i)
+                {
+                    float dist = 12.0f + i * 12.0f;
+                    DirectX::XMFLOAT3 ep{ startPos.x + dx * dist, atkY + 0.5f, startPos.z + dz * dist };
+                    QueueExplosion(ep, startDelay + (float)i * (breathDur / 5.0f));
+                }
+                // 카메라 쉐이크: windup 끝 강한 시작 + 분사 내내 약하게 지속
+                QueueShake(startDelay,           4.0f, 0.6f);
+                QueueShake(startDelay + 0.6f,    1.5f, breathDur);
             }
             else
             {
-                auto rIt = m_mapRemotePlayers.find(targetPlayerId);
-                if (rIt != m_mapRemotePlayers.end() && rIt->second)
+                QueueFan(7, 30.0f, 40.0f, 1.0f, 2.0f, 80.0f, startDelay, 2.5f);
+            }
+            break;
+
+        case 7:   // JumpSlam — windup 끝에 착지 폭발
+            QueueExplosion(XMFLOAT3{ atkX, atkY + 0.2f, atkZ }, startDelay);
+            QueueShake(startDelay, 2.5f, 0.5f);
+            break;
+
+        case 8:   // TailSweep
+            if (mt == 6)
+            {
+                // Red Dragon — windupSec=0 (서버 default) 라 즉시 임팩트.
+                //   보스 발 밑 폭발 + 좌우로 호 그리며 여러 폭발 (꼬리가 휩쓰는 호)
+                QueueExplosion(XMFLOAT3{ atkX, atkY + 0.2f, atkZ }, startDelay);
+                // 보스 yaw 기준 정면 ±90° 호로 4개 폭발 (꼬리 sweep 시뮬레이션)
+                if (auto* pT = pMonster->GetTransform())
                 {
-                    if (auto* pT = rIt->second->GetTransform())
+                    float yawRad = pT->GetRotation().y * (3.14159265f / 180.0f);
+                    for (int i = 0; i < 4; ++i)
                     {
-                        targetPos = pT->GetPosition();
-                        targetPos.y += 1.5f;
+                        float angle = yawRad + (-1.5708f + (i / 3.0f) * 3.1416f);
+                        float r = 8.0f;
+                        DirectX::XMFLOAT3 ep{ atkX + sinf(angle) * r, atkY + 0.2f, atkZ + cosf(angle) * r };
+                        QueueExplosion(ep, startDelay + 0.05f * i);
                     }
                 }
+                QueueShake(startDelay, 2.0f, 0.4f);
             }
+            // 다른 보스는 애니메이션만 (인디케이터로 대체)
+            break;
 
-            constexpr float RANGED_SPEED = 18.f;
-            pProj->SpawnProjectile(
-                startPos, targetPos,
-                0.0f,        // damage (서버 권위)
-                RANGED_SPEED,
-                0.5f,        // collisionRadius
-                0.0f,        // explosionRadius (없음)
-                ElementType::Fire,
-                nullptr,     // owner
-                false,       // isPlayerProjectile → 로컬 플레이어와 충돌 체크 경로
-                1.0f,        // scale
-                RuneCombo{}, // 룬 없음
-                0.0f,        // chargeRatio
-                80.f,        // maxDistance
-                false, false, 0.f, 0.f, 0.f,
-                SkillSlot::Count);
+        case 9:   // GroundRupture — windup 끝에 타겟 지점 폭발
+            QueueExplosion(targetPos, startDelay);
+            QueueShake(startDelay, 2.0f, 0.4f);
+            break;
+
+        case 10:  // FlyingBarrage — 12발/1.5s 넓은 부채꼴
+            QueueFan(12, 80.0f, 22.0f, 0.7f, 1.2f, 70.0f, startDelay, 1.5f);
+            break;
+
+        default:
+            break;
         }
     }
 
@@ -1711,6 +2319,87 @@ void NetworkManager::QueueRoomCleared(uint32 stageIndex, uint32 roomIndex)
     m_vCommandQueue.push_back(cmd);
 }
 
+void NetworkManager::QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 phaseIndex)
+{
+    std::lock_guard<std::mutex> lock(m_queueMutex);
+
+    NetworkCommandData cmd{};
+    cmd.type           = NetworkCommand::BossEvent;
+    cmd.monsterId      = monsterId;
+    cmd.bossEventType  = eventType;
+    cmd.phaseIndex     = phaseIndex;
+
+    m_vCommandQueue.push_back(cmd);
+}
+
+// (monsterType) → 보스 인트로/페이즈/사망용 포효 클립.
+//   오프라인 EnemyComponent::UpdateBossIntro 가 "Scream" 등을 사용 — 같은 클립 매핑.
+//   해당 모델에 클립이 없으면 nullptr → 폴백으로 attackClip 재생.
+static const char* GetBossRoarClip(uint32 monsterType)
+{
+    switch (monsterType)
+    {
+    case 6:  return "Scream";        // Dragon
+    case 10: return "Roar";          // BlueDragon (있으면 — 없으면 idle 로 폴백)
+    case 7:  return "Unreal Take";   // Kraken
+    case 9:  return "Idle1";         // Demon — 별도 포효 클립 없음
+    case 8:  return "Golem_battle_stand_ge"; // Golem — 정지자세로 컷씬 대체
+    default: return nullptr;
+    }
+}
+
+void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 eventType, uint32 phaseIndex)
+{
+    if (!pScene) return;
+
+    auto it = m_mapServerMonsters.find(monsterId);
+    GameObject* pBoss = (it != m_mapServerMonsters.end()) ? it->second : nullptr;
+
+    auto clipIt = m_mapServerMonsterClips.find(monsterId);
+    uint32 mt = (clipIt != m_mapServerMonsterClips.end()) ? clipIt->second.monsterType : 0;
+    const char* roarClip = GetBossRoarClip(mt);
+
+    // 카메라 쉐이크 — 이벤트 타입별로 강도/지속 다르게
+    CCamera* pCam = pScene->GetCamera();
+
+    switch (eventType)
+    {
+    case 1: // BOSS_EVENT_INTRO — 등장 컷씬: 강한 카메라 쉐이크 + 포효 애니
+        if (pCam) pCam->StartShake(4.0f, 1.5f);
+        if (pBoss && roarClip)
+        {
+            if (auto* pAnim = pBoss->GetComponent<AnimationComponent>())
+                pAnim->CrossFade(roarClip, 0.2f, false, true);
+        }
+        break;
+
+    case 2: // BOSS_EVENT_PHASE_CHANGE — 페이즈 전환: 중간 쉐이크 + 포효 + hit flash 대체 invincibility flash
+        if (pCam) pCam->StartShake(3.0f, 1.0f);
+        if (pBoss)
+        {
+            if (roarClip)
+                if (auto* pAnim = pBoss->GetComponent<AnimationComponent>())
+                    pAnim->CrossFade(roarClip, 0.2f, false, true);
+            // 무적 페이즈 — 흰 glow 한 번 강하게 깜빡 (이미 있는 hit flash 시스템 재활용)
+            pBoss->SetHitFlashAll(1.0f);
+            m_mapServerMonsterHitFlashTimer[monsterId] = 0.4f;  // 평소(0.15)보다 길게
+        }
+        break;
+
+    case 3: // BOSS_EVENT_DEATH — 사망 컷씬: 가장 강한 쉐이크 (사망 애니는 S_MONSTER_DAMAGE 가 별도 처리)
+        if (pCam) pCam->StartShake(5.0f, 2.0f);
+        break;
+
+    default:
+        break;
+    }
+
+    char buf[192];
+    sprintf_s(buf, "[Network] BossEvent processed: monsterId=%llu type=%u phase=%u clip=%s",
+              monsterId, eventType, phaseIndex, roarClip ? roarClip : "(none)");
+    WriteNetworkLog(buf);
+}
+
 void NetworkManager::ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float damage,
                                           float currentHp, bool isDead,
                                           uint64 attackerPlayerId, int skillType)
@@ -1809,6 +2498,18 @@ void NetworkManager::ProcessMonsterDespawn(Scene* pScene, uint64 monsterId)
     m_mapServerMonsterAttackTimer.erase(monsterId);
     m_mapServerMonsterHitFlashTimer.erase(monsterId);
     m_setDeadServerMonsters.erase(monsterId);
+
+    // 인디케이터 4개도 정리 — 보스가 아니면 애초에 등록 안 됐으므로 find 시 미스
+    auto indIt = m_mapServerMonsterIndicators.find(monsterId);
+    if (indIt != m_mapServerMonsterIndicators.end())
+    {
+        ServerMonsterIndicators& ind = indIt->second;
+        if (ind.circleBorder) pScene->MarkForDeletion(ind.circleBorder);
+        if (ind.circleFill)   pScene->MarkForDeletion(ind.circleFill);
+        if (ind.boxBorder)    pScene->MarkForDeletion(ind.boxBorder);
+        if (ind.boxFill)      pScene->MarkForDeletion(ind.boxFill);
+        m_mapServerMonsterIndicators.erase(indIt);
+    }
 
     wchar_t buf[128];
     swprintf_s(buf, L"[Network] Despawned NetMonster_%llu\n", monsterId);

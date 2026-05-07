@@ -168,6 +168,10 @@ private:
     void UpdatePhase(FluidVFXSlot& slot, float dt);
     void UpdateOrbitalCPs(FluidVFXSlot& slot, float dt);
 
+    // Player 우선 슬롯 할당 — free 가 없을 때 isPlayerEffect=true 면 가장 오래된 non-player 강제 evict.
+    //   결과: 보스 VFX 가 풀 채워도 플레이어 스킬 시각이 보장됨. 비플레이어 스폰은 free 만 사용.
+    int FindSlotForSpawn(bool isPlayerEffect);
+
     std::array<FluidVFXSlot, MAX_EFFECTS> m_Slots;
     uint32_t         m_nextSpawnGeneration = 0;
     ID3D12Device*    m_pDevice    = nullptr; // 경량 이미터 지연 초기화용

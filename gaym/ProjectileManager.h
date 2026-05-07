@@ -112,8 +112,9 @@ private:
     UINT m_nDescriptorStartIndex = 0;
     CDescriptorHeap* m_pDescriptorHeap = nullptr;
 
-    // Pool settings
-    static constexpr size_t MAX_PROJECTILES = 256;
-    static constexpr size_t MAX_RENDERED_PROJECTILES = 64;  // Max projectiles to render at once
+    // Pool settings — 256 으로는 보스 (MegaBreath 25발 등) + 플레이어 스킬이 동시에 돌면
+    //   풀이 가득 차서 SpawnProjectile 가 reject. 풀 크기 ↑ + 플레이어 우선 eviction 으로 해결.
+    static constexpr size_t MAX_PROJECTILES = 512;
+    static constexpr size_t MAX_RENDERED_PROJECTILES = 64;  // 큐브 mesh 렌더 cap (현재 dead code, fluid VFX 사용)
     static constexpr size_t CLEANUP_THRESHOLD = 32; // Cleanup when this many are inactive
 };
