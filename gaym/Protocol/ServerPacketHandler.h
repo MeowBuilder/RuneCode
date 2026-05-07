@@ -32,6 +32,7 @@ enum : uint16
 	// [DEBUG] 현재 방 안 살아있는 몬스터 전체 즉사. 본문 비어있음 — 빈 메시지 형식 C_PORTAL_INTERACT 재활용.
 	// 정식 패치 시 별도 message 로 분리할 것.
 	PKT_C_DEBUG_KILL_ALL = 1023,
+	PKT_S_BOSS_EVENT = 1024,
 };
 
 // Custom Handlers
@@ -51,6 +52,7 @@ bool Handle_S_MONSTER_ATTACK(PacketSessionRef& session, Protocol::S_MONSTER_ATTA
 bool Handle_S_PLAYER_DAMAGE(PacketSessionRef& session, Protocol::S_PLAYER_DAMAGE& pkt);
 bool Handle_S_MONSTER_DAMAGE(PacketSessionRef& session, Protocol::S_MONSTER_DAMAGE& pkt);
 bool Handle_S_ROOM_CLEARED(PacketSessionRef& session, Protocol::S_ROOM_CLEARED& pkt);
+bool Handle_S_BOSS_EVENT(PacketSessionRef& session, Protocol::S_BOSS_EVENT& pkt);
 
 class ServerPacketHandler
 {
@@ -58,7 +60,7 @@ public:
 	static void Init()
 	{
 		for (int32 i = 0; i < UINT16_MAX; i++)
-			GPacketHandler[i] = Handle_INVALID;
+		GPacketHandler[i] = Handle_INVALID;
 		GPacketHandler[PKT_S_LOGIN] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_LOGIN>(Handle_S_LOGIN, session, buffer, len); };
 		GPacketHandler[PKT_S_ENTER_GAME] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_ENTER_GAME>(Handle_S_ENTER_GAME, session, buffer, len); };
 		GPacketHandler[PKT_S_CHAT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_CHAT>(Handle_S_CHAT, session, buffer, len); };
@@ -74,6 +76,7 @@ public:
 		GPacketHandler[PKT_S_PLAYER_DAMAGE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PLAYER_DAMAGE>(Handle_S_PLAYER_DAMAGE, session, buffer, len); };
 		GPacketHandler[PKT_S_MONSTER_DAMAGE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_MONSTER_DAMAGE>(Handle_S_MONSTER_DAMAGE, session, buffer, len); };
 		GPacketHandler[PKT_S_ROOM_CLEARED] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_ROOM_CLEARED>(Handle_S_ROOM_CLEARED, session, buffer, len); };
+		GPacketHandler[PKT_S_BOSS_EVENT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) {return HandlePacket<Protocol::S_BOSS_EVENT>(Handle_S_BOSS_EVENT, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)
@@ -90,11 +93,7 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::C_TORCH_INTERACT& pkt) { return MakeSendBuffer(pkt, PKT_C_TORCH_INTERACT); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_PLAYER_ATTACK& pkt) { return MakeSendBuffer(pkt, PKT_C_PLAYER_ATTACK); }
 	// [DEBUG] 빈 본문 — C_PORTAL_INTERACT 메시지 형식만 빌려서 ID 만 다르게 보냄
-	static SendBufferRef MakeDebugKillAllSendBuffer()
-	{
-		Protocol::C_PORTAL_INTERACT pkt;
-		return MakeSendBuffer(pkt, PKT_C_DEBUG_KILL_ALL);
-	}
+	static SendBufferRef MakeDebugKillAllSendBuffer() { Protocol::C_PORTAL_INTERACT pkt; return MakeSendBuffer(pkt, PKT_C_DEBUG_KILL_ALL); }
 
 private:
 	template<typename PacketType, typename ProcessFunc>

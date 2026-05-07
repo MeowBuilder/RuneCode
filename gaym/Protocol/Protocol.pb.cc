@@ -322,8 +322,7 @@ struct S_PLAYER_DAMAGEDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT S_PLAYER_DAMAGEDefaultTypeInternal _S_PLAYER_DAMAGE_default_instance_;
 constexpr C_PLAYER_ATTACK::C_PLAYER_ATTACK(
   ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
-  : playerid_(uint64_t{0u})
-  , skilltype_(0)
+  : skilltype_(0)
 
   , x_(0)
   , y_(0)
@@ -374,8 +373,23 @@ struct S_ROOM_CLEAREDDefaultTypeInternal {
   };
 };
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT S_ROOM_CLEAREDDefaultTypeInternal _S_ROOM_CLEARED_default_instance_;
+constexpr S_BOSS_EVENT::S_BOSS_EVENT(
+  ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
+  : monsterid_(uint64_t{0u})
+  , eventtype_(0)
+
+  , phaseindex_(0u){}
+struct S_BOSS_EVENTDefaultTypeInternal {
+  constexpr S_BOSS_EVENTDefaultTypeInternal()
+    : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
+  ~S_BOSS_EVENTDefaultTypeInternal() {}
+  union {
+    S_BOSS_EVENT _instance;
+  };
+};
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT S_BOSS_EVENTDefaultTypeInternal _S_BOSS_EVENT_default_instance_;
 }  // namespace Protocol
-static ::PROTOBUF_NAMESPACE_ID::Metadata file_level_metadata_Protocol_2eproto[24];
+static ::PROTOBUF_NAMESPACE_ID::Metadata file_level_metadata_Protocol_2eproto[25];
 static constexpr ::PROTOBUF_NAMESPACE_ID::EnumDescriptor const** file_level_enum_descriptors_Protocol_2eproto = nullptr;
 static constexpr ::PROTOBUF_NAMESPACE_ID::ServiceDescriptor const** file_level_service_descriptors_Protocol_2eproto = nullptr;
 
@@ -560,7 +574,6 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_Protocol_2eproto::offsets[] PR
   ~0u,  // no _extensions_
   ~0u,  // no _oneof_case_
   ~0u,  // no _weak_field_map_
-  PROTOBUF_FIELD_OFFSET(::Protocol::C_PLAYER_ATTACK, playerid_),
   PROTOBUF_FIELD_OFFSET(::Protocol::C_PLAYER_ATTACK, skilltype_),
   PROTOBUF_FIELD_OFFSET(::Protocol::C_PLAYER_ATTACK, x_),
   PROTOBUF_FIELD_OFFSET(::Protocol::C_PLAYER_ATTACK, y_),
@@ -589,6 +602,14 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_Protocol_2eproto::offsets[] PR
   ~0u,  // no _weak_field_map_
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_CLEARED, stageindex_),
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_CLEARED, roomindex_),
+  ~0u,  // no _has_bits_
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_BOSS_EVENT, _internal_metadata_),
+  ~0u,  // no _extensions_
+  ~0u,  // no _oneof_case_
+  ~0u,  // no _weak_field_map_
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_BOSS_EVENT, monsterid_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_BOSS_EVENT, eventtype_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_BOSS_EVENT, phaseindex_),
 };
 static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, sizeof(::Protocol::C_LOGIN)},
@@ -613,8 +634,9 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOB
   { 152, -1, sizeof(::Protocol::S_MONSTER_ATTACK)},
   { 165, -1, sizeof(::Protocol::S_PLAYER_DAMAGE)},
   { 175, -1, sizeof(::Protocol::C_PLAYER_ATTACK)},
-  { 191, -1, sizeof(::Protocol::S_MONSTER_DAMAGE)},
-  { 202, -1, sizeof(::Protocol::S_ROOM_CLEARED)},
+  { 190, -1, sizeof(::Protocol::S_MONSTER_DAMAGE)},
+  { 201, -1, sizeof(::Protocol::S_ROOM_CLEARED)},
+  { 208, -1, sizeof(::Protocol::S_BOSS_EVENT)},
 };
 
 static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] = {
@@ -642,6 +664,7 @@ static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] =
   reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::Protocol::_C_PLAYER_ATTACK_default_instance_),
   reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::Protocol::_S_MONSTER_DAMAGE_default_instance_),
   reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::Protocol::_S_ROOM_CLEARED_default_instance_),
+  reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::Protocol::_S_BOSS_EVENT_default_instance_),
 };
 
 const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) =
@@ -683,17 +706,19 @@ const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABL
   "Sec\030\010 \001(\002\"q\n\017S_PLAYER_DAMAGE\022\020\n\010playerId"
   "\030\001 \001(\004\022\016\n\006damage\030\002 \001(\002\022\021\n\tcurrentHp\030\003 \001("
   "\002\022\016\n\006isDead\030\004 \001(\010\022\031\n\021attackerMonsterId\030\005"
-  " \001(\004\"\311\001\n\017C_PLAYER_ATTACK\022\020\n\010playerId\030\001 \001"
-  "(\004\022&\n\tskillType\030\002 \001(\0162\023.Protocol.SkillTy"
-  "pe\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\t\n\001z\030\005 \001(\002\022\014\n\004d"
-  "irX\030\006 \001(\002\022\014\n\004dirY\030\007 \001(\002\022\014\n\004dirZ\030\010 \001(\002\022\017\n"
-  "\007targetX\030\t \001(\002\022\017\n\007targetY\030\n \001(\002\022\017\n\007targe"
-  "tZ\030\013 \001(\002\"\232\001\n\020S_MONSTER_DAMAGE\022\021\n\tmonster"
-  "Id\030\001 \001(\004\022\016\n\006damage\030\002 \001(\002\022\021\n\tcurrentHp\030\003 "
-  "\001(\002\022\016\n\006isDead\030\004 \001(\010\022\030\n\020attackerPlayerId\030"
-  "\005 \001(\004\022&\n\tskillType\030\006 \001(\0162\023.Protocol.Skil"
-  "lType\"7\n\016S_ROOM_CLEARED\022\022\n\nstageIndex\030\001 "
-  "\001(\r\022\021\n\troomIndex\030\002 \001(\rb\006proto3"
+  " \001(\004\"\267\001\n\017C_PLAYER_ATTACK\022&\n\tskillType\030\001 "
+  "\001(\0162\023.Protocol.SkillType\022\t\n\001x\030\002 \001(\002\022\t\n\001y"
+  "\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\014\n\004dirX\030\005 \001(\002\022\014\n\004dirY\030"
+  "\006 \001(\002\022\014\n\004dirZ\030\007 \001(\002\022\017\n\007targetX\030\010 \001(\002\022\017\n\007"
+  "targetY\030\t \001(\002\022\017\n\007targetZ\030\n \001(\002\"\232\001\n\020S_MON"
+  "STER_DAMAGE\022\021\n\tmonsterId\030\001 \001(\004\022\016\n\006damage"
+  "\030\002 \001(\002\022\021\n\tcurrentHp\030\003 \001(\002\022\016\n\006isDead\030\004 \001("
+  "\010\022\030\n\020attackerPlayerId\030\005 \001(\004\022&\n\tskillType"
+  "\030\006 \001(\0162\023.Protocol.SkillType\"7\n\016S_ROOM_CL"
+  "EARED\022\022\n\nstageIndex\030\001 \001(\r\022\021\n\troomIndex\030\002"
+  " \001(\r\"a\n\014S_BOSS_EVENT\022\021\n\tmonsterId\030\001 \001(\004\022"
+  "*\n\teventType\030\002 \001(\0162\027.Protocol.BossEventT"
+  "ype\022\022\n\nphaseIndex\030\003 \001(\rb\006proto3"
   ;
 static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor_table_Protocol_2eproto_deps[2] = {
   &::descriptor_table_Enum_2eproto,
@@ -701,8 +726,8 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor
 };
 static ::PROTOBUF_NAMESPACE_ID::internal::once_flag descriptor_table_Protocol_2eproto_once;
 const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_Protocol_2eproto = {
-  false, false, 1950, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
-  &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 24,
+  false, false, 2031, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
+  &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 25,
   schemas, file_default_instances, TableStruct_Protocol_2eproto::offsets,
   file_level_metadata_Protocol_2eproto, file_level_enum_descriptors_Protocol_2eproto, file_level_service_descriptors_Protocol_2eproto,
 };
@@ -5952,17 +5977,17 @@ C_PLAYER_ATTACK::C_PLAYER_ATTACK(::PROTOBUF_NAMESPACE_ID::Arena* arena)
 C_PLAYER_ATTACK::C_PLAYER_ATTACK(const C_PLAYER_ATTACK& from)
   : ::PROTOBUF_NAMESPACE_ID::Message() {
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
-  ::memcpy(&playerid_, &from.playerid_,
+  ::memcpy(&skilltype_, &from.skilltype_,
     static_cast<size_t>(reinterpret_cast<char*>(&targetz_) -
-    reinterpret_cast<char*>(&playerid_)) + sizeof(targetz_));
+    reinterpret_cast<char*>(&skilltype_)) + sizeof(targetz_));
   // @@protoc_insertion_point(copy_constructor:Protocol.C_PLAYER_ATTACK)
 }
 
 void C_PLAYER_ATTACK::SharedCtor() {
 ::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
-    reinterpret_cast<char*>(&playerid_) - reinterpret_cast<char*>(this)),
+    reinterpret_cast<char*>(&skilltype_) - reinterpret_cast<char*>(this)),
     0, static_cast<size_t>(reinterpret_cast<char*>(&targetz_) -
-    reinterpret_cast<char*>(&playerid_)) + sizeof(targetz_));
+    reinterpret_cast<char*>(&skilltype_)) + sizeof(targetz_));
 }
 
 C_PLAYER_ATTACK::~C_PLAYER_ATTACK() {
@@ -5991,9 +6016,9 @@ void C_PLAYER_ATTACK::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  ::memset(&playerid_, 0, static_cast<size_t>(
+  ::memset(&skilltype_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&targetz_) -
-      reinterpret_cast<char*>(&playerid_)) + sizeof(targetz_));
+      reinterpret_cast<char*>(&skilltype_)) + sizeof(targetz_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -6003,80 +6028,73 @@ const char* C_PLAYER_ATTACK::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPAC
     ::PROTOBUF_NAMESPACE_ID::uint32 tag;
     ptr = ::PROTOBUF_NAMESPACE_ID::internal::ReadTag(ptr, &tag);
     switch (tag >> 3) {
-      // uint64 playerId = 1;
+      // .Protocol.SkillType skillType = 1;
       case 1:
         if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 8)) {
-          playerid_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
-          CHK_(ptr);
-        } else goto handle_unusual;
-        continue;
-      // .Protocol.SkillType skillType = 2;
-      case 2:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 16)) {
           ::PROTOBUF_NAMESPACE_ID::uint64 val = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
           CHK_(ptr);
           _internal_set_skilltype(static_cast<::Protocol::SkillType>(val));
         } else goto handle_unusual;
         continue;
-      // float x = 3;
-      case 3:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 29)) {
+      // float x = 2;
+      case 2:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 21)) {
           x_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
           ptr += sizeof(float);
         } else goto handle_unusual;
         continue;
-      // float y = 4;
-      case 4:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 37)) {
+      // float y = 3;
+      case 3:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 29)) {
           y_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
           ptr += sizeof(float);
         } else goto handle_unusual;
         continue;
-      // float z = 5;
-      case 5:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 45)) {
+      // float z = 4;
+      case 4:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 37)) {
           z_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
           ptr += sizeof(float);
         } else goto handle_unusual;
         continue;
-      // float dirX = 6;
-      case 6:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 53)) {
+      // float dirX = 5;
+      case 5:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 45)) {
           dirx_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
           ptr += sizeof(float);
         } else goto handle_unusual;
         continue;
-      // float dirY = 7;
-      case 7:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 61)) {
+      // float dirY = 6;
+      case 6:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 53)) {
           diry_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
           ptr += sizeof(float);
         } else goto handle_unusual;
         continue;
-      // float dirZ = 8;
-      case 8:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 69)) {
+      // float dirZ = 7;
+      case 7:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 61)) {
           dirz_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
           ptr += sizeof(float);
         } else goto handle_unusual;
         continue;
-      // float targetX = 9;
-      case 9:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 77)) {
+      // float targetX = 8;
+      case 8:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 69)) {
           targetx_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
           ptr += sizeof(float);
         } else goto handle_unusual;
         continue;
-      // float targetY = 10;
-      case 10:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 85)) {
+      // float targetY = 9;
+      case 9:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 77)) {
           targety_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
           ptr += sizeof(float);
         } else goto handle_unusual;
         continue;
-      // float targetZ = 11;
-      case 11:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 93)) {
+      // float targetZ = 10;
+      case 10:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 85)) {
           targetz_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
           ptr += sizeof(float);
         } else goto handle_unusual;
@@ -6110,71 +6128,65 @@ failure:
   ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  // uint64 playerId = 1;
-  if (this->playerid() != 0) {
-    target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(1, this->_internal_playerid(), target);
-  }
-
-  // .Protocol.SkillType skillType = 2;
+  // .Protocol.SkillType skillType = 1;
   if (this->skilltype() != 0) {
     target = stream->EnsureSpace(target);
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteEnumToArray(
-      2, this->_internal_skilltype(), target);
+      1, this->_internal_skilltype(), target);
   }
 
-  // float x = 3;
+  // float x = 2;
   if (!(this->x() <= 0 && this->x() >= 0)) {
     target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(3, this->_internal_x(), target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(2, this->_internal_x(), target);
   }
 
-  // float y = 4;
+  // float y = 3;
   if (!(this->y() <= 0 && this->y() >= 0)) {
     target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(4, this->_internal_y(), target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(3, this->_internal_y(), target);
   }
 
-  // float z = 5;
+  // float z = 4;
   if (!(this->z() <= 0 && this->z() >= 0)) {
     target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(5, this->_internal_z(), target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(4, this->_internal_z(), target);
   }
 
-  // float dirX = 6;
+  // float dirX = 5;
   if (!(this->dirx() <= 0 && this->dirx() >= 0)) {
     target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(6, this->_internal_dirx(), target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(5, this->_internal_dirx(), target);
   }
 
-  // float dirY = 7;
+  // float dirY = 6;
   if (!(this->diry() <= 0 && this->diry() >= 0)) {
     target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(7, this->_internal_diry(), target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(6, this->_internal_diry(), target);
   }
 
-  // float dirZ = 8;
+  // float dirZ = 7;
   if (!(this->dirz() <= 0 && this->dirz() >= 0)) {
     target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(8, this->_internal_dirz(), target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(7, this->_internal_dirz(), target);
   }
 
-  // float targetX = 9;
+  // float targetX = 8;
   if (!(this->targetx() <= 0 && this->targetx() >= 0)) {
     target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(9, this->_internal_targetx(), target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(8, this->_internal_targetx(), target);
   }
 
-  // float targetY = 10;
+  // float targetY = 9;
   if (!(this->targety() <= 0 && this->targety() >= 0)) {
     target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(10, this->_internal_targety(), target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(9, this->_internal_targety(), target);
   }
 
-  // float targetZ = 11;
+  // float targetZ = 10;
   if (!(this->targetz() <= 0 && this->targetz() >= 0)) {
     target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(11, this->_internal_targetz(), target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(10, this->_internal_targetz(), target);
   }
 
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
@@ -6193,60 +6205,53 @@ size_t C_PLAYER_ATTACK::ByteSizeLong() const {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  // uint64 playerId = 1;
-  if (this->playerid() != 0) {
-    total_size += 1 +
-      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64Size(
-        this->_internal_playerid());
-  }
-
-  // .Protocol.SkillType skillType = 2;
+  // .Protocol.SkillType skillType = 1;
   if (this->skilltype() != 0) {
     total_size += 1 +
       ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::EnumSize(this->_internal_skilltype());
   }
 
-  // float x = 3;
+  // float x = 2;
   if (!(this->x() <= 0 && this->x() >= 0)) {
     total_size += 1 + 4;
   }
 
-  // float y = 4;
+  // float y = 3;
   if (!(this->y() <= 0 && this->y() >= 0)) {
     total_size += 1 + 4;
   }
 
-  // float z = 5;
+  // float z = 4;
   if (!(this->z() <= 0 && this->z() >= 0)) {
     total_size += 1 + 4;
   }
 
-  // float dirX = 6;
+  // float dirX = 5;
   if (!(this->dirx() <= 0 && this->dirx() >= 0)) {
     total_size += 1 + 4;
   }
 
-  // float dirY = 7;
+  // float dirY = 6;
   if (!(this->diry() <= 0 && this->diry() >= 0)) {
     total_size += 1 + 4;
   }
 
-  // float dirZ = 8;
+  // float dirZ = 7;
   if (!(this->dirz() <= 0 && this->dirz() >= 0)) {
     total_size += 1 + 4;
   }
 
-  // float targetX = 9;
+  // float targetX = 8;
   if (!(this->targetx() <= 0 && this->targetx() >= 0)) {
     total_size += 1 + 4;
   }
 
-  // float targetY = 10;
+  // float targetY = 9;
   if (!(this->targety() <= 0 && this->targety() >= 0)) {
     total_size += 1 + 4;
   }
 
-  // float targetZ = 11;
+  // float targetZ = 10;
   if (!(this->targetz() <= 0 && this->targetz() >= 0)) {
     total_size += 1 + 4;
   }
@@ -6282,9 +6287,6 @@ void C_PLAYER_ATTACK::MergeFrom(const C_PLAYER_ATTACK& from) {
   ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  if (from.playerid() != 0) {
-    _internal_set_playerid(from._internal_playerid());
-  }
   if (from.skilltype() != 0) {
     _internal_set_skilltype(from._internal_skilltype());
   }
@@ -6341,9 +6343,9 @@ void C_PLAYER_ATTACK::InternalSwap(C_PLAYER_ATTACK* other) {
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
       PROTOBUF_FIELD_OFFSET(C_PLAYER_ATTACK, targetz_)
       + sizeof(C_PLAYER_ATTACK::targetz_)
-      - PROTOBUF_FIELD_OFFSET(C_PLAYER_ATTACK, playerid_)>(
-          reinterpret_cast<char*>(&playerid_),
-          reinterpret_cast<char*>(&other->playerid_));
+      - PROTOBUF_FIELD_OFFSET(C_PLAYER_ATTACK, skilltype_)>(
+          reinterpret_cast<char*>(&skilltype_),
+          reinterpret_cast<char*>(&other->skilltype_));
 }
 
 ::PROTOBUF_NAMESPACE_ID::Metadata C_PLAYER_ATTACK::GetMetadata() const {
@@ -6889,6 +6891,255 @@ void S_ROOM_CLEARED::InternalSwap(S_ROOM_CLEARED* other) {
       file_level_metadata_Protocol_2eproto[23]);
 }
 
+// ===================================================================
+
+class S_BOSS_EVENT::_Internal {
+ public:
+};
+
+S_BOSS_EVENT::S_BOSS_EVENT(::PROTOBUF_NAMESPACE_ID::Arena* arena)
+  : ::PROTOBUF_NAMESPACE_ID::Message(arena) {
+  SharedCtor();
+  RegisterArenaDtor(arena);
+  // @@protoc_insertion_point(arena_constructor:Protocol.S_BOSS_EVENT)
+}
+S_BOSS_EVENT::S_BOSS_EVENT(const S_BOSS_EVENT& from)
+  : ::PROTOBUF_NAMESPACE_ID::Message() {
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  ::memcpy(&monsterid_, &from.monsterid_,
+    static_cast<size_t>(reinterpret_cast<char*>(&phaseindex_) -
+    reinterpret_cast<char*>(&monsterid_)) + sizeof(phaseindex_));
+  // @@protoc_insertion_point(copy_constructor:Protocol.S_BOSS_EVENT)
+}
+
+void S_BOSS_EVENT::SharedCtor() {
+::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
+    reinterpret_cast<char*>(&monsterid_) - reinterpret_cast<char*>(this)),
+    0, static_cast<size_t>(reinterpret_cast<char*>(&phaseindex_) -
+    reinterpret_cast<char*>(&monsterid_)) + sizeof(phaseindex_));
+}
+
+S_BOSS_EVENT::~S_BOSS_EVENT() {
+  // @@protoc_insertion_point(destructor:Protocol.S_BOSS_EVENT)
+  SharedDtor();
+  _internal_metadata_.Delete<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+void S_BOSS_EVENT::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
+}
+
+void S_BOSS_EVENT::ArenaDtor(void* object) {
+  S_BOSS_EVENT* _this = reinterpret_cast< S_BOSS_EVENT* >(object);
+  (void)_this;
+}
+void S_BOSS_EVENT::RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena*) {
+}
+void S_BOSS_EVENT::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+
+void S_BOSS_EVENT::Clear() {
+// @@protoc_insertion_point(message_clear_start:Protocol.S_BOSS_EVENT)
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  ::memset(&monsterid_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&phaseindex_) -
+      reinterpret_cast<char*>(&monsterid_)) + sizeof(phaseindex_));
+  _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+const char* S_BOSS_EVENT::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) {
+#define CHK_(x) if (PROTOBUF_PREDICT_FALSE(!(x))) goto failure
+  while (!ctx->Done(&ptr)) {
+    ::PROTOBUF_NAMESPACE_ID::uint32 tag;
+    ptr = ::PROTOBUF_NAMESPACE_ID::internal::ReadTag(ptr, &tag);
+    switch (tag >> 3) {
+      // uint64 monsterId = 1;
+      case 1:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 8)) {
+          monsterid_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // .Protocol.BossEventType eventType = 2;
+      case 2:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 16)) {
+          ::PROTOBUF_NAMESPACE_ID::uint64 val = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+          _internal_set_eventtype(static_cast<::Protocol::BossEventType>(val));
+        } else goto handle_unusual;
+        continue;
+      // uint32 phaseIndex = 3;
+      case 3:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 24)) {
+          phaseindex_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      default: {
+      handle_unusual:
+        if ((tag == 0) || ((tag & 7) == 4)) {
+          CHK_(ptr);
+          ctx->SetLastTag(tag);
+          goto success;
+        }
+        ptr = UnknownFieldParse(tag,
+            _internal_metadata_.mutable_unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(),
+            ptr, ctx);
+        CHK_(ptr != nullptr);
+        continue;
+      }
+    }  // switch
+  }  // while
+success:
+  return ptr;
+failure:
+  ptr = nullptr;
+  goto success;
+#undef CHK_
+}
+
+::PROTOBUF_NAMESPACE_ID::uint8* S_BOSS_EVENT::_InternalSerialize(
+    ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:Protocol.S_BOSS_EVENT)
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // uint64 monsterId = 1;
+  if (this->monsterid() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(1, this->_internal_monsterid(), target);
+  }
+
+  // .Protocol.BossEventType eventType = 2;
+  if (this->eventtype() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteEnumToArray(
+      2, this->_internal_eventtype(), target);
+  }
+
+  // uint32 phaseIndex = 3;
+  if (this->phaseindex() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt32ToArray(3, this->_internal_phaseindex(), target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
+        _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:Protocol.S_BOSS_EVENT)
+  return target;
+}
+
+size_t S_BOSS_EVENT::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:Protocol.S_BOSS_EVENT)
+  size_t total_size = 0;
+
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // uint64 monsterId = 1;
+  if (this->monsterid() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64Size(
+        this->_internal_monsterid());
+  }
+
+  // .Protocol.BossEventType eventType = 2;
+  if (this->eventtype() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::EnumSize(this->_internal_eventtype());
+  }
+
+  // uint32 phaseIndex = 3;
+  if (this->phaseindex() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt32Size(
+        this->_internal_phaseindex());
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    return ::PROTOBUF_NAMESPACE_ID::internal::ComputeUnknownFieldsSize(
+        _internal_metadata_, total_size, &_cached_size_);
+  }
+  int cached_size = ::PROTOBUF_NAMESPACE_ID::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void S_BOSS_EVENT::MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
+// @@protoc_insertion_point(generalized_merge_from_start:Protocol.S_BOSS_EVENT)
+  GOOGLE_DCHECK_NE(&from, this);
+  const S_BOSS_EVENT* source =
+      ::PROTOBUF_NAMESPACE_ID::DynamicCastToGenerated<S_BOSS_EVENT>(
+          &from);
+  if (source == nullptr) {
+  // @@protoc_insertion_point(generalized_merge_from_cast_fail:Protocol.S_BOSS_EVENT)
+    ::PROTOBUF_NAMESPACE_ID::internal::ReflectionOps::Merge(from, this);
+  } else {
+  // @@protoc_insertion_point(generalized_merge_from_cast_success:Protocol.S_BOSS_EVENT)
+    MergeFrom(*source);
+  }
+}
+
+void S_BOSS_EVENT::MergeFrom(const S_BOSS_EVENT& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:Protocol.S_BOSS_EVENT)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.monsterid() != 0) {
+    _internal_set_monsterid(from._internal_monsterid());
+  }
+  if (from.eventtype() != 0) {
+    _internal_set_eventtype(from._internal_eventtype());
+  }
+  if (from.phaseindex() != 0) {
+    _internal_set_phaseindex(from._internal_phaseindex());
+  }
+}
+
+void S_BOSS_EVENT::CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
+// @@protoc_insertion_point(generalized_copy_from_start:Protocol.S_BOSS_EVENT)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void S_BOSS_EVENT::CopyFrom(const S_BOSS_EVENT& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:Protocol.S_BOSS_EVENT)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool S_BOSS_EVENT::IsInitialized() const {
+  return true;
+}
+
+void S_BOSS_EVENT::InternalSwap(S_BOSS_EVENT* other) {
+  using std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(S_BOSS_EVENT, phaseindex_)
+      + sizeof(S_BOSS_EVENT::phaseindex_)
+      - PROTOBUF_FIELD_OFFSET(S_BOSS_EVENT, monsterid_)>(
+          reinterpret_cast<char*>(&monsterid_),
+          reinterpret_cast<char*>(&other->monsterid_));
+}
+
+::PROTOBUF_NAMESPACE_ID::Metadata S_BOSS_EVENT::GetMetadata() const {
+  return ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(
+      &descriptor_table_Protocol_2eproto_getter, &descriptor_table_Protocol_2eproto_once,
+      file_level_metadata_Protocol_2eproto[24]);
+}
+
 // @@protoc_insertion_point(namespace_scope)
 }  // namespace Protocol
 PROTOBUF_NAMESPACE_OPEN
@@ -6963,6 +7214,9 @@ template<> PROTOBUF_NOINLINE ::Protocol::S_MONSTER_DAMAGE* Arena::CreateMaybeMes
 }
 template<> PROTOBUF_NOINLINE ::Protocol::S_ROOM_CLEARED* Arena::CreateMaybeMessage< ::Protocol::S_ROOM_CLEARED >(Arena* arena) {
   return Arena::CreateMessageInternal< ::Protocol::S_ROOM_CLEARED >(arena);
+}
+template<> PROTOBUF_NOINLINE ::Protocol::S_BOSS_EVENT* Arena::CreateMaybeMessage< ::Protocol::S_BOSS_EVENT >(Arena* arena) {
+  return Arena::CreateMessageInternal< ::Protocol::S_BOSS_EVENT >(arena);
 }
 PROTOBUF_NAMESPACE_CLOSE
 

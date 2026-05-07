@@ -384,3 +384,24 @@ bool Handle_S_ROOM_CLEARED(PacketSessionRef& session, Protocol::S_ROOM_CLEARED& 
     }
     return true;
 }
+
+// 보스 이벤트/컷씬 처리
+bool Handle_S_BOSS_EVENT(PacketSessionRef& session, Protocol::S_BOSS_EVENT& pkt)
+{
+    uint64 monsterId = pkt.monsterid();
+    Protocol::BossEventType eventType = pkt.eventtype();
+    uint32 phaseIndex = pkt.phaseindex();
+
+    char buf[256];
+    sprintf_s(buf,
+        "[Network] S_BOSS_EVENT received: monsterId=%llu eventType=%d phaseIndex=%u",
+        monsterId,
+        static_cast<int>(eventType),
+        phaseIndex);
+    WriteNetworkLog(buf);
+
+    // 아직 클라 컷씬 연결은 하지 않고, 수신 로그만 확인
+    // 이후 NetworkManager::QueueBossEvent(...)로 연결 예정
+
+    return true;
+}

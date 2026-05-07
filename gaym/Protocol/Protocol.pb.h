@@ -48,7 +48,7 @@ struct TableStruct_Protocol_2eproto {
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::AuxiliaryParseTableField aux[]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
-  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[24]
+  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[25]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::FieldMetadata field_metadata[];
   static const ::PROTOBUF_NAMESPACE_ID::internal::SerializationTable serialization_table[];
@@ -83,6 +83,9 @@ extern C_TORCH_INTERACTDefaultTypeInternal _C_TORCH_INTERACT_default_instance_;
 class MonsterInfo;
 struct MonsterInfoDefaultTypeInternal;
 extern MonsterInfoDefaultTypeInternal _MonsterInfo_default_instance_;
+class S_BOSS_EVENT;
+struct S_BOSS_EVENTDefaultTypeInternal;
+extern S_BOSS_EVENTDefaultTypeInternal _S_BOSS_EVENT_default_instance_;
 class S_CHAT;
 struct S_CHATDefaultTypeInternal;
 extern S_CHATDefaultTypeInternal _S_CHAT_default_instance_;
@@ -139,6 +142,7 @@ template<> ::Protocol::C_PORTAL_INTERACT* Arena::CreateMaybeMessage<::Protocol::
 template<> ::Protocol::C_SKILL* Arena::CreateMaybeMessage<::Protocol::C_SKILL>(Arena*);
 template<> ::Protocol::C_TORCH_INTERACT* Arena::CreateMaybeMessage<::Protocol::C_TORCH_INTERACT>(Arena*);
 template<> ::Protocol::MonsterInfo* Arena::CreateMaybeMessage<::Protocol::MonsterInfo>(Arena*);
+template<> ::Protocol::S_BOSS_EVENT* Arena::CreateMaybeMessage<::Protocol::S_BOSS_EVENT>(Arena*);
 template<> ::Protocol::S_CHAT* Arena::CreateMaybeMessage<::Protocol::S_CHAT>(Arena*);
 template<> ::Protocol::S_DESPAWN* Arena::CreateMaybeMessage<::Protocol::S_DESPAWN>(Arena*);
 template<> ::Protocol::S_ENTER_GAME* Arena::CreateMaybeMessage<::Protocol::S_ENTER_GAME>(Arena*);
@@ -3614,28 +3618,18 @@ class C_PLAYER_ATTACK final :
   // accessors -------------------------------------------------------
 
   enum : int {
-    kPlayerIdFieldNumber = 1,
-    kSkillTypeFieldNumber = 2,
-    kXFieldNumber = 3,
-    kYFieldNumber = 4,
-    kZFieldNumber = 5,
-    kDirXFieldNumber = 6,
-    kDirYFieldNumber = 7,
-    kDirZFieldNumber = 8,
-    kTargetXFieldNumber = 9,
-    kTargetYFieldNumber = 10,
-    kTargetZFieldNumber = 11,
+    kSkillTypeFieldNumber = 1,
+    kXFieldNumber = 2,
+    kYFieldNumber = 3,
+    kZFieldNumber = 4,
+    kDirXFieldNumber = 5,
+    kDirYFieldNumber = 6,
+    kDirZFieldNumber = 7,
+    kTargetXFieldNumber = 8,
+    kTargetYFieldNumber = 9,
+    kTargetZFieldNumber = 10,
   };
-  // uint64 playerId = 1;
-  void clear_playerid();
-  ::PROTOBUF_NAMESPACE_ID::uint64 playerid() const;
-  void set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value);
-  private:
-  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_playerid() const;
-  void _internal_set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value);
-  public:
-
-  // .Protocol.SkillType skillType = 2;
+  // .Protocol.SkillType skillType = 1;
   void clear_skilltype();
   ::Protocol::SkillType skilltype() const;
   void set_skilltype(::Protocol::SkillType value);
@@ -3644,7 +3638,7 @@ class C_PLAYER_ATTACK final :
   void _internal_set_skilltype(::Protocol::SkillType value);
   public:
 
-  // float x = 3;
+  // float x = 2;
   void clear_x();
   float x() const;
   void set_x(float value);
@@ -3653,7 +3647,7 @@ class C_PLAYER_ATTACK final :
   void _internal_set_x(float value);
   public:
 
-  // float y = 4;
+  // float y = 3;
   void clear_y();
   float y() const;
   void set_y(float value);
@@ -3662,7 +3656,7 @@ class C_PLAYER_ATTACK final :
   void _internal_set_y(float value);
   public:
 
-  // float z = 5;
+  // float z = 4;
   void clear_z();
   float z() const;
   void set_z(float value);
@@ -3671,7 +3665,7 @@ class C_PLAYER_ATTACK final :
   void _internal_set_z(float value);
   public:
 
-  // float dirX = 6;
+  // float dirX = 5;
   void clear_dirx();
   float dirx() const;
   void set_dirx(float value);
@@ -3680,7 +3674,7 @@ class C_PLAYER_ATTACK final :
   void _internal_set_dirx(float value);
   public:
 
-  // float dirY = 7;
+  // float dirY = 6;
   void clear_diry();
   float diry() const;
   void set_diry(float value);
@@ -3689,7 +3683,7 @@ class C_PLAYER_ATTACK final :
   void _internal_set_diry(float value);
   public:
 
-  // float dirZ = 8;
+  // float dirZ = 7;
   void clear_dirz();
   float dirz() const;
   void set_dirz(float value);
@@ -3698,7 +3692,7 @@ class C_PLAYER_ATTACK final :
   void _internal_set_dirz(float value);
   public:
 
-  // float targetX = 9;
+  // float targetX = 8;
   void clear_targetx();
   float targetx() const;
   void set_targetx(float value);
@@ -3707,7 +3701,7 @@ class C_PLAYER_ATTACK final :
   void _internal_set_targetx(float value);
   public:
 
-  // float targetY = 10;
+  // float targetY = 9;
   void clear_targety();
   float targety() const;
   void set_targety(float value);
@@ -3716,7 +3710,7 @@ class C_PLAYER_ATTACK final :
   void _internal_set_targety(float value);
   public:
 
-  // float targetZ = 11;
+  // float targetZ = 10;
   void clear_targetz();
   float targetz() const;
   void set_targetz(float value);
@@ -3732,7 +3726,6 @@ class C_PLAYER_ATTACK final :
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
-  ::PROTOBUF_NAMESPACE_ID::uint64 playerid_;
   int skilltype_;
   float x_;
   float y_;
@@ -4073,6 +4066,160 @@ class S_ROOM_CLEARED final :
   typedef void DestructorSkippable_;
   ::PROTOBUF_NAMESPACE_ID::uint32 stageindex_;
   ::PROTOBUF_NAMESPACE_ID::uint32 roomindex_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_Protocol_2eproto;
+};
+// -------------------------------------------------------------------
+
+class S_BOSS_EVENT final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_BOSS_EVENT) */ {
+ public:
+  inline S_BOSS_EVENT() : S_BOSS_EVENT(nullptr) {}
+  ~S_BOSS_EVENT() override;
+  explicit constexpr S_BOSS_EVENT(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_BOSS_EVENT(const S_BOSS_EVENT& from);
+  S_BOSS_EVENT(S_BOSS_EVENT&& from) noexcept
+    : S_BOSS_EVENT() {
+    *this = ::std::move(from);
+  }
+
+  inline S_BOSS_EVENT& operator=(const S_BOSS_EVENT& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_BOSS_EVENT& operator=(S_BOSS_EVENT&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_BOSS_EVENT& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_BOSS_EVENT* internal_default_instance() {
+    return reinterpret_cast<const S_BOSS_EVENT*>(
+               &_S_BOSS_EVENT_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    24;
+
+  friend void swap(S_BOSS_EVENT& a, S_BOSS_EVENT& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_BOSS_EVENT* other) {
+    if (other == this) return;
+    if (GetOwningArena() == other->GetOwningArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_BOSS_EVENT* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline S_BOSS_EVENT* New() const final {
+    return new S_BOSS_EVENT();
+  }
+
+  S_BOSS_EVENT* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<S_BOSS_EVENT>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const S_BOSS_EVENT& from);
+  void MergeFrom(const S_BOSS_EVENT& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_BOSS_EVENT* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_BOSS_EVENT";
+  }
+  protected:
+  explicit S_BOSS_EVENT(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kMonsterIdFieldNumber = 1,
+    kEventTypeFieldNumber = 2,
+    kPhaseIndexFieldNumber = 3,
+  };
+  // uint64 monsterId = 1;
+  void clear_monsterid();
+  ::PROTOBUF_NAMESPACE_ID::uint64 monsterid() const;
+  void set_monsterid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_monsterid() const;
+  void _internal_set_monsterid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
+  // .Protocol.BossEventType eventType = 2;
+  void clear_eventtype();
+  ::Protocol::BossEventType eventtype() const;
+  void set_eventtype(::Protocol::BossEventType value);
+  private:
+  ::Protocol::BossEventType _internal_eventtype() const;
+  void _internal_set_eventtype(::Protocol::BossEventType value);
+  public:
+
+  // uint32 phaseIndex = 3;
+  void clear_phaseindex();
+  ::PROTOBUF_NAMESPACE_ID::uint32 phaseindex() const;
+  void set_phaseindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_phaseindex() const;
+  void _internal_set_phaseindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_BOSS_EVENT)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 monsterid_;
+  int eventtype_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 phaseindex_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -5784,27 +5931,7 @@ inline void S_PLAYER_DAMAGE::set_attackermonsterid(::PROTOBUF_NAMESPACE_ID::uint
 
 // C_PLAYER_ATTACK
 
-// uint64 playerId = 1;
-inline void C_PLAYER_ATTACK::clear_playerid() {
-  playerid_ = uint64_t{0u};
-}
-inline ::PROTOBUF_NAMESPACE_ID::uint64 C_PLAYER_ATTACK::_internal_playerid() const {
-  return playerid_;
-}
-inline ::PROTOBUF_NAMESPACE_ID::uint64 C_PLAYER_ATTACK::playerid() const {
-  // @@protoc_insertion_point(field_get:Protocol.C_PLAYER_ATTACK.playerId)
-  return _internal_playerid();
-}
-inline void C_PLAYER_ATTACK::_internal_set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
-  
-  playerid_ = value;
-}
-inline void C_PLAYER_ATTACK::set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
-  _internal_set_playerid(value);
-  // @@protoc_insertion_point(field_set:Protocol.C_PLAYER_ATTACK.playerId)
-}
-
-// .Protocol.SkillType skillType = 2;
+// .Protocol.SkillType skillType = 1;
 inline void C_PLAYER_ATTACK::clear_skilltype() {
   skilltype_ = 0;
 }
@@ -5824,7 +5951,7 @@ inline void C_PLAYER_ATTACK::set_skilltype(::Protocol::SkillType value) {
   // @@protoc_insertion_point(field_set:Protocol.C_PLAYER_ATTACK.skillType)
 }
 
-// float x = 3;
+// float x = 2;
 inline void C_PLAYER_ATTACK::clear_x() {
   x_ = 0;
 }
@@ -5844,7 +5971,7 @@ inline void C_PLAYER_ATTACK::set_x(float value) {
   // @@protoc_insertion_point(field_set:Protocol.C_PLAYER_ATTACK.x)
 }
 
-// float y = 4;
+// float y = 3;
 inline void C_PLAYER_ATTACK::clear_y() {
   y_ = 0;
 }
@@ -5864,7 +5991,7 @@ inline void C_PLAYER_ATTACK::set_y(float value) {
   // @@protoc_insertion_point(field_set:Protocol.C_PLAYER_ATTACK.y)
 }
 
-// float z = 5;
+// float z = 4;
 inline void C_PLAYER_ATTACK::clear_z() {
   z_ = 0;
 }
@@ -5884,7 +6011,7 @@ inline void C_PLAYER_ATTACK::set_z(float value) {
   // @@protoc_insertion_point(field_set:Protocol.C_PLAYER_ATTACK.z)
 }
 
-// float dirX = 6;
+// float dirX = 5;
 inline void C_PLAYER_ATTACK::clear_dirx() {
   dirx_ = 0;
 }
@@ -5904,7 +6031,7 @@ inline void C_PLAYER_ATTACK::set_dirx(float value) {
   // @@protoc_insertion_point(field_set:Protocol.C_PLAYER_ATTACK.dirX)
 }
 
-// float dirY = 7;
+// float dirY = 6;
 inline void C_PLAYER_ATTACK::clear_diry() {
   diry_ = 0;
 }
@@ -5924,7 +6051,7 @@ inline void C_PLAYER_ATTACK::set_diry(float value) {
   // @@protoc_insertion_point(field_set:Protocol.C_PLAYER_ATTACK.dirY)
 }
 
-// float dirZ = 8;
+// float dirZ = 7;
 inline void C_PLAYER_ATTACK::clear_dirz() {
   dirz_ = 0;
 }
@@ -5944,7 +6071,7 @@ inline void C_PLAYER_ATTACK::set_dirz(float value) {
   // @@protoc_insertion_point(field_set:Protocol.C_PLAYER_ATTACK.dirZ)
 }
 
-// float targetX = 9;
+// float targetX = 8;
 inline void C_PLAYER_ATTACK::clear_targetx() {
   targetx_ = 0;
 }
@@ -5964,7 +6091,7 @@ inline void C_PLAYER_ATTACK::set_targetx(float value) {
   // @@protoc_insertion_point(field_set:Protocol.C_PLAYER_ATTACK.targetX)
 }
 
-// float targetY = 10;
+// float targetY = 9;
 inline void C_PLAYER_ATTACK::clear_targety() {
   targety_ = 0;
 }
@@ -5984,7 +6111,7 @@ inline void C_PLAYER_ATTACK::set_targety(float value) {
   // @@protoc_insertion_point(field_set:Protocol.C_PLAYER_ATTACK.targetY)
 }
 
-// float targetZ = 11;
+// float targetZ = 10;
 inline void C_PLAYER_ATTACK::clear_targetz() {
   targetz_ = 0;
 }
@@ -6172,9 +6299,75 @@ inline void S_ROOM_CLEARED::set_roomindex(::PROTOBUF_NAMESPACE_ID::uint32 value)
   // @@protoc_insertion_point(field_set:Protocol.S_ROOM_CLEARED.roomIndex)
 }
 
+// -------------------------------------------------------------------
+
+// S_BOSS_EVENT
+
+// uint64 monsterId = 1;
+inline void S_BOSS_EVENT::clear_monsterid() {
+  monsterid_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_BOSS_EVENT::_internal_monsterid() const {
+  return monsterid_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_BOSS_EVENT::monsterid() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_BOSS_EVENT.monsterId)
+  return _internal_monsterid();
+}
+inline void S_BOSS_EVENT::_internal_set_monsterid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  monsterid_ = value;
+}
+inline void S_BOSS_EVENT::set_monsterid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_monsterid(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_BOSS_EVENT.monsterId)
+}
+
+// .Protocol.BossEventType eventType = 2;
+inline void S_BOSS_EVENT::clear_eventtype() {
+  eventtype_ = 0;
+}
+inline ::Protocol::BossEventType S_BOSS_EVENT::_internal_eventtype() const {
+  return static_cast< ::Protocol::BossEventType >(eventtype_);
+}
+inline ::Protocol::BossEventType S_BOSS_EVENT::eventtype() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_BOSS_EVENT.eventType)
+  return _internal_eventtype();
+}
+inline void S_BOSS_EVENT::_internal_set_eventtype(::Protocol::BossEventType value) {
+  
+  eventtype_ = value;
+}
+inline void S_BOSS_EVENT::set_eventtype(::Protocol::BossEventType value) {
+  _internal_set_eventtype(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_BOSS_EVENT.eventType)
+}
+
+// uint32 phaseIndex = 3;
+inline void S_BOSS_EVENT::clear_phaseindex() {
+  phaseindex_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_BOSS_EVENT::_internal_phaseindex() const {
+  return phaseindex_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_BOSS_EVENT::phaseindex() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_BOSS_EVENT.phaseIndex)
+  return _internal_phaseindex();
+}
+inline void S_BOSS_EVENT::_internal_set_phaseindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  phaseindex_ = value;
+}
+inline void S_BOSS_EVENT::set_phaseindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_phaseindex(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_BOSS_EVENT.phaseIndex)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
