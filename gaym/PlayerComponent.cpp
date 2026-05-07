@@ -1,5 +1,6 @@
 ﻿#include "stdafx.h"
 #include "PlayerComponent.h"
+#include "CharacterData.h"
 #include "InputSystem.h" // Needed for InputSystem
 #include "GameObject.h" // Needed for GameObject
 #include "TransformComponent.h" // Needed for TransformComponent
@@ -16,6 +17,21 @@
 PlayerComponent::PlayerComponent(GameObject* pOwner)
     : Component(pOwner)
 {
+}
+
+void PlayerComponent::SetElementType(ElementType e)
+{
+    m_elementType = e;
+    const CharacterData& cd = GetCharacterData(e);
+
+    m_fMaxHP       = cd.baseHP;
+    m_fCurrentHP   = cd.baseHP;
+    m_fMoveSpeed   = cd.moveSpeed;
+    m_fDashCooldown  = cd.dashCooldown;
+    m_fDashDuration  = cd.dashDuration;
+    m_fDashSpeedMult = cd.dashSpeedMult;
+    m_dashCoreColor  = cd.dashCoreColor;
+    m_dashEdgeColor  = cd.dashEdgeColor;
 }
 
 void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, CCamera* pCamera)
@@ -182,7 +198,7 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
 
     // --- Movement Logic (Camera-Relative) ---
 
-    float moveSpeed = 20.0f; // Increased speed for better feel
+    float moveSpeed = m_fMoveSpeed;
 
     // Get camera's axes and flatten them to the XZ plane (ground)
     // This makes WASD movement relative to the screen/camera view.
@@ -231,8 +247,8 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
         EffectLayer layer;
         layer.type          = EmitterType::Sphere;
         layer.particleCount = particleCount;
-        layer.coreColor     = { 0.35f, 0.75f, 1.0f, 1.0f };  // 시안-블루 코어
-        layer.edgeColor     = { 0.05f, 0.15f, 0.55f, 0.0f };  // 진청 → 투명
+        layer.coreColor     = m_dashCoreColor;
+        layer.edgeColor     = m_dashEdgeColor;
         layer.sizeScale     = 0.55f;
         layer.speedMin      = 1.5f;
         layer.speedMax      = 4.0f;
@@ -258,7 +274,7 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
         {
             dashVec = XMVector3Normalize(dashVec);
             XMStoreFloat3(&m_xmf3DashDir, dashVec);
-            m_fDashTimer = kDashDuration;
+            m_fDashTimer = m_fDashDuration;
             bDashStarted = true;
 
             // 시작 시 폭발적 Sphere Burst (즉시 18개 팡)
@@ -277,11 +293,11 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
         // 대쉬 진행: 방향 고정 + 부스트 속도
         m_fDashTimer -= deltaTime;
         XMVECTOR dashVec = XMLoadFloat3(&m_xmf3DashDir);
-        displacement = dashVec * (moveSpeed * kDashSpeedMult) * deltaTime;
+        displacement = dashVec * (moveSpeed * m_fDashSpeedMult) * deltaTime;
 
         // HitFlash 림 아웃라인으로 "블러/스피드" 연출 — 시작 즉시 풀 강도, 끝 직전에만 페이드
         //   t: 0 시작 → 1 끝. 80% 구간 1.0 유지, 마지막 20% easeOut
-        float t = 1.0f - fmaxf(0.0f, m_fDashTimer) / kDashDuration;
+        float t = 1.0f - fmaxf(0.0f, m_fDashTimer) / m_fDashDuration;
         float flash = (t < 0.8f) ? 1.0f : (1.0f - (t - 0.8f) / 0.2f);
         m_pOwner->SetHitFlashAll(flash);
 
@@ -300,7 +316,7 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
         if (m_fDashTimer <= 0.0f)
         {
             m_fDashTimer = 0.0f;
-            m_fDashCooldownRemain = kDashCooldown;
+            m_fDashCooldownRemain = m_fDashCooldown;
             m_fDashFlashTail = kDashFlashTail;
             m_fDashTrailAccum = 0.0f;
         }

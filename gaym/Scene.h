@@ -4,7 +4,8 @@
 #include <memory>
 #include <unordered_map>
 #include "GameObject.h"
-#include "SkillTypes.h"  // For ActivationType
+#include "SkillTypes.h"  // For ActivationType, ElementType
+#include "CharacterData.h"
 #include "Shader.h"
 #include "Mesh.h"
 #include "DescriptorHeap.h"
@@ -107,6 +108,10 @@ public:
     Scene();
     ~Scene();
 
+    // 씬 초기화 전에 호출하여 플레이어 원소(캐릭터)를 지정
+    void SetSelectedElement(ElementType e) { m_eSelectedElement = e; }
+    ElementType GetSelectedElement() const { return m_eSelectedElement; }
+
     void Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList);
     void LoadSceneFromFile(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList, const char* pstrFileName);
     void Update(float deltaTime, InputSystem* pInputSystem);
@@ -201,6 +206,9 @@ public:
     D3D12_GPU_VIRTUAL_ADDRESS GetPassCBVAddress() const { if(m_pd3dcbPass) return m_pd3dcbPass->GetGPUVirtualAddress(); return 0; }
 
 private:
+    // 캐릭터 선택 화면에서 결정된 플레이어 원소 (Init() 전에 SetSelectedElement로 설정)
+    ElementType m_eSelectedElement = ElementType::Water;
+
     float m_fTotalTime = 0.0f;
     float m_fLastDeltaTime = 0.016f;
     bool m_bInBossRoom = false;  // 보스 룸 여부 (클리어 시 다음 스테이지 전환)

@@ -5,6 +5,7 @@
 #include "HealthBarUI.h"
 #include "NetworkManager.h" // Added NetworkManager include
 #include "BloomPostProcess.h"
+#include "CharacterSelectScreen.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -15,6 +16,8 @@
 #include <ResourceUploadBatch.h>
 #include <GraphicsMemory.h>
 #include <DescriptorHeap.h>
+
+enum class AppState { CharacterSelect, Playing };
 
 class Dx12App
 {
@@ -118,6 +121,11 @@ private:
     void InitializeNetwork();
     void RenderText();
     void UpdateNetwork(float deltaTime);
+
+    // 앱 상태 (캐릭터 선택 → 게임 플레이)
+    AppState m_eAppState = AppState::CharacterSelect;
+    std::unique_ptr<CharacterSelectScreen> m_pCharSelect;
+    void InitSceneWithElement(ElementType e);  // 선택 확정 후 씬 초기화
 
     // Pause menu
     bool m_bShowPauseMenu = false;

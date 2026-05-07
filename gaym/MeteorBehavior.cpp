@@ -2,15 +2,28 @@
 #include "MeteorBehavior.h"
 #include "FluidSkillVFXManager.h"
 #include "EffectRegistry.h"
+#include "FluidParticle.h"
 #include "GameObject.h"
 #include "TransformComponent.h"
 #include "SkillComponent.h"
+#include "PlayerComponent.h"
 #include "Scene.h"
 #include "Room.h"
 #include "EnemyComponent.h"
 #include <cmath>
 #include <algorithm>
 #include <random>
+
+static void ApplyElementColors(EffectDef& def, ElementType e)
+{
+    FluidElementColor ec = FluidElementColors::Get(e);
+    def.element = e;
+    for (auto& l : def.layers) {
+        l.element   = e;
+        l.coreColor = ec.coreColor;
+        l.edgeColor = ec.edgeColor;
+    }
+}
 
 static constexpr float TWO_PI = 6.28318530718f;
 
@@ -50,6 +63,13 @@ void MeteorBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& target
                 XMVectorScale(look, METEOR_FORWARD_DIST));
             XMStoreFloat3(&targetPos, targetV);
         }
+    }
+
+    // 캐스터 원소 캡처
+    m_elementType = ElementType::Fire;
+    if (caster) {
+        if (auto* pPC = caster->GetComponent<PlayerComponent>())
+            m_elementType = pPC->GetElementType();
     }
 
     // 상태 초기화
@@ -95,6 +115,7 @@ void MeteorBehavior::SpawnSmallMeteor()
 
     XMFLOAT3 upDir = { 0.f, 1.f, 0.f };
     EffectDef trailDef = EffectRegistry::Get().GetEffect("R_MeteorSmallTrail");
+    ApplyElementColors(trailDef, m_elementType);
     if (!trailDef.layers.empty())
         sm.trailVfxId = m_pVFXManager->SpawnEffectLayer(
             sm.spawnPos, upDir, trailDef.name, trailDef.layers[0], true);
@@ -175,6 +196,7 @@ void MeteorBehavior::OnSmallImpact(SmallMeteorData& sm)
         }
         XMFLOAT3 up = { 0.f, 1.f, 0.f };
         EffectDef impDef = EffectRegistry::Get().GetEffect("R_MeteorSmallImpact");
+        ApplyElementColors(impDef, m_elementType);
         m_pVFXManager->SpawnEffectDef(sm.targetPos, up, impDef, true);
     }
 
@@ -194,11 +216,13 @@ void MeteorBehavior::SpawnFinalMeteor()
     XMFLOAT3 upDir  = { 0.f, 1.f, 0.f };
 
     EffectDef trailDef = EffectRegistry::Get().GetEffect("R_MeteorTrail");
+    ApplyElementColors(trailDef, m_elementType);
     if (!trailDef.layers.empty())
         m_finalTrailId = m_pVFXManager->SpawnEffectLayer(
             m_finalSpawnPos, upDir, trailDef.name, trailDef.layers[0], true);
 
     EffectDef outerDef = EffectRegistry::Get().GetEffect("R_MeteorTrailOuter");
+    ApplyElementColors(outerDef, m_elementType);
     if (!outerDef.layers.empty())
         m_finalOuterId = m_pVFXManager->SpawnEffectLayer(
             m_finalSpawnPos, upDir, outerDef.name, outerDef.layers[0], true);
@@ -219,8 +243,10 @@ void MeteorBehavior::OnFinalImpact()
 
         XMFLOAT3 up = { 0.f, 1.f, 0.f };
         EffectDef impDef  = EffectRegistry::Get().GetEffect("R_MeteorImpact");
+        ApplyElementColors(impDef, m_elementType);
         m_finalImpactId = m_pVFXManager->SpawnEffectDef(m_targetPos, up, impDef, true);
         EffectDef fireDef = EffectRegistry::Get().GetEffect("R_MeteorGroundFire");
+        ApplyElementColors(fireDef, m_elementType);
         m_finalGroundId = m_pVFXManager->SpawnEffectDef(m_targetPos, up, fireDef, true);
     }
 

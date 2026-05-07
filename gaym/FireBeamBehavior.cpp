@@ -2,12 +2,25 @@
 #include "FireBeamBehavior.h"
 #include "FluidSkillVFXManager.h"
 #include "EffectRegistry.h"
+#include "FluidParticle.h"
 #include "GameObject.h"
 #include "TransformComponent.h"
 #include "SkillComponent.h"
+#include "PlayerComponent.h"
 #include "Scene.h"
 #include "Room.h"
 #include "EnemyComponent.h"
+
+static void ApplyElementColors(EffectDef& def, ElementType e)
+{
+    FluidElementColor ec = FluidElementColors::Get(e);
+    def.element = e;
+    for (auto& l : def.layers) {
+        l.element   = e;
+        l.coreColor = ec.coreColor;
+        l.edgeColor = ec.edgeColor;
+    }
+}
 
 // 코어 빔: swirlSpeed=0, 좁은 spreadRadius → 빔 축을 따라 빽빽하게 흐르는 직선
 EffectDef FireBeamBehavior::BuildCoreBeamDef()
@@ -157,7 +170,7 @@ void FireBeamBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
         if (caster && caster->GetTransform())
         {
             origin = caster->GetTransform()->GetPosition();
-            origin.y += 1.5f;
+            origin.y += 5.0f;
 
             XMVECTOR originV = XMLoadFloat3(&origin);
             XMVECTOR targetV = XMLoadFloat3(&targetPosition);
@@ -177,9 +190,22 @@ void FireBeamBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
                 XMVectorScale(dirV, 1.3f)));
         }
 
-        m_vfxCoreId  = m_pVFXManager->SpawnEffectDef(origin, direction, BuildCoreBeamDef(), true);
-        m_vfxSwirlId = m_pVFXManager->SpawnEffectDef(origin, direction, BuildSwirlDef(), true);
-        m_vfxBurstId = m_pVFXManager->SpawnEffectDef(origin, direction, BuildBurstDef(), true);
+        ElementType elemType = ElementType::Fire;
+        if (caster) {
+            if (auto* pPC = caster->GetComponent<PlayerComponent>())
+                elemType = pPC->GetElementType();
+        }
+
+        EffectDef coreDef  = BuildCoreBeamDef();
+        EffectDef swirlDef = BuildSwirlDef();
+        EffectDef burstDef = BuildBurstDef();
+        ApplyElementColors(coreDef,  elemType);
+        ApplyElementColors(swirlDef, elemType);
+        ApplyElementColors(burstDef, elemType);
+
+        m_vfxCoreId  = m_pVFXManager->SpawnEffectDef(origin, direction, coreDef,  true);
+        m_vfxSwirlId = m_pVFXManager->SpawnEffectDef(origin, direction, swirlDef, true);
+        m_vfxBurstId = m_pVFXManager->SpawnEffectDef(origin, direction, burstDef, true);
 
         // 서브 파티클 VFX 스폰 (EffectRegistry sub_* 이펙트)
         m_subVFXIds.clear();
@@ -209,7 +235,7 @@ void FireBeamBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
         if (caster && caster->GetTransform())
         {
             XMFLOAT3 origin = caster->GetTransform()->GetPosition();
-            origin.y += 1.5f;
+            origin.y += 5.0f;
 
             XMVECTOR originV = XMLoadFloat3(&origin);
             XMVECTOR targetV = XMLoadFloat3(&targetPosition);

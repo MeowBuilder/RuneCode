@@ -4,6 +4,7 @@
 #include "GameObject.h"
 #include "TransformComponent.h"
 #include "SkillComponent.h"
+#include "PlayerComponent.h"
 
 FireballBehavior::FireballBehavior()
     : m_SkillData(FireSkillPresets::Fireball())
@@ -24,7 +25,7 @@ void FireballBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
     if (caster && caster->GetTransform())
     {
         m_StartPosition = caster->GetTransform()->GetPosition();
-        m_StartPosition.y += 1.5f;  // Chest height
+        m_StartPosition.y += 5.0f;
     }
 
     // Handle different activation modes based on damageMultiplier
@@ -95,6 +96,12 @@ void FireballBehavior::ExecuteInstant(GameObject* caster, const DirectX::XMFLOAT
         L"[Skill] %hs: Damage=%.0f, Multiplier=%.1fx, Scale=%.1f\n",
         m_SkillData.name.c_str(), finalDamage, damageMultiplier, scale);
     OutputDebugString(buffer);
+
+    // 캐스터 원소 동기화
+    if (caster) {
+        if (auto* pPC = caster->GetComponent<PlayerComponent>())
+            m_SkillData.element = pPC->GetElementType();
+    }
 
     // 룬 스탯 및 VFX 콤보 읽기
     RuneCombo combo;

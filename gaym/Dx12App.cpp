@@ -151,27 +151,28 @@ void Dx12App::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
     m_pBloom = std::make_unique<BloomPostProcess>();
     m_pBloom->Init(m_pd3dDevice.Get(), m_nWndClientWidth, m_nWndClientHeight);
 
-    // CommandList를 열고 리소스 생성을 기록합니다.
-    CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
-
-    m_pScene = std::make_unique<Scene>();
-    m_pScene->Init(m_pd3dDevice.Get(), m_pd3dCommandList.Get());
-
-    // Create Shadow Map SRV in Scene's descriptor heap
-    CreateShadowMapSRV();
-
-    // Update persistent descriptor watermark to include Shadow Map SRV
-    // This prevents it from being overwritten during map transitions
-    m_pScene->UpdatePersistentDescriptorEnd();
-
-    // CommandList를 닫고 실행하여 리소스 업로드를 완료합니다.
-    CHECK_HR(m_pd3dCommandList->Close());
-    ID3D12CommandList* ppd3dCommandLists[] = { m_pd3dCommandList.Get() };
-    m_pd3dCommandQueue->ExecuteCommandLists(_countof(ppd3dCommandLists), ppd3dCommandLists);
-    WaitForGpuComplete();
-
-    // 텍스트 렌더링 초기화
+    // 텍스트 렌더링 먼저 초기화 (캐릭터 선택 화면에서 사용)
     InitializeText();
+
+    // 캐릭터 선택 화면 초기화
+    //   폰트 디스크립터 힙 슬롯 3 = 흰 픽셀 텍스처 (배경 사각형용)
+    //   슬롯 0=폰트, 1=HP바 base, 2=HP바 fill, 3=흰 픽셀
+    {
+        CHECK_HR(m_pd3dCommandAllocator->Reset());
+        CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
+
+        m_pCharSelect = std::make_unique<CharacterSelectScreen>();
+        m_pCharSelect->Initialize(m_pd3dDevice.Get(), m_pd3dCommandList.Get(),
+                                   m_fontDescriptorHeap.get(), 3,
+                                   m_pd3dCommandQueue.Get());
+
+        CHECK_HR(m_pd3dCommandList->Close());
+        ID3D12CommandList* lists[] = { m_pd3dCommandList.Get() };
+        m_pd3dCommandQueue->ExecuteCommandLists(_countof(lists), lists);
+        WaitForGpuComplete();
+    }
+
+    m_eAppState = AppState::CharacterSelect;
 
     // 네트워크 초기화
     InitializeNetwork();
@@ -452,9 +453,77 @@ void Dx12App::UpdateFrameRate()
 void Dx12App::FrameAdvance()
 {
     m_GameTimer.Tick();
+    float deltaTime = m_GameTimer.GetTimeElapsed();
+
+    // ── 캐릭터 선택 화면 ────────────────────────────────────────────────────
+    if (m_eAppState == AppState::CharacterSelect)
+    {
+        if (m_pCharSelect)
+            m_pCharSelect->Update(m_inputSystem, (float)m_nWndClientWidth, (float)m_nWndClientHeight, deltaTime);
+
+        WaitForGpuComplete();
+        CHECK_HR(m_pd3dCommandAllocator->Reset());
+        CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
+
+        // 선택 확정 → 씬 초기화 (명령 리스트는 내부에서 열고 닫음)
+        if (m_pCharSelect && m_pCharSelect->IsConfirmed())
+        {
+            ElementType selected = m_pCharSelect->GetSelectedElement();
+            CHECK_HR(m_pd3dCommandList->Close());  // 현재 열린 것 닫기
+            InitSceneWithElement(selected);        // 내부에서 열고 닫음
+            return;                                // 다음 프레임부터 Playing
+        }
+
+        // 배경을 단색으로 지우고 캐릭터 선택 UI만 렌더
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        barrier.Transition.pResource   = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        m_pd3dCommandList->ResourceBarrier(1, &barrier);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = m_pd3dRtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        rtv.ptr += m_nSwapChainBufferIndex * m_nRtvDescriptorIncrementSize;
+        float clearColor[4] = { 0.05f, 0.05f, 0.08f, 1.0f };
+        m_pd3dCommandList->ClearRenderTargetView(rtv, clearColor, 0, nullptr);
+        m_pd3dCommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+
+        D3D12_VIEWPORT vp = { 0, 0, (float)m_nWndClientWidth, (float)m_nWndClientHeight, 0, 1 };
+        m_pd3dCommandList->RSSetViewports(1, &vp);
+        D3D12_RECT sc = { 0, 0, (LONG)m_nWndClientWidth, (LONG)m_nWndClientHeight };
+        m_pd3dCommandList->RSSetScissorRects(1, &sc);
+
+        // SpriteBatch로 선택 UI 렌더
+        if (m_pCharSelect && m_spriteBatch && m_spriteFont)
+        {
+            ID3D12DescriptorHeap* heaps[] = { m_fontDescriptorHeap->Heap() };
+            m_pd3dCommandList->SetDescriptorHeaps(1, heaps);
+            m_spriteBatch->Begin(m_pd3dCommandList.Get());
+            m_pCharSelect->Render(m_spriteBatch.get(), m_spriteFont.get(),
+                (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+            m_spriteBatch->End();
+        }
+
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
+        m_pd3dCommandList->ResourceBarrier(1, &barrier);
+
+        CHECK_HR(m_pd3dCommandList->Close());
+        ID3D12CommandList* lists[] = { m_pd3dCommandList.Get() };
+        m_pd3dCommandQueue->ExecuteCommandLists(_countof(lists), lists);
+        m_pdxgiSwapChain->Present(1, 0);
+        m_nSwapChainBufferIndex = m_pdxgiSwapChain->GetCurrentBackBufferIndex();
+
+        if (m_graphicsMemory) m_graphicsMemory->Commit(m_pd3dCommandQueue.Get());
+        UpdateFrameRate();
+        return;
+    }
+
+    // ── 게임 플레이 ─────────────────────────────────────────────────────────
 
     // 네트워크 업데이트 (GPU 대기 전에 수행)
-    float deltaTime = m_GameTimer.GetTimeElapsed();
     UpdateNetwork(deltaTime);
 
     WaitForGpuComplete();
@@ -1008,12 +1077,13 @@ void Dx12App::InitializeText()
     // GraphicsMemory 초기화
     m_graphicsMemory = std::make_unique<DirectX::GraphicsMemory>(m_pd3dDevice.Get());
 
-    // 폰트용 디스크립터 힙 생성 (폰트 1개 + 체력바 텍스처 2개 = 3개)
+    // 폰트용 디스크립터 힙 생성
+    //   [0] 폰트, [1] HP바 base, [2] HP바 fill, [3] 캐릭터선택 흰픽셀
     m_fontDescriptorHeap = std::make_unique<DirectX::DescriptorHeap>(
         m_pd3dDevice.Get(),
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-        3  // 폰트 1개 + 체력바 base 1개 + 체력바 fill 1개
+        4
     );
 
     // 리소스 업로드 배치
@@ -1762,6 +1832,27 @@ void Dx12App::RenderText()
     RenderPauseMenu();
 
     m_spriteBatch->End();
+}
+
+void Dx12App::InitSceneWithElement(ElementType e)
+{
+    WaitForGpuComplete();
+    CHECK_HR(m_pd3dCommandAllocator->Reset());
+    CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
+
+    m_pScene = std::make_unique<Scene>();
+    m_pScene->SetSelectedElement(e);
+    m_pScene->Init(m_pd3dDevice.Get(), m_pd3dCommandList.Get());
+
+    CreateShadowMapSRV();
+    m_pScene->UpdatePersistentDescriptorEnd();
+
+    CHECK_HR(m_pd3dCommandList->Close());
+    ID3D12CommandList* ppd3dCommandLists[] = { m_pd3dCommandList.Get() };
+    m_pd3dCommandQueue->ExecuteCommandLists(_countof(ppd3dCommandLists), ppd3dCommandLists);
+    WaitForGpuComplete();
+
+    m_eAppState = AppState::Playing;
 }
 
 void Dx12App::InitializeNetwork()

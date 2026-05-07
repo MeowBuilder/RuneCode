@@ -1,5 +1,6 @@
 #pragma once
 #include "Component.h"
+#include "SkillTypes.h"  // ElementType
 
 class InputSystem; // Forward declaration for InputSystem
 class CCamera;     // Forward declaration for CCamera
@@ -14,9 +15,13 @@ public:
 
     void PlayerUpdate(float deltaTime, InputSystem* pInputSystem, CCamera* pCamera);
 
+    // 캐릭터 원소 설정 (씬 초기화 직후 호출)
+    void SetElementType(ElementType e);
+    ElementType GetElementType() const { return m_elementType; }
+
     // Dash state query (for VFX / i-frame 판정)
     bool IsDashing() const { return m_fDashTimer > 0.0f; }
-    float GetDashCooldownRatio() const { return (kDashCooldown > 0.0f) ? (m_fDashCooldownRemain / kDashCooldown) : 0.0f; }
+    float GetDashCooldownRatio() const { return (m_fDashCooldown > 0.0f) ? (m_fDashCooldownRemain / m_fDashCooldown) : 0.0f; }
 
     // HP System
     void TakeDamage(float fDamage);
@@ -56,6 +61,16 @@ public:
     bool IsFallZoneActive() const { return m_bFallZoneActive; }
 
 private:
+    // ─── 캐릭터 원소 ──────────────────────────────────────────────────────────
+    ElementType m_elementType    = ElementType::Water;
+    XMFLOAT4    m_dashCoreColor  = { 0.35f, 0.75f, 1.0f, 1.0f };
+    XMFLOAT4    m_dashEdgeColor  = { 0.05f, 0.15f, 0.55f, 0.0f };
+    float       m_fMoveSpeed     = 20.0f;   // 기본값; SetElementType 으로 덮어씀
+    float       m_fDashCooldown  = 1.2f;    // 기본값 (Water); SetElementType 으로 덮어씀
+    float       m_fDashDuration  = 0.25f;
+    float       m_fDashSpeedMult = 3.2f;
+
+    // ─── HP ───────────────────────────────────────────────────────────────────
     float m_fMaxHP = 100.0f;
     float m_fCurrentHP = 100.0f;
     float m_fShield    = 0.0f;
@@ -93,10 +108,9 @@ private:
     XMFLOAT3 m_xmf3DashDir = { 0, 0, 1 };// 대쉬 방향 (시작 시 고정)
     float m_fDashTrailAccum = 0.0f;      // 대쉬 트레일 LightEmitter 재스폰 누적 타이머
 
-    static constexpr float kDashDuration      = 0.25f;  // 대쉬 지속
-    static constexpr float kDashCooldown      = 1.2f;   // 쿨다운
-    static constexpr float kDashSpeedMult     = 3.2f;   // 평상시 속도 대비 배율
-    static constexpr float kDashFlashTail     = 0.15f;  // 대쉬 후 플래시 잔상 (페이드아웃)
+    // 대쉬 파라미터 — SetElementType()으로 원소별 값으로 덮어씀
+    // (m_fDashDuration / m_fDashCooldown / m_fDashSpeedMult 가 실제 사용)
+    static constexpr float kDashFlashTail = 0.15f;  // 대쉬 후 플래시 잔상 (페이드아웃)
 
     // 네트워크 회전 동기화용 (이전 프레임 Y 회전값)
     float m_fPrevYaw = 0.0f;

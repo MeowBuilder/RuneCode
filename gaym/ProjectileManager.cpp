@@ -108,8 +108,8 @@ void ProjectileManager::SpawnProjectile(const Projectile& projectile)
             const char* effectId = slotToEffectId(vfxSlot);
 
             // 1차 원소 VFX: EffectRegistry → EffectDef → 색상 오버라이드 후 SpawnEffectDef
+            // primaryElem: elementSet이 있으면 룬 원소, 없으면 proj.element (캐릭터 기본 원소)
             EffectDef def = EffectRegistry::Get().GetEffect(effectId, runeFlags);
-            if (!proj.elementSet.empty())
             {
                 FluidElementColor ec = FluidElementColors::Get(primaryElem);
                 def.element = primaryElem;

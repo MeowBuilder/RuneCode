@@ -258,6 +258,8 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClInclude Include="MathUtils.h" />
     <ClInclude Include="InteractableComponent.h" />
     <ClInclude Include="HealthBarUI.h" />
+    <ClInclude Include="CharacterSelectScreen.h" />
+    <ClInclude Include="CharacterData.h" />
     <ClInclude Include="DebugRenderer.h" />
     <!-- ServerCore Headers -->
     <ClInclude Include="ServerCore\Allocator.h" />
@@ -376,6 +378,7 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClCompile Include="RuneRegistry.cpp" />
     <ClCompile Include="InteractableComponent.cpp" />
     <ClCompile Include="HealthBarUI.cpp" />
+    <ClCompile Include="CharacterSelectScreen.cpp" />
     <ClCompile Include="DebugRenderer.cpp" />
     <!-- ServerCore Sources -->
     <ClCompile Include="ServerCore\Allocator.cpp" />

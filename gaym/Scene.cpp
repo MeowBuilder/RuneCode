@@ -84,19 +84,24 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
     // --------------------------------------------------------------------------
     // 2. Load Global Objects (Player)
     // --------------------------------------------------------------------------
-    m_pCurrentRoom = nullptr; 
+    m_pCurrentRoom = nullptr;
 
-    GameObject* pPlayer = MeshLoader::LoadGeometryFromFile(this, pDevice, pCommandList, NULL, "Assets/Player/MageBlue.bin");
+    const CharacterData& charData = GetCharacterData(m_eSelectedElement);
+    const char* playerMeshPath = charData.meshPath;
+    const char* playerAnimPath = charData.animPath;
+
+    GameObject* pPlayer = MeshLoader::LoadGeometryFromFile(this, pDevice, pCommandList, NULL, playerMeshPath);
     if (pPlayer)
     {
         OutputDebugString(L"Player model loaded successfully!\n");
         pPlayer->GetTransform()->SetPosition(0.0f, 0.0f, 0.0f);
         pPlayer->GetTransform()->SetScale(5.0f, 5.0f, 5.0f);
-        pPlayer->AddComponent<PlayerComponent>();
+        auto* pPlayerComp = pPlayer->AddComponent<PlayerComponent>();
+        pPlayerComp->SetElementType(m_eSelectedElement);
         m_pPlayerGameObject = pPlayer;
 
         auto* pAnim = pPlayer->AddComponent<AnimationComponent>();
-        pAnim->LoadAnimation("Assets/Player/MageBlue_Anim.bin");
+        pAnim->LoadAnimation(playerAnimPath);
         pAnim->Play("Idle", true);
         pAnim->SetCullEnabled(false);  // 플레이어는 항상 풀 애니메이션 (frustum/phase skip 면제)
 

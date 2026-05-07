@@ -79,7 +79,8 @@ private:
     GameObject* m_pTarget = nullptr;
     
     // Offset from the target's origin where the camera should look
-    DirectX::XMFLOAT3 m_lookAtOffset = { 0.0f, 1.0f, 0.0f };
+    // scale=5 캐릭터 기준 시각적 중심이 Y≈5 이므로 그쪽을 바라봄
+    DirectX::XMFLOAT3 m_lookAtOffset = { 0.0f, 5.0f, 0.0f };
 
     // Camera orbit parameters
     float m_distance = 50.0f;

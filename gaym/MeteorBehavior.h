@@ -47,6 +47,7 @@ private:
     bool                  m_bIsFinished = true;
     FluidSkillVFXManager* m_pVFXManager = nullptr;
     Scene*                m_pScene      = nullptr;
+    ElementType           m_elementType = ElementType::Fire;
 
     // 최종 메테오 VFX IDs
     int m_finalTrailId  = -1;

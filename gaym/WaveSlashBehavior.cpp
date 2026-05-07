@@ -5,6 +5,7 @@
 #include "GameObject.h"
 #include "TransformComponent.h"
 #include "SkillComponent.h"
+#include "PlayerComponent.h"
 #include "Scene.h"
 #include "Room.h"
 #include "EnemyComponent.h"
@@ -41,7 +42,7 @@ void WaveSlashBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& tar
     if (caster && caster->GetTransform())
     {
         origin = caster->GetTransform()->GetPosition();
-        origin.y += 0.5f;
+        origin.y += 5.0f;
 
         XMVECTOR originV = XMLoadFloat3(&origin);
         XMVECTOR targetV = XMLoadFloat3(&targetPosition);
@@ -86,9 +87,16 @@ void WaveSlashBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& tar
         }
     };
 
+    // 캐릭터 기본 원소; 룬 원소 세트가 있으면 룬 원소가 우선
+    ElementType baseElem = ElementType::Fire;
+    if (caster) {
+        if (auto* pPC = caster->GetComponent<PlayerComponent>())
+            baseElem = pPC->GetElementType();
+    }
+    ElementType primaryElem = stats.elementSet.empty() ? baseElem : stats.elementSet[0];
+
     EffectDef def = EffectRegistry::Get().GetEffect("Q_WaveSlash", runeFlags);
-    if (!stats.elementSet.empty())
-        applyElement(def, stats.elementSet[0], stats.elementSet.size() > 1);
+    applyElement(def, primaryElem, stats.elementSet.size() > 1);
 
     // 3. VFX 스폰 (1차 원소)
     m_vfxId = m_pVFXManager->SpawnEffectDef(origin, direction, def, /*isPlayer*/true);
