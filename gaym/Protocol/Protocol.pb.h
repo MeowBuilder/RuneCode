@@ -2583,6 +2583,7 @@ class MonsterInfo final :
     kYawFieldNumber = 6,
     kHpFieldNumber = 7,
     kIsBossFieldNumber = 8,
+    kStageIndexFieldNumber = 9,
   };
   // uint64 monsterId = 1;
   void clear_monsterid();
@@ -2656,6 +2657,15 @@ class MonsterInfo final :
   void _internal_set_isboss(bool value);
   public:
 
+  // uint32 stageIndex = 9;
+  void clear_stageindex();
+  ::PROTOBUF_NAMESPACE_ID::uint32 stageindex() const;
+  void set_stageindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_stageindex() const;
+  void _internal_set_stageindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.MonsterInfo)
  private:
   class _Internal;
@@ -2671,6 +2681,7 @@ class MonsterInfo final :
   float yaw_;
   float hp_;
   bool isboss_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 stageindex_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -5442,6 +5453,26 @@ inline void MonsterInfo::_internal_set_isboss(bool value) {
 inline void MonsterInfo::set_isboss(bool value) {
   _internal_set_isboss(value);
   // @@protoc_insertion_point(field_set:Protocol.MonsterInfo.isBoss)
+}
+
+// uint32 stageIndex = 9;
+inline void MonsterInfo::clear_stageindex() {
+  stageindex_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 MonsterInfo::_internal_stageindex() const {
+  return stageindex_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 MonsterInfo::stageindex() const {
+  // @@protoc_insertion_point(field_get:Protocol.MonsterInfo.stageIndex)
+  return _internal_stageindex();
+}
+inline void MonsterInfo::_internal_set_stageindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  stageindex_ = value;
+}
+inline void MonsterInfo::set_stageindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_stageindex(value);
+  // @@protoc_insertion_point(field_set:Protocol.MonsterInfo.stageIndex)
 }
 
 // -------------------------------------------------------------------

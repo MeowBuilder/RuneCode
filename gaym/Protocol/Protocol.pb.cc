@@ -235,7 +235,8 @@ constexpr MonsterInfo::MonsterInfo(
   , z_(0)
   , yaw_(0)
   , hp_(0)
-  , isboss_(false){}
+  , isboss_(false)
+  , stageindex_(0u){}
 struct MonsterInfoDefaultTypeInternal {
   constexpr MonsterInfoDefaultTypeInternal()
     : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
@@ -524,6 +525,7 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_Protocol_2eproto::offsets[] PR
   PROTOBUF_FIELD_OFFSET(::Protocol::MonsterInfo, yaw_),
   PROTOBUF_FIELD_OFFSET(::Protocol::MonsterInfo, hp_),
   PROTOBUF_FIELD_OFFSET(::Protocol::MonsterInfo, isboss_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::MonsterInfo, stageindex_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::S_MONSTER_SPAWN, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -628,15 +630,15 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOB
   { 103, -1, sizeof(::Protocol::C_TORCH_INTERACT)},
   { 108, -1, sizeof(::Protocol::S_ROOM_TRANSITION)},
   { 117, -1, sizeof(::Protocol::MonsterInfo)},
-  { 130, -1, sizeof(::Protocol::S_MONSTER_SPAWN)},
-  { 136, -1, sizeof(::Protocol::S_MONSTER_MOVE)},
-  { 146, -1, sizeof(::Protocol::S_MONSTER_DESPAWN)},
-  { 152, -1, sizeof(::Protocol::S_MONSTER_ATTACK)},
-  { 165, -1, sizeof(::Protocol::S_PLAYER_DAMAGE)},
-  { 175, -1, sizeof(::Protocol::C_PLAYER_ATTACK)},
-  { 190, -1, sizeof(::Protocol::S_MONSTER_DAMAGE)},
-  { 201, -1, sizeof(::Protocol::S_ROOM_CLEARED)},
-  { 208, -1, sizeof(::Protocol::S_BOSS_EVENT)},
+  { 131, -1, sizeof(::Protocol::S_MONSTER_SPAWN)},
+  { 137, -1, sizeof(::Protocol::S_MONSTER_MOVE)},
+  { 147, -1, sizeof(::Protocol::S_MONSTER_DESPAWN)},
+  { 153, -1, sizeof(::Protocol::S_MONSTER_ATTACK)},
+  { 166, -1, sizeof(::Protocol::S_PLAYER_DAMAGE)},
+  { 176, -1, sizeof(::Protocol::C_PLAYER_ATTACK)},
+  { 191, -1, sizeof(::Protocol::S_MONSTER_DAMAGE)},
+  { 202, -1, sizeof(::Protocol::S_ROOM_CLEARED)},
+  { 209, -1, sizeof(::Protocol::S_BOSS_EVENT)},
 };
 
 static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] = {
@@ -691,34 +693,35 @@ const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABL
   "\014\n\004dirZ\030\010 \001(\002\"\023\n\021C_PORTAL_INTERACT\"\022\n\020C_"
   "TORCH_INTERACT\"]\n\021S_ROOM_TRANSITION\022\022\n\ns"
   "tageIndex\030\001 \001(\r\022\021\n\troomIndex\030\002 \001(\r\022\022\n\nis"
-  "BossRoom\030\003 \001(\010\022\r\n\005mapId\030\004 \001(\t\"\177\n\013Monster"
-  "Info\022\021\n\tmonsterId\030\001 \001(\004\022\023\n\013monsterType\030\002"
-  " \001(\r\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\t\n\001z\030\005 \001(\002\022\013\n"
-  "\003yaw\030\006 \001(\002\022\n\n\002hp\030\007 \001(\002\022\016\n\006isBoss\030\010 \001(\010\"9"
-  "\n\017S_MONSTER_SPAWN\022&\n\007monster\030\001 \001(\0132\025.Pro"
-  "tocol.MonsterInfo\"Q\n\016S_MONSTER_MOVE\022\021\n\tm"
-  "onsterId\030\001 \001(\004\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001"
-  "z\030\004 \001(\002\022\013\n\003yaw\030\005 \001(\002\"&\n\021S_MONSTER_DESPAW"
-  "N\022\021\n\tmonsterId\030\001 \001(\004\"\222\001\n\020S_MONSTER_ATTAC"
-  "K\022\021\n\tmonsterId\030\001 \001(\004\022\026\n\016targetPlayerId\030\002"
-  " \001(\004\022\022\n\nattackType\030\003 \001(\r\022\t\n\001x\030\004 \001(\002\022\t\n\001y"
-  "\030\005 \001(\002\022\t\n\001z\030\006 \001(\002\022\013\n\003yaw\030\007 \001(\002\022\021\n\twindup"
-  "Sec\030\010 \001(\002\"q\n\017S_PLAYER_DAMAGE\022\020\n\010playerId"
-  "\030\001 \001(\004\022\016\n\006damage\030\002 \001(\002\022\021\n\tcurrentHp\030\003 \001("
-  "\002\022\016\n\006isDead\030\004 \001(\010\022\031\n\021attackerMonsterId\030\005"
-  " \001(\004\"\267\001\n\017C_PLAYER_ATTACK\022&\n\tskillType\030\001 "
-  "\001(\0162\023.Protocol.SkillType\022\t\n\001x\030\002 \001(\002\022\t\n\001y"
-  "\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\014\n\004dirX\030\005 \001(\002\022\014\n\004dirY\030"
-  "\006 \001(\002\022\014\n\004dirZ\030\007 \001(\002\022\017\n\007targetX\030\010 \001(\002\022\017\n\007"
-  "targetY\030\t \001(\002\022\017\n\007targetZ\030\n \001(\002\"\232\001\n\020S_MON"
-  "STER_DAMAGE\022\021\n\tmonsterId\030\001 \001(\004\022\016\n\006damage"
-  "\030\002 \001(\002\022\021\n\tcurrentHp\030\003 \001(\002\022\016\n\006isDead\030\004 \001("
-  "\010\022\030\n\020attackerPlayerId\030\005 \001(\004\022&\n\tskillType"
-  "\030\006 \001(\0162\023.Protocol.SkillType\"7\n\016S_ROOM_CL"
-  "EARED\022\022\n\nstageIndex\030\001 \001(\r\022\021\n\troomIndex\030\002"
-  " \001(\r\"a\n\014S_BOSS_EVENT\022\021\n\tmonsterId\030\001 \001(\004\022"
-  "*\n\teventType\030\002 \001(\0162\027.Protocol.BossEventT"
-  "ype\022\022\n\nphaseIndex\030\003 \001(\rb\006proto3"
+  "BossRoom\030\003 \001(\010\022\r\n\005mapId\030\004 \001(\t\"\223\001\n\013Monste"
+  "rInfo\022\021\n\tmonsterId\030\001 \001(\004\022\023\n\013monsterType\030"
+  "\002 \001(\r\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\t\n\001z\030\005 \001(\002\022\013"
+  "\n\003yaw\030\006 \001(\002\022\n\n\002hp\030\007 \001(\002\022\016\n\006isBoss\030\010 \001(\010\022"
+  "\022\n\nstageIndex\030\t \001(\r\"9\n\017S_MONSTER_SPAWN\022&"
+  "\n\007monster\030\001 \001(\0132\025.Protocol.MonsterInfo\"Q"
+  "\n\016S_MONSTER_MOVE\022\021\n\tmonsterId\030\001 \001(\004\022\t\n\001x"
+  "\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\013\n\003yaw\030\005 \001("
+  "\002\"&\n\021S_MONSTER_DESPAWN\022\021\n\tmonsterId\030\001 \001("
+  "\004\"\222\001\n\020S_MONSTER_ATTACK\022\021\n\tmonsterId\030\001 \001("
+  "\004\022\026\n\016targetPlayerId\030\002 \001(\004\022\022\n\nattackType\030"
+  "\003 \001(\r\022\t\n\001x\030\004 \001(\002\022\t\n\001y\030\005 \001(\002\022\t\n\001z\030\006 \001(\002\022\013"
+  "\n\003yaw\030\007 \001(\002\022\021\n\twindupSec\030\010 \001(\002\"q\n\017S_PLAY"
+  "ER_DAMAGE\022\020\n\010playerId\030\001 \001(\004\022\016\n\006damage\030\002 "
+  "\001(\002\022\021\n\tcurrentHp\030\003 \001(\002\022\016\n\006isDead\030\004 \001(\010\022\031"
+  "\n\021attackerMonsterId\030\005 \001(\004\"\267\001\n\017C_PLAYER_A"
+  "TTACK\022&\n\tskillType\030\001 \001(\0162\023.Protocol.Skil"
+  "lType\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\014"
+  "\n\004dirX\030\005 \001(\002\022\014\n\004dirY\030\006 \001(\002\022\014\n\004dirZ\030\007 \001(\002"
+  "\022\017\n\007targetX\030\010 \001(\002\022\017\n\007targetY\030\t \001(\002\022\017\n\007ta"
+  "rgetZ\030\n \001(\002\"\232\001\n\020S_MONSTER_DAMAGE\022\021\n\tmons"
+  "terId\030\001 \001(\004\022\016\n\006damage\030\002 \001(\002\022\021\n\tcurrentHp"
+  "\030\003 \001(\002\022\016\n\006isDead\030\004 \001(\010\022\030\n\020attackerPlayer"
+  "Id\030\005 \001(\004\022&\n\tskillType\030\006 \001(\0162\023.Protocol.S"
+  "killType\"7\n\016S_ROOM_CLEARED\022\022\n\nstageIndex"
+  "\030\001 \001(\r\022\021\n\troomIndex\030\002 \001(\r\"a\n\014S_BOSS_EVEN"
+  "T\022\021\n\tmonsterId\030\001 \001(\004\022*\n\teventType\030\002 \001(\0162"
+  "\027.Protocol.BossEventType\022\022\n\nphaseIndex\030\003"
+  " \001(\rb\006proto3"
   ;
 static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor_table_Protocol_2eproto_deps[2] = {
   &::descriptor_table_Enum_2eproto,
@@ -726,7 +729,7 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor
 };
 static ::PROTOBUF_NAMESPACE_ID::internal::once_flag descriptor_table_Protocol_2eproto_once;
 const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_Protocol_2eproto = {
-  false, false, 2031, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
+  false, false, 2052, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
   &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 25,
   schemas, file_default_instances, TableStruct_Protocol_2eproto::offsets,
   file_level_metadata_Protocol_2eproto, file_level_enum_descriptors_Protocol_2eproto, file_level_service_descriptors_Protocol_2eproto,
@@ -4305,16 +4308,16 @@ MonsterInfo::MonsterInfo(const MonsterInfo& from)
   : ::PROTOBUF_NAMESPACE_ID::Message() {
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
   ::memcpy(&monsterid_, &from.monsterid_,
-    static_cast<size_t>(reinterpret_cast<char*>(&isboss_) -
-    reinterpret_cast<char*>(&monsterid_)) + sizeof(isboss_));
+    static_cast<size_t>(reinterpret_cast<char*>(&stageindex_) -
+    reinterpret_cast<char*>(&monsterid_)) + sizeof(stageindex_));
   // @@protoc_insertion_point(copy_constructor:Protocol.MonsterInfo)
 }
 
 void MonsterInfo::SharedCtor() {
 ::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
     reinterpret_cast<char*>(&monsterid_) - reinterpret_cast<char*>(this)),
-    0, static_cast<size_t>(reinterpret_cast<char*>(&isboss_) -
-    reinterpret_cast<char*>(&monsterid_)) + sizeof(isboss_));
+    0, static_cast<size_t>(reinterpret_cast<char*>(&stageindex_) -
+    reinterpret_cast<char*>(&monsterid_)) + sizeof(stageindex_));
 }
 
 MonsterInfo::~MonsterInfo() {
@@ -4344,8 +4347,8 @@ void MonsterInfo::Clear() {
   (void) cached_has_bits;
 
   ::memset(&monsterid_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&isboss_) -
-      reinterpret_cast<char*>(&monsterid_)) + sizeof(isboss_));
+      reinterpret_cast<char*>(&stageindex_) -
+      reinterpret_cast<char*>(&monsterid_)) + sizeof(stageindex_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -4408,6 +4411,13 @@ const char* MonsterInfo::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID
       case 8:
         if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 64)) {
           isboss_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // uint32 stageIndex = 9;
+      case 9:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 72)) {
+          stageindex_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
           CHK_(ptr);
         } else goto handle_unusual;
         continue;
@@ -4488,6 +4498,12 @@ failure:
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteBoolToArray(8, this->_internal_isboss(), target);
   }
 
+  // uint32 stageIndex = 9;
+  if (this->stageindex() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt32ToArray(9, this->_internal_stageindex(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -4548,6 +4564,13 @@ size_t MonsterInfo::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  // uint32 stageIndex = 9;
+  if (this->stageindex() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt32Size(
+        this->_internal_stageindex());
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     return ::PROTOBUF_NAMESPACE_ID::internal::ComputeUnknownFieldsSize(
         _internal_metadata_, total_size, &_cached_size_);
@@ -4603,6 +4626,9 @@ void MonsterInfo::MergeFrom(const MonsterInfo& from) {
   if (from.isboss() != 0) {
     _internal_set_isboss(from._internal_isboss());
   }
+  if (from.stageindex() != 0) {
+    _internal_set_stageindex(from._internal_stageindex());
+  }
 }
 
 void MonsterInfo::CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
@@ -4627,8 +4653,8 @@ void MonsterInfo::InternalSwap(MonsterInfo* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(MonsterInfo, isboss_)
-      + sizeof(MonsterInfo::isboss_)
+      PROTOBUF_FIELD_OFFSET(MonsterInfo, stageindex_)
+      + sizeof(MonsterInfo::stageindex_)
       - PROTOBUF_FIELD_OFFSET(MonsterInfo, monsterid_)>(
           reinterpret_cast<char*>(&monsterid_),
           reinterpret_cast<char*>(&other->monsterid_));
