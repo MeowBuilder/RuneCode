@@ -2454,6 +2454,22 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
             pBoss->SetHitFlashAll(1.0f);
             m_mapServerMonsterHitFlashTimer[monsterId] = 0.4f;  // 평소(0.15)보다 길게
         }
+
+        // Kraken 2페이즈 전용 컷신 처리
+        // 서버에서 eventType=2, phaseIndex=2를 보내면
+        // 서버가 스폰한 Kraken GameObject를 기존 Kraken 컷신 상태머신에 연결한다.
+        if (mt == 7 && phaseIndex == 2)
+        {
+            if (pBoss)
+            {
+                pScene->StartNetworkKrakenCutscene(pBoss);
+                WriteNetworkLog("[Network] Kraken phase 2 cutscene requested");
+            }
+            else
+            {
+                WriteNetworkLog("[Network] Kraken phase 2 cutscene failed: monster not found");
+            }
+        }
         break;
 
     case 3: // BOSS_EVENT_DEATH — 사망 컷씬: 가장 강한 쉐이크 (사망 애니는 S_MONSTER_DAMAGE 가 별도 처리)

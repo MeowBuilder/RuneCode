@@ -571,12 +571,26 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         OutputDebugString(L"[Scene] Kraken cutscene: RUMBLE\n");
     }
 
-    if (m_eKrakenStage != KrakenCutsceneStage::None && m_pPreloadedKraken)
+    // Kraken 컷신 대상 오브젝트 선택
+    // 오프라인 모드: m_pPreloadedKraken(EnemyComponent*) 사용
+    // 온라인 모드: 서버가 스폰한 m_pNetworkKrakenCutsceneObject(GameObject*) 사용
+    GameObject* pKrakenObj = nullptr;
+
+    if (m_pNetworkKrakenCutsceneObject)
+    {
+        // 온라인/네트워크 Kraken 컷신 대상
+        pKrakenObj = m_pNetworkKrakenCutsceneObject;
+    }
+    else if (m_pPreloadedKraken)
+    {
+        // 오프라인 Kraken 컷신 대상
+        pKrakenObj = m_pPreloadedKraken->GetOwner();
+    }
+
+    if (m_eKrakenStage != KrakenCutsceneStage::None && pKrakenObj)
     {
         m_fKrakenEmergeTimer += deltaTime;
         float T = m_fKrakenEmergeTimer;
-
-        GameObject* pKrakenObj = m_pPreloadedKraken->GetOwner();
 
         auto easeOutCubic = [](float t) { return 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t); };
         auto easeInOutQuad = [](float t) { return t < 0.5f ? 2*t*t : 1 - (-2*t+2)*(-2*t+2)/2; };
@@ -1084,7 +1098,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     XMMATRIX mView = XMLoadFloat4x4(&m_pCamera->GetViewMatrix());
     XMMATRIX mProjection = XMLoadFloat4x4(&m_pCamera->GetProjectionMatrix());
     XMMATRIX mViewProj = mView * mProjection;
-    XMStoreFloat4x4(&m_pcbMappedPass->m_xmf4x4ViewProj, XMMatrixTranspose(mViewProj));
+    DirectX::XMStoreFloat4x4(&m_pcbMappedPass->m_xmf4x4ViewProj, XMMatrixTranspose(mViewProj));
 
     // Set lighting parameters based on current theme
     XMVECTOR lightDir;
@@ -1109,7 +1123,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         lightDir = XMVector3Normalize(XMVectorSet(-0.6f, -0.7f, 0.3f, 0.0f));
         break;
     }
-    XMStoreFloat3(&m_pcbMappedPass->m_xmf3LightDirection, lightDir);
+    DirectX::XMStoreFloat3(&m_pcbMappedPass->m_xmf3LightDirection, lightDir);
 
     // Calculate Light View-Projection for Shadow Mapping
     {
@@ -1141,7 +1155,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         XMMATRIX mLightProj = XMMatrixOrthographicLH(shadowOrthoSize, shadowOrthoSize, nearZ, farZ);
 
         XMMATRIX mLightViewProj = mLightView * mLightProj;
-        XMStoreFloat4x4(&m_pcbMappedPass->m_xmf4x4LightViewProj, XMMatrixTranspose(mLightViewProj));
+        DirectX::XMStoreFloat4x4(&m_pcbMappedPass->m_xmf4x4LightViewProj, XMMatrixTranspose(mLightViewProj));
     }
     m_pcbMappedPass->m_fPad0 = 0.0f; // Padding for directional light
 
@@ -1190,7 +1204,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         XMVECTOR playerForward = m_pPlayerGameObject->GetTransform()->GetLook();
         XMVECTOR spotlightOffset = XMVectorScale(playerForward, 5.0f); // 5 units in front of the player
         XMVECTOR spotlightPosition = XMLoadFloat3(&playerPosition) + spotlightOffset;
-        XMStoreFloat3(&m_pcbMappedPass->m_SpotLight.m_xmf3SpotLightPosition, spotlightPosition);
+        DirectX::XMStoreFloat3(&m_pcbMappedPass->m_SpotLight.m_xmf3SpotLightPosition, spotlightPosition);
     }
     else
     {
@@ -1198,7 +1212,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         m_pcbMappedPass->m_SpotLight.m_xmf3SpotLightPosition = cameraPosition;
     }
     XMVECTOR look = m_pCamera->GetLookDirection();
-    XMStoreFloat3(&m_pcbMappedPass->m_SpotLight.m_xmf3SpotLightDirection, look);
+    DirectX::XMStoreFloat3(&m_pcbMappedPass->m_SpotLight.m_xmf3SpotLightDirection, look);
 
 
     // 1. Update Global Components (Player, etc.)
@@ -1461,11 +1475,11 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
         XMFLOAT3 camUp    = { XMVectorGetY(mView.r[0]), XMVectorGetY(mView.r[1]), XMVectorGetY(mView.r[2]) };
 
         XMFLOAT4X4 viewProjT, viewT;
-        XMStoreFloat4x4(&viewProjT, XMMatrixTranspose(mView * mProj));
-        XMStoreFloat4x4(&viewT, XMMatrixTranspose(mView));
+        DirectX::XMStoreFloat4x4(&viewProjT, XMMatrixTranspose(mView * mProj));
+        DirectX::XMStoreFloat4x4(&viewT, XMMatrixTranspose(mView));
 
         XMFLOAT4X4 projRaw;
-        XMStoreFloat4x4(&projRaw, mProj);
+        DirectX::XMStoreFloat4x4(&projRaw, mProj);
 
         float projA = projRaw._33;
         float projB = projRaw._43;
@@ -1477,7 +1491,7 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
         XMFLOAT3 lightDirWorld = { -0.5f, -0.8f, -0.3f };
         XMVECTOR lightV = XMVector3TransformNormal(XMLoadFloat3(&lightDirWorld), mView);
         XMFLOAT3 lightDirVS;
-        XMStoreFloat3(&lightDirVS, XMVector3Normalize(lightV));
+        DirectX::XMStoreFloat3(&lightDirVS, XMVector3Normalize(lightV));
 
         auto GetFluidColors = [&](bool blurOnly) -> std::pair<XMFLOAT4, XMFLOAT4>
         {
@@ -1565,7 +1579,7 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
 
         XMMATRIX mViewProj2 = mView2 * XMLoadFloat4x4(&m_pCamera->GetProjectionMatrix());
         XMFLOAT4X4 viewProj2;
-        XMStoreFloat4x4(&viewProj2, XMMatrixTranspose(mViewProj2));
+        DirectX::XMStoreFloat4x4(&viewProj2, XMMatrixTranspose(mViewProj2));
 
         if (m_pVFXManager)
             m_pVFXManager->Render(pCommandList, viewProj2, camRight2, camUp2);
@@ -1583,7 +1597,7 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
 
             XMMATRIX mViewProj3 = mView3 * XMLoadFloat4x4(&m_pCamera->GetProjectionMatrix());
             XMFLOAT4X4 viewProj3;
-            XMStoreFloat4x4(&viewProj3, XMMatrixTranspose(mViewProj3));
+            DirectX::XMStoreFloat4x4(&viewProj3, XMMatrixTranspose(mViewProj3));
 
             pGeyserManager->Render(pCommandList, viewProj3, camRight3, camUp3);
         }
@@ -1598,7 +1612,7 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
 
         XMMATRIX mViewProj4 = mView4 * XMLoadFloat4x4(&m_pCamera->GetProjectionMatrix());
         XMFLOAT4X4 viewProj4;
-        XMStoreFloat4x4(&viewProj4, XMMatrixTranspose(mViewProj4));
+        DirectX::XMStoreFloat4x4(&viewProj4, XMMatrixTranspose(mViewProj4));
 
         m_pTorchSystem->Render(pCommandList, viewProj4, camRight4, camUp4);
     }
@@ -3196,6 +3210,69 @@ void Scene::TransitionToWaterBossRoom()
     OutputDebugString(L"[Scene] Water boss room ready - Kraken spawned!\n");
 }
 
+void Scene::StartNetworkKrakenCutscene(GameObject* pKrakenObj)
+{
+    // 1. 서버가 스폰한 Kraken 오브젝트가 없으면 컷신 시작 불가
+    if (!pKrakenObj)
+        return;
+
+    // 2. 네트워크 Kraken 컷신 대상 저장
+    // 온라인 모드에서는 서버 몬스터가 EnemyComponent 없이 GameObject로만 존재하므로
+    // 기존 m_pPreloadedKraken 대신 별도 GameObject 포인터를 사용한다.
+    m_pNetworkKrakenCutsceneObject = pKrakenObj;
+
+    // 3. 컷신 기준 위치 저장
+    // 이후 Rumble/Rise/Burst/Jump/Slam 단계에서 기준 좌표로 사용된다.
+    m_xmf3PendingKrakenPos = pKrakenObj->GetTransform()->GetPosition();
+
+    // 4. 컷신 상태 초기화
+    // Rumble부터 시작하면 기존 Scene::Update()의 Kraken 컷신 상태머신이 이어서 처리한다.
+    m_eKrakenStage = KrakenCutsceneStage::Rumble;
+    m_fKrakenEmergeTimer = 0.0f;
+    m_bSlamShakeTriggered = false;
+    m_bKrakenRoarFadedToIdle = false;
+
+    // 5. Kraken을 수면 아래 작은 크기로 배치
+    // 컷신 진행 중 점점 커지고 위로 올라오는 연출을 위해 초기 상태를 숨긴다.
+    XMFLOAT3 pos = m_xmf3PendingKrakenPos;
+    pos.y = -5.0f;
+    pKrakenObj->GetTransform()->SetPosition(pos);
+    pKrakenObj->GetTransform()->SetScale(0.05f, 0.05f, 0.05f);
+
+    // 6. 물 Plane 범위 보정
+    // 보스룸의 현재 방 바운딩 박스 기준으로 수면 크기와 중심을 맞춘다.
+    if (m_pWaterPlane && m_pCurrentRoom)
+    {
+        const BoundingBox& rb = m_pCurrentRoom->GetBoundingBox();
+        constexpr float kSafeMul = 1.6f;
+
+        float scaleX = rb.Extents.x * kSafeMul * 2.0f;
+        float scaleZ = rb.Extents.z * kSafeMul * 2.0f;
+
+        m_pWaterPlane->GetTransform()->SetScale(scaleX, 1.0f, scaleZ);
+
+        XMFLOAT3 wp = m_pWaterPlane->GetTransform()->GetPosition();
+        wp.x = rb.Center.x;
+        wp.z = rb.Center.z;
+        m_pWaterPlane->GetTransform()->SetPosition(wp);
+    }
+
+    // 7. 카메라 컷신 시작
+    // 기존 오프라인 Kraken 등장 컷신과 동일하게 Kraken 등장 위치를 바라보게 한다.
+    XMFLOAT3 camFocus = m_xmf3PendingKrakenPos;
+    camFocus.y = 0.0f;
+
+    m_pCamera->StartCinematic(
+        camFocus,
+        45.0f,
+        25.0f,
+        m_pCamera->IsFreeCam() ? 45.0f : 200.0f
+    );
+
+    // 8. 로그 출력
+    WriteNetworkLog("[Scene] Network Kraken cutscene: RUMBLE");
+}
+
 void Scene::TransitionToEarthStage(int roomIndex)
 {
     OutputDebugString(L"[Scene] ========== EARTH STAGE ==========\n");
@@ -3725,7 +3802,7 @@ void Scene::FlightShoot(const XMFLOAT3& muzzlePos, const XMFLOAT3& dirNormalized
         if (d < bossRadius)
         {
             bHit = true;
-            XMStoreFloat3(&hitPoint, closest);
+            DirectX::XMStoreFloat3(&hitPoint, closest);
         }
     }
 
@@ -3774,7 +3851,7 @@ void Scene::FlightShoot(const XMFLOAT3& muzzlePos, const XMFLOAT3& dirNormalized
         {
             float u = (float)i / 5.0f;
             XMVECTOR p = XMVectorLerp(ro, end, u);
-            XMFLOAT3 pp; XMStoreFloat3(&pp, p);
+            XMFLOAT3 pp; DirectX::XMStoreFloat3(&pp, p);
 
             EffectLayer layer;
             layer.type          = EmitterType::Sphere;
@@ -3815,7 +3892,7 @@ void Scene::UpdateFlightFX(float deltaTime, InputSystem* pInputSystem)
     float yawRad = XMConvertToRadians(m_fFlightBossYawDeg);
     XMVECTOR fwd = XMVectorSet(sinf(yawRad), 0.0f, cosf(yawRad), 0.0f);
 
-    XMFLOAT3 fwdF; XMStoreFloat3(&fwdF, fwd);
+    XMFLOAT3 fwdF; DirectX::XMStoreFloat3(&fwdF, fwd);
     float windSpeed = bBoost ? 160.0f : 110.0f;
 
     // ~30Hz 재스폰 (0.033s). 부스트 시 ~50Hz (0.020s).
@@ -3830,7 +3907,7 @@ void Scene::UpdateFlightFX(float deltaTime, InputSystem* pInputSystem)
         // 플레이어 앞쪽 8단위에서 스폰 → 뒤로 빠르게 흘러내려옴
         XMVECTOR ppV = XMLoadFloat3(&pPT->GetPosition());
         XMVECTOR spawn = ppV + fwd * 8.0f;
-        XMFLOAT3 spawnPos; XMStoreFloat3(&spawnPos, spawn);
+        XMFLOAT3 spawnPos; DirectX::XMStoreFloat3(&spawnPos, spawn);
 
         // direction = -fwd (뒤로 흐름)
         XMFLOAT3 backDir = { -fwdF.x, 0.0f, -fwdF.z };
@@ -3878,7 +3955,7 @@ void Scene::UpdateFlightBoss(float deltaTime)
     XMFLOAT3 bp = pBT->GetPosition();
     XMVECTOR bpv = XMLoadFloat3(&bp);
     bpv = bpv + motionFwd * (m_fFlightBossSpeed * deltaTime);
-    XMStoreFloat3(&bp, bpv);
+    DirectX::XMStoreFloat3(&bp, bpv);
     pBT->SetPosition(bp);
 
     // ── 보스 기본 공격: 부채꼴 탄막 (속성별 색만 다름) ─────────
@@ -3960,7 +4037,7 @@ void Scene::FireFlightBossBarrage()
 
         FlightBossBullet b;
         b.pos = bossPos;
-        XMFLOAT3 d; XMStoreFloat3(&d, dir);
+        XMFLOAT3 d; DirectX::XMStoreFloat3(&d, dir);
         b.vel = { d.x * kFlightBulletSpeed, d.y * kFlightBulletSpeed, d.z * kFlightBulletSpeed };
         b.lifeRemain = kFlightBulletLifetime;
 
