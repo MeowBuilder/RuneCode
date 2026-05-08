@@ -2518,7 +2518,7 @@ void Scene::RegisterPlayersToEnemy(EnemyComponent* pEnemy)
     pEnemy->RegisterAllPlayers(players);
 }
 
-void Scene::TransitionToWaterStage()
+void Scene::TransitionToWaterStage(int roomIndex)
 {
     OutputDebugString(L"[Scene] ========== WATER STAGE ==========\n");
 
@@ -2538,6 +2538,13 @@ void Scene::TransitionToWaterStage()
     // ── 1. 테마 변경 (조명 색상에 영향)
     m_eCurrentTheme = StageTheme::Water;
     m_nRoomCount = 0;  // 새 스테이지 진입 → 방 카운트 리셋
+
+    // 기존 WaterPlane 정리
+    if (m_pWaterPlane)
+    {
+        MarkForDeletion(m_pWaterPlane);
+        m_pWaterPlane = nullptr;
+    }
 
     // ── 2. 셰이더 RC 목록 전체 클리어
     m_vShaders[0]->ClearRenderComponents();
@@ -2566,24 +2573,45 @@ void Scene::TransitionToWaterStage()
     // ── 7. 영속 오브젝트의 RC를 셰이더에 다시 등록 (용암 제외)
     for (auto& pGO : m_vGameObjects)
     {
-        if (pGO.get() != m_pLavaPlane)  // 용암은 제외
-            ReAddRenderComponentsToShader(pGO.get());
+        // 용암은 제외
+        if (pGO.get() == m_pLavaPlane)
+            continue;
+
+        if (pGO.get() == m_pWaterPlane)
+            continue;
+
+        if (pGO.get() == m_pRockPlane)
+            continue;
+
+        ReAddRenderComponentsToShader(pGO.get());
     }
 
     ID3D12Device*              pDevice      = Dx12App::GetInstance()->GetDevice();
     ID3D12GraphicsCommandList* pCommandList = Dx12App::GetInstance()->GetCommandList();
 
-    // ── 7. 기존 맵 로드 (일반 맵 사용)
-    m_strCurrentMap = m_vMapPool[0];
+    // ── 7. 서버 roomIndex 기준으로 물 스테이지 맵 로드
+// roomIndex: 0=1번방, 1=2번방, 2=3번방 ...
+    int safeRoomIndex = roomIndex;
+
+    if (safeRoomIndex < 0)
+        safeRoomIndex = 0;
+
+    if (safeRoomIndex >= static_cast<int>(m_vMapPool.size()))
+        safeRoomIndex = static_cast<int>(m_vMapPool.size()) - 1;
+
+    m_strCurrentMap = m_vMapPool[safeRoomIndex];
+
+    char mapLog[256];
+    sprintf_s(mapLog, "[Scene] Water stage load roomIndex=%d map=%s",
+        safeRoomIndex, m_strCurrentMap.c_str());
+    WriteNetworkLog(mapLog);
+
+    WriteNetworkLog("[Scene] WaterStage before LoadIntoScene");
     bool bLoaded = MapLoader::LoadIntoScene(
         m_strCurrentMap.c_str(), this, pDevice, pCommandList, m_vShaders[0].get());
+    WriteNetworkLog("[Scene] WaterStage after LoadIntoScene");
 
-    if (!bLoaded)
-    {
-        OutputDebugString(L"[Scene] Water stage map load failed!\n");
-        return;
-    }
-
+    WriteNetworkLog("[Scene] WaterStage before WaterPlane create");
     // ── 8. 물 바닥 평면 생성 (용암 대신 물)
     {
         CRoom* pTempRoom = m_pCurrentRoom;
@@ -2816,7 +2844,9 @@ void Scene::TransitionToWaterStage()
         }
         OutputDebugString(L"[Scene] Water floor plane placed (with water_normal_01/02 + water_height_01/02)\n");
     }
+    WriteNetworkLog("[Scene] WaterStage after WaterPlane create");
 
+    WriteNetworkLog("[Scene] WaterStage before CurrentRoom update");
     // ── 9. 맵 정적 오브젝트 상수 버퍼 초기화
     if (m_pCurrentRoom)
     {
@@ -2826,6 +2856,7 @@ void Scene::TransitionToWaterStage()
         // 룸 활성화 (적 스폰)
         m_pCurrentRoom->SetState(RoomState::Active);
     }
+    WriteNetworkLog("[Scene] WaterStage after CurrentRoom update");
 
     // ── 10. 인터랙션 큐브 숨김
     if (m_pInteractionCube)
@@ -2904,6 +2935,7 @@ void Scene::TransitionToWaterStage()
         }
     }
 
+    WriteNetworkLog("[Scene] WaterStage ready");
     OutputDebugString(L"[Scene] Water stage ready!\n");
 }
 
@@ -3164,7 +3196,7 @@ void Scene::TransitionToWaterBossRoom()
     OutputDebugString(L"[Scene] Water boss room ready - Kraken spawned!\n");
 }
 
-void Scene::TransitionToEarthStage()
+void Scene::TransitionToEarthStage(int roomIndex)
 {
     OutputDebugString(L"[Scene] ========== EARTH STAGE ==========\n");
 
@@ -3206,7 +3238,21 @@ void Scene::TransitionToEarthStage()
     ID3D12Device*              pDevice      = Dx12App::GetInstance()->GetDevice();
     ID3D12GraphicsCommandList* pCommandList = Dx12App::GetInstance()->GetCommandList();
 
-    if (!m_vMapPool.empty()) m_strCurrentMap = m_vMapPool[0];
+    int safeRoomIndex = roomIndex;
+
+    if (safeRoomIndex < 0)
+        safeRoomIndex = 0;
+
+    if (safeRoomIndex >= static_cast<int>(m_vMapPool.size()))
+        safeRoomIndex = static_cast<int>(m_vMapPool.size()) - 1;
+
+    m_strCurrentMap = m_vMapPool[safeRoomIndex];
+
+    char mapLog[256];
+    sprintf_s(mapLog, "[Scene] Earth stage load roomIndex=%d map=%s",
+        safeRoomIndex, m_strCurrentMap.c_str());
+    WriteNetworkLog(mapLog);
+
     bool bLoaded = MapLoader::LoadIntoScene(
         m_strCurrentMap.c_str(), this, pDevice, pCommandList, m_vShaders[0].get());
     if (!bLoaded) { OutputDebugString(L"[Scene] Earth stage map load failed!\n"); return; }
@@ -3235,7 +3281,7 @@ void Scene::TransitionToEarthStage()
     OutputDebugString(L"[Scene] Earth stage ready!\n");
 }
 
-void Scene::TransitionToGrassStage()
+void Scene::TransitionToGrassStage(int roomIndex)
 {
     OutputDebugString(L"[Scene] ========== GRASS STAGE ==========\n");
 
@@ -3275,7 +3321,21 @@ void Scene::TransitionToGrassStage()
     ID3D12Device*              pDevice      = Dx12App::GetInstance()->GetDevice();
     ID3D12GraphicsCommandList* pCommandList = Dx12App::GetInstance()->GetCommandList();
 
-    if (!m_vMapPool.empty()) m_strCurrentMap = m_vMapPool[0];
+    int safeRoomIndex = roomIndex;
+
+    if (safeRoomIndex < 0)
+        safeRoomIndex = 0;
+
+    if (safeRoomIndex >= static_cast<int>(m_vMapPool.size()))
+        safeRoomIndex = static_cast<int>(m_vMapPool.size()) - 1;
+
+    m_strCurrentMap = m_vMapPool[safeRoomIndex];
+
+    char mapLog[256];
+    sprintf_s(mapLog, "[Scene] Grass stage load roomIndex=%d map=%s",
+        safeRoomIndex, m_strCurrentMap.c_str());
+    WriteNetworkLog(mapLog);
+
     bool bLoaded = MapLoader::LoadIntoScene(
         m_strCurrentMap.c_str(), this, pDevice, pCommandList, m_vShaders[0].get());
     if (!bLoaded) { OutputDebugString(L"[Scene] Grass stage map load failed!\n"); return; }

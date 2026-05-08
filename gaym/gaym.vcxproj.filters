@@ -390,6 +390,12 @@
     <ClInclude Include="RuneRegistry.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="CharacterSelectScreen.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="CharacterData.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="gaym.cpp">
@@ -702,6 +708,9 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="RuneRegistry.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="CharacterSelectScreen.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>

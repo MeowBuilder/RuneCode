@@ -150,11 +150,11 @@ public:
     void TransitionToNextRoom();
     void TransitionToRoomByIndex(int index); // pool 인덱스 직접 지정 이동 (서버 동기화 / 9·0 디버그)
     void TransitionToBossRoom();        // 불 보스전 (Dragon)
-    void TransitionToWaterStage();      // 물 스테이지 (N: 불→물)
+    void TransitionToWaterStage(int roomIndex = 0);      // 물 스테이지 (N: 불→물)
     void TransitionToWaterBossRoom();   // 물 보스전 (Kraken)
-    void TransitionToEarthStage();      // 땅 스테이지 (N: 물→땅)
+    void TransitionToEarthStage(int roomIndex = 0);      // 땅 스테이지 (N: 물→땅)
     void TransitionToEarthBossRoom();   // 땅 보스전 (Golem)
-    void TransitionToGrassStage();      // 풀 스테이지 (N: 땅→풀)
+    void TransitionToGrassStage(int roomIndex = 0);      // 풀 스테이지 (N: 땅→풀)
     void TransitionToGrassBossRoom();   // 풀 보스전 (Demon)
 
     // Drop interaction system

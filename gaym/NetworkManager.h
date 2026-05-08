@@ -272,6 +272,8 @@ private:
     // 방 전환 중복 방지 — S_ROOM_TRANSITION 이 서버에서 중복 전송되거나, 같은 프레임에
     // 두 번 큐잉되는 경우 ProcessRoomTransition 을 여러 번 실행해 자원 이중 정리/생성으로
     // 크래시 나는 케이스 차단. 전환 처리 진입 시 true, 완료 시 false.
+    bool m_bPendingTorchInteract = false;
+    int m_nPendingTorchInteractFrame = 0;
     bool m_bInRoomTransition = false;
 
     // 서버 MOVE 패킷 간격이 띄엄띄엄해서 직접 SetPosition하면 순간이동처럼 보임.

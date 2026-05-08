@@ -219,10 +219,8 @@ bool Handle_S_MONSTER_MOVE(PacketSessionRef& session, Protocol::S_MONSTER_MOVE& 
     float x = pkt.x(), y = pkt.y(), z = pkt.z();
     float yaw = pkt.yaw();
 
-    char buf[256];
-    sprintf_s(buf, "[Network] S_MONSTER_MOVE: id=%llu pos=(%.2f,%.2f,%.2f) yaw=%.2f",
-        id, x, y, z, yaw);
-    WriteNetworkLog(buf);
+    // S_MONSTER_MOVE는 매 프레임 대량 발생하므로 로그 비활성화
+    // WriteNetworkLog(buf);
 
     NetworkManager* pNetMgr = NetworkManager::GetInstance();
     if (pNetMgr)

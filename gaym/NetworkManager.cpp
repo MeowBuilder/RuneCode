@@ -17,6 +17,7 @@
 #include "DamageNumberManager.h"
 #include "Room.h"
 #include "EnemySpawner.h"
+#include <cmath>
 
 // ServerPacketHandler.cpp에 정의된 파일 로그 함수 — network_log.txt에 append
 extern void WriteNetworkLog(const std::string& msg);
@@ -197,6 +198,10 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
     if (!pScene || !pDevice || !pCommandList)
         return;
 
+    // 이번 Update에서 방 전환이 처리됐는지 확인
+    // 같은 프레임에 TorchInteract까지 보내지 않기 위한 방어
+    bool roomTransitionProcessedThisFrame = false;
+
     // 큐에 쌓인 명령들을 메인 스레드에서 처리
     std::vector<NetworkCommandData> commands;
     {
@@ -308,6 +313,28 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
         case NetworkCommand::BossEvent:
             ProcessBossEvent(pScene, cmd.monsterId, cmd.bossEventType, cmd.phaseIndex);
             break;
+        }
+    }
+
+    // 방 전환이 처리된 바로 그 프레임에는 TorchInteract 타이머를 줄이지 않음
+    // 즉, 최소 다음 프레임부터 카운트다운 시작
+    if (roomTransitionProcessedThisFrame)
+        return;
+
+    // 방 전환 후 지연 TorchInteract 처리
+    // ProcessRoomTransition 직후 바로 보내면 맵 로딩/오브젝트 정리와
+    // 몬스터 스폰 패킷이 겹쳐 클라가 끊길 수 있으므로 몇 프레임 뒤에 전송한다.
+    if (m_bPendingTorchInteract)
+    {
+        m_nPendingTorchInteractFrame--;
+
+        if (m_nPendingTorchInteractFrame <= 0)
+        {
+            SendTorchInteract();
+            m_bPendingTorchInteract = false;
+            m_nPendingTorchInteractFrame = 0;
+
+            WriteNetworkLog("[Network] Delayed C_TORCH_INTERACT sent");
         }
     }
 }
@@ -564,10 +591,26 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
         else if (mapId == "water_boss")     { pScene->TransitionToWaterBossRoom();   bHandled = true; }
         else if (mapId == "earth_boss")     { pScene->TransitionToEarthBossRoom();   bHandled = true; }
         else if (mapId == "grass_boss")     { pScene->TransitionToGrassBossRoom();   bHandled = true; }
-        else if (mapId == "water_room_01")  { pScene->TransitionToWaterStage();      bHandled = true; }
-        else if (mapId == "earth_room_01")  { pScene->TransitionToEarthStage();      bHandled = true; }
-        else if (mapId == "grass_room_01")  { pScene->TransitionToGrassStage();      bHandled = true; }
-        else if (mapId == "fire_room_01")   { pScene->TransitionToRoomByIndex(static_cast<int>(roomIndex)); bHandled = true; }
+        else if (mapId.rfind("fire_room_", 0) == 0)
+        {
+            pScene->TransitionToRoomByIndex(static_cast<int>(roomIndex));
+            bHandled = true;
+        }
+        else if (mapId.rfind("water_room_", 0) == 0)
+        {
+            pScene->TransitionToWaterStage(static_cast<int>(roomIndex));
+            bHandled = true;
+        }
+        else if (mapId.rfind("earth_room_", 0) == 0)
+        {
+            pScene->TransitionToEarthStage(static_cast<int>(roomIndex));
+            bHandled = true;
+        }
+        else if (mapId.rfind("grass_room_", 0) == 0)
+        {
+            pScene->TransitionToGrassStage(static_cast<int>(roomIndex));
+            bHandled = true;
+        }
     }
 
     if (!bHandled)
@@ -615,7 +658,10 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     // 서버 Room 은 HandleTorchInteract 를 받아야만 몬스터를 스폰하도록 돼 있음 (최초 방 진입과 동일 플로우).
     // 오프라인에서는 방 Active 시 자동 스폰이지만, 네트워크 모드에서는 C_TORCH_INTERACT 가 스폰 트리거.
     // 첫 방에선 맵에 배치된 횃불/큐브를 F 로 눌러 시작했지만, 다음 방 이후에는 자동으로 요청해준다.
-    SendTorchInteract();
+    m_bPendingTorchInteract = true;
+    m_nPendingTorchInteractFrame = 30; // 약 0.5초 정도
+
+    WriteNetworkLog("[Network] Pending C_TORCH_INTERACT scheduled");
 
     m_bInRoomTransition = false;
 }
@@ -1426,6 +1472,30 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
 
 void NetworkManager::ProcessMonsterMove(uint64 monsterId, float x, float y, float z, float yaw)
 {
+    // 비정상 monsterId / 좌표 방어
+    if (monsterId == 0 || monsterId > 1000000)
+    {
+        char buf[128];
+        sprintf_s(buf, "[Network] MonsterMove skipped: invalid monsterId=%llu", monsterId);
+        WriteNetworkLog(buf);
+        return;
+    }
+
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) || !std::isfinite(yaw))
+    {
+        char buf[256];
+        sprintf_s(buf, "[Network] MonsterMove skipped: invalid pos id=%llu pos=(%.2f,%.2f,%.2f) yaw=%.2f",
+            monsterId, x, y, z, yaw);
+        WriteNetworkLog(buf);
+        return;
+    }
+
+    // 죽은 몬스터 move 무시
+    if (m_setDeadServerMonsters.find(monsterId) != m_setDeadServerMonsters.end())
+    {
+        return;
+    }
+
     auto it = m_mapServerMonsters.find(monsterId);
     if (it == m_mapServerMonsters.end())
         return;
