@@ -48,7 +48,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v145</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -196,6 +196,8 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClInclude Include="MeleeAttackBehavior.h" />
     <ClInclude Include="RushAoEAttackBehavior.h" />
     <ClInclude Include="RushFrontAttackBehavior.h" />
+    <ClInclude Include="SpinDashAttackBehavior.h" />
+    <ClInclude Include="FixatedChargeAttackBehavior.h" />
     <ClInclude Include="RangedAttackBehavior.h" />
     <ClInclude Include="BreathAttackBehavior.h" />
     <ClInclude Include="FlyingBarrageAttackBehavior.h" />
@@ -318,6 +320,8 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClCompile Include="MeleeAttackBehavior.cpp" />
     <ClCompile Include="RushAoEAttackBehavior.cpp" />
     <ClCompile Include="RushFrontAttackBehavior.cpp" />
+    <ClCompile Include="SpinDashAttackBehavior.cpp" />
+    <ClCompile Include="FixatedChargeAttackBehavior.cpp" />
     <ClCompile Include="RangedAttackBehavior.cpp" />
     <ClCompile Include="BreathAttackBehavior.cpp" />
     <ClCompile Include="FlyingBarrageAttackBehavior.cpp" />

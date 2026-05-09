@@ -71,7 +71,10 @@ void CS_LightEmit(uint3 DTid:SV_DispatchThreadID) {
     p.startColor=lerp(edgeColor,coreColor,r0);
 
     if(emitterType==0){ // Linear
-        float t=r0,ang=r1*6.28318f,rad=sqrt(Rand01(seed))*linearWidth;
+        float t=r0,ang=r1*6.28318f;
+        // Inverted funnel — base 35% 좁음, top 100% — 전형적 토네이도 깔때기
+        float taperT=0.35f+0.65f*t;
+        float rad=sqrt(Rand01(seed))*linearWidth*taperT;
         p.pos=origin+direction*t*linearLength+rightAxis*rad*cos(ang)+upAxis*rad*sin(ang);
         p.vel=direction*speed; p.life=99.f; p.maxLife=99.f;
         p.size=sizeBase*sizeScale; p.startSize=p.size;
@@ -136,8 +139,40 @@ void CS_LightUpdate(uint3 DTid:SV_DispatchThreadID) {
         float proj=dot(p.pos-origin,direction);
         if(proj<0.f||proj>linearLength){
             uint s2=WangHash(p.seed^asuint(elapsed));
-            float t=Rand01(s2),ang=Rand01(s2)*6.28318f,rad=sqrt(Rand01(s2))*linearWidth;
+            float t=Rand01(s2),ang=Rand01(s2)*6.28318f;
+            float taperT=0.35f+0.65f*t;   // base 좁음 → top 넓음
+            float rad=sqrt(Rand01(s2))*linearWidth*taperT;
             p.pos=origin+direction*t*linearLength+rightAxis*rad*cos(ang)+upAxis*rad*sin(ang);
+        }
+        // Swirl + 입자별/높이별 속도 변동성으로 정직한 원통 느낌 깨기
+        if(linearSwirlSpeed!=0.f){
+            float3 rel=p.pos-origin;
+            float fwdComp=dot(rel,direction);
+            float3 radial=rel-direction*fwdComp;
+            float curR=length(radial);
+            if(curR>0.001f){
+                // 입자별 ±30% (seed 기반, 결정적)
+                float seedF=float(p.seed&0xFFFFu)*(1.0f/65535.0f);
+                float perPart=0.7f+0.6f*seedF;                    // 0.7~1.3
+                // 높이별: 위로 갈수록 더 빠르게 (twist)
+                float heightT=saturate(fwdComp/max(linearLength,0.0001f));
+                float heightMul=0.7f+1.0f*heightT;                // 0.7~1.7
+                float swA=linearSwirlSpeed*dt*perPart*heightMul;
+                float curCos=dot(radial,rightAxis)/curR;
+                float curSin=dot(radial,upAxis)/curR;
+                float ca=cos(swA),sa=sin(swA);
+                float newCos=curCos*ca-curSin*sa;
+                float newSin=curSin*ca+curCos*sa;
+                p.pos=origin+direction*fwdComp+(rightAxis*newCos+upAxis*newSin)*curR;
+            }
+        }
+        // Turbulence — 매 프레임 작은 랜덤 워크 (난기류 흉내)
+        {
+            uint ts=WangHash(p.seed^asuint(elapsed*61.0f)^idx);
+            float jx=(Rand01(ts)-0.5f)*0.06f;
+            float jy=(Rand01(ts)-0.5f)*0.04f;
+            float jz=(Rand01(ts)-0.5f)*0.06f;
+            p.pos+=float3(jx,jy,jz);
         }
     } else if(emitterType==3&&ringExpandSpeed>0.f){
         float3 toP=p.pos-origin;

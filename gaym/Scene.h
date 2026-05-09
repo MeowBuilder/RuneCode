@@ -216,6 +216,11 @@ private:
     float m_fTotalTime = 0.0f;
     float m_fLastDeltaTime = 0.016f;
     bool m_bInBossRoom = false;  // 보스 룸 여부 (클리어 시 다음 스테이지 전환)
+
+    // 디버그용 영구 wind VFX (데몬 보스방 진입 시 활성, 튜닝 가시성 확보)
+    int   m_nDebugWindVFXId    = -1;
+    float m_fDebugWindVFXTimer = 0.0f;
+    DirectX::XMFLOAT3 m_xmf3DebugWindPos = { 0.0f, 0.0f, 0.0f };
     StageTheme m_eCurrentTheme = StageTheme::Fire; // 현재 스테이지 테마
     bool m_bToonEnabled = true;  // F7로 토글: 원신풍 셀 셰이딩 (기본 ON)
     GameObject* m_pLavaPlane = nullptr; // 용암 바닥 평면

@@ -245,7 +245,7 @@ void CS_LightUpdate(uint3 DTid : SV_DispatchThreadID)
     p.vel += gravity * dt;
 
     // ── 이미터별 특수 처리 ──────────────────────────────────
-    if (emitterType == 0) // Linear: 범위 이탈 시 재스폰
+    if (emitterType == 0) // Linear: 범위 이탈 시 재스폰 + swirl 회전
     {
         float proj = dot(p.pos - origin, direction);
         if (proj < 0.f || proj > linearLength)
@@ -257,6 +257,30 @@ void CS_LightUpdate(uint3 DTid : SV_DispatchThreadID)
             p.pos = origin + direction * t * linearLength
                   + rightAxis * rad * cos(ang)
                   + upAxis    * rad * sin(ang);
+        }
+
+        // Swirl: 라인 축 주위 회전. p.pos 의 line-방사 성분을 swirlSpeed*dt 만큼 회전
+        if (linearSwirlSpeed != 0.f)
+        {
+            float3 rel       = p.pos - origin;
+            float  fwdComp   = dot(rel, direction);              // 라인 따라 전진 거리
+            float3 radialVec = rel - direction * fwdComp;        // 라인 축 직각 성분
+            float  curR      = length(radialVec);
+            if (curR > 0.001f)
+            {
+                // 현재 cos/sin 추출
+                float curCos = dot(radialVec, rightAxis) / curR;
+                float curSin = dot(radialVec, upAxis)    / curR;
+                // 회전각만큼 더하기
+                float swirlAng = linearSwirlSpeed * dt;
+                float ca = cos(swirlAng);
+                float sa = sin(swirlAng);
+                float newCos = curCos * ca - curSin * sa;
+                float newSin = curSin * ca + curCos * sa;
+                // 회전된 radial 로 재구성
+                float3 newRadial = (rightAxis * newCos + upAxis * newSin) * curR;
+                p.pos = origin + direction * fwdComp + newRadial;
+            }
         }
     }
     else if (emitterType == 3 && ringExpandSpeed > 0.f) // Ring: 반경 확장

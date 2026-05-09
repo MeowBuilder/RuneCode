@@ -1303,6 +1303,28 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     if (m_pVFXManager)
         m_pVFXManager->Update(deltaTime);
 
+    // 디버그 wind VFX 영구 재스폰 — 90s 마다 자동 재시작 (sub_wind 페이즈 99s 직전)
+    //   m_bInBossRoom 일 때만 동작. 보스방 벗어나면 정리.
+    if (m_bInBossRoom && m_pVFXManager && m_nDebugWindVFXId >= 0)
+    {
+        m_fDebugWindVFXTimer += deltaTime;
+        // 위치 추적(이동 X 지만 매 프레임 Track 호출하면 슬롯이 살아있는 동안 정상)
+        m_pVFXManager->Track(m_nDebugWindVFXId, m_xmf3DebugWindPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
+        if (m_fDebugWindVFXTimer >= 90.0f)
+        {
+            m_pVFXManager->Stop(m_nDebugWindVFXId);
+            m_nDebugWindVFXId = m_pVFXManager->Spawn(
+                "Demon_Tornado", m_xmf3DebugWindPos, XMFLOAT3(0.0f, 1.0f, 0.0f),
+                0u, false);
+            m_fDebugWindVFXTimer = 0.0f;
+        }
+    }
+    else if (!m_bInBossRoom && m_nDebugWindVFXId >= 0 && m_pVFXManager)
+    {
+        m_pVFXManager->Stop(m_nDebugWindVFXId);
+        m_nDebugWindVFXId = -1;
+    }
+
     // Update Torch System (flickering effect)
     if (m_pTorchSystem)
     {
@@ -3620,7 +3642,7 @@ void Scene::TransitionToGrassBossRoom()
         }
         else
         {
-            OutputDebugString(L"[Scene] Offline mode - Spawning Demon boss\n");
+            OutputDebugString(L"[Scene] Offline mode - Spawning Demon boss (ground)\n");
             // 맵 중앙 스폰 (공용 보스 맵 기준)
             const BoundingBox& demonBB = m_pCurrentRoom->GetBoundingBox();
             XMFLOAT3 demonPos = XMFLOAT3(demonBB.Center.x, 0.0f, demonBB.Center.z);
@@ -3629,38 +3651,95 @@ void Scene::TransitionToGrassBossRoom()
             if (pDemon)
             {
                 if (auto* pA = pDemon->GetComponent<AnimationComponent>()) pA->SetCullEnabled(false);
-
-                // ── 4스테이지 바람 보스 = 레일 슈팅 (인트로 대신 비행 모드 자동 진입) ──
-                if (auto* pE = pDemon->GetComponent<EnemyComponent>()) pE->SetAIPaused(true);
-
-                // 비행 보스 크기/고도 (3.5x → 7.0x, Y=38 공중 부양)
-                pDemon->GetTransform()->SetScale(7.0f, 7.0f, 7.0f);
-                pDemon->GetTransform()->SetPosition(XMFLOAT3(demonPos.x, 38.0f, demonPos.z));
-                // 초기 visual yaw = 180 (motion yaw 0 + 180 보정)
+                // 지상 보스로 시작 — 비행 슈팅은 중간 기믹으로 별도 트리거 예정 (F6 더미 또는 HP 임계 등)
                 pDemon->GetTransform()->SetRotation(0.0f, 180.0f, 0.0f);
 
-                // 비행 중 idle 루프 — Demon_Anim.txt 기준 사용 가능 클립 중 가장 자연스러움
-                if (auto* pA = pDemon->GetComponent<AnimationComponent>())
-                    pA->CrossFade("Idle1", 0.3f, true);
-
-                // Flight 시스템에 보스 등록 (테스트용 m_pFlightBossDummy 슬롯 재사용)
-                m_pFlightBossDummy = pDemon;
-                m_fFlightBossYawDeg = 0.0f;
-                m_fFlightCurveTime  = 0.0f;
-                m_fFlightBossHitFlashTimer = 0.0f;
-                m_nFlightHitCount = 0;
-
-                // 플레이어를 보스 뒤쪽 30단위, 같은 고도에 배치
-                if (m_pPlayerGameObject)
+                // ── 기둥 스폰 (FixatedCharge 기믹) — Red Dragon MegaBreath 와 동일한 ColumnBig 모델 사용 ──
+                //   대각선 4 + 카디널 2 = 6 기둥, 방 외곽쪽으로 분산 배치 (중앙 집중 회피)
+                std::vector<GameObject*> vPillars;
                 {
-                    m_pPlayerGameObject->GetTransform()->SetPosition(
-                        XMFLOAT3(demonPos.x, 38.0f, demonPos.z - 30.0f));
-                    if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
-                        pPC->EnterFlightMode(pDemon);
-                }
-                if (m_pCamera) m_pCamera->SetFlightMode(true, pDemon);
+                    XMFLOAT3 center = { demonBB.Center.x, 0.0f, demonBB.Center.z };
+                    float minExt = (std::min)(demonBB.Extents.x, demonBB.Extents.z);
 
-                OutputDebugString(L"[Scene] Grass boss: rail flight mode auto-entered\n");
+                    float dDiag = minExt * 0.65f;       // 대각선 거리 — 외곽 가까이
+                    float dCard = minExt * 0.55f;       // 카디널 거리 — 살짝 안쪽
+                    XMFLOAT3 positions[6] = {
+                        { center.x + dDiag * 0.7071f, 0.0f, center.z + dDiag * 0.7071f }, // NE
+                        { center.x - dDiag * 0.7071f, 0.0f, center.z + dDiag * 0.7071f }, // NW
+                        { center.x + dDiag * 0.7071f, 0.0f, center.z - dDiag * 0.7071f }, // SE
+                        { center.x - dDiag * 0.7071f, 0.0f, center.z - dDiag * 0.7071f }, // SW
+                        { center.x + dCard,           0.0f, center.z                    }, // E
+                        { center.x - dCard,           0.0f, center.z                    }, // W
+                    };
+
+                    Mesh* pColumnMesh = MapLoader::LoadMesh(
+                        "Assets/MapData/meshes/ColumnBig_001.obj", pDevice, pCommandList);
+                    if (pColumnMesh) pColumnMesh->AddRef();
+
+                    const char* pPillarTexPath = "Assets/MapData/meshes/textures/lm_cliff_01_dif.png";
+
+                    for (int i = 0; i < 6; ++i)
+                    {
+                        GameObject* pPillar = CreateGameObject(pDevice, pCommandList);
+                        if (!pPillar) continue;
+
+                        if (auto* pT = pPillar->GetTransform())
+                        {
+                            pT->SetPosition(positions[i].x, positions[i].y, positions[i].z);
+                            pT->SetScale(5.0f, 5.0f, 5.0f);
+                        }
+
+                        if (pColumnMesh) pPillar->SetMesh(pColumnMesh);
+
+                        // 텍스처 바인딩 (cliff stone 질감) — SRV 미할당 시 셰이더가 garbage 샘플
+                        pPillar->SetTextureName(pPillarTexPath);
+                        D3D12_CPU_DESCRIPTOR_HANDLE pillarCpuH;
+                        D3D12_GPU_DESCRIPTOR_HANDLE pillarGpuH;
+                        AllocateDescriptor(&pillarCpuH, &pillarGpuH);
+                        pPillar->LoadTexture(pDevice, pCommandList, pillarCpuH);
+                        pPillar->SetSrvGpuDescriptorHandle(pillarGpuH);
+
+                        MATERIAL stoneMat;
+                        stoneMat.m_cAmbient  = XMFLOAT4(0.45f, 0.45f, 0.47f, 1.0f);
+                        stoneMat.m_cDiffuse  = XMFLOAT4(1.00f, 1.00f, 1.00f, 1.0f);
+                        stoneMat.m_cSpecular = XMFLOAT4(0.30f, 0.30f, 0.30f, 16.0f);
+                        stoneMat.m_cEmissive = XMFLOAT4(0.05f, 0.05f, 0.06f, 1.0f);
+                        pPillar->SetMaterial(stoneMat);
+
+                        auto* pRC = pPillar->AddComponent<RenderComponent>();
+                        if (pColumnMesh) pRC->SetMesh(pColumnMesh);
+                        m_vShaders[0]->AddRenderComponent(pRC);
+
+                        // Wall 콜라이더: 플레이어/투사체만 차단. 보스(Enemy)는 의도적으로 제외 —
+                        //   dash 중 물리적 push-back 으로 궤도가 휘는 문제 방지.
+                        //   기둥 충돌 판정은 FixatedChargeAttackBehavior 가 거리 체크로 직접 처리.
+                        auto* pCol = pPillar->AddComponent<ColliderComponent>();
+                        pCol->SetExtents(1.5f, 6.0f, 1.5f);
+                        pCol->SetCenter(0.0f, 3.0f, 0.0f);
+                        pCol->SetLayer(CollisionLayer::Wall);
+                        pCol->SetCollisionMask(
+                            CollisionLayer::Player |
+                            CollisionLayer::PlayerBullet |
+                            CollisionLayer::EnemyBullet);
+
+                        vPillars.push_back(pPillar);
+                    }
+                }
+
+                // 보스에 기둥 리스트 전달 — FixatedChargeAttackBehavior 가 충돌 체크용으로 사용
+                if (auto* pE = pDemon->GetComponent<EnemyComponent>())
+                    pE->SetEnvironmentObstacles(vPillars);
+
+                // ── 디버그용 영구 tornado VFX (튜닝 가시성) — 보스 옆에 항상 떠있게 ──
+                //   Demon_Tornado: Linear 수직 emitter 라 spawn Y = 컬럼 base (지면 살짝 위)
+                m_xmf3DebugWindPos = XMFLOAT3(demonPos.x + 22.0f, 0.5f, demonPos.z);
+                m_fDebugWindVFXTimer = 0.0f;
+                if (m_pVFXManager)
+                {
+                    m_nDebugWindVFXId = m_pVFXManager->Spawn(
+                        "Demon_Tornado", m_xmf3DebugWindPos, XMFLOAT3(0.0f, 1.0f, 0.0f),
+                        0u, false /*isPlayer*/);
+                }
             }
 
             m_pCurrentRoom->SetState(RoomState::Active);

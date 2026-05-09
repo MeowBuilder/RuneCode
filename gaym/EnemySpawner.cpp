@@ -9,6 +9,8 @@
 #include "CollisionLayer.h"
 #include "MeleeAttackBehavior.h"
 #include "RushAoEAttackBehavior.h"
+#include "SpinDashAttackBehavior.h"
+#include "FixatedChargeAttackBehavior.h"
 #include "RushFrontAttackBehavior.h"
 #include "RangedAttackBehavior.h"
 #include "BreathAttackBehavior.h"
@@ -679,40 +681,155 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
 
     RegisterEnemyPreset("Golem", golem);
 
-    // Register Demon Boss preset (Grass/Wind stage boss - agile dark druid)
+    // Register Demon Boss preset (Stage 4 — 빠른 돌진형 보스)
+    //   컨셉: 돌진을 회피하고 후딜 사이에 딜을 넣어서 깨는 히트앤런 보스
+    //   페이즈1 = 단발 돌진 (짧은/긴 두 변형), 페이즈2 = Rage 후 강화 돌진
     EnemySpawnData demon;
     demon.m_strMeshPath      = "Assets/Enemies/demon/Demon.bin";
     demon.m_strAnimationPath = "Assets/Enemies/demon/Demon_Anim.bin";
     demon.m_strTexturePath   = "Assets/Enemies/demon/Textures/_Albedo.png";
-    demon.m_xmf3Scale = XMFLOAT3(3.5f, 3.5f, 3.5f);
+    demon.m_xmf3Scale = XMFLOAT3(8.0f, 8.0f, 8.0f);  // 보스급 위압감
     demon.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 
     demon.m_Stats.m_fMaxHP              = 1500.0f;
     demon.m_Stats.m_fCurrentHP          = 1500.0f;
-    demon.m_Stats.m_fMoveSpeed          = 9.0f;   // 빠르고 공격적
-    demon.m_Stats.m_fAttackRange        = 12.0f;
-    demon.m_Stats.m_fAttackCooldown     = 1.5f;
-    demon.m_Stats.m_fLongRangeThreshold = 30.0f;
+    demon.m_Stats.m_fMoveSpeed          = 14.0f;    // 살짝 더 빠름
+    // 사거리를 짧게 — 안에 들어오면 즉시 공격, 밖이면 계속 추격 (대기 프레임 최소화)
+    //   사이즈 업으로 몸체 외곽이 늘어나서 6.0 정도가 "딱 붙는" 거리
+    demon.m_Stats.m_fAttackRange        = 6.0f;
+    demon.m_Stats.m_fAttackCooldown     = 0.6f;
+    demon.m_Stats.m_fLongRangeThreshold = 32.0f;    // 더 멀리서도 압박
     demon.m_Stats.m_fMidRangeThreshold  = 15.0f;
 
     demon.m_bIsBoss = true;
-    demon.m_fSpecialAttackCooldown = 5.0f;
-    demon.m_nSpecialAttackChance   = 45;
+    demon.m_fSpecialAttackCooldown = 1.8f;          // 3.0→1.8, 돌진 매우 자주
+    demon.m_nSpecialAttackChance   = 75;
+    demon.m_fAnimationPlaybackSpeed = 1.15f;        // 살짝 빠른 모션 (민첩한 인상)
 
     demon.m_AnimConfig.m_strIdleClip    = "Idle1";
     demon.m_AnimConfig.m_strChaseClip   = "Run";
-    demon.m_AnimConfig.m_strAttackClip  = "attack1";
-    demon.m_AnimConfig.m_strStaggerClip = "gethit1";
+    demon.m_AnimConfig.m_strAttackClip  = "attack3"; // 가장 짧은 1.33s — 빠른 잽
+    demon.m_AnimConfig.m_strStaggerClip = "gethit2";
     demon.m_AnimConfig.m_strDeathClip   = "Death1";
 
-    demon.m_IndicatorConfig.m_eType      = IndicatorType::Circle;
-    demon.m_IndicatorConfig.m_fHitRadius = 10.0f;
+    // ForwardBox preset — 모든 데몬 공격이 ForwardBox override 라 일관된 메시 셋업 필요
+    //   (Circle preset 으로 두면 ring/disc 만 생성돼서 override 가 시각적으로 안 먹음)
+    demon.m_IndicatorConfig.m_eType      = IndicatorType::ForwardBox;
+    demon.m_IndicatorConfig.m_fHitRadius = 5.5f;   // 기본 corridor 절반 너비
+    demon.m_IndicatorConfig.m_fHitLength = 20.0f;  // 기본 corridor 길이 (behavior 가 override)
 
+    // 기본 공격 — 회전 돌진 (SpinDash). attack3 애니 + 긴 거리 + 넓은 AoE
+    //   가까이 붙으면 즉시 발동 → 보스가 멈출 새 없이 돌진/회전으로 들이댐
     demon.m_fnCreateAttack = []() {
-        return std::make_unique<MeleeAttackBehavior>(50.0f, 0.3f, 0.2f, 0.4f);
+        return std::make_unique<SpinDashAttackBehavior>(
+            18.0f /*tickDmg*/, 0.22f /*tickInterval*/,
+            18.0f /*rushSpeed*/, 1.1f  /*rushDur ~20 unit*/,
+            0.25f /*windup*/, 0.55f /*recovery=딜윈도우*/,
+            7.0f  /*aoeRadius*/);
     };
-    demon.m_fnCreateSpecialAttack = [pProjMgr]() {
-        return std::make_unique<RushFrontAttackBehavior>(70.0f, 20.0f, 1.0f, 0.2f, 0.2f, 0.3f, 6.0f, 80.0f);
+
+    // 특수 공격 fallback (페이즈 컨트롤러 없을 때)
+    demon.m_fnCreateSpecialAttack = []() {
+        return std::make_unique<RushFrontAttackBehavior>(
+            60.0f /*damage*/, 28.0f /*rushSpeed*/, 1.0f /*rushDur ~28 unit*/,
+            0.25f /*windup*/, 0.15f /*hit*/, 1.0f /*recovery*/,
+            8.0f /*hitRange*/, 80.0f /*coneDeg*/);
+    };
+
+    // ===== Boss Phase Configuration — 2 페이즈 (Rage 전환) =====
+    demon.m_fnCreateBossPhaseConfig = []() {
+        auto pConfig = std::make_unique<BossPhaseConfig>();
+
+        // ----- Phase 1 (100% - 50% HP): Hit & Run -----
+        BossPhaseData phase1;
+        phase1.m_fHealthThreshold = 1.0f;
+        phase1.m_fSpeedMultiplier = 1.0f;
+        phase1.m_fAttackSpeedMultiplier = 1.0f;
+        phase1.m_nSpecialAttackChance = 70;
+        phase1.m_bCanFly = false;
+
+        // Primary — SpinDash (회전 돌진). 매번 발동 = 거의 끊임없는 회전 압박
+        phase1.m_fnPrimaryAttack = []() {
+            return std::make_unique<SpinDashAttackBehavior>(
+                18.0f, 0.22f, 18.0f, 1.1f, 0.25f, 0.55f, 7.0f);
+        };
+
+        // 돌진 2 변형:
+        //   짧은 돌진 — 가깝게, 후딜 1.0s (회피 빡빡, 딜윈도우 보통)
+        //   긴  돌진  — 멀리,   후딜 1.2s (회피 쉬움, 딜윈도우 큼)
+        // 특수공격 풀: 짧은 돌진 / 긴 돌진 / 어글락 차지 (1/3 씩)
+        //   FixatedCharge = 핵심 기믹. 어글자 추적 텔레그래프 → 장거리 돌진 → 기둥 박으면 그로기
+        phase1.m_fnSpecialAttack = []() -> std::unique_ptr<IAttackBehavior> {
+            int choice = rand() % 3;
+            if (choice == 0) {
+                // 짧은 돌진 — 거리/범위 모두 확장, 위협적
+                return std::make_unique<RushFrontAttackBehavior>(
+                    55.0f, 28.0f, 0.85f, 0.25f, 0.15f, 1.0f, 8.5f, 75.0f);
+            } else if (choice == 1) {
+                // 긴 돌진 — 방 가로지르는 거리
+                return std::make_unique<RushFrontAttackBehavior>(
+                    70.0f, 34.0f, 1.2f, 0.30f, 0.20f, 1.2f, 10.5f, 95.0f);
+            } else {
+                // 어글자 락온 차지 — 매우 멀리, 더 두꺼운 인디케이터
+                return std::make_unique<FixatedChargeAttackBehavior>(
+                    85.0f /*damage*/, 3.0f /*telegraph*/, 0.2f /*locked*/,
+                    58.0f /*dashSpeed*/, 110.0f /*maxDist 매우 길게*/,
+                    6.5f  /*playerHitR*/, 8.0f /*pillarHitR*/,
+                    6.0f  /*indicatorHalfW 두껍게*/,
+                    4.5f  /*groggyDur*/, 0.9f /*missRecovery*/);
+            }
+        };
+
+        pConfig->AddPhase(phase1);
+
+        // ----- Phase 2 (50% - 0% HP): Rage Mode -----
+        BossPhaseData phase2;
+        phase2.m_fHealthThreshold = 0.5f;
+        phase2.m_fSpeedMultiplier = 1.35f;
+        phase2.m_fAttackSpeedMultiplier = 0.65f;  // 쿨 짧아짐
+        phase2.m_nSpecialAttackChance = 85;
+        phase2.m_bCanFly = false;
+
+        // Primary 강화: 더 빠른 회전, 길게 끌고감, 후딜 짧음
+        phase2.m_fnPrimaryAttack = []() {
+            return std::make_unique<SpinDashAttackBehavior>(
+                20.0f /*tickDmg*/, 0.18f /*tick 더 자주*/,
+                22.0f /*rushSpeed*/, 1.25f /*rushDur ~27 unit*/,
+                0.20f /*windup*/, 0.40f /*recovery 짧게*/,
+                7.5f  /*aoeRadius*/);
+        };
+
+        // 더 빠른 돌진. 후딜도 같이 짧아져서 딜 윈도우 좁음 (빡빡한 패링)
+        phase2.m_fnSpecialAttack = []() -> std::unique_ptr<IAttackBehavior> {
+            int choice = rand() % 3;
+            if (choice == 0) {
+                // 빠른 짧은 돌진
+                return std::make_unique<RushFrontAttackBehavior>(
+                    60.0f, 36.0f, 0.7f, 0.20f, 0.15f, 0.70f, 8.5f, 75.0f);
+            } else if (choice == 1) {
+                // 빠른 긴 돌진
+                return std::make_unique<RushFrontAttackBehavior>(
+                    78.0f, 42.0f, 1.05f, 0.22f, 0.18f, 0.85f, 10.5f, 95.0f);
+            } else {
+                // Rage 모드의 차지 — 텔레그래프 짧고 더 빠름, 더 멀리
+                return std::make_unique<FixatedChargeAttackBehavior>(
+                    100.0f /*damage*/, 2.4f /*telegraph 짧게*/, 0.15f /*locked*/,
+                    68.0f  /*dashSpeed*/, 120.0f /*maxDist 더 멀리*/,
+                    6.5f   /*playerHitR*/, 8.0f /*pillarHitR*/,
+                    6.0f   /*indicatorHalfW*/,
+                    4.0f   /*groggyDur*/, 0.7f /*missRecovery*/);
+            }
+        };
+
+        // 페이즈 전환: Rage 포효 + 무적 (전환공격 없음)
+        phase2.m_bHasTransitionAttack = false;
+        phase2.m_bInvincibleDuringTransition = true;
+        phase2.m_fTransitionDuration = 2.4f;          // Rage 클립 2.37s 매칭
+        phase2.m_strTransitionAnimation = "Rage";
+
+        pConfig->AddPhase(phase2);
+
+        return pConfig;
     };
 
     RegisterEnemyPreset("Demon", demon);

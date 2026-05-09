@@ -223,6 +223,15 @@ public:
     // 보스 앞쪽 직사각형 영역 안에 타겟이 있는지 (로컬 X: ±widthHalf, 로컬 Z: 0~length)
     bool IsTargetInForwardRect(float fWidthHalf, float fLength) const;
 
+    // 환경 장애물 (4스테이지 데몬 fixated charge — 기둥 충돌 감지용)
+    void SetEnvironmentObstacles(std::vector<GameObject*> obstacles) { m_vEnvironmentObstacles = std::move(obstacles); }
+    const std::vector<GameObject*>& GetEnvironmentObstacles() const  { return m_vEnvironmentObstacles; }
+
+    // FixatedCharge 실패(허공 돌진) 카운터 — 다음 charge windup 단축에 사용
+    int  GetMissedFixatedCharges() const { return m_nMissedFixatedCharges; }
+    void IncrementMissedFixatedCharges() { ++m_nMissedFixatedCharges; }
+    void ResetMissedFixatedCharges()     { m_nMissedFixatedCharges = 0; }
+
 private:
     // State update functions
     void UpdateIdle(float dt);
@@ -322,6 +331,10 @@ private:
     // Flying mode
     bool m_bIsFlying = false;
     float m_fFlyHeight = 15.0f;
+
+    // 4스테이지 데몬 fixated charge 시스템
+    std::vector<GameObject*> m_vEnvironmentObstacles;   // 기둥 등 장애물 — 돌진 충돌 감지
+    int m_nMissedFixatedCharges = 0;                    // 허공 돌진 횟수 — escalation
 
     // Boss intro cutscene
     BossIntroPhase m_eIntroPhase = BossIntroPhase::None;

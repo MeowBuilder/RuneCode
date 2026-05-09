@@ -129,6 +129,12 @@
     <ClInclude Include="RushFrontAttackBehavior.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="SpinDashAttackBehavior.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="FixatedChargeAttackBehavior.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
     <ClInclude Include="RangedAttackBehavior.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -489,6 +495,12 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="RushFrontAttackBehavior.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="SpinDashAttackBehavior.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="FixatedChargeAttackBehavior.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="RangedAttackBehavior.cpp">

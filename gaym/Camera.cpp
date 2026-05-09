@@ -190,6 +190,12 @@ void CCamera::Update(float mouseDeltaX, float mouseDeltaY, float scrollDelta, fl
     m_distance -= scrollDelta * m_zoomSpeed;
     m_distance = max(m_minDistance, min(m_maxDistance, m_distance));
 
+    // 임시 orbit 거리 부스트 lerp (보스 텔레그래프 중 pull-back 등)
+    if (deltaTime > 0.0f)
+    {
+        m_fExtraOrbitDist += (m_fExtraOrbitDistTarget - m_fExtraOrbitDist) * 4.0f * deltaTime;
+    }
+
     // Update camera shake
     if (m_bShaking && deltaTime > 0.0f)
     {
@@ -248,7 +254,7 @@ void CCamera::UpdateViewMatrix()
         if (!m_pTarget) return;
         yawRad   = XMConvertToRadians(m_yaw);
         pitchRad = XMConvertToRadians(m_pitch);
-        dist     = m_distance;
+        dist     = m_distance + m_fExtraOrbitDist;   // 임시 pull-back 적용
 
         TransformComponent* pTransform = m_pTarget->GetTransform();
         XMVECTOR targetPos = XMLoadFloat3(&pTransform->GetPosition());

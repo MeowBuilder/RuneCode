@@ -971,13 +971,18 @@ void EnemyComponent::ShowIndicators()
         float fHalfW = (pActive && pActive->GetIndicatorRadius() > 0.0f)
                      ? pActive->GetIndicatorRadius()
                      : m_IndicatorConfig.m_fHitRadius;  // half-width (override 반영)
+        // 보스 위치를 corridor 의 시작점으로 — Z-scale 그대로 사용해서 보스 뒤로 새지 않게
         float centerX = bossPos.x + fwdX * (fLen * 0.5f);
         float centerZ = bossPos.z + fwdZ * (fLen * 0.5f);
 
         float baseY = (std::max)(bossPos.y, targetPos.y);
         float indY  = baseY + 1.2f;
 
-        // 외곽 box — 공격 내내 고정 테두리
+        // behavior 별 색상 — 기본 (1,1,1) = 빨강 그대로, 그 외엔 tint 를 베이스 컬러로 사용
+        XMFLOAT3 tint = pActive ? pActive->GetIndicatorTint() : XMFLOAT3(1.0f, 1.0f, 1.0f);
+        bool bUseTint = !(tint.x == 1.0f && tint.y == 1.0f && tint.z == 1.0f);
+
+        // 외곽 box — 공격 내내 고정 테두리. 사이드 방향만 1.06 마진, Z 는 fLen 그대로
         if (m_pHitZoneIndicator)
         {
             TransformComponent* pT = m_pHitZoneIndicator->GetTransform();
@@ -985,12 +990,21 @@ void EnemyComponent::ShowIndicators()
             {
                 pT->SetPosition(centerX, indY + 0.02f, centerZ);
                 pT->SetRotation(0.0f, bossYawDeg, 0.0f);
-                pT->SetScale(fHalfW * 2.0f * 1.06f, 1.0f, fLen * 1.06f);
+                pT->SetScale(fHalfW * 2.0f * 1.06f, 1.0f, fLen);
                 MATERIAL mat;
-                mat.m_cAmbient  = XMFLOAT4(0.5f, 0.02f, 0.02f, 1.0f);
-                mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.15f, 0.1f,  1.0f);
-                mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f,  0.0f,  1.0f);
-                mat.m_cEmissive = XMFLOAT4(2.0f, 0.25f, 0.1f,  1.0f);
+                if (bUseTint)
+                {
+                    mat.m_cAmbient  = XMFLOAT4(0.4f * tint.x, 0.4f * tint.y, 0.4f * tint.z, 1.0f);
+                    mat.m_cDiffuse  = XMFLOAT4(tint.x, tint.y, tint.z, 1.0f);
+                    mat.m_cEmissive = XMFLOAT4(2.0f * tint.x, 2.0f * tint.y, 2.0f * tint.z, 1.0f);
+                }
+                else
+                {
+                    mat.m_cAmbient  = XMFLOAT4(0.5f, 0.02f, 0.02f, 1.0f);
+                    mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.15f, 0.10f, 1.0f);
+                    mat.m_cEmissive = XMFLOAT4(2.0f, 0.25f, 0.10f, 1.0f);
+                }
+                mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
                 m_pHitZoneIndicator->SetMaterial(mat);
             }
         }
@@ -1003,7 +1017,6 @@ void EnemyComponent::ShowIndicators()
             {
                 float curLen = fLen * fillProgress;
                 if (curLen < 0.01f) curLen = 0.01f;
-                // 보스 기준 0 → curLen. fill 중심 = curLen/2 위치
                 float fillCenterX = bossPos.x + fwdX * (curLen * 0.5f);
                 float fillCenterZ = bossPos.z + fwdZ * (curLen * 0.5f);
 
@@ -1012,14 +1025,21 @@ void EnemyComponent::ShowIndicators()
                 pT->SetScale(fHalfW * 2.0f, 1.0f, curLen);
 
                 MATERIAL mat;
-                mat.m_cAmbient  = XMFLOAT4(0.3f, 0.02f, 0.0f, 1.0f);
-                mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.2f + 0.5f * fillProgress, 0.05f, 1.0f);
+                if (bUseTint)
+                {
+                    // tint 기반 fill — fill 진행도에 따라 emissive 가 점점 강해짐
+                    float emitMul = 0.8f + 1.6f * fillProgress;   // 0.8 → 2.4
+                    mat.m_cAmbient  = XMFLOAT4(0.25f * tint.x, 0.25f * tint.y, 0.25f * tint.z, 1.0f);
+                    mat.m_cDiffuse  = XMFLOAT4(tint.x, tint.y, tint.z, 1.0f);
+                    mat.m_cEmissive = XMFLOAT4(emitMul * tint.x, emitMul * tint.y, emitMul * tint.z, 1.0f);
+                }
+                else
+                {
+                    mat.m_cAmbient  = XMFLOAT4(0.3f, 0.02f, 0.0f, 1.0f);
+                    mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.2f + 0.5f * fillProgress, 0.05f, 1.0f);
+                    mat.m_cEmissive = XMFLOAT4(0.8f + 1.0f * fillProgress, 0.1f + 0.9f * fillProgress, 0.05f, 1.0f);
+                }
                 mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-                mat.m_cEmissive = XMFLOAT4(
-                    0.8f + 1.0f * fillProgress,
-                    0.1f + 0.9f * fillProgress,
-                    0.05f,
-                    1.0f);
                 m_pHitZoneFillIndicator->SetMaterial(mat);
             }
         }

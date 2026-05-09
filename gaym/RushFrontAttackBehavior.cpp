@@ -8,7 +8,8 @@
 
 RushFrontAttackBehavior::RushFrontAttackBehavior(float fDamage, float fRushSpeed, float fRushDuration,
                                                  float fWindupTime, float fHitTime, float fRecoveryTime,
-                                                 float fHitRange, float fConeAngleDeg)
+                                                 float fHitRange, float fConeAngleDeg,
+                                                 float fTelegraphTime)
     : m_fDamage(fDamage)
     , m_fRushSpeed(fRushSpeed)
     , m_fRushDuration(fRushDuration)
@@ -17,10 +18,34 @@ RushFrontAttackBehavior::RushFrontAttackBehavior(float fDamage, float fRushSpeed
     , m_fRecoveryTime(fRecoveryTime)
     , m_fHitRange(fHitRange)
     , m_fConeAngleDeg(fConeAngleDeg)
+    , m_fTelegraphTime(fTelegraphTime)
 {
     // Precompute cos of half-cone angle for dot product comparison
     float halfConeRad = XMConvertToRadians(fConeAngleDeg * 0.5f);
     m_fCosHalfCone = cosf(halfConeRad);
+}
+
+int RushFrontAttackBehavior::GetIndicatorTypeOverride() const
+{
+    return static_cast<int>(IndicatorType::ForwardBox);
+}
+
+float RushFrontAttackBehavior::GetIndicatorRadius() const
+{
+    // FixatedCharge 와 일관된 시각 폭 — 4.5 ~ 6.0 클램프
+    //   콘 끝 너비를 베이스로 하되, 너무 좁거나 넓지 않게
+    float halfConeRad = XMConvertToRadians(m_fConeAngleDeg * 0.5f);
+    float coneHalf    = m_fHitRange * sinf(halfConeRad);
+    float halfW       = (coneHalf > RUSH_HIT_RADIUS + 1.5f) ? coneHalf : (RUSH_HIT_RADIUS + 1.5f);
+    if (halfW < 4.5f) halfW = 4.5f;
+    if (halfW > 6.0f) halfW = 6.0f;
+    return halfW;
+}
+
+float RushFrontAttackBehavior::GetIndicatorLength() const
+{
+    // 전체 위험 구간 = 돌진 거리 + 콘 적중 사거리
+    return m_fRushSpeed * m_fRushDuration + m_fHitRange;
 }
 
 void RushFrontAttackBehavior::Execute(EnemyComponent* pEnemy)
@@ -47,7 +72,7 @@ void RushFrontAttackBehavior::Execute(EnemyComponent* pEnemy)
         }
     }
 
-    m_ePhase = Phase::Rush;
+    m_ePhase = Phase::Telegraph;
 }
 
 void RushFrontAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
@@ -58,6 +83,15 @@ void RushFrontAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
 
     switch (m_ePhase)
     {
+    case Phase::Telegraph:
+        // 정지 상태로 인디케이터 차오름. ShouldShowHitZone 이 true → ForwardBox 표시.
+        if (m_fTimer >= m_fTelegraphTime)
+        {
+            m_ePhase = Phase::Rush;
+            m_fTimer = 0.0f;
+        }
+        break;
+
     case Phase::Rush:
         UpdateRush(dt, pEnemy);
         if (m_fTimer >= m_fRushDuration)
@@ -104,7 +138,7 @@ bool RushFrontAttackBehavior::IsFinished() const
 
 void RushFrontAttackBehavior::Reset()
 {
-    m_ePhase = Phase::Rush;
+    m_ePhase = Phase::Telegraph;
     m_fTimer = 0.0f;
     m_bHitDealt = false;
     m_bRushHitDealt = false;

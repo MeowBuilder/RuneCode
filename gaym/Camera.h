@@ -49,6 +49,11 @@ public:
     void StopShake();
     bool IsShaking() const { return m_bShaking; }
 
+    // 임시 orbit 거리 부스트 — 보스 패턴 텔레그래프 중 카메라를 뒤로 빼서 드라마틱한 느낌
+    //   target 만 설정하면 매 프레임 부드럽게 lerp. 0 으로 리셋하면 자연스럽게 복귀
+    void  SetExtraOrbitDistanceTarget(float fTarget) { m_fExtraOrbitDistTarget = fTarget; }
+    float GetExtraOrbitDistance() const              { return m_fExtraOrbitDist; }
+
     // Cinematic mode: orbit around a world-space point instead of the follow target
     void StartCinematic(const DirectX::XMFLOAT3& lookAt, float distance, float pitch, float yaw);
     void StopCinematic();
@@ -124,4 +129,8 @@ private:
     float m_fShakeDuration = 0.0f;
     float m_fShakeTimer = 0.0f;
     DirectX::XMFLOAT3 m_shakeOffset = { 0.0f, 0.0f, 0.0f };
+
+    // 임시 orbit 거리 부스트 (드라마틱 pull-back 용)
+    float m_fExtraOrbitDist       = 0.0f;
+    float m_fExtraOrbitDistTarget = 0.0f;
 };

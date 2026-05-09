@@ -668,6 +668,66 @@ void EffectRegistry::Initialize()
         def.layers.push_back(std::move(layer));
         Register(std::move(def));
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Demon_Tornado — 4스테이지 데몬 회오리 (Linear 수직 emitter + swirl)
+    //   light_emitter.hlsl 에 swirl rotation 추가 후 Linear 가 진짜 helix 흐름 생성
+    //   [Outer]  넓은 반경 느린 swirl → 외곽 흙먼지
+    //   [Inner]  좁은 반경 빠른 swirl → 코어 streak
+    // ──────────────────────────────────────────────────────────────────────────
+    EffectDef def;
+    def.name    = "Demon_Tornado";
+    def.element = ElementType::Wind;
+
+    auto BuildLinearSwirlLayer = [](float length, float width, float swirlSpeed,
+                                     float speedMin, float speedMax,
+                                     float lifetimeMin, float lifetimeMax,
+                                     int particleCount, float sizeScale,
+                                     const XMFLOAT4& core, const XMFLOAT4& edge) -> EffectLayer
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Linear;
+        layer.element        = ElementType::Wind;
+        layer.particleCount  = particleCount;
+        layer.overrideColors = true;
+        layer.coreColor      = core;
+        layer.edgeColor      = edge;
+        layer.sizeScale      = sizeScale;
+        layer.speedMin       = speedMin;
+        layer.speedMax       = speedMax;
+        layer.lifetimeMin    = lifetimeMin;
+        layer.lifetimeMax    = lifetimeMax;
+        layer.duration       = -1.f;        // 무한
+        layer.emitRate       = 0.f;         // 즉시 전부 (recycle 로 순환)
+
+        layer.linear.length      = length;
+        layer.linear.width       = width;
+        layer.linear.recycleRate = 1.0f;
+        layer.linear.swirlSpeed  = swirlSpeed;
+
+        return layer;
+    };
+
+    // [Layer 0] Outer column — 외곽 옅은 민트 그린, 넓은 반경, 천천히 회전
+    def.layers.push_back(BuildLinearSwirlLayer(
+        12.0f /*length*/, 3.0f /*width*/, 5.0f /*swirl rad/s ~0.8 rev/s*/,
+        4.0f, 8.0f /*speedMin/Max — 위로 흐름*/,
+        2.0f, 3.5f /*lifetime — 길게 흐름 보임*/,
+        800 /*particleCount*/, 1.4f /*sizeScale*/,
+        XMFLOAT4(0.72f, 0.92f, 0.76f, 1.00f),   // 옅은 민트 그린 (코어)
+        XMFLOAT4(0.30f, 0.55f, 0.35f, 0.30f))); // 살짝 짙은 그린 (엣지)
+
+    // [Layer 1] Inner core — 좁은 반경, 빠른 회전, 화이트-민트
+    def.layers.push_back(BuildLinearSwirlLayer(
+        13.0f /*length 살짝 더 길게*/, 1.3f /*width — 좁음*/,
+        9.5f /*swirl 더 빠름*/,
+        6.0f, 11.0f /*speed 빠름*/,
+        1.2f, 2.0f /*lifetime*/,
+        500 /*particleCount*/, 0.9f /*size 작게*/,
+        XMFLOAT4(0.92f, 1.00f, 0.92f, 1.00f),   // 밝은 화이트-민트 (코어)
+        XMFLOAT4(0.55f, 0.85f, 0.62f, 0.55f))); // 부드러운 민트 (엣지)
+
+    Register(std::move(def));
 }
 
 void EffectRegistry::Register(EffectDef def) {

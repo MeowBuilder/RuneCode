@@ -1,4 +1,5 @@
 #pragma once
+#include <DirectXMath.h>
 
 class EnemyComponent;
 
@@ -45,4 +46,11 @@ public:
     //   true (default) : m_AnimConfig.m_bLoopAttack 사용
     //   false          : 애니를 1회만 재생하고 끝 (behavior 가 애니 종료 후 idle 전환 담당)
     virtual bool ShouldLoopAnim() const { return true; }
+
+    // 인디케이터 색상 RGB 멀티플라이어 (1,1,1) 이면 기본 빨강 그대로.
+    //   특수 패턴마다 색깔 구분에 사용 — 예: SpinDash=주황, FixatedCharge=보라/짙은빨강
+    virtual DirectX::XMFLOAT3 GetIndicatorTint() const
+    {
+        return DirectX::XMFLOAT3(1.0f, 1.0f, 1.0f);
+    }
 };
