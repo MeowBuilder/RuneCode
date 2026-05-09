@@ -48,6 +48,13 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
         return;
     }
 
+    // === Tornado Trap (4스테이지 ambient 회오리에 빨려들어감) — 입력/물리 모두 우회 ===
+    if (m_bTornadoTrapped)
+    {
+        UpdateTornadoTrap(deltaTime);
+        return;
+    }
+
     // Hit flash 페이드 — 대쉬 중이 아닐 때만 (대쉬는 자기 플래시 적용)
     if (m_fHitFlashTimer > 0.0f)
     {
@@ -367,6 +374,52 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
     }
 
     UpdateAnimation(deltaTime, bMoving, bAttackTriggered, bDashStarted, bDashing);
+}
+
+void PlayerComponent::EnterTornadoTrap(const XMFLOAT3& tornadoCenter)
+{
+    if (!m_pOwner || !m_pOwner->GetTransform()) return;
+    m_bTornadoTrapped   = true;
+    m_xmf3TornadoCenter = tornadoCenter;
+    m_fTornadoTime      = 0.0f;
+    m_fTornadoStartY    = m_pOwner->GetTransform()->GetPosition().y;
+    m_fVelocityY        = 0.0f;
+    m_bOnGround         = false;
+    OutputDebugString(L"[Player] Tornado Trap ENTER\n");
+}
+
+void PlayerComponent::ExitTornadoTrap()
+{
+    if (!m_bTornadoTrapped) return;
+    m_bTornadoTrapped = false;
+    m_fVelocityY      = 0.0f;
+    m_bOnGround       = false;   // 낙하 시작
+    OutputDebugString(L"[Player] Tornado Trap EXIT (descend)\n");
+}
+
+void PlayerComponent::UpdateTornadoTrap(float dt)
+{
+    auto* pT = m_pOwner ? m_pOwner->GetTransform() : nullptr;
+    if (!pT) return;
+
+    m_fTornadoTime += dt;
+
+    const float orbitRadius = 2.5f;
+    const float orbitSpeed  = 5.5f;     // rad/s, ~0.87 rev/s
+    const float riseSpeed   = 5.5f;     // units/s
+    const float maxLiftY    = 12.0f;    // 컬럼 높이만큼
+
+    float angle = m_fTornadoTime * orbitSpeed;
+    float x     = m_xmf3TornadoCenter.x + cosf(angle) * orbitRadius;
+    float z     = m_xmf3TornadoCenter.z + sinf(angle) * orbitRadius;
+    float y     = m_fTornadoStartY + m_fTornadoTime * riseSpeed;
+    if (y > m_fTornadoStartY + maxLiftY) y = m_fTornadoStartY + maxLiftY;
+
+    pT->SetPosition(x, y, z);
+
+    // 시각 회전 — 접선 방향으로 정렬 (캐릭터가 회오리 따라 도는 모션)
+    float tangentYawDeg = XMConvertToDegrees(angle) + 90.0f;
+    pT->SetRotation(0.0f, tangentYawDeg, 0.0f);
 }
 
 void PlayerComponent::EnterFlightMode(GameObject* pFlightCenter)

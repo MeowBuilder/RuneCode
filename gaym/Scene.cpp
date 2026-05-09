@@ -1325,6 +1325,162 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         m_nDebugWindVFXId = -1;
     }
 
+    // 테마 변경 감지 — sky color 자동 갱신 (Update 단일 진입점에서 처리)
+    if (m_eCurrentTheme != m_eLastAppliedTheme)
+    {
+        m_eLastAppliedTheme = m_eCurrentTheme;
+        ApplyThemeSkyColor();
+        if (m_eCurrentTheme != StageTheme::Grass) CleanupWindAmbient();
+    }
+
+    // 4스테이지 바람 ambient — Grass 테마: 주기적 큰 토네이도 + 경고 인디케이터 + 데미지 트랩
+    //   사이클: Idle(6s) → Warning(2s, 경고링) → Active(6s, 토네이도+트랩) → Cooldown(1.5s)
+    if (m_pVFXManager && m_pCurrentRoom && m_eCurrentTheme == StageTheme::Grass)
+    {
+        m_fPeriodicTornadoTimer += deltaTime;
+
+        // Active 페이즈: 모든 플레이어에 데미지/석션/트랩 적용
+        if (m_eTornadoPhase == TornadoEventPhase::Active)
+        {
+            const float kSuctionRadius = 7.5f;       // 이 안에 들어오면 끌림
+            const float kTrapRadius    = 3.5f;       // 이 안에 들어오면 트랩 발동
+            const float kPullStrength  = 12.0f;      // 끌리는 속도 (units/s)
+            const float kInitialDamage = 10.0f;      // 트랩 진입 시 즉시 데미지
+            const float kTickDamage    = 6.0f;       // 트랩 중 0.5s 마다 tick
+            const float kTickInterval  = 0.5f;
+
+            m_fTornadoDamageTickTimer += deltaTime;
+            bool bTickFires = (m_fTornadoDamageTickTimer >= kTickInterval);
+            if (bTickFires) m_fTornadoDamageTickTimer = 0.0f;
+
+            const auto& players = GetAllPlayers();
+            for (GameObject* pP : players)
+            {
+                if (!pP) continue;
+                auto* pPC = pP->GetComponent<PlayerComponent>();
+                auto* pPT = pP->GetTransform();
+                if (!pPC || !pPT) continue;
+
+                XMFLOAT3 ppos = pPT->GetPosition();
+                float dx = ppos.x - m_xmf3TornadoEventPos.x;
+                float dz = ppos.z - m_xmf3TornadoEventPos.z;
+                float dist = sqrtf(dx*dx + dz*dz);
+
+                if (pPC->IsTornadoTrapped())
+                {
+                    if (bTickFires) pPC->TakeDamage(kTickDamage);
+                }
+                else if (dist <= kTrapRadius)
+                {
+                    // 트랩 발동
+                    pPC->EnterTornadoTrap(m_xmf3TornadoEventPos);
+                    pPC->TakeDamage(kInitialDamage);
+                }
+                else if (dist <= kSuctionRadius && dist > 0.001f)
+                {
+                    // 끌림: 중심 방향으로 위치 이동
+                    float pullDist = kPullStrength * deltaTime;
+                    ppos.x -= (dx / dist) * pullDist;
+                    ppos.z -= (dz / dist) * pullDist;
+                    pPT->SetPosition(ppos);
+                }
+            }
+        }
+
+        // 페이즈 전환
+        switch (m_eTornadoPhase)
+        {
+        case TornadoEventPhase::Idle:
+            if (m_fPeriodicTornadoTimer >= 6.0f)
+            {
+                // 새 위치 선택
+                const BoundingBox& rb = m_pCurrentRoom->GetBoundingBox();
+                float halfX = rb.Extents.x * 0.55f;
+                float halfZ = rb.Extents.z * 0.55f;
+                float rx = ((rand() % 1000) / 1000.0f - 0.5f) * 2.0f * halfX;
+                float rz = ((rand() % 1000) / 1000.0f - 0.5f) * 2.0f * halfZ;
+                m_xmf3TornadoEventPos = XMFLOAT3(rb.Center.x + rx, 0.0f, rb.Center.z + rz);
+
+                // 경고 링 spawn (Y=0.1 지면 살짝 위)
+                XMFLOAT3 warnPos = m_xmf3TornadoEventPos; warnPos.y = 0.1f;
+                m_nTornadoWarningVFXId = m_pVFXManager->Spawn(
+                    "Wind_TornadoWarning", warnPos, XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
+
+                m_eTornadoPhase = TornadoEventPhase::Warning;
+                m_fPeriodicTornadoTimer = 0.0f;
+            }
+            break;
+
+        case TornadoEventPhase::Warning:
+            if (m_fPeriodicTornadoTimer >= 2.0f)
+            {
+                // 경고 종료 (자동 fade 되지만 안전하게 stop)
+                if (m_nTornadoWarningVFXId >= 0) m_pVFXManager->Stop(m_nTornadoWarningVFXId);
+                m_nTornadoWarningVFXId = -1;
+
+                // 토네이도 본체 spawn
+                XMFLOAT3 tornadoPos = m_xmf3TornadoEventPos; tornadoPos.y = 0.5f;
+                m_nPeriodicTornadoId = m_pVFXManager->Spawn(
+                    "Demon_Tornado_Big", tornadoPos, XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
+
+                m_eTornadoPhase = TornadoEventPhase::Active;
+                m_fPeriodicTornadoTimer = 0.0f;
+                m_fTornadoDamageTickTimer = 0.0f;
+            }
+            break;
+
+        case TornadoEventPhase::Active:
+            if (m_fPeriodicTornadoTimer >= 6.0f)
+            {
+                // 토네이도 종료 + 트랩된 플레이어 모두 해제 (자연 낙하)
+                if (m_nPeriodicTornadoId >= 0) m_pVFXManager->Stop(m_nPeriodicTornadoId);
+                m_nPeriodicTornadoId = -1;
+
+                for (GameObject* pP : GetAllPlayers())
+                {
+                    if (!pP) continue;
+                    if (auto* pPC = pP->GetComponent<PlayerComponent>())
+                        pPC->ExitTornadoTrap();
+                }
+
+                m_eTornadoPhase = TornadoEventPhase::Cooldown;
+                m_fPeriodicTornadoTimer = 0.0f;
+            }
+            break;
+
+        case TornadoEventPhase::Cooldown:
+            if (m_fPeriodicTornadoTimer >= 1.5f)
+            {
+                m_eTornadoPhase = TornadoEventPhase::Idle;
+                m_fPeriodicTornadoTimer = 0.0f;
+            }
+            break;
+        }
+    }
+    else
+    {
+        // grass 이탈 시 정리
+        if (m_nPeriodicTornadoId >= 0 && m_pVFXManager)
+        {
+            m_pVFXManager->Stop(m_nPeriodicTornadoId);
+            m_nPeriodicTornadoId = -1;
+        }
+        if (m_nTornadoWarningVFXId >= 0 && m_pVFXManager)
+        {
+            m_pVFXManager->Stop(m_nTornadoWarningVFXId);
+            m_nTornadoWarningVFXId = -1;
+        }
+        // 트랩된 플레이어 해제
+        for (GameObject* pP : GetAllPlayers())
+        {
+            if (pP)
+                if (auto* pPC = pP->GetComponent<PlayerComponent>())
+                    pPC->ExitTornadoTrap();
+        }
+        m_eTornadoPhase = TornadoEventPhase::Idle;
+        m_fPeriodicTornadoTimer = 0.0f;
+    }
+
     // Update Torch System (flickering effect)
     if (m_pTorchSystem)
     {
@@ -2027,6 +2183,7 @@ void Scene::ReAddRenderComponentsToShader(GameObject* pGO)
 void Scene::TransitionToNextRoom()
 {
     OutputDebugString(L"[Scene] Transitioning to next room...\n");
+    CleanupWindAmbient();   // 다음 방으로 가기 전 ambient 정리 (다음 방에서 다시 spawn)
 
     // 보스방에서 포탈 탄 경우 → 다음 스테이지로 (방 카운트 증가 X)
     if (m_bInBossRoom)
@@ -2181,6 +2338,7 @@ void Scene::TransitionToRoomByIndex(int index)
     OutputDebugString(dbg);
 
     // ── 공통 정리 단계 (TransitionToNextRoom과 동일)
+    CleanupWindAmbient();   // 이전 방 ambient VFX 정리 (방마다 재스폰)
     m_vShaders[0]->ClearRenderComponents();
     ProcessPendingDeletions();
 
@@ -2237,6 +2395,11 @@ void Scene::TransitionToRoomByIndex(int index)
         {
             m_pCurrentRoom->InitRockfallManager(
                 pDevice, pCommandList, m_vShaders[0].get());
+        }
+        else if (m_eCurrentTheme == StageTheme::Grass)
+        {
+            // 바람 ambient — 새 방의 bounding box 기반 spawn (이전 ambient 는 caller 가 정리)
+            SetupWindAmbient(m_pCurrentRoom->GetBoundingBox());
         }
 
         m_pCurrentRoom->SetState(RoomState::Active);
@@ -3397,6 +3560,10 @@ void Scene::TransitionToGrassStage(int roomIndex)
     m_bInBossRoom = false;
     m_nRoomCount = 0;  // 새 스테이지 진입 → 방 카운트 리셋
 
+    // 테마 sky color + 이전 ambient 정리
+    ApplyThemeSkyColor();
+    CleanupWindAmbient();
+
     m_vShaders[0]->ClearRenderComponents();
     ProcessPendingDeletions();
     m_vRooms.clear();
@@ -3442,6 +3609,8 @@ void Scene::TransitionToGrassStage(int roomIndex)
     if (m_pCurrentRoom) {
         for (const auto& pGO : m_pCurrentRoom->GetGameObjects()) pGO->Update(0.0f);
         m_pCurrentRoom->SetState(RoomState::Active);
+        // 바람 ambient — 모든 grass 방에 즉시 spawn
+        SetupWindAmbient(m_pCurrentRoom->GetBoundingBox());
     }
 
     if (m_pInteractionCube) {
@@ -3740,6 +3909,10 @@ void Scene::TransitionToGrassBossRoom()
                         "Demon_Tornado", m_xmf3DebugWindPos, XMFLOAT3(0.0f, 1.0f, 0.0f),
                         0u, false /*isPlayer*/);
                 }
+
+                // ── 4스테이지 바람 ambient: 배경 토네이도 + 업드래프트 + 잎 드리프트 ──
+                CleanupWindAmbient();
+                SetupWindAmbient(demonBB);
             }
 
             m_pCurrentRoom->SetState(RoomState::Active);
@@ -3760,6 +3933,118 @@ void Scene::TransitionToGrassBossRoom()
 
     m_bInBossRoom = true;
     OutputDebugString(L"[Scene] Grass boss room ready - Demon spawned!\n");
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 4스테이지 바람 ambient: 모든 grass 방에 공통 spawn (배경 토네이도/업드래프트/잎)
+// ────────────────────────────────────────────────────────────────────────────
+void Scene::SetupWindAmbient(const BoundingBox& roomBB)
+{
+    if (!m_pVFXManager) return;
+
+    XMFLOAT3 center(roomBB.Center.x, 0.0f, roomBB.Center.z);
+    XMFLOAT3 up(0.0f, 1.0f, 0.0f);
+    float ex = roomBB.Extents.x;
+    float ez = roomBB.Extents.z;
+
+    // 배경 거대 토네이도 3 — 방 외곽 너머에서도 보이게 멀리
+    XMFLOAT3 bigT[3] = {
+        { center.x - ex * 1.6f, 0.5f, center.z + ez * 1.4f },
+        { center.x + ex * 1.7f, 0.5f, center.z - ez * 1.0f },
+        { center.x + ex * 0.2f, 0.5f, center.z - ez * 1.9f },
+    };
+    for (auto& p : bigT)
+    {
+        int id = m_pVFXManager->Spawn("Demon_Tornado_Big", p, up, 0u, false);
+        if (id >= 0) m_vAmbientWindIds.push_back(id);
+    }
+
+    // 업드래프트 작은 기둥 5 — 방 중-외곽 영역
+    XMFLOAT3 ud[5] = {
+        { center.x - ex * 0.55f, 0.5f, center.z + ez * 0.45f },
+        { center.x + ex * 0.60f, 0.5f, center.z + ez * 0.50f },
+        { center.x - ex * 0.50f, 0.5f, center.z - ez * 0.55f },
+        { center.x + ex * 0.55f, 0.5f, center.z - ez * 0.50f },
+        { center.x,              0.5f, center.z + ez * 0.70f },
+    };
+    for (auto& p : ud)
+    {
+        int id = m_pVFXManager->Spawn("Wind_UpdraftSmall", p, up, 0u, false);
+        if (id >= 0) m_vAmbientWindIds.push_back(id);
+    }
+
+    // 잎 드리프트 6 인스턴스 — 맵 전역에 흩뿌려지도록 위치/방향 다양화
+    //   각 인스턴스 width 50, length 160 → 영역 곳곳에서 흘러나오는 잎이 맵을 가로지름
+    struct DriftCfg { XMFLOAT3 pos; XMFLOAT3 dir; };
+    DriftCfg drifts[6] = {
+        // 좌측에서 우로 (다른 Y 높이)
+        { { center.x - ex * 1.3f, 3.0f,  center.z + ez * 0.4f }, { 1.0f, 0.05f, 0.0f } },
+        { { center.x - ex * 1.2f, 8.5f,  center.z - ez * 0.5f }, { 0.92f, 0.0f, 0.40f } },  // 좌→우상
+        // 후방에서 전방
+        { { center.x + ex * 0.5f, 5.0f,  center.z - ez * 1.3f }, { -0.30f, 0.05f, 0.95f } },
+        { { center.x - ex * 0.6f, 11.0f, center.z - ez * 1.2f }, { 0.20f, 0.0f, 0.98f } },
+        // 대각선 — 우상 → 좌하
+        { { center.x + ex * 1.2f, 6.5f,  center.z + ez * 1.2f }, { -0.7071f, 0.0f, -0.7071f } },
+        // 우하 → 좌상
+        { { center.x + ex * 1.1f, 4.0f,  center.z - ez * 0.8f }, { -0.85f, 0.05f, 0.53f } },
+    };
+    for (auto& d : drifts)
+    {
+        int id = m_pVFXManager->Spawn("Wind_DriftLeaves", d.pos, d.dir, 0u, false);
+        if (id >= 0) m_vAmbientWindIds.push_back(id);
+    }
+
+    m_fPeriodicTornadoTimer = 0.0f;
+    m_nPeriodicTornadoId = -1;
+}
+
+void Scene::CleanupWindAmbient()
+{
+    if (!m_pVFXManager)
+    {
+        m_vAmbientWindIds.clear();
+        m_nPeriodicTornadoId = -1;
+        m_nTornadoWarningVFXId = -1;
+        m_eTornadoPhase = TornadoEventPhase::Idle;
+        return;
+    }
+    for (int id : m_vAmbientWindIds) if (id >= 0) m_pVFXManager->Stop(id);
+    m_vAmbientWindIds.clear();
+    if (m_nPeriodicTornadoId >= 0) m_pVFXManager->Stop(m_nPeriodicTornadoId);
+    m_nPeriodicTornadoId = -1;
+    if (m_nTornadoWarningVFXId >= 0) m_pVFXManager->Stop(m_nTornadoWarningVFXId);
+    m_nTornadoWarningVFXId = -1;
+    m_fPeriodicTornadoTimer = 0.0f;
+    m_fTornadoDamageTickTimer = 0.0f;
+    m_eTornadoPhase = TornadoEventPhase::Idle;
+
+    // 트랩된 플레이어 해제
+    for (GameObject* pP : GetAllPlayers())
+    {
+        if (pP)
+            if (auto* pPC = pP->GetComponent<PlayerComponent>())
+                pPC->ExitTornadoTrap();
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 스테이지 테마별 sky/clear color
+//   Fire  — 따뜻한 적-주황 (0.18, 0.06, 0.04)
+//   Water — 깊은 청 (0.05, 0.10, 0.18)
+//   Earth — 갈-회색 (0.10, 0.08, 0.06)
+//   Grass — 청록 새벽빛 (0.45, 0.62, 0.55) 바람 컨셉
+// ────────────────────────────────────────────────────────────────────────────
+void Scene::ApplyThemeSkyColor()
+{
+    auto* pApp = Dx12App::GetInstance();
+    if (!pApp) return;
+    switch (m_eCurrentTheme)
+    {
+    case StageTheme::Fire:  pApp->SetClearColor(0.18f, 0.06f, 0.04f); break;
+    case StageTheme::Water: pApp->SetClearColor(0.05f, 0.10f, 0.18f); break;
+    case StageTheme::Earth: pApp->SetClearColor(0.10f, 0.08f, 0.06f); break;
+    case StageTheme::Grass: pApp->SetClearColor(0.45f, 0.62f, 0.55f); break;
+    }
 }
 
 // ────────────────────────────────────────────────────────────────────────────

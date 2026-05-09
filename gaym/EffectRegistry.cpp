@@ -675,6 +675,7 @@ void EffectRegistry::Initialize()
     //   [Outer]  넓은 반경 느린 swirl → 외곽 흙먼지
     //   [Inner]  좁은 반경 빠른 swirl → 코어 streak
     // ──────────────────────────────────────────────────────────────────────────
+    {
     EffectDef def;
     def.name    = "Demon_Tornado";
     def.element = ElementType::Wind;
@@ -728,6 +729,186 @@ void EffectRegistry::Initialize()
         XMFLOAT4(0.55f, 0.85f, 0.62f, 0.55f))); // 부드러운 민트 (엣지)
 
     Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Demon_Tornado_Big — 배경용 거대 토네이도 (멀리 보이는 ambient)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Demon_Tornado_Big";
+        def.element = ElementType::Wind;
+
+        EffectLayer outer;
+        outer.type           = EmitterType::Linear;
+        outer.element        = ElementType::Wind;
+        outer.particleCount  = 1000;
+        outer.overrideColors = true;
+        outer.coreColor      = { 0.70f, 0.90f, 0.74f, 1.0f };
+        outer.edgeColor      = { 0.28f, 0.50f, 0.32f, 0.30f };
+        outer.sizeScale      = 2.2f;
+        outer.speedMin       = 5.f;
+        outer.speedMax       = 10.f;
+        outer.lifetimeMin    = 3.0f;
+        outer.lifetimeMax    = 5.0f;
+        outer.duration       = -1.f;
+        outer.linear.length      = 28.0f;   // ~2.5x demon
+        outer.linear.width       = 6.5f;    // ~2x demon
+        outer.linear.recycleRate = 1.0f;
+        outer.linear.swirlSpeed  = 4.0f;    // 좀 더 느림
+        def.layers.push_back(outer);
+
+        EffectLayer inner;
+        inner.type           = EmitterType::Linear;
+        inner.element        = ElementType::Wind;
+        inner.particleCount  = 500;
+        inner.overrideColors = true;
+        inner.coreColor      = { 0.92f, 1.00f, 0.92f, 1.0f };
+        inner.edgeColor      = { 0.55f, 0.85f, 0.62f, 0.55f };
+        inner.sizeScale      = 1.4f;
+        inner.speedMin       = 7.f;
+        inner.speedMax       = 13.f;
+        inner.lifetimeMin    = 2.0f;
+        inner.lifetimeMax    = 3.5f;
+        inner.duration       = -1.f;
+        inner.linear.length      = 30.0f;
+        inner.linear.width       = 2.8f;
+        inner.linear.recycleRate = 1.0f;
+        inner.linear.swirlSpeed  = 7.5f;
+        def.layers.push_back(inner);
+
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Wind_UpdraftSmall — 작은 업드래프트 기둥 (맵 곳곳 고정 배치용)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Wind_UpdraftSmall";
+        def.element = ElementType::Wind;
+
+        EffectLayer up;
+        up.type           = EmitterType::Linear;
+        up.element        = ElementType::Wind;
+        up.particleCount  = 200;
+        up.overrideColors = true;
+        up.coreColor      = { 0.85f, 0.97f, 0.88f, 1.0f };
+        up.edgeColor      = { 0.45f, 0.75f, 0.55f, 0.40f };
+        up.sizeScale      = 1.0f;
+        up.speedMin       = 5.f;
+        up.speedMax       = 9.f;
+        up.lifetimeMin    = 1.5f;
+        up.lifetimeMax    = 2.5f;
+        up.duration       = -1.f;
+        up.linear.length      = 8.0f;
+        up.linear.width       = 1.0f;
+        up.linear.recycleRate = 1.0f;
+        up.linear.swirlSpeed  = 3.5f;
+        def.layers.push_back(up);
+
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Wind_DriftLeaves — 수평 드리프트 (맵 가로질러 떠다니는 잎/먼지)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Wind_DriftLeaves";
+        def.element = ElementType::Wind;
+
+        EffectLayer drift;
+        drift.type           = EmitterType::Linear;
+        drift.element        = ElementType::Wind;
+        drift.particleCount  = 180;            // 인스턴스당 수 줄이고 인스턴스 수 늘림
+        drift.overrideColors = true;
+        drift.coreColor      = { 0.78f, 0.92f, 0.55f, 1.0f };  // 옅은 잎녹색
+        drift.edgeColor      = { 0.38f, 0.55f, 0.20f, 0.45f };
+        drift.sizeScale      = 1.1f;
+        drift.speedMin       = 2.5f;
+        drift.speedMax       = 5.0f;
+        drift.lifetimeMin    = 8.0f;
+        drift.lifetimeMax    = 14.0f;
+        drift.duration       = -1.f;
+        drift.linear.length      = 160.0f;
+        drift.linear.width       = 50.0f;      // 너비 살짝 키움
+        drift.linear.recycleRate = 1.0f;
+        drift.linear.swirlSpeed  = 1.2f;
+        def.layers.push_back(drift);
+
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Wind_TornadoWarning — 큰 토네이도 등장 직전 바닥 경고 링 (2s 펄스)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Wind_TornadoWarning";
+        def.element = ElementType::Wind;
+
+        EffectLayer ring;
+        ring.type           = EmitterType::Ring;
+        ring.element        = ElementType::Wind;
+        ring.particleCount  = 250;
+        ring.overrideColors = true;
+        // 빨강-주황 경고색 — ambient 민트와 분명히 구분
+        ring.coreColor      = { 1.00f, 0.35f, 0.10f, 1.00f };
+        ring.edgeColor      = { 0.70f, 0.10f, 0.00f, 0.40f };
+        ring.sizeScale      = 2.5f;
+        ring.speedMin       = 0.5f;
+        ring.speedMax       = 1.8f;
+        ring.lifetimeMin    = 0.6f;
+        ring.lifetimeMax    = 1.0f;
+        ring.duration       = 2.2f;        // warning 페이즈와 매칭 (2s + 약간)
+        ring.emitRate       = 150.f;
+
+        ring.ring.radius         = 5.5f;   // tornado outer width 와 매칭
+        ring.ring.width          = 0.8f;
+        ring.ring.expandSpeed    = 1.5f;   // 천천히 확장
+        ring.ring.tiltX          = 0.f;
+        ring.ring.rotateSpeed    = 8.0f;   // 빠른 회전 (긴급함)
+        ring.ring.normalSpeedMin = 0.3f;
+        ring.ring.normalSpeedMax = 1.2f;
+
+        def.layers.push_back(ring);
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Wind_GroundRipple — 바닥 풍압 ripple (주기 spawn)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Wind_GroundRipple";
+        def.element = ElementType::Wind;
+
+        EffectLayer ring;
+        ring.type           = EmitterType::Ring;
+        ring.element        = ElementType::Wind;
+        ring.particleCount  = 80;
+        ring.overrideColors = true;
+        ring.coreColor      = { 0.85f, 0.98f, 0.88f, 0.7f };
+        ring.edgeColor      = { 0.50f, 0.78f, 0.55f, 0.0f };
+        ring.sizeScale      = 1.5f;
+        ring.speedMin       = 0.5f;
+        ring.speedMax       = 1.5f;
+        ring.lifetimeMin    = 1.0f;
+        ring.lifetimeMax    = 1.6f;
+        ring.duration       = 1.6f;            // 짧게 끝남
+
+        ring.ring.radius         = 1.5f;
+        ring.ring.width          = 0.4f;
+        ring.ring.expandSpeed    = 8.0f;       // 빠르게 외곽으로 확장
+        ring.ring.tiltX          = 0.f;
+        ring.ring.rotateSpeed    = 0.f;
+        ring.ring.normalSpeedMin = 0.2f;
+        ring.ring.normalSpeedMax = 0.8f;
+
+        def.layers.push_back(ring);
+        Register(std::move(def));
+    }
 }
 
 void EffectRegistry::Register(EffectDef def) {

@@ -53,6 +53,13 @@ public:
     bool IsFlightMode() const { return m_bFlightMode; }
     GameObject* GetFlightCenter() const { return m_pFlightCenter; }
 
+    // Tornado Trap (4스테이지 ambient 회오리에 빨려들어감)
+    //   진입: 회오리 중심 좌표 받아서 회전+상승 시작 (입력/물리 모두 우회)
+    //   해제: ExitTornadoTrap → 다음 프레임부터 중력 작동, 자연 낙하
+    void EnterTornadoTrap(const XMFLOAT3& tornadoCenter);
+    void ExitTornadoTrap();
+    bool IsTornadoTrapped() const { return m_bTornadoTrapped; }
+
     // Fall zone: safe AABB(center±extents) 안 = 수면에 뜸(차오르는 물 따라 상승),
     // 밖 = 중력 낙하 → y<FALL_DEATH_Y 도달 시 즉사. 크라켄 WaterRise/전투에서만 활성화.
     void EnableFallZone(const XMFLOAT3& safeCenter, const XMFLOAT3& safeExtents);
@@ -115,6 +122,13 @@ private:
     // 네트워크 회전 동기화용 (이전 프레임 Y 회전값)
     float m_fPrevYaw = 0.0f;
     static constexpr float YAW_SYNC_THRESHOLD = 1.0f;  // 1도 이상 변화 시 동기화
+
+    // Tornado Trap (4스테이지 ambient 회오리)
+    bool      m_bTornadoTrapped     = false;
+    XMFLOAT3  m_xmf3TornadoCenter   = { 0.0f, 0.0f, 0.0f };
+    float     m_fTornadoTime        = 0.0f;       // trap 진입 후 경과
+    float     m_fTornadoStartY      = 0.0f;       // 진입 시점 Y
+    void      UpdateTornadoTrap(float dt);
 
     // Flight mode (레일 슈팅: 보스 forward 기준 2D 평면 락온)
     bool m_bFlightMode = false;

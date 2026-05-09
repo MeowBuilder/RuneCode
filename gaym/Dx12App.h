@@ -42,6 +42,12 @@ public:
     UINT GetWindowWidth() const { return m_nWndClientWidth; }
     UINT GetWindowHeight() const { return m_nWndClientHeight; }
 
+    // Sky/clear color — 스테이지 테마별 톤 변경용
+    void SetClearColor(float r, float g, float b)
+    {
+        m_fClearColor[0] = r; m_fClearColor[1] = g; m_fClearColor[2] = b;
+    }
+
     static ComPtr<ID3D12Resource> CreateBufferResource(const void* pData, UINT nBytes, D3D12_HEAP_TYPE d3dHeapType = D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATES d3dResourceStates = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, ComPtr<ID3D12Resource>* ppd3dUploadBuffer = NULL);
 
 private:
@@ -92,6 +98,9 @@ private:
     HANDLE m_hFenceEvent;
 
     UINT m_nSwapChainBufferIndex;
+
+    // 스테이지 테마별 sky/clear color (기본 짙은 회색)
+    float m_fClearColor[4] = { 0.10f, 0.10f, 0.10f, 1.0f };
 
     CGameTimer m_GameTimer;
     bool m_bIsFullscreen;

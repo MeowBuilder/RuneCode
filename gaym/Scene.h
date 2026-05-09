@@ -157,6 +157,12 @@ public:
     void TransitionToGrassStage(int roomIndex = 0);      // 풀 스테이지 (N: 땅→풀)
     void TransitionToGrassBossRoom();   // 풀 보스전 (Demon)
 
+    // 4스테이지 바람 ambient — 모든 grass 방에 공통 spawn (배경 토네이도/업드래프트/잎 드리프트)
+    void SetupWindAmbient(const DirectX::BoundingBox& roomBB);
+    void CleanupWindAmbient();
+    // 스테이지 테마별 sky/clear color 적용 (Dx12App 의 m_fClearColor 갱신)
+    void ApplyThemeSkyColor();
+
     // Drop interaction system
     DropInteractionState GetDropInteractionState() const { return m_eDropState; }
     bool IsNearDropItem() const;
@@ -221,6 +227,17 @@ private:
     int   m_nDebugWindVFXId    = -1;
     float m_fDebugWindVFXTimer = 0.0f;
     DirectX::XMFLOAT3 m_xmf3DebugWindPos = { 0.0f, 0.0f, 0.0f };
+
+    // 4스테이지 바람 ambient — 배경 토네이도/업드래프트/드리프트 잎 + 주기 큰 토네이도(트랩)
+    std::vector<int> m_vAmbientWindIds;          // 영구 ambient VFX 슬롯
+    enum class TornadoEventPhase { Idle, Warning, Active, Cooldown };
+    TornadoEventPhase m_eTornadoPhase    = TornadoEventPhase::Idle;
+    DirectX::XMFLOAT3 m_xmf3TornadoEventPos = { 0.0f, 0.0f, 0.0f };
+    int   m_nPeriodicTornadoId = -1;             // Active 페이즈 토네이도 VFX 슬롯
+    int   m_nTornadoWarningVFXId = -1;           // Warning 페이즈 경고 VFX 슬롯
+    float m_fPeriodicTornadoTimer = 0.0f;        // 현재 페이즈 경과 시간
+    float m_fTornadoDamageTickTimer = 0.0f;      // Active 중 데미지 tick
+    StageTheme m_eLastAppliedTheme = StageTheme::Fire;  // sky color 변경 감지용
     StageTheme m_eCurrentTheme = StageTheme::Fire; // 현재 스테이지 테마
     bool m_bToonEnabled = true;  // F7로 토글: 원신풍 셀 셰이딩 (기본 ON)
     GameObject* m_pLavaPlane = nullptr; // 용암 바닥 평면
