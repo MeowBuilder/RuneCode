@@ -291,6 +291,41 @@ protected:
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Procedural grass clump — N개의 십자 quad blade를 하나의 mesh로 통합
+// 한 군집 = 1 GameObject = 1 mesh = 수백 blade. 텍스처 없음(셰이더에서 vertex 그라데이션).
+class GrassClumpMesh : public Mesh
+{
+public:
+    GrassClumpMesh(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCmd,
+                   int nBladeCount, float fAreaRadius,
+                   float fBladeHeight, float fBladeWidth,
+                   unsigned int seed, bool bTaper = false);
+    virtual ~GrassClumpMesh();
+
+    virtual void ReleaseUploadBuffers() override;
+    virtual void Render(ID3D12GraphicsCommandList* pd3dCommandList, int nSubSet = 0) override;
+
+protected:
+    ComPtr<ID3D12Resource> m_pd3dPositionBuffer;
+    ComPtr<ID3D12Resource> m_pd3dPositionUploadBuffer;
+    D3D12_VERTEX_BUFFER_VIEW m_d3dPositionBufferView{};
+
+    ComPtr<ID3D12Resource> m_pd3dNormalBuffer;
+    ComPtr<ID3D12Resource> m_pd3dNormalUploadBuffer;
+    D3D12_VERTEX_BUFFER_VIEW m_d3dNormalBufferView{};
+
+    ComPtr<ID3D12Resource> m_pd3dTexCoordBuffer;
+    ComPtr<ID3D12Resource> m_pd3dTexCoordUploadBuffer;
+    D3D12_VERTEX_BUFFER_VIEW m_d3dTexCoordBufferView{};
+
+    ComPtr<ID3D12Resource> m_pd3dIndexBuffer;
+    ComPtr<ID3D12Resource> m_pd3dIndexUploadBuffer;
+    D3D12_INDEX_BUFFER_VIEW m_d3dIndexBufferView{};
+
+    UINT m_nIndices = 0;
+};
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Subdivided grid plane mesh on XZ plane for water vertex displacement
 class GridPlaneMesh : public Mesh
 {

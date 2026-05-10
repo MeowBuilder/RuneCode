@@ -228,6 +228,11 @@ private:
     float m_fDebugWindVFXTimer = 0.0f;
     DirectX::XMFLOAT3 m_xmf3DebugWindPos = { 0.0f, 0.0f, 0.0f };
 
+    // 4스테이지 바람 ambient — 절차적 풀 군집
+    //   각 군집 = 1 GameObject + 1 GrassClumpMesh. mesh refcount는 GameObject SetMesh가 1로 만듦.
+    //   CleanupWindAmbient에서 SetMesh(nullptr) → Release → delete (refcount 0).
+    std::vector<GameObject*> m_vGrassClumpObjects;   // 군집 GameObject 포인터(MarkForDeletion 대상)
+
     // 4스테이지 바람 ambient — 배경 토네이도/업드래프트/드리프트 잎 + 주기 큰 토네이도(트랩)
     std::vector<int> m_vAmbientWindIds;          // 영구 ambient VFX 슬롯
     enum class TornadoEventPhase { Idle, Warning, Active, Cooldown };

@@ -9,7 +9,16 @@
       "Bash(grep -n \"Register\\\\|\\\\\\\\.id\\\\\\\\s*=\\\\\\\\|name\\\\\\\\s*=\" \"C:/Users/khj16/Downloads/gaym/gaym/EffectRegistry.cpp\")",
       "WebSearch",
       "WebFetch(domain:www.cyanilux.com)",
-      "WebFetch(domain:80.lv)"
+      "WebFetch(domain:80.lv)",
+      "Bash(xargs grep *)",
+      "Read(//c/Users/khj16/Downloads/gaym/**)",
+      "Bash(cmd.exe //c \"vswhere -latest -property installationPath\")",
+      "Bash(where msbuild.exe)",
+      "Read(//c/Program Files/Microsoft Visual Studio/2022/**)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe\" /c/Users/khj16/Downloads/gaym/gaym/gaym.sln /p:Configuration=Release /p:Platform=x64 /m /nologo /v:minimal)",
+      "Bash(cmd.exe //c '\"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" C:\\\\Users\\\\khj16\\\\Downloads\\\\gaym\\\\gaym\\\\gaym.sln -p:Configuration=Release -p:Platform=x64 -m -nologo -v:minimal')",
+      "PowerShell(& \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" C:\\\\Users\\\\khj16\\\\Downloads\\\\gaym\\\\gaym\\\\gaym.sln -p:Configuration=Release -p:Platform=x64 -m -nologo -v:minimal 2>&1 | Select-Object -Last 120)",
+      "PowerShell(& \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" C:\\\\Users\\\\khj16\\\\Downloads\\\\gaym\\\\gaym\\\\gaym.sln -p:Configuration=Release -p:Platform=x64 -m -nologo -v:minimal 2>&1 | Select-String -Pattern \"error|Build succeeded|FAILED|Build FAILED\" | Select-Object -First 30)"
     ]
   }
 }

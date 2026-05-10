@@ -19,6 +19,10 @@ cbuffer cbGameObject : register(b0)
     uint bHasEmissiveTexture;
     float g_HitFlash;
     uint bIsRocky;
+    uint bIsGrass;   // 절차적 풀(grass) 셰이딩 플래그 — VS sway + PS vertex 그라데이션
+    uint _gpad0;
+    uint _gpad1;
+    uint _gpad2;
     MATERIAL gMaterial;
     matrix gBoneTransforms[128];
 };
@@ -356,6 +360,39 @@ PS_INPUT VS(VS_INPUT input)
         normalL = waveNormal;
     }
 
+    // === Grass sway: 갈대 끝 큰 폭으로 흔들림 (방향성 바람 + gust) ===
+    // bIsGrass=1: world space 위치 + UV.y(0=뿌리, 1=끝)에 큐빅 가중 → 뿌리 고정, 끝 큰 호 그리며 휨
+    if (bIsGrass)
+    {
+        // 베이스 잔물결: 3옥타브 합성 + per-blade 위상 차 → 인접 갈대도 다르게 흔들림
+        float swayPhase = g_Time * 2.0f + worldPos.x * 1.10f + worldPos.z * 1.40f;
+        float baseSway = sin(swayPhase) * 0.70f
+                       + sin(swayPhase * 1.7f + 0.7f) * 0.30f
+                       + sin(swayPhase * 3.1f + 1.3f) * 0.15f;
+
+        // 1차 gust: 빠르게 변하는 바람 강도 (0~1)
+        float gust1Phase = g_Time * 0.55f + worldPos.x * 0.06f + worldPos.z * 0.04f;
+        float gust1 = sin(gust1Phase) * 0.5f + 0.5f;
+        // 2차 weather: 매우 느린 modulation — 잔잔한 시간 vs 휘몰아치는 시간을 구분
+        float gust2Phase = g_Time * 0.18f + worldPos.x * 0.02f;
+        float gust2 = sin(gust2Phase) * 0.5f + 0.5f;
+        // 합성 gust: weather 약하면 잔잔, 강하면 격렬 (squared로 sharp peak)
+        float gust = gust1 * (0.30f + 0.70f * gust2);
+        float gustPeak = gust * gust;                  // 더 sharp한 peak
+
+        // 방향성 wind push — 항상 +X(+살짝 +Z) 방향으로 미는 일정한 바이어스. 양의 값.
+        // gustPeak에 따라 push 강도가 변함 → 평소는 살짝, 휘몰아칠 땐 크게 쓸림
+        float windPush = 0.25f + gustPeak * 1.10f;     // 평소 0.25, 폭풍 시 1.35
+
+        // 잔물결 진폭은 gust 따라 같이 커짐 (격할 땐 진동도 격해짐)
+        float oscAmp = 0.30f + 0.50f * gust;
+
+        float swayAmount = baseSway * oscAmp + windPush;
+        float heightF = input.uv.y * input.uv.y;       // 제곱: mid-row와 함께 곡선 휨
+        worldPos.x += swayAmount * heightF;
+        worldPos.z += swayAmount * 0.4f * heightF;
+    }
+
     // Transform the position from world space to clip space
     output.position = mul(worldPos, ViewProj);
 
@@ -583,7 +620,29 @@ float4 PS(PS_INPUT input) : SV_TARGET
     }
 
     float4 albedoColor;
-    if (bHasTexture)
+    if (bIsGrass)
+    {
+        // 절차적 갈대: 두 팔레트(신선 녹 ↔ 마른 보리황) 사이를 블레이드별로 보간
+        float t = input.uv.y;
+        // 블레이드별 hash — 두 종류의 주파수 합성으로 더 풍부한 변동
+        float h1 = sin(input.worldPosition.x * 1.73f + input.worldPosition.z * 2.41f) * 0.5f + 0.5f;
+        float h2 = sin(input.worldPosition.x * 0.61f - input.worldPosition.z * 0.83f) * 0.5f + 0.5f;
+        float vSeed = saturate(h1 * 0.7f + h2 * 0.3f);
+        // 신선 녹 팔레트
+        float3 freshBase = float3(0.20f, 0.34f, 0.10f);
+        float3 freshTip  = float3(0.65f, 0.86f, 0.36f);
+        // 마른 보리황 팔레트 — 더 따뜻한 톤
+        float3 dryBase   = float3(0.34f, 0.30f, 0.12f);
+        float3 dryTip    = float3(0.92f, 0.78f, 0.32f);
+        // 위치별 보간 (vSeed 0=신선, 1=마른) — 갈대밭에 자연스러운 색 변동
+        float3 baseG = lerp(freshBase, dryBase, vSeed);
+        float3 tipG  = lerp(freshTip,  dryTip,  vSeed);
+        // 미세한 노이즈 — 한 블레이드 내에서도 색이 단조롭지 않게
+        float n = sin(input.worldPosition.x * 5.3f + input.worldPosition.y * 4.1f) * 0.05f;
+        float3 grassRGB = lerp(baseG, tipG, t) + n;
+        albedoColor = float4(saturate(grassRGB), 1.0f);
+    }
+    else if (bHasTexture)
     {
         albedoColor = gAlbedoMap.Sample(gSampler, uv);
 

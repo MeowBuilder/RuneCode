@@ -3996,10 +3996,111 @@ void Scene::SetupWindAmbient(const BoundingBox& roomBB)
 
     m_fPeriodicTornadoTimer = 0.0f;
     m_nPeriodicTornadoId = -1;
+
+    // ── 절차적 풀(grass) 군집: 6~8개, BoundingBox 안에 분산 배치 ──
+    // 텍스처 없음(셰이더에서 vertex 그라데이션). 알파 컷아웃 X (taper 형상으로 충분).
+    {
+        ID3D12Device* pDev = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetDevice() : nullptr;
+        ID3D12GraphicsCommandList* pCmd = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetCommandList() : nullptr;
+        if (pDev && pCmd && !m_vShaders.empty())
+        {
+            // 갈대밭 컨셉: 큰 영역에 dense 군집 + 듬성듬성 보조 군집 → 자연스럽게 펼쳐진 풀밭
+            const int kClumpCount = 18;
+            struct ClumpCfg { float fx; float fz; int nBlades; float fRadius; };
+            ClumpCfg cfgs[kClumpCount] = {
+                // dense 메인 군집들 (radius 큼, 갈대 많음)
+                { -0.65f, -0.55f,150, 6.0f },
+                { +0.60f, -0.50f,160, 6.5f },
+                { -0.45f, +0.55f,140, 5.5f },
+                { +0.50f, +0.60f,150, 6.0f },
+                {  0.00f, -0.10f,180, 7.0f },
+                { -0.05f, +0.30f,120, 5.0f },
+                // 보조 군집들 (작고 듬성)
+                { -0.85f, -0.05f, 60, 3.5f },
+                { +0.80f, -0.10f, 65, 3.5f },
+                { -0.30f, -0.85f, 70, 3.8f },
+                { +0.30f, +0.85f, 70, 3.8f },
+                { -0.75f,  0.55f, 55, 3.2f },
+                { +0.70f, +0.55f, 60, 3.2f },
+                { -0.10f, -0.45f, 80, 4.0f },
+                { +0.15f, +0.10f, 90, 4.5f },
+                { -0.55f,  0.00f, 85, 4.0f },
+                { +0.55f, -0.05f, 90, 4.2f },
+                { -0.20f, +0.65f, 65, 3.8f },
+                { +0.25f, -0.65f, 70, 4.0f },
+            };
+
+            for (int i = 0; i < kClumpCount; ++i)
+            {
+                float cx = roomBB.Center.x + cfgs[i].fx * roomBB.Extents.x;
+                float cz = roomBB.Center.z + cfgs[i].fz * roomBB.Extents.z;
+                XMFLOAT3 clumpPos(cx, 0.0f, cz);
+
+                // 군집별 결정적 seed — 매번 같은 모양 (방 재진입해도 일관성)
+                unsigned int seed = 0xA5F00Du + static_cast<unsigned int>(i) * 0x9E3779B9u;
+
+                // 갈대: 길고 얇은 taper, 밀도 ↑ — 바람에 흔들리는 갈대밭
+                GrassClumpMesh* pMesh = new GrassClumpMesh(
+                    pDev, pCmd,
+                    cfgs[i].nBlades,
+                    cfgs[i].fRadius,
+                    /*fBladeHeight*/ 6.0f,    // 키 큰 갈대
+                    /*fBladeWidth*/  0.22f,   // 얇음
+                    seed,
+                    /*bTaper*/ true);         // 테이퍼 ON — 자연 갈대 형태
+
+                GameObject* pClump = CreateGameObject(pDev, pCmd);
+                if (!pClump)
+                {
+                    delete pMesh;  // refcount 0 — 그냥 delete
+                    continue;
+                }
+
+                if (auto* pT = pClump->GetTransform())
+                    pT->SetPosition(clumpPos.x, clumpPos.y, clumpPos.z);
+
+                // SetMesh가 AddRef → refcount 1. CleanupWindAmbient에서 SetMesh(nullptr)로 0 → delete
+                pClump->SetMesh(pMesh);
+
+                // 풀 셰이딩 플래그 ON — VS sway + PS vertex 그라데이션 (텍스처 X)
+                pClump->SetGrass(true);
+
+                // 머티리얼: 흰색 diffuse — 셰이더가 grass 그라데이션으로 덮음. ambient는 0.5로 그라데이션 잘 살게.
+                MATERIAL grassMat;
+                grassMat.m_cAmbient  = XMFLOAT4(0.50f, 0.50f, 0.50f, 1.0f);
+                grassMat.m_cDiffuse  = XMFLOAT4(1.00f, 1.00f, 1.00f, 1.0f);
+                grassMat.m_cSpecular = XMFLOAT4(0.05f, 0.05f, 0.05f, 16.0f);
+                grassMat.m_cEmissive = XMFLOAT4(0.00f, 0.00f, 0.00f, 1.0f);
+                pClump->SetMaterial(grassMat);
+
+                auto* pRC = pClump->AddComponent<RenderComponent>();
+                pRC->SetMesh(pMesh);
+                m_vShaders[0]->AddRenderComponent(pRC);
+
+                m_vGrassClumpObjects.push_back(pClump);
+            }
+        }
+    }
 }
 
 void Scene::CleanupWindAmbient()
 {
+    // 절차적 풀 군집 정리:
+    //   1) shader 렌더 리스트에서 RenderComponent 제거 (이번 프레임 이후 렌더 X)
+    //   2) GameObject SetMesh(nullptr) → mesh refcount 1→0 → delete (Mesh 메모리 회수)
+    //   3) MarkForDeletion → 다음 ProcessPendingDeletions에서 GameObject 정리
+    for (GameObject* pClump : m_vGrassClumpObjects)
+    {
+        if (!pClump) continue;
+        if (auto* pRC = pClump->GetComponent<RenderComponent>())
+        {
+            if (!m_vShaders.empty()) m_vShaders[0]->RemoveRenderComponent(pRC);
+        }
+        pClump->SetMesh(nullptr);  // refcount 1 → 0 → delete GrassClumpMesh
+        MarkForDeletion(pClump);
+    }
+    m_vGrassClumpObjects.clear();
+
     if (!m_pVFXManager)
     {
         m_vAmbientWindIds.clear();
