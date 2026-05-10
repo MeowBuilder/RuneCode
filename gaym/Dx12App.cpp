@@ -1900,6 +1900,15 @@ void Dx12App::UpdateNetwork(float deltaTime)
     // 서버 몬스터 위치/회전 보간 (MOVE 패킷 간격 사이 부드럽게 이동)
     m_pNetworkManager->InterpolateServerMonsters(deltaTime);
 
+    // 보스 인트로 컷신 yOffset 적용 — 보간 직후 호출해 yOffset 이 매 프레임 덮이도록.
+    m_pNetworkManager->UpdateServerBossIntros(m_pScene.get(), deltaTime);
+
+    // 보스 MegaBreath 엄폐물(기둥 4개) 컷신 — 잔여 시간 감소 + 종료 시 정리
+    m_pNetworkManager->UpdateServerMegaBreathCutscenes(m_pScene.get(), deltaTime);
+
+    // 보스 액션 yOffset (Jump/Flying) — 보간된 위치에 점프/비행 곡선 덧붙임
+    m_pNetworkManager->UpdateServerBossActions(m_pScene.get(), deltaTime);
+
     // 이동 패킷 전송 간격 체크
     m_fNetworkSendTimer += deltaTime;
     if (m_fNetworkSendTimer < m_fNetworkSendInterval)

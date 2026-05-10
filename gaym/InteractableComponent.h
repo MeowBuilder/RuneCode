@@ -36,6 +36,9 @@ public:
     // Hide this object (moves to y=-1000)
     void Hide();
 
+    // 중력 + bobbing 비활성화 (포탈처럼 정적인 오브젝트용 — 호출 즉시 현재 위치 고정)
+    void DisablePhysics() { m_bSkipPhysics = true; }
+
 private:
     bool m_bIsActive = true;
     float m_fInteractionDistance = 5.0f;
@@ -53,4 +56,7 @@ private:
     float m_fBobTime = 0.0f;
     float m_fBobSpeed = 1.5f;
     float m_fBobAmplitude = 0.25f;
+
+    // true 면 Update 에서 중력/bobbing 모두 스킵 (포탈 등 정적 오브젝트)
+    bool m_bSkipPhysics = false;
 };

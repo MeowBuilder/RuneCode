@@ -20,6 +20,26 @@ CRoom::CRoom()
 
 CRoom::~CRoom()
 {
+    // Portal_Ring VFX 정리 — Scene/VFXManager 가 살아있을 때만
+    if (m_pScene && m_nPortalCubeRingVFXId >= 0)
+    {
+        if (auto* pVFX = m_pScene->GetVFXManager())
+            pVFX->Stop(m_nPortalCubeRingVFXId);
+        m_nPortalCubeRingVFXId = -1;
+    }
+}
+
+void CRoom::ClearPortalCube()
+{
+    // Portal_Ring VFX 정리
+    if (m_pScene && m_nPortalCubeRingVFXId >= 0)
+    {
+        if (auto* pVFX = m_pScene->GetVFXManager())
+            pVFX->Stop(m_nPortalCubeRingVFXId);
+        m_nPortalCubeRingVFXId = -1;
+    }
+    m_fPortalCubeRingRespawnTimer = 0.0f;
+    m_pPortalCube = nullptr;
 }
 
 void CRoom::Update(float deltaTime)
@@ -56,6 +76,45 @@ void CRoom::Update(float deltaTime)
     for (auto& pGameObject : m_vGameObjects)
     {
         pGameObject->Update(deltaTime);
+    }
+
+    // ── PortalCube Portal_Ring VFX 관리 (InteractionCube 와 동일 패턴) ─────────
+    //   Ring 이미터는 1회 spawn 후 입자가 lifetime 끝나면 사라지므로 1.5s 마다 stop+respawn 으로 continuous 유지
+    if (m_pPortalCube && m_pScene)
+    {
+        VFXManager* pVFX = m_pScene->GetVFXManager();
+        auto* pInteractable = m_pPortalCube->GetComponent<InteractableComponent>();
+        bool bActive = pVFX && pInteractable && pInteractable->IsActive();
+
+        if (bActive)
+        {
+            DirectX::XMFLOAT3 cubePos = m_pPortalCube->GetTransform()->GetPosition();
+            DirectX::XMFLOAT3 vfxNormal{ 0.0f, 0.0f, 1.0f }; // 세로 disc 평면 normal = Z
+
+            constexpr float PORTAL_RING_RESPAWN_INTERVAL = 1.5f;
+            m_fPortalCubeRingRespawnTimer += deltaTime;
+
+            bool bNeedSpawn = (m_nPortalCubeRingVFXId < 0)
+                           || (m_fPortalCubeRingRespawnTimer >= PORTAL_RING_RESPAWN_INTERVAL);
+
+            if (bNeedSpawn)
+            {
+                if (m_nPortalCubeRingVFXId >= 0)
+                    pVFX->Stop(m_nPortalCubeRingVFXId);
+                m_nPortalCubeRingVFXId = pVFX->Spawn("Portal_Ring", cubePos, vfxNormal, 0u, false);
+                m_fPortalCubeRingRespawnTimer = 0.0f;
+            }
+            else if (m_nPortalCubeRingVFXId >= 0)
+            {
+                pVFX->Track(m_nPortalCubeRingVFXId, cubePos, vfxNormal);
+            }
+        }
+        else if (m_nPortalCubeRingVFXId >= 0)
+        {
+            pVFX->Stop(m_nPortalCubeRingVFXId);
+            m_nPortalCubeRingVFXId = -1;
+            m_fPortalCubeRingRespawnTimer = 0.0f;
+        }
     }
 }
 
@@ -298,30 +357,32 @@ void CRoom::SpawnPortalCube()
         return;
     }
 
-    // Set position and scale
-    m_pPortalCube->GetTransform()->SetPosition(spawnPos.x, spawnPos.y, spawnPos.z);
-    m_pPortalCube->GetTransform()->SetScale(2.0f, 2.0f, 2.0f);
+    // 포탈 비주얼 — InteractionCube 와 동일 패턴 (세로 보라 마법진 disc + 포탈 material)
+    //   spawn y 는 disc 반경(3)을 고려 → y=3 (바닥 ↔ 머리 높이)
+    m_pPortalCube->GetTransform()->SetPosition(spawnPos.x, 3.0f, spawnPos.z);
+    m_pPortalCube->GetTransform()->SetScale(3.0f, 3.0f, 3.0f);
+    m_pPortalCube->GetTransform()->SetRotation(90.0f, 0.0f, 0.0f); // RingMesh XZ → XY 평면 (세로)
 
-    // Create blue cube mesh
-    CubeMesh* pCubeMesh = new CubeMesh(Dx12App::GetInstance()->GetDevice(),
-                                        Dx12App::GetInstance()->GetCommandList(),
-                                        1.0f, 1.0f, 1.0f);
-    m_pPortalCube->SetMesh(pCubeMesh);
+    // 채워진 disc (innerRadius=0) — 포탈 표면
+    RingMesh* pPortalDisc = new RingMesh(Dx12App::GetInstance()->GetDevice(),
+                                          Dx12App::GetInstance()->GetCommandList(),
+                                          1.0f, 0.0f, 64);
+    m_pPortalCube->SetMesh(pPortalDisc);
 
-    MATERIAL blueMaterial;
-    blueMaterial.m_cAmbient = XMFLOAT4(0.0f, 0.0f, 0.3f, 1.0f);
-    blueMaterial.m_cDiffuse = XMFLOAT4(0.2f, 0.4f, 1.0f, 1.0f);
-    blueMaterial.m_cSpecular = XMFLOAT4(0.5f, 0.5f, 0.5f, 32.0f);
-    blueMaterial.m_cEmissive = XMFLOAT4(0.0f, 0.2f, 0.6f, 1.0f);
-    m_pPortalCube->SetMaterial(blueMaterial);
+    MATERIAL portalMat;
+    portalMat.m_cAmbient  = XMFLOAT4(0.10f, 0.05f, 0.25f, 1.0f);
+    portalMat.m_cDiffuse  = XMFLOAT4(0.30f, 0.10f, 0.60f, 1.0f);
+    portalMat.m_cSpecular = XMFLOAT4(0.5f, 0.4f, 0.9f, 32.0f);
+    portalMat.m_cEmissive = XMFLOAT4(0.45f, 0.20f, 0.95f, 1.0f); // 보라 강한 발광
+    m_pPortalCube->SetMaterial(portalMat);
 
-    // Add RenderComponent for visibility
-    m_pPortalCube->AddComponent<RenderComponent>()->SetMesh(pCubeMesh);
+    m_pPortalCube->AddComponent<RenderComponent>()->SetMesh(pPortalDisc);
 
     // Add InteractableComponent
     auto* pInteractable = m_pPortalCube->AddComponent<InteractableComponent>();
     pInteractable->SetPromptText(L"[F] Enter Portal");
-    pInteractable->SetInteractionDistance(5.0f);
+    pInteractable->SetInteractionDistance(7.0f); // 세로 disc 반경 만큼 여유
+    pInteractable->DisablePhysics();             // 중력/bobbing OFF — Scene 이 위치 직접 결정
     pInteractable->SetOnInteract([this](InteractableComponent* pComp) {
         if (!m_pScene)
             return;

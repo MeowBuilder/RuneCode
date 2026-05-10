@@ -877,6 +877,42 @@ void EffectRegistry::Initialize()
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // Portal_Ring — 인터랙션 큐브 포탈 회전 링 (보라 자기장, 무한 루프)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Portal_Ring";
+        def.element = ElementType::Wind; // 가장 가벼운 element 재사용
+
+        EffectLayer ring;
+        ring.type           = EmitterType::Ring;
+        ring.element        = ElementType::Wind;
+        ring.particleCount  = 200;
+        ring.overrideColors = true;
+        // 보라/마젠타 — 디스크 색과 어울리는 게이트 자기장
+        ring.coreColor      = { 0.85f, 0.40f, 1.00f, 1.00f };
+        ring.edgeColor      = { 0.45f, 0.10f, 0.85f, 0.55f };
+        ring.sizeScale      = 1.4f;
+        ring.speedMin       = 0.3f;
+        ring.speedMax       = 0.9f;
+        ring.lifetimeMin    = 1.2f;
+        ring.lifetimeMax    = 2.0f;
+        ring.duration       = 9999.f;       // 무한 루프 (포탈 활성 동안 계속)
+        ring.emitRate       = 90.f;
+
+        ring.ring.radius         = 3.0f;     // 디스크 반경과 매칭
+        ring.ring.width          = 0.5f;
+        ring.ring.expandSpeed    = 0.0f;     // 확장 안 함 (제자리에서 회전)
+        ring.ring.tiltX          = 0.f;
+        ring.ring.rotateSpeed    = 4.0f;     // 적당한 회전 속도
+        ring.ring.normalSpeedMin = 0.2f;
+        ring.ring.normalSpeedMax = 0.8f;     // 살짝 위로 떠오르는 입자
+
+        def.layers.push_back(ring);
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // Wind_GroundRipple — 바닥 풍압 ripple (주기 spawn)
     // ──────────────────────────────────────────────────────────────────────────
     {

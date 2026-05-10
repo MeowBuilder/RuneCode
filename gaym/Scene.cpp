@@ -248,25 +248,32 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
     }
 
     m_pInteractionCube->GetTransform()->SetPosition(0.0f, 0.0f, 0.0f);  // repositioned after MapLoader
-    m_pInteractionCube->GetTransform()->SetScale(2.0f, 2.0f, 2.0f);
+    // 포탈 비주얼: 세로로 세운 보라 게이트 (문처럼) + Portal_Ring VFX
+    // RingMesh 는 XZ 평면(원반) → X축 90° 회전 → XY 평면(세로 doorway). 균등 스케일 3 (반경 3u 디스크).
+    m_pInteractionCube->GetTransform()->SetScale(3.0f, 3.0f, 3.0f);
+    m_pInteractionCube->GetTransform()->SetRotation(90.0f, 0.0f, 0.0f);
 
     {
-        CubeMesh* pCubeMesh = new CubeMesh(pDevice, pCommandList, 1.0f, 1.0f, 1.0f);
-        m_pInteractionCube->SetMesh(pCubeMesh);
+        // 채워진 디스크 (innerRadius=0) — 포탈 표면, 색이 차 있는 느낌
+        RingMesh* pPortalDisc = new RingMesh(pDevice, pCommandList, 1.0f, 0.0f, 64);
+        m_pInteractionCube->SetMesh(pPortalDisc);
 
-        MATERIAL blueMaterial;
-        blueMaterial.m_cAmbient  = XMFLOAT4(0.0f, 0.0f, 0.2f, 1.0f);
-        blueMaterial.m_cDiffuse  = XMFLOAT4(0.2f, 0.4f, 1.0f, 1.0f);
-        blueMaterial.m_cSpecular = XMFLOAT4(0.5f, 0.5f, 0.5f, 32.0f);
-        blueMaterial.m_cEmissive = XMFLOAT4(0.0f, 0.1f, 0.3f, 1.0f);
-        m_pInteractionCube->SetMaterial(blueMaterial);
+        MATERIAL portalMat;
+        portalMat.m_cAmbient  = XMFLOAT4(0.10f, 0.05f, 0.25f, 1.0f);
+        portalMat.m_cDiffuse  = XMFLOAT4(0.30f, 0.10f, 0.60f, 1.0f);  // 깊은 보라
+        portalMat.m_cSpecular = XMFLOAT4(0.5f, 0.4f, 0.9f, 32.0f);
+        portalMat.m_cEmissive = XMFLOAT4(0.45f, 0.20f, 0.95f, 1.0f); // 보라 강한 발광 (포탈 게이트)
+        m_pInteractionCube->SetMaterial(portalMat);
 
-        m_pInteractionCube->AddComponent<RenderComponent>()->SetMesh(pCubeMesh);
+        m_pInteractionCube->AddComponent<RenderComponent>()->SetMesh(pPortalDisc);
         m_vShaders[0]->AddRenderComponent(m_pInteractionCube->GetComponent<RenderComponent>());
 
         auto* pInteractable = m_pInteractionCube->AddComponent<InteractableComponent>();
         pInteractable->SetPromptText(L"[F] Interact");
-        pInteractable->SetInteractionDistance(m_fInteractionDistance);
+        // 포탈 disc 가 세로 반경 3 → 플레이어 발(y=0) ↔ disc 중심(y=3) 수직 거리 만큼 여유 필요
+        pInteractable->SetInteractionDistance(7.0f);
+        // 포탈 — 중력/bobbing 비활성화 (Scene 이 위치 직접 결정, 떨어지면 안 됨)
+        pInteractable->DisablePhysics();
         pInteractable->SetOnInteract([this](InteractableComponent* pComp) {
             WriteNetworkLog("[Scene] InteractionCube OnInteract fired");
 
@@ -438,12 +445,13 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
             pGO->Update(0.0f);
     }
 
-    // 인터랙션 큐브를 플레이어 스폰 근처로 이동 (MapLoader가 플레이어 위치를 결정한 후)
+    // 인터랙션 큐브(포탈)를 플레이어 스폰 근처로 이동 (MapLoader가 플레이어 위치를 결정한 후)
+    // 포탈은 세로 disc (반경 3) — 중심 y=3 으로 두면 바닥(y=0)부터 y=6 까지 disc 가 펼쳐짐
     if (m_pPlayerGameObject)
     {
         XMFLOAT3 playerSpawn = m_pPlayerGameObject->GetTransform()->GetPosition();
         m_pInteractionCube->GetTransform()->SetPosition(
-            playerSpawn.x + 5.0f, playerSpawn.y, playerSpawn.z);
+            playerSpawn.x + 5.0f, 3.0f, playerSpawn.z);
     }
 
     // --------------------------------------------------------------------------
@@ -527,6 +535,52 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
 
     // LOD 용 전역 프레임 카운터 — AnimationComponent 의 phase offset 분산에 사용
     AnimationComponent::TickGlobalFrame();
+
+    // ── InteractionCube 포탈 회오리 VFX 관리 ──────────────────────────────────
+    //   큐브가 활성(보임) 동안 Demon_Tornado 회오리를 큐브 위치에 매 프레임 추적.
+    //   인터랙트되어 Hide 되면 stop. 다시 Show 되면 재 spawn.
+    if (m_pInteractionCube && m_pVFXManager)
+    {
+        bool bActive = m_bInteractionCubeActive;
+        if (auto* pInteractable = m_pInteractionCube->GetComponent<InteractableComponent>())
+            bActive = bActive && pInteractable->IsActive();
+
+        if (bActive)
+        {
+            DirectX::XMFLOAT3 cubePos = m_pInteractionCube->GetTransform()->GetPosition();
+            // 포탈은 수직(XY 평면) → Ring 평면 normal 은 Z 축 (입자가 disc 둘레에 형성)
+            DirectX::XMFLOAT3 vfxNormal{ 0.0f, 0.0f, 1.0f };
+
+            // Portal_Ring — Ring 이미터는 1회 spawn 후 입자 lifetime(2s) 끝나면 사라지므로
+            // 주기적(1.5s)으로 stop + 재 spawn 해서 continuous 한 시각 유지
+            constexpr float PORTAL_RING_RESPAWN_INTERVAL = 1.5f;
+            m_fPortalRingRespawnTimer += deltaTime;
+
+            bool bNeedSpawn = (m_nInteractionCubePortalRingVFXId < 0)
+                           || (m_fPortalRingRespawnTimer >= PORTAL_RING_RESPAWN_INTERVAL);
+
+            if (bNeedSpawn)
+            {
+                if (m_nInteractionCubePortalRingVFXId >= 0)
+                    m_pVFXManager->Stop(m_nInteractionCubePortalRingVFXId);
+                m_nInteractionCubePortalRingVFXId = m_pVFXManager->Spawn("Portal_Ring", cubePos, vfxNormal, 0u, false);
+                m_fPortalRingRespawnTimer = 0.0f;
+            }
+            else if (m_nInteractionCubePortalRingVFXId >= 0)
+            {
+                m_pVFXManager->Track(m_nInteractionCubePortalRingVFXId, cubePos, vfxNormal);
+            }
+        }
+        else
+        {
+            if (m_nInteractionCubePortalRingVFXId >= 0)
+            {
+                m_pVFXManager->Stop(m_nInteractionCubePortalRingVFXId);
+                m_nInteractionCubePortalRingVFXId = -1;
+            }
+            m_fPortalRingRespawnTimer = 0.0f;
+        }
+    }
 
     // ── Kraken emergence cinematic ──────────────────────────────────────────
     // Trigger: death callback sets m_bPendingKrakenSpawn

@@ -1,0 +1,278 @@
+{
+  "_comment": "Red Dragon boss config — single source of truth shared by client (gaym/EnemySpawner.cpp Dragon section) and server (RuneCode_Server/GameServer/RedDragonData.h). When tuning, change ONE place and mirror.",
+  "name": "Dragon",
+  "monsterType": 6,
+  "stats": {
+    "maxHp": 800.0,
+    "moveSpeed": 10.0,
+    "attackRange": 40.0,
+    "attackCooldown": 1.5,
+    "longRangeThreshold": 35.0,
+    "midRangeThreshold": 18.0,
+    "specialAttackCooldown": 4.0,
+    "flyingAttackCooldown": 8.0
+  },
+  "phases": [
+    {
+      "phaseIndex": 1,
+      "healthThreshold": 1.0,
+      "speedMult": 1.0,
+      "attackSpeedMult": 1.0,
+      "specialChance": 35,
+      "flyingChance": 0,
+      "canFly": false,
+      "primary": {
+        "behavior": "Breath",
+        "params": {
+          "damage": 30.0,
+          "projectileSpeed": 35.0,
+          "projectileCount": 4,
+          "spreadDeg": 45.0,
+          "windup": 0.4,
+          "fireDuration": 0.8,
+          "recovery": 0.3
+        }
+      },
+      "specialPool": [
+        {
+          "weight": 50,
+          "behavior": "JumpSlam",
+          "params": {
+            "damage": 45.0,
+            "jumpHeight": 10.0,
+            "windup": 0.45,
+            "radius": 7.0,
+            "slamTime": 0.25,
+            "recovery": 0.4
+          }
+        },
+        {
+          "weight": 50,
+          "behavior": "LightCombo",
+          "params": {
+            "totalDamage": 28.0,
+            "hitCount": 3,
+            "totalDuration": 1.8,
+            "hitTimings": [0.25, 0.55, 1.0],
+            "perHitDamage": [8.0, 8.0, 12.0],
+            "hitRange": [5.0, 5.0, 6.0],
+            "coneAngleDeg": [90.0, 90.0, 120.0]
+          }
+        }
+      ],
+      "flyingPool": [],
+      "transition": null
+    },
+    {
+      "phaseIndex": 2,
+      "healthThreshold": 0.7,
+      "speedMult": 1.3,
+      "attackSpeedMult": 0.85,
+      "specialChance": 45,
+      "flyingChance": 55,
+      "canFly": true,
+      "primary": {
+        "behavior": "Breath",
+        "params": {
+          "damage": 35.0,
+          "projectileSpeed": 38.0,
+          "projectileCount": 5,
+          "spreadDeg": 50.0,
+          "windup": 0.35,
+          "fireDuration": 0.75,
+          "recovery": 0.25
+        }
+      },
+      "specialPool": [
+        {
+          "weight": 50,
+          "behavior": "JumpSlam",
+          "params": {
+            "damage": 50.0,
+            "jumpHeight": 12.0,
+            "windup": 0.45,
+            "radius": 8.0,
+            "slamTime": 0.2,
+            "recovery": 0.35
+          }
+        },
+        {
+          "weight": 50,
+          "behavior": "HeavyCombo",
+          "params": {
+            "totalDamage": 50.0,
+            "hitCount": 2,
+            "totalDuration": 2.0,
+            "hitTimings": [0.4, 1.1],
+            "perHitDamage": [20.0, 30.0],
+            "hitRange": [6.0, 7.0],
+            "coneAngleDeg": [120.0, 150.0]
+          }
+        }
+      ],
+      "flyingPool": [
+        {
+          "weight": 50,
+          "behavior": "FlyingStrafe",
+          "params": {
+            "damage": 30.0,
+            "projectileSpeed": 22.0,
+            "flightHeight": 18.0,
+            "strafeDistance": 22.0,
+            "burstInterval": 0.15,
+            "shotsPerBurst": 2,
+            "totalDamageEstimate": 60.0,
+            "totalDuration": 3.0
+          }
+        },
+        {
+          "weight": 50,
+          "behavior": "FlyingCircle",
+          "params": {
+            "damage": 28.0,
+            "projectileSpeed": 22.0,
+            "flightHeight": 18.0,
+            "orbitRadius": 100.0,
+            "orbitSpeedDegPerSec": 280.0,
+            "burstInterval": 0.18,
+            "shotsPerBurst": 2,
+            "totalDamageEstimate": 56.0,
+            "totalDuration": 4.0
+          }
+        }
+      ],
+      "transition": {
+        "behavior": "MegaBreath",
+        "invincibleDuringTransition": true,
+        "params": {
+          "damagePerTick": 15.0,
+          "tickInterval": 0.2,
+          "moveSpeed": 20.0,
+          "wallMoveTime": 3.0,
+          "prepTime": 5.5,
+          "breathDuration": 6.5,
+          "recoveryTime": 1.2,
+          "coverSize": 3.0
+        }
+      }
+    },
+    {
+      "phaseIndex": 3,
+      "healthThreshold": 0.35,
+      "speedMult": 1.6,
+      "attackSpeedMult": 0.7,
+      "specialChance": 55,
+      "flyingChance": 65,
+      "canFly": true,
+      "primary": {
+        "behavior": "Breath",
+        "params": {
+          "damage": 42.0,
+          "projectileSpeed": 42.0,
+          "projectileCount": 6,
+          "spreadDeg": 55.0,
+          "windup": 0.25,
+          "fireDuration": 0.65,
+          "recovery": 0.2
+        }
+      },
+      "specialPool": [
+        {
+          "weight": 50,
+          "behavior": "FuryCombo",
+          "params": {
+            "totalDamage": 35.0,
+            "hitCount": 5,
+            "totalDuration": 0.9,
+            "hitTimings": [0.08, 0.26, 0.44, 0.62, 0.80],
+            "perHitDamage": [5.0, 6.0, 7.0, 8.0, 9.0],
+            "hitRange": [4.5, 4.5, 4.5, 4.5, 4.5],
+            "coneAngleDeg": [70.0, 70.0, 70.0, 70.0, 70.0]
+          }
+        },
+        {
+          "weight": 50,
+          "behavior": "JumpSlam",
+          "params": {
+            "damage": 60.0,
+            "jumpHeight": 14.0,
+            "windup": 0.4,
+            "radius": 9.0,
+            "slamTime": 0.18,
+            "recovery": 0.3
+          }
+        }
+      ],
+      "flyingPool": [
+        {
+          "weight": 25,
+          "behavior": "DiveBomb",
+          "params": {
+            "damage": 38.0,
+            "projectileSpeed": 32.0,
+            "flightHeight": 36.0,
+            "diveRange": 40.0,
+            "hoverTime": 7.0,
+            "shotsPerBurst": 3,
+            "burstInterval": 0.1,
+            "impactRadius": 18.0
+          }
+        },
+        {
+          "weight": 25,
+          "behavior": "FlyingSweep",
+          "params": {
+            "damage": 28.0,
+            "projectileSpeed": 28.0,
+            "flightHeight": 18.0,
+            "sweepDistance": 28.0,
+            "orbitRadius": 100.0,
+            "sweepArcDeg": 200.0,
+            "burstInterval": 0.08,
+            "shotsPerBurst": 2
+          }
+        },
+        {
+          "weight": 25,
+          "behavior": "FlyingBarrage",
+          "params": {
+            "damage": 42.0,
+            "projectileSpeed": 20.0,
+            "shotsPerWave": 6,
+            "waveCount": 3,
+            "waveInterval": 0.35,
+            "burstInterval": 16.0,
+            "totalDuration": 6.8
+          }
+        },
+        {
+          "weight": 25,
+          "behavior": "FlyingStrafe",
+          "params": {
+            "damage": 33.0,
+            "projectileSpeed": 26.0,
+            "flightHeight": 22.0,
+            "strafeDistance": 25.0,
+            "burstInterval": 0.12,
+            "shotsPerBurst": 2,
+            "_note": "fast strafe variant"
+          }
+        }
+      ],
+      "transition": {
+        "behavior": "MegaBreath",
+        "invincibleDuringTransition": true,
+        "params": {
+          "damagePerTick": 25.0,
+          "tickInterval": 0.15,
+          "moveSpeed": 25.0,
+          "wallMoveTime": 2.5,
+          "prepTime": 4.8,
+          "breathDuration": 7.5,
+          "recoveryTime": 1.0,
+          "coverSize": 3.5
+        }
+      }
+    }
+  ]
+}

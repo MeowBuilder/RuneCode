@@ -17,6 +17,8 @@
 #include "DamageNumberManager.h"
 #include "Room.h"
 #include "EnemySpawner.h"
+#include "Dx12App.h"
+#include "MapLoader.h"
 #include <cmath>
 
 // ServerPacketHandler.cpp에 정의된 파일 로그 함수 — network_log.txt에 append
@@ -1445,6 +1447,13 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
     initTgt.hasTarget = true;
     m_mapServerMonsterTarget[monsterId] = initTgt;
 
+    // 보스면 spawn 위치 영구 보존 — MegaBreath cover 좌표 기준점
+    if (isBoss)
+    {
+        ServerBossSpawnPos sp{ x, y, z };
+        m_mapServerBossSpawnPos[monsterId] = sp;
+    }
+
     // 디버그: 실제 배치된 transform과 preset 클립 확인 (VS Output + file 둘 다)
     XMFLOAT3 finalPos = pT ? pT->GetPosition() : XMFLOAT3{0,0,0};
     XMFLOAT3 finalRot = pT ? pT->GetRotation() : XMFLOAT3{0,0,0};
@@ -1647,6 +1656,23 @@ static float GetVfxStartDelay(uint32 monsterType, uint32 attackType, float serve
         return 0.5f;
     case 2: // Ranged
         return 0.3f;
+
+    // Red Dragon 추가 패턴 (서버 enum 14~20)
+    case 14: // LightCombo — 첫 hit 텔레그래프
+        return 0.25f;
+    case 15: // HeavyCombo — 긴 텔레그래프
+        return 0.4f;
+    case 16: // FuryCombo — 즉발
+        return 0.08f;
+    case 17: // FlyingStrafe — takeOff(0.6) → 발사
+        return 0.6f;
+    case 18: // FlyingCircle — takeOff(0.7) → 선회 후 발사
+        return 0.7f;
+    case 19: // FlyingSweep — takeOff(0.5) → 직진 발사
+        return 0.5f;
+    case 20: // DiveBomb — takeOff(0.8) + hover(0.5)
+        return 1.3f;
+
     default:
         // 알 수 없으면 서버 windupSec 의 절반 (안전한 절충값)
         return fmaxf(serverWindupSec * 0.5f, 0.1f);
@@ -1677,6 +1703,22 @@ static NetIndicatorParams GetIndicatorParamsForAttack(uint32 monsterType, uint32
         case 7:  p.radius = 9.0f;  break;       // JumpSlam
         case 8:  p.radius = 12.0f; break;       // TailSweep (Circle 폴백)
         case 10: p.type = NetworkManager::NetIndicatorType::None; break;  // FlyingBarrage 억제
+
+        // Red Dragon 추가 패턴
+        case 14: // LightCombo — 90° 콘 5~6m
+            p.type = NetworkManager::NetIndicatorType::ForwardBox;
+            p.radius = 5.5f; p.length = 6.0f; break;
+        case 15: // HeavyCombo — 120~150° 콘 6~7m
+            p.type = NetworkManager::NetIndicatorType::ForwardBox;
+            p.radius = 7.0f; p.length = 7.5f; break;
+        case 16: // FuryCombo — 70° 좁은 콘 4.5m
+            p.type = NetworkManager::NetIndicatorType::ForwardBox;
+            p.radius = 4.5f; p.length = 5.0f; break;
+        case 17: // FlyingStrafe — 비행 사격, 인디케이터 억제
+        case 18: // FlyingCircle
+        case 19: // FlyingSweep
+        case 20: // DiveBomb
+            p.type = NetworkManager::NetIndicatorType::None; break;
         default: p.radius = 12.0f; break;
         }
         break;
@@ -1818,6 +1860,68 @@ void NetworkManager::UpdatePendingMonsterVFX(Scene* pScene, float deltaTime)
             {
                 if (CCamera* pCam = pScene ? pScene->GetCamera() : nullptr)
                     pCam->StartShake(it->shakeIntensity, it->shakeDuration);
+            }
+            // SPHBeam — 오프라인 SpawnFireWave 와 동일 EffectDef + SPH_Beam emitter
+            else if (it->kind == PendingVFXKind::SPHBeam)
+            {
+                auto* pFluidVFX = pScene ? pScene->GetFluidVFXManager() : nullptr;
+                if (pFluidVFX)
+                {
+                    // 보스 입 위치 — 보스가 살아있으면 실시간, 아니면 캐시된 startPos
+                    DirectX::XMFLOAT3 origin = it->startPos;
+                    auto mIt = m_mapServerMonsters.find(it->monsterId);
+                    if (mIt != m_mapServerMonsters.end() && mIt->second && mIt->second->GetTransform())
+                    {
+                        DirectX::XMFLOAT3 bp = mIt->second->GetTransform()->GetPosition();
+                        origin = { bp.x, bp.y + it->yOffset, bp.z };
+                    }
+                    // 빔 방향: origin → targetPos에 fanAngle 적용
+                    float dx = it->targetPos.x - origin.x;
+                    float dz = it->targetPos.z - origin.z;
+                    float len = sqrtf(dx*dx + dz*dz);
+                    if (len < 0.001f) { dx = 0.f; dz = 1.f; }
+                    else              { dx /= len; dz /= len; }
+                    float ang = it->fanAngleDeg * (3.14159265f / 180.0f);
+                    float c = cosf(ang), s = sinf(ang);
+                    DirectX::XMFLOAT3 dir{ dx * c - dz * s, 0.f, dx * s + dz * c };
+
+                    // EffectDef — 오프라인 MegaBreathAttackBehavior::SpawnFireWave 와 동일
+                    EffectDef def;
+                    def.name    = "Net_MegaBreath";
+                    def.element = ElementType::Fire;
+
+                    EffectLayer layer;
+                    layer.type      = EmitterType::SPH_Beam;
+                    layer.element   = ElementType::Fire;
+                    layer.coreColor = { 1.0f, 0.45f, 0.10f, 1.0f };
+                    layer.edgeColor = { 0.95f, 0.35f, 0.08f, 0.95f };
+                    layer.useSSF    = true;
+
+                    SPHEmitterParams& sph = layer.sph;
+                    sph.particleCount = it->beamParticleCount;
+                    sph.spawnRadius   = (it->fanAngleDeg == 0.0f) ? 3.0f : 2.5f;
+                    sph.particleSize  = 1.8f;
+
+                    VFXPhase phase;
+                    phase.startTime = 0.f;
+                    phase.duration  = it->beamDuration + 0.5f;
+                    phase.motionMode = ParticleMotionMode::Beam;
+                    phase.beamDesc.beamLength    = it->beamLength;
+                    phase.beamDesc.spreadRadius  = 6.0f * it->beamSpreadMult;
+                    phase.beamDesc.speedMin      = it->beamLength / (it->beamDuration * 0.7f);
+                    phase.beamDesc.speedMax      = phase.beamDesc.speedMin * 1.4f;
+                    phase.beamDesc.swirlExpand   = true;
+                    phase.beamDesc.swirlSpeed    = 0.6f;
+                    phase.beamDesc.swirlFadeEnd  = 0.f;
+                    phase.beamDesc.enableFlow    = true;
+                    phase.beamDesc.verticalScale = 0.18f;
+                    sph.phases.push_back(phase);
+                    sph.maxParticleSpeed = phase.beamDesc.speedMax * 1.2f;
+
+                    def.layers.push_back(std::move(layer));
+
+                    pFluidVFX->SpawnEffectDef(origin, dir, def, false);
+                }
             }
             it = m_vPendingMonsterVFX.erase(it);
         }
@@ -1967,14 +2071,23 @@ static const char* GetMonsterAttackClipForType(uint32 monsterType, uint32 attack
     // monsterType: 6 Dragon, 7 Kraken, 8 Golem, 9 Demon, 10 BlueDragon
     switch (monsterType)
     {
-    case 6:  // Dragon (Red) — Anim: Flame Attack / Tail Attack / (보유 클립 한정)
+    case 6:  // Dragon (Red) — 보유 클립 한정 (Flame Attack / Tail Attack / Walk / Idle01 / Get Hit / Die / Scream)
         switch (attackType)
         {
         case 5:  return "Flame Attack";       // Breath
-        case 6:  return "Flame Attack";       // MegaBreath (전용 클립 없음 → Flame Attack 유지)
-        case 7:  return "Flame Attack";       // JumpSlam (Red 클립 한정 — 점프 클립 없음)
+        case 6:  return "Flame Attack";       // MegaBreath
+        case 7:  return "Flame Attack";       // JumpSlam (점프 클립 부재)
         case 8:  return "Tail Attack";        // TailSweep
         case 10: return "Flame Attack";       // FlyingBarrage
+
+        // Red Dragon 추가 패턴 — Tail Attack 으로 시각 차별화 (휘두름 모션이 콤보/돌진과 어울림)
+        case 14: return "Tail Attack";        // LightCombo (3-hit 휘두름)
+        case 15: return "Tail Attack";        // HeavyCombo (2-hit 강한 휘두름)
+        case 16: return "Tail Attack";        // FuryCombo (5-hit 폭주 휘두름)
+        case 17: return "Flame Attack";       // FlyingStrafe (사격이라 화염)
+        case 18: return "Flame Attack";       // FlyingCircle (선회 사격)
+        case 19: return "Flame Attack";       // FlyingSweep (스윕 사격)
+        case 20: return "Flame Attack";       // DiveBomb (다이브 + 화염)
         default: return "Flame Attack";
         }
     case 7:  // Kraken — Anim: Attack_Forward_RM / Sweep_Attack / Sweep_Smash_Attack_3_HIt_Combo / Unreal Take
@@ -2196,37 +2309,56 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             else              QueueFan(5,  50.0f, 35.0f, 1.0f, 2.5f, 70.0f, startDelay, 0.8f);
             break;
 
-        case 6:   // MegaBreath
+        case 6:   // MegaBreath — 옵션A: 클라 단독 9-phase 시퀀스 (오프라인 MegaBreathAttackBehavior 1:1)
             if (mt == 6)
             {
-                // Red Dragon — "오프라인 MegaBreathAttackBehavior" 임시 미러:
-                //   서버 windup 2.0s 동안 입에 모이는 분위기(쉐이크 + 작은 폭발),
-                //   이후 4.0s 동안 25발 빔 분사 + 5발의 큰 폭발이 보스 전방 쭉 이어짐.
-                const float breathDur = 4.0f;
-                // 25→15 감량 (풀 부담 ↓ + scale ↑ 으로 시각 임팩트 유지)
-                QueueFan(15, 35.0f, 45.0f, 1.5f, 4.5f, 80.0f, startDelay, breathDur);
+                // 중복 가드
+                if (m_mapServerMegaBreathCutscenes.find(monsterId) != m_mapServerMegaBreathCutscenes.end())
+                    break;
 
-                // 입가 충전 — windup 동안 작은 폭발 4번 (분위기)
-                for (int i = 0; i < 4; ++i)
+                ServerMegaBreathCutscene cs;
+                cs.phase = MegaBreathPhase::TakeOff;
+                cs.phaseTimer = 0.0f;
+
+                // 보스 진입 직전 위치 (현재 보스 위치) — 복귀 목표
+                cs.originalPos = XMFLOAT3{ atkX, atkY, atkZ };
                 {
-                    float t = (float)i / 4.0f;
-                    QueueExplosion(startPos, startDelay * t);
+                    auto bIt = m_mapServerMonsters.find(monsterId);
+                    if (bIt != m_mapServerMonsters.end() && bIt->second && bIt->second->GetTransform())
+                        cs.originalPos = bIt->second->GetTransform()->GetPosition();
                 }
-                // 분사 동안 보스 전방 5지점에 큰 폭발 (빔이 지면을 훑는 느낌)
-                float dx = targetPos.x - startPos.x;
-                float dz = targetPos.z - startPos.z;
-                float len = sqrtf(dx*dx + dz*dz);
-                if (len > 0.001f) { dx /= len; dz /= len; }
-                else              { dx = 0.f; dz = 1.f; }
-                for (int i = 0; i < 5; ++i)
+                cs.phaseStartPos = cs.originalPos;
+
+                // 보스룸 (Boss_Room) 고정 — game world 좌표 (오프라인 동일):
+                //   center=(-30, 0, 6.71), bounds world X[-145, 85] Z[-115, 128.4], WALL_OFFSET=15(world units)
+                int wallDir = static_cast<int>((monsterId * 7u + 2u) % 4u);
+                XMFLOAT3 wallPos{ -30.0f, 0.0f, 6.71f };
+                switch (wallDir)
                 {
-                    float dist = 12.0f + i * 12.0f;
-                    DirectX::XMFLOAT3 ep{ startPos.x + dx * dist, atkY + 0.5f, startPos.z + dz * dist };
-                    QueueExplosion(ep, startDelay + (float)i * (breathDur / 5.0f));
+                case 0: wallPos.x =  69.95f; wallPos.z =   6.71f; break; // +X (84.95-15)
+                case 1: wallPos.x = -129.95f; wallPos.z =   6.71f; break; // -X (-144.95+15)
+                case 2: wallPos.x = -30.0f;  wallPos.z = 113.40f; break; // +Z (128.40-15)
+                default: wallPos.x = -30.0f; wallPos.z = -99.95f; break; // -Z (-114.95+15)
                 }
-                // 카메라 쉐이크: windup 끝 강한 시작 + 분사 내내 약하게 지속
-                QueueShake(startDelay,           4.0f, 0.6f);
-                QueueShake(startDelay + 0.6f,    1.5f, breathDur);
+                cs.wallPos = wallPos;
+                cs.bossSpawnPos = XMFLOAT3{ -30.0f, 0.0f, 6.71f }; // 룸 중심 game world = cover/카메라 기준
+                cs.active = true;
+                m_mapServerMegaBreathCutscenes[monsterId] = std::move(cs);
+
+                // 이륙 애니 — 오프라인 MegaBreath::Execute 동일
+                {
+                    auto bIt = m_mapServerMonsters.find(monsterId);
+                    if (bIt != m_mapServerMonsters.end() && bIt->second)
+                    {
+                        if (auto* pAnim = bIt->second->GetComponent<AnimationComponent>())
+                            pAnim->CrossFade("Take Off", 0.15f, false);
+                    }
+                }
+
+                char cBuf[200];
+                sprintf_s(cBuf, "[Network] MegaBreath OptionA START monsterId=%llu wallDir=%d wall=(%.1f,%.1f,%.1f)",
+                    monsterId, wallDir, wallPos.x, wallPos.y, wallPos.z);
+                WriteNetworkLog(cBuf);
             }
             else
             {
@@ -2234,9 +2366,18 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             }
             break;
 
-        case 7:   // JumpSlam — windup 끝에 착지 폭발
+        case 7:   // JumpSlam — 보스 점프 + 착지 폭발
             QueueExplosion(XMFLOAT3{ atkX, atkY + 0.2f, atkZ }, startDelay);
             QueueShake(startDelay, 2.5f, 0.5f);
+            // 보스 점프 액션 — 포물선 yOffset (서버는 XZ 이미 텔레포트됨)
+            {
+                ServerBossAction act;
+                act.kind = BossActionKind::Jump;
+                act.timer = 0.0f;
+                act.duration = startDelay > 0.f ? startDelay : 1.0f; // windup 만큼 점프
+                act.peakHeight = 8.0f; // 점프 정점 높이
+                m_mapServerBossActions[monsterId] = act;
+            }
             break;
 
         case 8:   // TailSweep
@@ -2267,8 +2408,117 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             QueueShake(startDelay, 2.0f, 0.4f);
             break;
 
-        case 10:  // FlyingBarrage — 12발/1.5s 넓은 부채꼴
+        case 10:  // FlyingBarrage — 비행 + 12발/1.5s 넓은 부채꼴
             QueueFan(12, 80.0f, 22.0f, 0.7f, 1.2f, 70.0f, startDelay, 1.5f);
+            {
+                ServerBossAction act;
+                act.kind = BossActionKind::Flying;
+                act.timer = 0.0f; act.duration = 3.5f; act.peakHeight = 18.0f;
+                m_mapServerBossActions[monsterId] = act;
+            }
+            break;
+
+        // Red Dragon 추가 패턴 — 클라 오프라인 VFX 미러
+        case 14:  // LightCombo — 3-hit (8/8/12), 콘 90°, 1.8s 윈도우
+            // 보스 발치 + 정면 ±70° 폭발 3회 (휘두르는 발톱 느낌)
+            for (int i = 0; i < 3; ++i)
+            {
+                float t = i * 0.55f; // 0.0 / 0.55 / 1.10
+                if (auto* pT = pMonster->GetTransform())
+                {
+                    float yawRad = pT->GetRotation().y * (3.14159265f / 180.0f);
+                    float side = (i == 1) ? -0.7f : 0.7f; // 좌/우 휘두름
+                    DirectX::XMFLOAT3 ep{
+                        atkX + sinf(yawRad + side) * 4.0f,
+                        atkY + 0.2f,
+                        atkZ + cosf(yawRad + side) * 4.0f };
+                    QueueExplosion(ep, startDelay + t);
+                }
+                QueueShake(startDelay + t, 1.2f, 0.15f);
+            }
+            break;
+
+        case 15:  // HeavyCombo — 2-hit (20/30), 콘 120~150°, 2.0s 윈도우
+            // 강타 2회 — 더 큰 폭발 + 강한 쉐이크
+            for (int i = 0; i < 2; ++i)
+            {
+                float t = i * 0.7f;
+                if (auto* pT = pMonster->GetTransform())
+                {
+                    float yawRad = pT->GetRotation().y * (3.14159265f / 180.0f);
+                    DirectX::XMFLOAT3 ep{
+                        atkX + sinf(yawRad) * 5.0f,
+                        atkY + 0.2f,
+                        atkZ + cosf(yawRad) * 5.0f };
+                    QueueExplosion(ep, startDelay + t);
+                }
+                QueueShake(startDelay + t, 2.5f, 0.3f);
+            }
+            break;
+
+        case 16:  // FuryCombo — 5-hit, 콘 70°, 0.9s 윈도우 (빠른 폭주)
+            // 5연속 작은 폭발 — 좌우 번갈아
+            for (int i = 0; i < 5; ++i)
+            {
+                float t = i * 0.18f;
+                if (auto* pT = pMonster->GetTransform())
+                {
+                    float yawRad = pT->GetRotation().y * (3.14159265f / 180.0f);
+                    float side = (i % 2 == 0) ? -0.4f : 0.4f;
+                    DirectX::XMFLOAT3 ep{
+                        atkX + sinf(yawRad + side) * 3.5f,
+                        atkY + 0.2f,
+                        atkZ + cosf(yawRad + side) * 3.5f };
+                    QueueExplosion(ep, startDelay + t);
+                }
+                if (i == 0 || i == 4) QueueShake(startDelay + t, 1.5f, 0.12f);
+            }
+            break;
+
+        case 17:  // FlyingStrafe — 비행 + 직선 사격
+            QueueFan(5, 25.0f, 32.0f, 0.8f, 2.0f, 60.0f, startDelay, 0.5f);
+            {
+                ServerBossAction act;
+                act.kind = BossActionKind::Flying;
+                act.timer = 0.0f; act.duration = 2.5f; act.peakHeight = 14.0f;
+                m_mapServerBossActions[monsterId] = act;
+            }
+            break;
+
+        case 18:  // FlyingCircle — 비행 + 원형 분사
+            QueueFan(8, 360.0f, 24.0f, 0.7f, 1.8f, 50.0f, startDelay, 1.0f);
+            {
+                ServerBossAction act;
+                act.kind = BossActionKind::Flying;
+                act.timer = 0.0f; act.duration = 3.0f; act.peakHeight = 16.0f;
+                m_mapServerBossActions[monsterId] = act;
+            }
+            break;
+
+        case 19:  // FlyingSweep — 비행 + 와이드 부채꼴
+            QueueFan(6, 60.0f, 28.0f, 0.7f, 2.0f, 55.0f, startDelay, 0.8f);
+            {
+                ServerBossAction act;
+                act.kind = BossActionKind::Flying;
+                act.timer = 0.0f; act.duration = 2.5f; act.peakHeight = 14.0f;
+                m_mapServerBossActions[monsterId] = act;
+            }
+            break;
+
+        case 20:  // DiveBomb — 보스 공중 → 급강하
+            QueueExplosion(targetPos, startDelay);
+            QueueExplosion(XMFLOAT3{
+                (atkX + targetPos.x) * 0.5f,
+                atkY + 5.0f,
+                (atkZ + targetPos.z) * 0.5f }, startDelay - 0.3f);
+            QueueShake(startDelay, 3.5f, 0.6f);
+            // 다이브: 비행 → 급강하. peakHeight 18u 까지 빠르게 올라가서 startDelay 시점 근처 착지
+            {
+                ServerBossAction act;
+                act.kind = BossActionKind::Flying;
+                act.timer = 0.0f; act.duration = startDelay + 0.5f; act.peakHeight = 18.0f;
+                m_mapServerBossActions[monsterId] = act;
+            }
             break;
 
         default:
@@ -2434,12 +2684,57 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
 
     switch (eventType)
     {
-    case 1: // BOSS_EVENT_INTRO — 등장 컷씬: 강한 카메라 쉐이크 + 포효 애니
-        if (pCam) pCam->StartShake(4.0f, 1.5f);
-        if (pBoss && roarClip)
+    case 1: // BOSS_EVENT_INTRO — 오프라인 EnemyComponent::StartBossIntro 와 동일 시퀀스
+        // 중복 가드 — 다중 플레이어 broadcast 누적 방지
+        if (m_mapServerBossIntros.find(monsterId) != m_mapServerBossIntros.end())
         {
+            char dupBuf[128];
+            sprintf_s(dupBuf, "[Network] BossIntro duplicate skipped monsterId=%llu", monsterId);
+            WriteNetworkLog(dupBuf);
+            break;
+        }
+
+        if (pBoss)
+        {
+            ServerBossIntroState st;
+            st.phase       = BossIntroPhase::FlyingIn;
+            st.phaseTimer  = 0.0f;
+            st.startHeight = 25.0f;  // 오프라인 Scene.cpp 와 동일 (Red Dragon 25u)
+
+            if (auto* pT = pBoss->GetTransform())
+            {
+                XMFLOAT3 p = pT->GetPosition();
+                st.bossX   = p.x;
+                st.bossZ   = p.z;
+                st.groundY = p.y;            // 스폰 좌표 = 지면 y
+                st.curY    = p.y + st.startHeight; // 시작은 25u 위
+                pT->SetPosition(p.x, st.curY, p.z);
+            }
+            st.active = true;
+            m_mapServerBossIntros[monsterId] = st;
+
+            // 강하 시작 — "Fly Glide" 애니 (오프라인 동일)
             if (auto* pAnim = pBoss->GetComponent<AnimationComponent>())
-                pAnim->CrossFade(roarClip, 0.2f, false, true);
+                pAnim->CrossFade("Fly Glide", 0.2f, true);
+            m_mapServerBossIntros[monsterId].flyAnimFired = true;
+
+            // ── 시네마틱 카메라 ON ── 오프라인 Scene.cpp 와 100% 동일 (dist 55, pitch 15, yaw 180)
+            //   ground 위 보스를 정반대 시점에서 wide-angle 로 비춤 → 하늘에서 강하하는 보스가 정면 보임
+            if (pCam)
+            {
+                XMFLOAT3 landPos{ st.bossX, st.groundY, st.bossZ };
+                pCam->StartCinematic(landPos, 55.0f, 15.0f, 180.0f);
+                pCam->StartShake(2.5f, 0.6f);
+            }
+
+            char introBuf[160];
+            sprintf_s(introBuf, "[Network] BossIntro (offline-port) started monsterId=%llu startHeight=%.1f",
+                      monsterId, st.startHeight);
+            WriteNetworkLog(introBuf);
+        }
+        else
+        {
+            if (pCam) pCam->StartShake(4.0f, 1.5f);
         }
         break;
 
@@ -2602,6 +2897,638 @@ void NetworkManager::ProcessMonsterDespawn(Scene* pScene, uint64 monsterId)
     OutputDebugString(buf);
 }
 
+void NetworkManager::UpdateServerBossActions(Scene* pScene, float deltaTime)
+{
+    if (m_mapServerBossActions.empty()) return;
+
+    for (auto it = m_mapServerBossActions.begin(); it != m_mapServerBossActions.end(); )
+    {
+        ServerBossAction& act = it->second;
+        if (act.kind == BossActionKind::None) { it = m_mapServerBossActions.erase(it); continue; }
+
+        act.timer += deltaTime;
+
+        auto mIt = m_mapServerMonsters.find(it->first);
+        if (mIt == m_mapServerMonsters.end()) { it = m_mapServerBossActions.erase(it); continue; }
+        GameObject* pBoss = mIt->second;
+        if (pBoss == nullptr || pBoss->GetTransform() == nullptr) { it = m_mapServerBossActions.erase(it); continue; }
+
+        float yOffset = 0.0f;
+        bool finished = false;
+
+        if (act.kind == BossActionKind::Jump)
+        {
+            // 포물선: y = 4*peak * t * (1-t)  (t in 0..1)
+            float t = (act.timer / act.duration);
+            if (t >= 1.0f) { finished = true; yOffset = 0.0f; }
+            else { yOffset = 4.0f * act.peakHeight * t * (1.0f - t); }
+        }
+        else if (act.kind == BossActionKind::Flying)
+        {
+            // TakeOff(0.6s) → Hover(중간) → Landing(0.6s)
+            constexpr float TAKEOFF = 0.6f;
+            constexpr float LANDING = 0.6f;
+            float total = act.duration;
+            float landingStart = total - LANDING;
+
+            if (act.timer >= total) { finished = true; yOffset = 0.0f; }
+            else if (act.timer < TAKEOFF)
+            {
+                float t = act.timer / TAKEOFF;
+                float ease = 1.0f - (1.0f - t) * (1.0f - t); // ease-out
+                yOffset = act.peakHeight * ease;
+            }
+            else if (act.timer < landingStart)
+            {
+                yOffset = act.peakHeight;
+            }
+            else
+            {
+                float t = (act.timer - landingStart) / LANDING;
+                float ease = t * t; // ease-in
+                yOffset = act.peakHeight * (1.0f - ease);
+            }
+        }
+
+        if (finished)
+        {
+            // 종료 — 보스 y 를 서버 타겟 y 로 복귀
+            auto tIt = m_mapServerMonsterTarget.find(it->first);
+            float baseY = (tIt != m_mapServerMonsterTarget.end()) ? tIt->second.py : 0.0f;
+            XMFLOAT3 p = pBoss->GetTransform()->GetPosition();
+            pBoss->GetTransform()->SetPosition(p.x, baseY, p.z);
+            it = m_mapServerBossActions.erase(it);
+            continue;
+        }
+
+        // yOffset 적용 — InterpolateServerMonsters 가 이미 위치를 보간해놓았으므로
+        // 그 위에 yOffset 만 추가
+        auto tIt = m_mapServerMonsterTarget.find(it->first);
+        float baseY = (tIt != m_mapServerMonsterTarget.end()) ? tIt->second.py : 0.0f;
+        XMFLOAT3 p = pBoss->GetTransform()->GetPosition();
+        pBoss->GetTransform()->SetPosition(p.x, baseY + yOffset, p.z);
+
+        ++it;
+    }
+}
+
+void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaTime)
+{
+    if (m_mapServerMegaBreathCutscenes.empty()) return;
+
+    // 오프라인 MegaBreathAttackBehavior phase 시간 (P2)
+    constexpr float TAKEOFF_TIME    = 0.9f;
+    constexpr float MOVE_TIME       = 3.0f;
+    constexpr float LANDING_TIME    = 0.7f;
+    constexpr float COVER_TIME      = 1.2f;
+    constexpr float WINDUP_TIME     = 5.5f;
+    constexpr float BREATH_TIME     = 6.5f;
+    constexpr float RECOVERY_TIME   = 1.2f;
+    constexpr float RETTAKEOFF_TIME = 0.9f;
+    constexpr float RETFLY_TIME     = 3.0f;
+    constexpr float RETLAND_TIME    = 0.7f;
+    constexpr float FLY_HEIGHT      = 18.0f;
+    constexpr float COVER_DIST      = 57.5f;  // game world: 11.5(JSON) * MAP_SCALE(5) = 57.5
+    constexpr float COVER_SCALE     = 5.0f;
+    // 보스 spawn 기준 — 각 cs.bossSpawnPos 로 결정 (이전 hardcoded fire 룸 좌표 폐기)
+
+    for (auto it = m_mapServerMegaBreathCutscenes.begin(); it != m_mapServerMegaBreathCutscenes.end(); )
+    {
+        ServerMegaBreathCutscene& cs = it->second;
+        if (!cs.active) { it = m_mapServerMegaBreathCutscenes.erase(it); continue; }
+
+        auto bIt = m_mapServerMonsters.find(it->first);
+        if (bIt == m_mapServerMonsters.end()) { it = m_mapServerMegaBreathCutscenes.erase(it); continue; }
+        GameObject* pBoss = bIt->second;
+        if (!pBoss || !pBoss->GetTransform()) { it = m_mapServerMegaBreathCutscenes.erase(it); continue; }
+        TransformComponent* pT = pBoss->GetTransform();
+        AnimationComponent* pAnim = pBoss->GetComponent<AnimationComponent>();
+        CCamera* pCam = pScene ? pScene->GetCamera() : nullptr;
+
+        cs.phaseTimer += deltaTime;
+
+        // 보스룸 중심 (cover/wall reference) — 모든 phase 공통
+        XMFLOAT3 roomCenter = cs.bossSpawnPos;
+
+        // 로컬 플레이어 위치 (카메라 lookAt — 어깨 너머 숏)
+        XMFLOAT3 playerPos = roomCenter; // fallback
+        if (pScene)
+        {
+            if (auto* pLocal = pScene->GetPlayer())
+                if (auto* pPT = pLocal->GetTransform())
+                    playerPos = pPT->GetPosition();
+        }
+
+        // ── 매 프레임 카메라 블렌드 (오프라인 UpdateCinematicCamera 와 동일 패턴) ──
+        auto BlendCamera = [&](const XMFLOAT3& tgtLookAt, float tgtDist, float tgtPitch, float tgtYaw, float kBlend)
+        {
+            if (!pCam) return;
+            if (!cs.camInit)
+            {
+                cs.camLookAt = tgtLookAt; cs.camDist = tgtDist; cs.camPitch = tgtPitch; cs.camYaw = tgtYaw;
+                pCam->StartCinematic(cs.camLookAt, cs.camDist, cs.camPitch, cs.camYaw);
+                cs.camInit = true; return;
+            }
+            float rate = 1.0f - expf(-deltaTime * kBlend);
+            if (rate < 0.f) rate = 0.f; if (rate > 1.f) rate = 1.f;
+            cs.camLookAt.x += (tgtLookAt.x - cs.camLookAt.x) * rate;
+            cs.camLookAt.y += (tgtLookAt.y - cs.camLookAt.y) * rate;
+            cs.camLookAt.z += (tgtLookAt.z - cs.camLookAt.z) * rate;
+            cs.camDist  += (tgtDist  - cs.camDist) * rate;
+            cs.camPitch += (tgtPitch - cs.camPitch) * rate;
+            float yawDelta = tgtYaw - cs.camYaw;
+            while (yawDelta >  180.f) yawDelta -= 360.f;
+            while (yawDelta < -180.f) yawDelta += 360.f;
+            cs.camYaw += yawDelta * rate;
+            pCam->SetCinematicLookAt(cs.camLookAt);
+            pCam->SetCinematicOrbit(cs.camDist, cs.camPitch, cs.camYaw);
+        };
+
+        XMFLOAT3 dragonPos = pT->GetPosition();
+
+        switch (cs.phase)
+        {
+        case MegaBreathPhase::TakeOff:
+        {
+            float t = (std::min)(cs.phaseTimer / TAKEOFF_TIME, 1.0f);
+            float ease = t * t; // easeIn
+            XMFLOAT3 p = cs.phaseStartPos;
+            p.y = cs.phaseStartPos.y + FLY_HEIGHT * ease;
+            pT->SetPosition(p);
+
+            // 카메라: 와이드 (오프라인 TakeOff/MoveToWall/Landing 공통)
+            float dxc = p.x - roomCenter.x, dzc = p.z - roomCenter.z;
+            float radius = sqrtf(dxc*dxc + dzc*dzc);
+            float baseYaw = (radius > 0.5f) ? atan2f(dxc, dzc) * (180.f / 3.14159265f) : 0.f;
+            float yawOffset = -15.0f * (cs.phaseTimer / (TAKEOFF_TIME + MOVE_TIME + LANDING_TIME));
+            float flightYaw = baseYaw + 45.f + yawOffset;
+            BlendCamera(XMFLOAT3{ p.x, p.y + 4.0f, p.z }, 48.f, 28.f, flightYaw, 2.0f);
+
+            if (cs.phaseTimer >= TAKEOFF_TIME)
+            {
+                if (pAnim) pAnim->CrossFade("Fly Glide", 0.2f, true);
+                cs.phase = MegaBreathPhase::MoveToWall;
+                cs.phaseTimer = 0.f;
+                cs.phaseStartPos = pT->GetPosition();
+                cs.wallPos.y = cs.phaseStartPos.y; // 비행 고도 유지
+                WriteNetworkLog("[Network] MegaBreath phase -> MoveToWall");
+            }
+            break;
+        }
+        case MegaBreathPhase::MoveToWall:
+        {
+            float t = (std::min)(cs.phaseTimer / MOVE_TIME, 1.0f);
+            float ease = 1.0f - (1.0f - t) * (1.0f - t); // easeOut
+            XMFLOAT3 p;
+            p.x = cs.phaseStartPos.x + (cs.wallPos.x - cs.phaseStartPos.x) * ease;
+            p.y = cs.phaseStartPos.y;
+            p.z = cs.phaseStartPos.z + (cs.wallPos.z - cs.phaseStartPos.z) * ease;
+            pT->SetPosition(p);
+            // 이동 방향 바라봄
+            float dx = cs.wallPos.x - p.x, dz = cs.wallPos.z - p.z;
+            if (fabsf(dx) + fabsf(dz) > 0.01f)
+                pT->SetRotation(0.f, atan2f(dx, dz) * (180.f / 3.14159265f), 0.f);
+
+            float dxc = p.x - roomCenter.x, dzc = p.z - roomCenter.z;
+            float radius = sqrtf(dxc*dxc + dzc*dzc);
+            float baseYaw = (radius > 0.5f) ? atan2f(dxc, dzc) * (180.f / 3.14159265f) : 0.f;
+            float globalT = (TAKEOFF_TIME + cs.phaseTimer) / (TAKEOFF_TIME + MOVE_TIME + LANDING_TIME);
+            float yawOffset = (globalT - 0.5f) * 30.0f;
+            BlendCamera(XMFLOAT3{ p.x, p.y + 4.0f, p.z }, 48.f, 28.f, baseYaw + 45.f + yawOffset, 2.0f);
+
+            if (cs.phaseTimer >= MOVE_TIME)
+            {
+                if (pAnim) pAnim->CrossFade("Land", 0.15f, false);
+                cs.phase = MegaBreathPhase::Landing;
+                cs.phaseTimer = 0.f;
+                cs.phaseStartPos = pT->GetPosition();
+                WriteNetworkLog("[Network] MegaBreath phase -> Landing");
+            }
+            break;
+        }
+        case MegaBreathPhase::Landing:
+        {
+            float t = (std::min)(cs.phaseTimer / LANDING_TIME, 1.0f);
+            float ease = 1.0f - (1.0f - t) * (1.0f - t);
+            XMFLOAT3 p = cs.phaseStartPos;
+            p.y = cs.phaseStartPos.y - FLY_HEIGHT * ease;
+            pT->SetPosition(p);
+
+            // 카메라: Landing 동안 flightYaw → playerDir 으로 수렴
+            float dxc = p.x - roomCenter.x, dzc = p.z - roomCenter.z;
+            float baseYaw = atan2f(dxc, dzc) * (180.f / 3.14159265f);
+            // playerDir 추정 — 방 중심 향함
+            float ddx = roomCenter.x - p.x, ddz = roomCenter.z - p.z;
+            float playerDirYaw = atan2f(ddx, ddz) * (180.f / 3.14159265f);
+            float globalT = (TAKEOFF_TIME + MOVE_TIME + cs.phaseTimer) / (TAKEOFF_TIME + MOVE_TIME + LANDING_TIME);
+            float flightYaw = baseYaw + 45.f + (globalT - 0.5f) * 30.f;
+            float landingT = t;
+            float diff = playerDirYaw - flightYaw;
+            while (diff >  180.f) diff -= 360.f;
+            while (diff < -180.f) diff += 360.f;
+            float yaw = flightYaw + diff * landingT;
+            BlendCamera(XMFLOAT3{ p.x, p.y + 4.0f, p.z }, 48.f, 28.f, yaw, 2.0f);
+
+            if (cs.phaseTimer >= LANDING_TIME)
+            {
+                cs.phase = MegaBreathPhase::SpawnCover;
+                cs.phaseTimer = 0.f;
+                WriteNetworkLog("[Network] MegaBreath phase -> SpawnCover (4 columns)");
+                // 4 cover 기둥 spawn (방 중심 cross +12)
+                Dx12App* pApp = Dx12App::GetInstance();
+                Shader* pShader = pScene ? pScene->GetDefaultShader() : nullptr;
+                if (pApp && pScene && pShader)
+                {
+                    ID3D12Device* pDev = pApp->GetDevice();
+                    ID3D12GraphicsCommandList* pCmd = pApp->GetCommandList();
+                    XMFLOAT3 coverPos[4] = {
+                        { roomCenter.x + COVER_DIST, 0.0f, roomCenter.z },
+                        { roomCenter.x - COVER_DIST, 0.0f, roomCenter.z },
+                        { roomCenter.x, 0.0f, roomCenter.z + COVER_DIST },
+                        { roomCenter.x, 0.0f, roomCenter.z - COVER_DIST }
+                    };
+                    for (int i = 0; i < 4; ++i)
+                    {
+                        CRoom* pPrev = pScene->GetCurrentRoom();
+                        pScene->SetCurrentRoom(nullptr);
+                        GameObject* pCover = pScene->CreateGameObject(pDev, pCmd);
+                        pScene->SetCurrentRoom(pPrev);
+                        if (!pCover) continue;
+                        if (auto* pCT = pCover->GetTransform())
+                        { pCT->SetPosition(coverPos[i].x, coverPos[i].y, coverPos[i].z);
+                          pCT->SetScale(COVER_SCALE, COVER_SCALE, COVER_SCALE);
+                          pCT->SetRotation(0.0f, 0.0f, 0.0f); } // 명시적 회전 0 (역방향 mesh 방지)
+                        Mesh* pMesh = MapLoader::LoadMesh("Assets/MapData/meshes/ColumnBig_001.obj", pDev, pCmd);
+                        if (pMesh) { pMesh->AddRef(); pCover->SetMesh(pMesh); }
+                        MATERIAL mat;
+                        mat.m_cAmbient  = XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f);
+                        mat.m_cDiffuse  = XMFLOAT4(0.7f, 0.7f, 0.7f, 1.0f);
+                        mat.m_cSpecular = XMFLOAT4(0.2f, 0.2f, 0.2f, 8.0f);
+                        mat.m_cEmissive = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                        pCover->SetMaterial(mat);
+                        auto* pRC = pCover->AddComponent<RenderComponent>();
+                        if (pMesh) pRC->SetMesh(pMesh);
+                        pShader->AddRenderComponent(pRC);
+                        cs.covers.push_back(pCover);
+                    }
+                }
+            }
+            break;
+        }
+        case MegaBreathPhase::SpawnCover:
+        {
+            // establishing wide shot — lookAt = 플레이어, yaw = (player - dragon) (오프라인 동일)
+            float ddx = playerPos.x - dragonPos.x, ddz = playerPos.z - dragonPos.z;
+            float yaw = atan2f(ddx, ddz) * (180.f / 3.14159265f);
+            BlendCamera(XMFLOAT3{ playerPos.x, playerPos.y + 2.5f, playerPos.z }, 78.f, 50.f, yaw, 2.0f);
+
+            if (cs.phaseTimer >= COVER_TIME)
+            {
+                cs.phase = MegaBreathPhase::Windup;
+                cs.phaseTimer = 0.f;
+                // 보스 회전 — 방 중심 향함 (cover/wall 기준)
+                float dxc = roomCenter.x - dragonPos.x, dzc = roomCenter.z - dragonPos.z;
+                if (fabsf(dxc) + fabsf(dzc) > 0.01f)
+                    pT->SetRotation(0.f, atan2f(dxc, dzc) * (180.f / 3.14159265f), 0.f);
+            }
+            break;
+        }
+        case MegaBreathPhase::Windup:
+        {
+            // over-shoulder 카메라 — lookAt = 플레이어, yaw = (player - dragon)
+            float ddx = playerPos.x - dragonPos.x, ddz = playerPos.z - dragonPos.z;
+            float yaw = atan2f(ddx, ddz) * (180.f / 3.14159265f);
+            BlendCamera(XMFLOAT3{ playerPos.x, playerPos.y + 1.0f, playerPos.z }, 62.f, 55.f, yaw, 2.0f);
+
+            if (cs.phaseTimer >= WINDUP_TIME)
+            {
+                cs.phase = MegaBreathPhase::Breath;
+                cs.phaseTimer = 0.f;
+                if (pAnim) pAnim->CrossFade("Flame Attack", 0.2f, true);
+                if (pCam) pCam->StartShake(2.5f, BREATH_TIME);
+                WriteNetworkLog("[Network] MegaBreath phase -> Breath (5-fan SPH spawn)");
+
+                // 5-fan SPH beam spawn (오프라인 SpawnFireWave 1:1)
+                if (auto* pFluidVFX = pScene ? pScene->GetFluidVFXManager() : nullptr)
+                {
+                    // 오프라인 SpawnFireWave: 보스 yaw 기준 입 위치 (전방 17u, 머리 7u 위)
+                    XMFLOAT3 bossRot = pT->GetRotation();
+                    float yawRad = bossRot.y * (3.14159265f / 180.f);
+                    XMFLOAT3 forward{ sinf(yawRad), 0.f, cosf(yawRad) };
+                    XMFLOAT3 mouth{
+                        dragonPos.x + forward.x * 17.0f,
+                        dragonPos.y + 7.0f,
+                        dragonPos.z + forward.z * 17.0f
+                    };
+
+                    const float beamAngles[5]      = { -12.f, -6.f, 0.f, 6.f, 12.f };
+                    const int   beamParticles[5]   = { 2800, 3600, 4400, 3600, 2800 };
+                    const float beamSpreadMults[5] = { 0.85f, 0.95f, 1.0f, 0.95f, 0.85f };
+                    for (int i = 0; i < 5; ++i)
+                    {
+                        float a = beamAngles[i] * (3.14159265f / 180.f);
+                        float c = cosf(a), s = sinf(a);
+                        XMFLOAT3 dir{ forward.x * c - forward.z * s, 0.f, forward.x * s + forward.z * c };
+
+                        EffectDef def;
+                        def.name = "Net_MegaBreath";
+                        def.element = ElementType::Fire;
+                        EffectLayer layer;
+                        layer.type = EmitterType::SPH_Beam;
+                        layer.element = ElementType::Fire;
+                        layer.coreColor = { 1.0f, 0.45f, 0.10f, 1.0f };
+                        layer.edgeColor = { 0.95f, 0.35f, 0.08f, 0.95f };
+                        layer.useSSF = true;
+                        SPHEmitterParams& sph = layer.sph;
+                        sph.particleCount = beamParticles[i];
+                        sph.spawnRadius   = (i == 2) ? 3.0f : 2.5f;
+                        sph.particleSize  = 1.8f;
+                        VFXPhase ph;
+                        ph.startTime = 0.f;
+                        ph.duration = BREATH_TIME + 0.5f;
+                        ph.motionMode = ParticleMotionMode::Beam;
+                        // 오프라인 game world: sqrt((2*114.95)² + (2*121.675)²) * 0.9 ≈ 301u
+                        ph.beamDesc.beamLength    = 301.0f;
+                        // 오프라인 perpExtent * 1.4 = max(114.95, 121.675) * 1.4 ≈ 170u
+                        ph.beamDesc.spreadRadius  = 170.0f * beamSpreadMults[i];
+                        ph.beamDesc.speedMin      = 301.0f / (BREATH_TIME * 0.7f);
+                        ph.beamDesc.speedMax      = ph.beamDesc.speedMin * 1.4f;
+                        ph.beamDesc.swirlExpand   = true;
+                        ph.beamDesc.swirlSpeed    = 0.6f;
+                        ph.beamDesc.swirlFadeEnd  = 0.f;
+                        ph.beamDesc.enableFlow    = true;
+                        ph.beamDesc.verticalScale = 0.18f;
+                        sph.phases.push_back(ph);
+                        sph.maxParticleSpeed = ph.beamDesc.speedMax * 1.2f;
+                        def.layers.push_back(std::move(layer));
+
+                        // isPlayerEffect=true 필수 — SSF 파이프라인 (RenderDepth→Blur→Composite) 거쳐야 매끈한 빔
+                        // false 면 RenderEnemyEffects 빌보드만 호출돼 안 보이거나 구슬처럼 됨 (오프라인 동일)
+                        cs.beamVFXIds[i] = pFluidVFX->SpawnEffectDef(mouth, dir, def, true);
+                    }
+                }
+            }
+            break;
+        }
+        case MegaBreathPhase::Breath:
+        {
+            // over-shoulder 유지 — lookAt = 플레이어, yaw = (player - dragon) (오프라인 동일)
+            float ddx = playerPos.x - dragonPos.x, ddz = playerPos.z - dragonPos.z;
+            float yaw = atan2f(ddx, ddz) * (180.f / 3.14159265f);
+            BlendCamera(XMFLOAT3{ playerPos.x, playerPos.y + 1.0f, playerPos.z }, 62.f, 55.f, yaw, 2.0f);
+
+            if (cs.phaseTimer >= BREATH_TIME)
+            {
+                cs.phase = MegaBreathPhase::Recovery;
+                cs.phaseTimer = 0.f;
+                if (pCam) pCam->StopShake();
+                // beam stop
+                if (auto* pFluidVFX = pScene ? pScene->GetFluidVFXManager() : nullptr)
+                {
+                    for (int i = 0; i < 5; ++i)
+                        if (cs.beamVFXIds[i] >= 0) { pFluidVFX->StopEffect(cs.beamVFXIds[i]); cs.beamVFXIds[i] = -1; }
+                }
+                // cover despawn (Recovery 진입 즉시)
+                Shader* pShader = pScene ? pScene->GetDefaultShader() : nullptr;
+                for (GameObject* pCover : cs.covers)
+                {
+                    if (!pCover) continue;
+                    if (pShader)
+                        if (auto* pRC = pCover->GetComponent<RenderComponent>())
+                            pShader->RemoveRenderComponent(pRC);
+                    if (auto* pCT = pCover->GetTransform())
+                        pCT->SetPosition(0.f, -1000.f, 0.f);
+                    if (pScene) pScene->MarkForDeletion(pCover);
+                }
+                cs.covers.clear();
+            }
+            break;
+        }
+        case MegaBreathPhase::Recovery:
+        {
+            // 기본 orbit 으로 블렌드 (오프라인 동일) — lookAt = 플레이어
+            BlendCamera(XMFLOAT3{ playerPos.x, playerPos.y + 1.0f, playerPos.z }, 50.f, 60.f, 45.f, 5.5f);
+
+            if (cs.phaseTimer >= RECOVERY_TIME - 0.15f)
+            {
+                if (pCam) pCam->StopCinematic();
+                cs.camInit = false;
+            }
+            if (cs.phaseTimer >= RECOVERY_TIME)
+            {
+                if (pAnim) pAnim->CrossFade("Take Off", 0.15f, false);
+                cs.phase = MegaBreathPhase::ReturnTakeOff;
+                cs.phaseTimer = 0.f;
+                cs.phaseStartPos = pT->GetPosition();
+            }
+            break;
+        }
+        case MegaBreathPhase::ReturnTakeOff:
+        {
+            float t = (std::min)(cs.phaseTimer / RETTAKEOFF_TIME, 1.0f);
+            float ease = t * t;
+            XMFLOAT3 p = cs.phaseStartPos;
+            p.y = cs.phaseStartPos.y + FLY_HEIGHT * ease;
+            pT->SetPosition(p);
+            if (cs.phaseTimer >= RETTAKEOFF_TIME)
+            {
+                if (pAnim) pAnim->CrossFade("Fly Glide", 0.2f, true);
+                cs.phase = MegaBreathPhase::ReturnFly;
+                cs.phaseTimer = 0.f;
+                cs.phaseStartPos = pT->GetPosition();
+            }
+            break;
+        }
+        case MegaBreathPhase::ReturnFly:
+        {
+            float t = (std::min)(cs.phaseTimer / RETFLY_TIME, 1.0f);
+            float ease = 1.0f - (1.0f - t) * (1.0f - t);
+            XMFLOAT3 targetAir = cs.originalPos;
+            targetAir.y = cs.phaseStartPos.y;
+            XMFLOAT3 p;
+            p.x = cs.phaseStartPos.x + (targetAir.x - cs.phaseStartPos.x) * ease;
+            p.y = cs.phaseStartPos.y + (targetAir.y - cs.phaseStartPos.y) * ease;
+            p.z = cs.phaseStartPos.z + (targetAir.z - cs.phaseStartPos.z) * ease;
+            pT->SetPosition(p);
+            float dx = targetAir.x - p.x, dz = targetAir.z - p.z;
+            if (fabsf(dx) + fabsf(dz) > 0.01f)
+                pT->SetRotation(0.f, atan2f(dx, dz) * (180.f / 3.14159265f), 0.f);
+            if (cs.phaseTimer >= RETFLY_TIME)
+            {
+                if (pAnim) pAnim->CrossFade("Land", 0.15f, false);
+                cs.phase = MegaBreathPhase::ReturnLand;
+                cs.phaseTimer = 0.f;
+                cs.phaseStartPos = pT->GetPosition();
+            }
+            break;
+        }
+        case MegaBreathPhase::ReturnLand:
+        {
+            float t = (std::min)(cs.phaseTimer / RETLAND_TIME, 1.0f);
+            float ease = 1.0f - (1.0f - t) * (1.0f - t);
+            XMFLOAT3 p = cs.phaseStartPos;
+            p.y = cs.phaseStartPos.y - FLY_HEIGHT * ease;
+            pT->SetPosition(p);
+            if (cs.phaseTimer >= RETLAND_TIME)
+            {
+                pT->SetPosition(cs.originalPos);
+                cs.phase = MegaBreathPhase::Done;
+            }
+            break;
+        }
+        case MegaBreathPhase::Done:
+        default:
+        {
+            // 보간 타겟 동기화 → 정상 보간 복귀
+            auto tIt = m_mapServerMonsterTarget.find(it->first);
+            if (tIt != m_mapServerMonsterTarget.end())
+            { tIt->second.px = cs.originalPos.x; tIt->second.py = cs.originalPos.y; tIt->second.pz = cs.originalPos.z; }
+            it = m_mapServerMegaBreathCutscenes.erase(it);
+            continue;
+        }
+        }
+
+        ++it;
+    }
+    // 옵션A end — phase machine 안에서 모든 처리 완결
+}
+
+void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
+{
+    if (m_mapServerBossIntros.empty()) return;
+
+    // 오프라인 EnemyComponent::UpdateBossIntro 와 동일 흐름:
+    //   FlyingIn   — y 8u/s 등속 강하, "Fly Glide" 유지, 플레이어 향해 회전
+    //   Landing 1.5s — "Land" 애니, 위치 정지
+    //   Roaring 2.0s — "Scream" 애니, 위치 정지
+    //   Done       — StopCinematic, 정상 보간 복귀
+
+    for (auto it = m_mapServerBossIntros.begin(); it != m_mapServerBossIntros.end(); )
+    {
+        ServerBossIntroState& st = it->second;
+        if (!st.active) { it = m_mapServerBossIntros.erase(it); continue; }
+        st.phaseTimer += deltaTime;
+
+        auto mIt = m_mapServerMonsters.find(it->first);
+        if (mIt == m_mapServerMonsters.end()) { it = m_mapServerBossIntros.erase(it); continue; }
+        GameObject* pBoss = mIt->second;
+        if (pBoss == nullptr || pBoss->GetTransform() == nullptr) { it = m_mapServerBossIntros.erase(it); continue; }
+
+        auto* pAnim = pBoss->GetComponent<AnimationComponent>();
+        auto* pCam  = pScene->GetCamera();
+        constexpr float DESCEND_SPEED = 8.0f; // 오프라인 EnemyComponent::UpdateBossIntro 와 동일
+
+        switch (st.phase)
+        {
+        case BossIntroPhase::FlyingIn:
+        {
+            // y 등속 강하 (오프라인 EnemyComponent::UpdateBossIntro 와 동일)
+            st.curY -= DESCEND_SPEED * deltaTime;
+            if (st.curY <= st.groundY + 0.5f)
+            {
+                st.curY = st.groundY;
+                pBoss->GetTransform()->SetPosition(st.bossX, st.curY, st.bossZ);
+                st.phase = BossIntroPhase::Landing;
+                st.phaseTimer = 0.0f;
+                if (pAnim && !st.landAnimFired)
+                {
+                    pAnim->CrossFade("Land", 0.15f, false);
+                    st.landAnimFired = true;
+                }
+                // Landing 카메라 — 오프라인 Scene.cpp:1249 와 100% 동일
+                if (pCam)
+                {
+                    pCam->StartCinematic(XMFLOAT3{ st.bossX, 2.0f, st.bossZ }, 60.0f, 25.0f, 200.0f);
+                    pCam->StartShake(0.4f, 1.5f);
+                }
+            }
+            else
+            {
+                pBoss->GetTransform()->SetPosition(st.bossX, st.curY, st.bossZ);
+            }
+
+            // FlyingIn 카메라 — 오프라인 Scene.cpp:1265-1266 와 100% 동일 (매 프레임 갱신)
+            //   focusY = dragonY * 0.45 + 3, dist 95, pitch 22, yaw 185
+            if (pCam)
+            {
+                float focusY = st.curY * 0.45f + 3.0f;
+                pCam->StartCinematic(XMFLOAT3{ st.bossX, focusY, st.bossZ }, 95.0f, 22.0f, 185.0f);
+            }
+            break;
+        }
+        case BossIntroPhase::Landing:
+        {
+            // 1.5s 정지 (오프라인 동일)
+            pBoss->GetTransform()->SetPosition(st.bossX, st.groundY, st.bossZ);
+            // 카메라는 phase 전환 시 한 번만 설정 (오프라인 동일) — 매 프레임 변경 X
+            if (st.phaseTimer >= 1.5f)
+            {
+                st.phase = BossIntroPhase::Roaring;
+                st.phaseTimer = 0.0f;
+                if (pAnim && !st.roarAnimFired)
+                {
+                    auto clipIt = m_mapServerMonsterClips.find(it->first);
+                    uint32 mt = (clipIt != m_mapServerMonsterClips.end()) ? clipIt->second.monsterType : 0;
+                    const char* roarClip = GetBossRoarClip(mt);
+                    if (roarClip) pAnim->CrossFade(roarClip, 0.15f, false);
+                    st.roarAnimFired = true;
+                }
+                // Roaring 카메라 — 오프라인 Scene.cpp:1254 와 100% 동일
+                if (pCam)
+                {
+                    pCam->StartCinematic(XMFLOAT3{ st.bossX, 4.0f, st.bossZ }, 42.0f, 30.0f, 230.0f);
+                    pCam->StartShake(2.2f, 2.2f);
+                }
+            }
+            break;
+        }
+        case BossIntroPhase::Roaring:
+        {
+            // 2.0s 포효 — 카메라 phase 전환 시 한 번만 (오프라인 동일)
+            pBoss->GetTransform()->SetPosition(st.bossX, st.groundY, st.bossZ);
+            if (st.phaseTimer >= 2.0f)
+            {
+                st.phase = BossIntroPhase::Done; // 오프라인은 즉시 StopCinematic
+                st.phaseTimer = 0.0f;
+            }
+            break;
+        }
+        case BossIntroPhase::Outro:
+        {
+            // 사용 안 함 (오프라인은 즉시 StopCinematic) — 안전 폴백으로 즉시 Done
+            st.phase = BossIntroPhase::Done;
+            st.phaseTimer = 0.0f;
+            break;
+        }
+        case BossIntroPhase::Done:
+        default:
+        {
+            if (pCam) pCam->StopCinematic();
+            // 보간 타겟을 ground 위치(스폰)로 동기화 — 인트로 종료 후 보스가 다른 위치로 튀는 것 방지
+            auto tIt = m_mapServerMonsterTarget.find(it->first);
+            if (tIt != m_mapServerMonsterTarget.end())
+            {
+                tIt->second.px = st.bossX;
+                tIt->second.py = st.groundY;
+                tIt->second.pz = st.bossZ;
+            }
+            // 인트로 종료 — Idle 애니로 명시적 복귀
+            if (pAnim)
+            {
+                auto clipIt = m_mapServerMonsterClips.find(it->first);
+                const char* idleClip = (clipIt != m_mapServerMonsterClips.end())
+                    ? clipIt->second.idle.c_str() : "Idle01";
+                pAnim->CrossFade(idleClip, 0.2f, true);
+            }
+            it = m_mapServerBossIntros.erase(it);
+            continue;
+        }
+        }
+
+        ++it;
+    }
+}
+
 void NetworkManager::InterpolateServerMonsters(float deltaTime)
 {
     // 각 몬스터의 현재 transform을 타겟을 향해 exponential smoothing.
@@ -2617,6 +3544,12 @@ void NetworkManager::InterpolateServerMonsters(float deltaTime)
         uint64 monsterId = kv.first;
         const ServerMonsterTarget& tgt = kv.second;
         if (!tgt.hasTarget) continue;
+
+        // 인트로/메가브레스 컷신 진행 중인 보스는 보간 스킵 — Update*가 위치 직접 제어
+        if (m_mapServerBossIntros.find(monsterId) != m_mapServerBossIntros.end())
+            continue;
+        if (m_mapServerMegaBreathCutscenes.find(monsterId) != m_mapServerMegaBreathCutscenes.end())
+            continue;
 
         auto mIt = m_mapServerMonsters.find(monsterId);
         if (mIt == m_mapServerMonsters.end()) continue;

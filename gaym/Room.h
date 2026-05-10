@@ -74,7 +74,7 @@ public:
     void SpawnPortalCube();
     GameObject* GetPortalCube() const { return m_pPortalCube; }
     bool HasPortalCube() const { return m_pPortalCube != nullptr; }
-    void ClearPortalCube() { m_pPortalCube = nullptr; }
+    void ClearPortalCube();
 
     // Lava Geyser system
     void InitLavaGeyserManager(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList,
@@ -107,6 +107,9 @@ protected:
 
     // Portal cube system
     GameObject* m_pPortalCube = nullptr;
+    // Portal_Ring VFX (Scene::Update 가 매 프레임 spawn/track) — Ring 이미터 lifetime 짧아 주기 재 spawn 필요
+    int   m_nPortalCubeRingVFXId = -1;
+    float m_fPortalCubeRingRespawnTimer = 0.0f;
 
     // Lava Geyser system
     std::unique_ptr<LavaGeyserManager> m_pGeyserManager;

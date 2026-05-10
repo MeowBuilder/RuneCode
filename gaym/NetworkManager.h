@@ -286,6 +286,96 @@ private:
     };
     std::unordered_map<uint64, ServerMonsterTarget> m_mapServerMonsterTarget;
 
+    // 보스 spawn 위치 — MegaBreath cover 4개 spawn 좌표 (방 중심).
+    // ProcessMonsterSpawn 시점에 boss 면 기록.
+    struct ServerBossSpawnPos { float x = 0, y = 0, z = 0; };
+    std::unordered_map<uint64, ServerBossSpawnPos> m_mapServerBossSpawnPos;
+
+    // ── 보스 인트로 컷신 (BOSS_EVENT_INTRO 수신 시 활성) ─────────────────────
+    //   클라 오프라인 EnemyComponent::StartBossIntro 4단계(FlyingIn → Landing → Roaring)를
+    //   네트워크 보스에도 적용. InterpolateServerMonsters 직후 yOffset 을 적용해 시각적으로 강하`.
+    //   진입 단계에서는 서버 위치 보간을 그대로 사용하되 Y 만 인트로 곡선으로 강제 오버라이드.
+    // 오프라인 EnemyComponent::StartBossIntro 와 동일한 시퀀스 (FlyingIn 등속 강하 → Landing → Roaring)
+    // 오프라인 EnemyComponent::StartBossIntro 와 동일한 시퀀스 + Outro 블렌드
+    enum class BossIntroPhase { FlyingIn = 0, Landing = 1, Roaring = 2, Outro = 3, Done = 4 };
+    struct ServerBossIntroState
+    {
+        BossIntroPhase phase = BossIntroPhase::FlyingIn;
+        float phaseTimer  = 0.0f;
+        float startHeight = 25.0f; // 오프라인 동일 (Red Dragon 25u)
+        float groundY     = 0.0f;  // 착지 목표 y
+        float curY        = 25.0f; // 매 프레임 갱신 y (8u/s 등속 강하)
+        float bossX       = 0.0f;
+        float bossZ       = 0.0f;
+        bool  flyAnimFired  = false;
+        bool  landAnimFired = false;
+        bool  roarAnimFired = false;
+        bool  active        = true;
+    };
+    std::unordered_map<uint64, ServerBossIntroState> m_mapServerBossIntros;
+
+    // ── MegaBreath 컷신 (옵션A — 클라 단독 처리, 오프라인 MegaBreathAttackBehavior 1:1 이식) ─
+    //   서버는 위치 broadcast 안 하고 데미지만 (Breathing 윈도우). 클라가 보스 시각 위치 + 카메라 +
+    //   기둥 + SPH 5빔 모두 직접 제어.
+    enum class MegaBreathPhase
+    {
+        None = 0,
+        TakeOff,        // 0.9s  보스 y +0→18 easeIn
+        MoveToWall,     // 3.0s  x,z origin→wall easeOut
+        Landing,        // 0.7s  y +18→0 easeOut
+        SpawnCover,     // 1.2s  4 기둥 spawn + establishing camera
+        Windup,         // 5.5s  방 중심 향해 회전 + charge VFX
+        Breath,         // 6.5s  5-fan SPH beam + 0.4s tick 데미지 (서버 처리)
+        Recovery,       // 1.2s  beam stop + cover despawn + 카메라 블렌드
+        ReturnTakeOff,  // 0.9s  y 0→18
+        ReturnFly,      // 3.0s  x,z wall→origin
+        ReturnLand,     // 0.7s  y 18→0
+        Done
+    };
+    struct ServerMegaBreathCutscene
+    {
+        MegaBreathPhase phase = MegaBreathPhase::None;
+        float phaseTimer = 0.0f;
+        // 위치
+        DirectX::XMFLOAT3 originalPos{0,0,0};   // 보스 진입 직전 위치 (복귀 목표)
+        DirectX::XMFLOAT3 wallPos{0,0,0};       // 보스 비행 목표 (cardinal +25 from spawn)
+        DirectX::XMFLOAT3 phaseStartPos{0,0,0}; // 각 phase 시작 시 보스 위치 (lerp 시작점)
+        DirectX::XMFLOAT3 bossSpawnPos{0,0,0};  // 보스 spawn 좌표 (cover/카메라 reference)
+        // VFX
+        Vector<GameObject*> covers;             // 4 기둥
+        int chargeVFXId = -1;
+        int beamVFXIds[5] = { -1, -1, -1, -1, -1 };
+        // 카메라 블렌드 상태
+        DirectX::XMFLOAT3 camLookAt{0,0,0};
+        float camDist = 50.f;
+        float camPitch = 60.f;
+        float camYaw = 45.f;
+        bool  camInit = false;
+        bool  active = false;
+    };
+    std::unordered_map<uint64, ServerMegaBreathCutscene> m_mapServerMegaBreathCutscenes;
+
+    // ── 보스 액션 yOffset (점프/비행 시각화) ────────────────────────────────
+    //   서버는 보스 위치를 XZ 만 다루므로, 클라가 attackType 별로 적절한 yOffset 곡선을 적용해
+    //   "점프", "비행" 같은 시각 효과를 만들어준다 (실제 충돌은 서버 권위 그대로).
+    enum class BossActionKind { None = 0, Jump = 1, Flying = 2 };
+    struct ServerBossAction
+    {
+        BossActionKind kind = BossActionKind::None;
+        float timer    = 0.0f;
+        float duration = 0.0f;
+        float peakHeight = 0.0f;  // Jump: 포물선 정점 높이, Flying: 비행 고도
+    };
+    std::unordered_map<uint64, ServerBossAction> m_mapServerBossActions;
+public:
+    // 매 프레임 인트로 상태 갱신 (Dx12App 에서 호출). 활성 보스의 yOffset 을 갱신하고 종료 처리.
+    void UpdateServerBossIntros(Scene* pScene, float deltaTime);
+    // 매 프레임 MegaBreath 컷신 잔여 시간 감소 + 종료 시 기둥 정리.
+    void UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaTime);
+    // 매 프레임 보스 액션(Jump/Flying) yOffset 적용 + 종료 처리.
+    void UpdateServerBossActions(Scene* pScene, float deltaTime);
+private:
+
 public:
     // ── 서버 보스 인디케이터 (Circle / ForwardBox) ──────────────────────────
     //   isBoss=true 로 스폰된 NetMonster 마다 4개의 인디케이터 GameObject(원/박스 × border/fill) 사전 할당.
@@ -320,7 +410,7 @@ private:
     //   오프라인 IAttackBehavior 처럼 windup 후 + breathDuration 동안 staggered 발사 재현.
     //   ProcessMonsterAttack 에서 attackType 별로 delay 가 다른 여러 항목을 push.
     //   매 프레임 delay 감소 → 0 도달 시 ProjectileManager / SpawnExplosionParticles 호출.
-    enum class PendingVFXKind { Projectile, Explosion, CameraShake };
+    enum class PendingVFXKind { Projectile, Explosion, CameraShake, SPHBeam };
     struct PendingMonsterVFX
     {
         PendingVFXKind kind = PendingVFXKind::Projectile;
@@ -331,7 +421,7 @@ private:
         DirectX::XMFLOAT3 startPos  = { 0.f, 0.f, 0.f };  // 캐시된 fallback 위치
         DirectX::XMFLOAT3 targetPos = { 0.f, 0.f, 0.f };  // 캐시된 타겟 (player at packet time)
         float    yOffset   = 2.0f;       // 보스 base 에서 입 높이 (Projectile 만)
-        float    fanAngleDeg = 0.0f;     // 정면 forward 기준 ± offset (Projectile 만)
+        float    fanAngleDeg = 0.0f;     // 정면 forward 기준 ± offset (Projectile/SPHBeam)
         float    fireRange = 60.0f;      // 타겟까지 투영 거리 (Projectile 만)
         float    speed     = 18.0f;
         float    radius    = 0.5f;
@@ -341,6 +431,11 @@ private:
         // CameraShake 전용
         float    shakeIntensity = 0.0f;
         float    shakeDuration  = 0.0f;
+        // SPHBeam 전용 — 오프라인 MegaBreath 5-fan beam 재현
+        int      beamParticleCount = 4400;
+        float    beamSpreadMult    = 1.0f;
+        float    beamLength        = 70.0f;
+        float    beamDuration      = 4.0f;
     };
     std::vector<PendingMonsterVFX> m_vPendingMonsterVFX;
 

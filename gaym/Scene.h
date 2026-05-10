@@ -228,6 +228,11 @@ private:
     float m_fDebugWindVFXTimer = 0.0f;
     DirectX::XMFLOAT3 m_xmf3DebugWindPos = { 0.0f, 0.0f, 0.0f };
 
+    // 인터랙션 큐브 포탈 VFX — Portal_Ring 보라 링만 사용. Ring 이미터는 1회 spawn 후 입자가 죽으므로
+    // 주기적으로 재 spawn 하여 continuous 유지. RespawnTimer 가 PORTAL_RING_RESPAWN_INTERVAL 도달 시 stop+spawn.
+    int   m_nInteractionCubePortalRingVFXId = -1; // Portal_Ring 슬롯
+    float m_fPortalRingRespawnTimer = 0.0f;       // 재 spawn 누적 타이머
+
     // 4스테이지 바람 ambient — 절차적 풀 군집
     //   각 군집 = 1 GameObject + 1 GrassClumpMesh. mesh refcount는 GameObject SetMesh가 1로 만듦.
     //   CleanupWindAmbient에서 SetMesh(nullptr) → Release → delete (refcount 0).

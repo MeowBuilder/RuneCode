@@ -12,6 +12,9 @@ void InteractableComponent::Update(float deltaTime)
 {
     if (!m_bIsActive || !m_pOwner) return;
 
+    // 정적 오브젝트(포탈 등) — 중력/bobbing 모두 스킵
+    if (m_bSkipPhysics) return;
+
     TransformComponent* pTransform = m_pOwner->GetTransform();
     if (!pTransform) return;
 
