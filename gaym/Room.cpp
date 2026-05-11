@@ -20,23 +20,34 @@ CRoom::CRoom()
 
 CRoom::~CRoom()
 {
-    // Portal_Ring VFX 정리 — Scene/VFXManager 가 살아있을 때만
-    if (m_pScene && m_nPortalCubeRingVFXId >= 0)
+    // Portal VFX 3 레이어 정리 — Scene/VFXManager 가 살아있을 때만
+    if (m_pScene)
     {
         if (auto* pVFX = m_pScene->GetVFXManager())
-            pVFX->Stop(m_nPortalCubeRingVFXId);
-        m_nPortalCubeRingVFXId = -1;
+        {
+            if (m_nPortalCubeRingVFXId    >= 0) pVFX->Stop(m_nPortalCubeRingVFXId);
+            if (m_nPortalCubeSuctionVFXId >= 0) pVFX->Stop(m_nPortalCubeSuctionVFXId);
+            if (m_nPortalCubeBeamVFXId    >= 0) pVFX->Stop(m_nPortalCubeBeamVFXId);
+        }
+        m_nPortalCubeRingVFXId    = -1;
+        m_nPortalCubeSuctionVFXId = -1;
+        m_nPortalCubeBeamVFXId    = -1;
     }
 }
 
 void CRoom::ClearPortalCube()
 {
-    // Portal_Ring VFX 정리
-    if (m_pScene && m_nPortalCubeRingVFXId >= 0)
+    if (m_pScene)
     {
         if (auto* pVFX = m_pScene->GetVFXManager())
-            pVFX->Stop(m_nPortalCubeRingVFXId);
-        m_nPortalCubeRingVFXId = -1;
+        {
+            if (m_nPortalCubeRingVFXId    >= 0) pVFX->Stop(m_nPortalCubeRingVFXId);
+            if (m_nPortalCubeSuctionVFXId >= 0) pVFX->Stop(m_nPortalCubeSuctionVFXId);
+            if (m_nPortalCubeBeamVFXId    >= 0) pVFX->Stop(m_nPortalCubeBeamVFXId);
+        }
+        m_nPortalCubeRingVFXId    = -1;
+        m_nPortalCubeSuctionVFXId = -1;
+        m_nPortalCubeBeamVFXId    = -1;
     }
     m_fPortalCubeRingRespawnTimer = 0.0f;
     m_pPortalCube = nullptr;
@@ -89,7 +100,9 @@ void CRoom::Update(float deltaTime)
         if (bActive)
         {
             DirectX::XMFLOAT3 cubePos = m_pPortalCube->GetTransform()->GetPosition();
-            DirectX::XMFLOAT3 vfxNormal{ 0.0f, 0.0f, 1.0f }; // 세로 disc 평면 normal = Z
+            // 포탈이 바닥에 눕혀짐(XZ 평면) → Ring/Beam normal 모두 Y
+            DirectX::XMFLOAT3 vfxNormal{ 0.0f, 1.0f, 0.0f };
+            DirectX::XMFLOAT3 beamNormal{ 0.0f, 1.0f, 0.0f };
 
             constexpr float PORTAL_RING_RESPAWN_INTERVAL = 1.5f;
             m_fPortalCubeRingRespawnTimer += deltaTime;
@@ -99,20 +112,38 @@ void CRoom::Update(float deltaTime)
 
             if (bNeedSpawn)
             {
-                if (m_nPortalCubeRingVFXId >= 0)
-                    pVFX->Stop(m_nPortalCubeRingVFXId);
-                m_nPortalCubeRingVFXId = pVFX->Spawn("Portal_Ring", cubePos, vfxNormal, 0u, false);
+                if (m_nPortalCubeRingVFXId    >= 0) pVFX->Stop(m_nPortalCubeRingVFXId);
+                if (m_nPortalCubeSuctionVFXId >= 0) pVFX->Stop(m_nPortalCubeSuctionVFXId);
+                if (m_nPortalCubeBeamVFXId    >= 0) pVFX->Stop(m_nPortalCubeBeamVFXId);
+                m_nPortalCubeRingVFXId    = pVFX->Spawn("Portal_Ring",    cubePos, vfxNormal, 0u, false);
+                m_nPortalCubeSuctionVFXId = pVFX->Spawn("Portal_Suction", cubePos, vfxNormal, 0u, false);
+                m_nPortalCubeBeamVFXId    = pVFX->Spawn("Portal_Beam",    cubePos, beamNormal, 0u, false);
                 m_fPortalCubeRingRespawnTimer = 0.0f;
             }
-            else if (m_nPortalCubeRingVFXId >= 0)
+            else
             {
-                pVFX->Track(m_nPortalCubeRingVFXId, cubePos, vfxNormal);
+                if (m_nPortalCubeRingVFXId    >= 0) pVFX->Track(m_nPortalCubeRingVFXId,    cubePos, vfxNormal);
+                if (m_nPortalCubeSuctionVFXId >= 0) pVFX->Track(m_nPortalCubeSuctionVFXId, cubePos, vfxNormal);
+                if (m_nPortalCubeBeamVFXId    >= 0) pVFX->Track(m_nPortalCubeBeamVFXId,    cubePos, beamNormal);
             }
         }
-        else if (m_nPortalCubeRingVFXId >= 0)
+        else
         {
-            pVFX->Stop(m_nPortalCubeRingVFXId);
-            m_nPortalCubeRingVFXId = -1;
+            if (m_nPortalCubeRingVFXId >= 0)
+            {
+                pVFX->Stop(m_nPortalCubeRingVFXId);
+                m_nPortalCubeRingVFXId = -1;
+            }
+            if (m_nPortalCubeSuctionVFXId >= 0)
+            {
+                pVFX->Stop(m_nPortalCubeSuctionVFXId);
+                m_nPortalCubeSuctionVFXId = -1;
+            }
+            if (m_nPortalCubeBeamVFXId >= 0)
+            {
+                pVFX->Stop(m_nPortalCubeBeamVFXId);
+                m_nPortalCubeBeamVFXId = -1;
+            }
             m_fPortalCubeRingRespawnTimer = 0.0f;
         }
     }
@@ -357,11 +388,10 @@ void CRoom::SpawnPortalCube()
         return;
     }
 
-    // 포탈 비주얼 — InteractionCube 와 동일 패턴 (세로 보라 마법진 disc + 포탈 material)
-    //   spawn y 는 disc 반경(3)을 고려 → y=3 (바닥 ↔ 머리 높이)
-    m_pPortalCube->GetTransform()->SetPosition(spawnPos.x, 3.0f, spawnPos.z);
-    m_pPortalCube->GetTransform()->SetScale(3.0f, 3.0f, 3.0f);
-    m_pPortalCube->GetTransform()->SetRotation(90.0f, 0.0f, 0.0f); // RingMesh XZ → XY 평면 (세로)
+    // 포탈 비주얼 — 바닥 마법진. 반경 9u (시작방 베이스 크기 매칭). 베이스 표면 위에 깔리도록 y=1.5.
+    m_pPortalCube->GetTransform()->SetPosition(spawnPos.x, 2.5f, spawnPos.z);
+    m_pPortalCube->GetTransform()->SetScale(9.0f, 9.0f, 9.0f);
+    m_pPortalCube->GetTransform()->SetRotation(0.0f, 0.0f, 0.0f);
 
     // 채워진 disc (innerRadius=0) — 포탈 표면
     RingMesh* pPortalDisc = new RingMesh(Dx12App::GetInstance()->GetDevice(),
@@ -369,14 +399,16 @@ void CRoom::SpawnPortalCube()
                                           1.0f, 0.0f, 64);
     m_pPortalCube->SetMesh(pPortalDisc);
 
+    // 포탈 머티리얼 — fbm 와류로 두 보라 톤을 부드럽게 섞음 (디지털 듀얼톤 회피)
     MATERIAL portalMat;
-    portalMat.m_cAmbient  = XMFLOAT4(0.10f, 0.05f, 0.25f, 1.0f);
-    portalMat.m_cDiffuse  = XMFLOAT4(0.30f, 0.10f, 0.60f, 1.0f);
-    portalMat.m_cSpecular = XMFLOAT4(0.5f, 0.4f, 0.9f, 32.0f);
-    portalMat.m_cEmissive = XMFLOAT4(0.45f, 0.20f, 0.95f, 1.0f); // 보라 강한 발광
+    portalMat.m_cAmbient  = XMFLOAT4(0.00f, 0.00f, 0.00f, 1.0f);
+    portalMat.m_cDiffuse  = XMFLOAT4(0.40f, 0.20f, 0.85f, 1.0f);   // 딥 바이올렛 (외곽 림)
+    portalMat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+    portalMat.m_cEmissive = XMFLOAT4(1.00f, 0.75f, 0.95f, 1.0f);   // 라벤더-핑크 (코어)
     m_pPortalCube->SetMaterial(portalMat);
 
     m_pPortalCube->AddComponent<RenderComponent>()->SetMesh(pPortalDisc);
+    m_pPortalCube->SetPortal(true);  // bIsPortal — 셰이더 와류/블랙홀 분기 활성
 
     // Add InteractableComponent
     auto* pInteractable = m_pPortalCube->AddComponent<InteractableComponent>();

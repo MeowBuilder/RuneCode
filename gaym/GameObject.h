@@ -31,7 +31,7 @@ struct ObjectConstants
     float m_fHitFlash = 0.f;
     UINT m_bIsRocky = 0;  // HLSL: 7 uints + g_HitFlash float = 32B → 다음 offset 96
     UINT m_bIsGrass = 0;  // offset 96 — 절차적 풀(grass) 셰이딩(VS sway + PS vertex 그라데이션)
-    UINT m_grassPad0 = 0; // offset 100
+    UINT m_bIsPortal = 0; // offset 100 — 차원문 와류 셰이딩 (시안/마젠타 듀얼톤 + 블랙홀)
     UINT m_grassPad1 = 0; // offset 104
     UINT m_grassPad2 = 0; // offset 108 → MATERIAL at offset 112 (16-aligned 유지)
 	MATERIAL mMaterial;
@@ -171,6 +171,13 @@ public:
         if (m_pcbMappedGameObject)
         {
             m_pcbMappedGameObject->m_bIsGrass = bIsGrass ? 1 : 0;
+        }
+    }
+    void SetPortal(bool bIsPortal)
+    {
+        if (m_pcbMappedGameObject)
+        {
+            m_pcbMappedGameObject->m_bIsPortal = bIsPortal ? 1 : 0;
         }
     }
 

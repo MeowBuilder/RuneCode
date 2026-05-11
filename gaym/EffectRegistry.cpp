@@ -887,24 +887,24 @@ void EffectRegistry::Initialize()
         EffectLayer ring;
         ring.type           = EmitterType::Ring;
         ring.element        = ElementType::Wind;
-        ring.particleCount  = 200;
+        ring.particleCount  = 220;
         ring.overrideColors = true;
-        // 보라/마젠타 — 디스크 색과 어울리는 게이트 자기장
-        ring.coreColor      = { 0.85f, 0.40f, 1.00f, 1.00f };
-        ring.edgeColor      = { 0.45f, 0.10f, 0.85f, 0.55f };
+        // 라벤더 코어 + 딥 바이올렛 엣지 — 디스크와 같은 보라 톤으로 통일
+        ring.coreColor      = { 1.00f, 0.80f, 0.95f, 0.95f };
+        ring.edgeColor      = { 0.50f, 0.25f, 0.85f, 0.50f };
         ring.sizeScale      = 1.4f;
         ring.speedMin       = 0.3f;
         ring.speedMax       = 0.9f;
         ring.lifetimeMin    = 1.2f;
         ring.lifetimeMax    = 2.0f;
         ring.duration       = 9999.f;       // 무한 루프 (포탈 활성 동안 계속)
-        ring.emitRate       = 90.f;
+        ring.emitRate       = 120.f;
 
-        ring.ring.radius         = 3.0f;     // 디스크 반경과 매칭
-        ring.ring.width          = 0.5f;
-        ring.ring.expandSpeed    = 0.0f;     // 확장 안 함 (제자리에서 회전)
+        ring.ring.radius         = 8.5f;     // 디스크 반경 9 와 매칭 (외곽 림 위에 입자)
+        ring.ring.width          = 1.0f;
+        ring.ring.expandSpeed    = 0.0f;     // 제자리 회전
         ring.ring.tiltX          = 0.f;
-        ring.ring.rotateSpeed    = 4.0f;     // 적당한 회전 속도
+        ring.ring.rotateSpeed    = 3.0f;     // 회전 속도 약간 낮춤 (반경 커져서 외형상 속도는 유지)
         ring.ring.normalSpeedMin = 0.2f;
         ring.ring.normalSpeedMax = 0.8f;     // 살짝 위로 떠오르는 입자
 
@@ -1336,6 +1336,72 @@ void EffectRegistry::Initialize()
         ring.ring.normalSpeedMax = 18.f;
 
         def.layers.push_back(ring);
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Portal_Suction — 외곽에서 중심으로 빨려들어가는 흡입 입자 (차원문 인력 연출)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Portal_Suction";
+        def.element = ElementType::Wind;
+
+        EffectLayer suck;
+        suck.type           = EmitterType::Sphere;
+        suck.element        = ElementType::Wind;
+        suck.particleCount  = 70;            // 약간 늘림 — 흐름이 너무 빈약하지 않게
+        suck.overrideColors = true;
+        suck.coreColor      = { 1.00f, 0.75f, 0.95f, 0.80f };  // 라벤더
+        suck.edgeColor      = { 0.30f, 0.10f, 0.60f, 0.0f };   // 딥 바이올렛 페이드
+        suck.sizeScale      = 0.45f;
+        suck.speedMin       = 1.5f;          // ↓ 느리게 — 빨려들어가는 속도가 자연스러워짐
+        suck.speedMax       = 2.8f;
+        suck.lifetimeMin    = 1.2f;          // ↑ 길게 — trail 이 더 부드럽게 보임
+        suck.lifetimeMax    = 1.8f;
+        suck.duration       = 9999.f;
+        suck.emitRate       = 40.f;
+
+        suck.sphere.radius        = 8.5f;    // 디스크 외곽 직전 (반경 9)
+        suck.sphere.shellFraction = 1.0f;
+        suck.sphere.inward        = true;
+        suck.sphere.rotationSpeed = 0.5f;    // 부드러운 나선 (큰 반경에 맞춰 약간 느리게)
+
+        def.layers.push_back(suck);
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Portal_Beam — 디스크에서 위로 솟는 수직 광주 (멀리서도 인지)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Portal_Beam";
+        def.element = ElementType::Wind;
+
+        // Linear emitter — 위로 솟는 빛줄기 + swirl(공전) 으로 토네이도/소용돌이 형태
+        // recycle 켜져 있어 위쪽 끝 도달 시 바닥에서 재스폰 → 끊김 없는 흐름
+        EffectLayer beam;
+        beam.type           = EmitterType::Linear;
+        beam.element        = ElementType::Wind;
+        beam.particleCount  = 90;            // 토네이도 흐름은 입자 수 필요
+        beam.overrideColors = true;
+        beam.coreColor      = { 1.00f, 0.80f, 0.95f, 0.85f }; // 라벤더
+        beam.edgeColor      = { 0.40f, 0.15f, 0.75f, 0.0f };  // 딥 바이올렛 페이드
+        beam.sizeScale      = 0.5f;
+        beam.speedMin       = 1.8f;
+        beam.speedMax       = 3.0f;
+        beam.lifetimeMin    = 1.8f;
+        beam.lifetimeMax    = 2.6f;
+        beam.duration       = 9999.f;
+        beam.emitRate       = 50.f;
+
+        beam.linear.length      = 7.5f;     // 디스크 위로 7.5u 솟음 (디스크 커져서 비례)
+        beam.linear.width       = 2.2f;     // 토네이도 둘레 반경
+        beam.linear.recycleRate = 1.0f;     // 끝 도달 후 재스폰 (지속 흐름)
+        beam.linear.swirlSpeed  = 3.0f;     // 회전 — 진짜 소용돌이 느낌
+
+        def.layers.push_back(beam);
         Register(std::move(def));
     }
 

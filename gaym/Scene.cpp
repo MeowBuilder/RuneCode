@@ -312,24 +312,26 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
     }
 
     m_pInteractionCube->GetTransform()->SetPosition(0.0f, 0.0f, 0.0f);  // repositioned after MapLoader
-    // 포탈 비주얼: 세로로 세운 보라 게이트 (문처럼) + Portal_Ring VFX
-    // RingMesh 는 XZ 평면(원반) → X축 90° 회전 → XY 평면(세로 doorway). 균등 스케일 3 (반경 3u 디스크).
-    m_pInteractionCube->GetTransform()->SetScale(3.0f, 3.0f, 3.0f);
-    m_pInteractionCube->GetTransform()->SetRotation(90.0f, 0.0f, 0.0f);
+    // 포탈 비주얼: 플레이어 스폰 원형 베이스 위에 깔리는 바닥 마법진. 반경 9u (베이스 크기 매칭).
+    m_pInteractionCube->GetTransform()->SetScale(9.0f, 9.0f, 9.0f);
+    m_pInteractionCube->GetTransform()->SetRotation(0.0f, 0.0f, 0.0f);
 
     {
         // 채워진 디스크 (innerRadius=0) — 포탈 표면, 색이 차 있는 느낌
         RingMesh* pPortalDisc = new RingMesh(pDevice, pCommandList, 1.0f, 0.0f, 64);
         m_pInteractionCube->SetMesh(pPortalDisc);
 
+        // 포탈 머티리얼 — bIsPortal 셰이더 분기가 fbm 와류로 두 톤을 부드럽게 섞는다.
+        // 통일된 보라 계열 (라벤더 코어 + 딥 바이올렛 림) — 디지털한 보색 듀얼톤 회피.
         MATERIAL portalMat;
-        portalMat.m_cAmbient  = XMFLOAT4(0.10f, 0.05f, 0.25f, 1.0f);
-        portalMat.m_cDiffuse  = XMFLOAT4(0.30f, 0.10f, 0.60f, 1.0f);  // 깊은 보라
-        portalMat.m_cSpecular = XMFLOAT4(0.5f, 0.4f, 0.9f, 32.0f);
-        portalMat.m_cEmissive = XMFLOAT4(0.45f, 0.20f, 0.95f, 1.0f); // 보라 강한 발광 (포탈 게이트)
+        portalMat.m_cAmbient  = XMFLOAT4(0.00f, 0.00f, 0.00f, 1.0f);
+        portalMat.m_cDiffuse  = XMFLOAT4(0.40f, 0.20f, 0.85f, 1.0f);   // 딥 바이올렛 (외곽 림)
+        portalMat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+        portalMat.m_cEmissive = XMFLOAT4(1.00f, 0.75f, 0.95f, 1.0f);   // 라벤더-핑크 (코어)
         m_pInteractionCube->SetMaterial(portalMat);
 
         m_pInteractionCube->AddComponent<RenderComponent>()->SetMesh(pPortalDisc);
+        m_pInteractionCube->SetPortal(true);  // bIsPortal — 셰이더 와류/블랙홀 분기 활성
         m_vShaders[0]->AddRenderComponent(m_pInteractionCube->GetComponent<RenderComponent>());
 
         auto* pInteractable = m_pInteractionCube->AddComponent<InteractableComponent>();
@@ -509,13 +511,13 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
             pGO->Update(0.0f);
     }
 
-    // 인터랙션 큐브(포탈)를 플레이어 스폰 근처로 이동 (MapLoader가 플레이어 위치를 결정한 후)
-    // 포탈은 세로 disc (반경 3) — 중심 y=3 으로 두면 바닥(y=0)부터 y=6 까지 disc 가 펼쳐짐
+    // 인터랙션 큐브(포탈)를 플레이어 스폰 원형 베이스 정중앙에 배치 (MapLoader 가 플레이어 위치 결정 후).
+    // 포탈은 베이스 단(stand) 표면 위에 깔린 마법진 → y=1.5 (베이스 표면 위, Z-fight 회피).
     if (m_pPlayerGameObject)
     {
         XMFLOAT3 playerSpawn = m_pPlayerGameObject->GetTransform()->GetPosition();
         m_pInteractionCube->GetTransform()->SetPosition(
-            playerSpawn.x + 5.0f, 3.0f, playerSpawn.z);
+            playerSpawn.x, 2.5f, playerSpawn.z);
     }
 
     // --------------------------------------------------------------------------
@@ -612,10 +614,11 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         if (bActive)
         {
             DirectX::XMFLOAT3 cubePos = m_pInteractionCube->GetTransform()->GetPosition();
-            // 포탈은 수직(XY 평면) → Ring 평면 normal 은 Z 축 (입자가 disc 둘레에 형성)
-            DirectX::XMFLOAT3 vfxNormal{ 0.0f, 0.0f, 1.0f };
+            // 포탈이 바닥에 눕혀짐(XZ 평면) → Ring 평면 normal = Y. Beam도 위로 솟으므로 동일 Y.
+            DirectX::XMFLOAT3 vfxNormal{ 0.0f, 1.0f, 0.0f };
+            DirectX::XMFLOAT3 beamNormal{ 0.0f, 1.0f, 0.0f };
 
-            // Portal_Ring — Ring 이미터는 1회 spawn 후 입자 lifetime(2s) 끝나면 사라지므로
+            // Portal_Ring / Suction / Beam — 각 이미터는 1회 spawn 후 입자 lifetime 만큼 살다 죽으므로
             // 주기적(1.5s)으로 stop + 재 spawn 해서 continuous 한 시각 유지
             constexpr float PORTAL_RING_RESPAWN_INTERVAL = 1.5f;
             m_fPortalRingRespawnTimer += deltaTime;
@@ -627,12 +630,20 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
             {
                 if (m_nInteractionCubePortalRingVFXId >= 0)
                     m_pVFXManager->Stop(m_nInteractionCubePortalRingVFXId);
-                m_nInteractionCubePortalRingVFXId = m_pVFXManager->Spawn("Portal_Ring", cubePos, vfxNormal, 0u, false);
+                if (m_nInteractionCubePortalSuctionVFXId >= 0)
+                    m_pVFXManager->Stop(m_nInteractionCubePortalSuctionVFXId);
+                if (m_nInteractionCubePortalBeamVFXId >= 0)
+                    m_pVFXManager->Stop(m_nInteractionCubePortalBeamVFXId);
+                m_nInteractionCubePortalRingVFXId    = m_pVFXManager->Spawn("Portal_Ring",    cubePos, vfxNormal, 0u, false);
+                m_nInteractionCubePortalSuctionVFXId = m_pVFXManager->Spawn("Portal_Suction", cubePos, vfxNormal, 0u, false);
+                m_nInteractionCubePortalBeamVFXId    = m_pVFXManager->Spawn("Portal_Beam",    cubePos, beamNormal, 0u, false);
                 m_fPortalRingRespawnTimer = 0.0f;
             }
-            else if (m_nInteractionCubePortalRingVFXId >= 0)
+            else
             {
-                m_pVFXManager->Track(m_nInteractionCubePortalRingVFXId, cubePos, vfxNormal);
+                if (m_nInteractionCubePortalRingVFXId    >= 0) m_pVFXManager->Track(m_nInteractionCubePortalRingVFXId,    cubePos, vfxNormal);
+                if (m_nInteractionCubePortalSuctionVFXId >= 0) m_pVFXManager->Track(m_nInteractionCubePortalSuctionVFXId, cubePos, vfxNormal);
+                if (m_nInteractionCubePortalBeamVFXId    >= 0) m_pVFXManager->Track(m_nInteractionCubePortalBeamVFXId,    cubePos, beamNormal);
             }
         }
         else
@@ -641,6 +652,16 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
             {
                 m_pVFXManager->Stop(m_nInteractionCubePortalRingVFXId);
                 m_nInteractionCubePortalRingVFXId = -1;
+            }
+            if (m_nInteractionCubePortalSuctionVFXId >= 0)
+            {
+                m_pVFXManager->Stop(m_nInteractionCubePortalSuctionVFXId);
+                m_nInteractionCubePortalSuctionVFXId = -1;
+            }
+            if (m_nInteractionCubePortalBeamVFXId >= 0)
+            {
+                m_pVFXManager->Stop(m_nInteractionCubePortalBeamVFXId);
+                m_nInteractionCubePortalBeamVFXId = -1;
             }
             m_fPortalRingRespawnTimer = 0.0f;
         }

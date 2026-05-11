@@ -20,7 +20,7 @@ cbuffer cbGameObject : register(b0)
     float g_HitFlash;
     uint bIsRocky;
     uint bIsGrass;   // 절차적 풀(grass) 셰이딩 플래그 — VS sway + PS vertex 그라데이션
-    uint _gpad0;
+    uint bIsPortal;  // 차원문 셰이딩 — 시안/마젠타 듀얼톤 와류 + 블랙홀 + 림 글로우
     uint _gpad1;
     uint _gpad2;
     MATERIAL gMaterial;
@@ -567,6 +567,66 @@ float CalculateShadow(float4 posLightSpace)
 
 float4 PS(PS_INPUT input) : SV_TARGET
 {
+    // ========================================================================
+    // Portal (차원문) — 라이팅 무시. 시안/마젠타 듀얼톤 와류 + 블랙홀 + 림 글로우
+    // ========================================================================
+    //   - RingMesh UV: u = 각도(0~1), v = 반경(0=외곽, 1=중심)
+    //   - gMaterial.m_cEmissive = 코어색(마젠타), m_cDiffuse = 림색(시안)
+    if (bIsPortal)
+    {
+        // RingMesh UV: u = 각도(0~1), v = 반경(0=외곽, 1=중심)
+        // fbm 노이즈 + r 기반 회전 속도 차등(안쪽이 빠르게 빨려들어가는 깊이감)
+        float r = saturate(1.0f - input.uv.y);
+        float theta = input.uv.x * 6.2831853f;
+
+        // 깊이감의 핵심: 안쪽으로 갈수록 빠르게 회전 (whirlpool / accretion disk)
+        float radialBoost = 1.0f / max(r + 0.18f, 0.18f);
+        float twistedTheta = theta + g_Time * 0.30f * radialBoost;
+
+        float t = g_Time * 0.12f;
+        float2 polar = float2(cos(twistedTheta), sin(twistedTheta)) * (0.6f + r * 1.4f);
+
+        // 3 옥타브 fbm — 부드러운 유기적 패턴
+        float n1 = _vnoise(polar * 2.5f + float2( t,        -t * 0.6f));
+        float n2 = _vnoise(polar * 5.0f + float2(-t * 0.7f,  t * 0.9f));
+        float n3 = _vnoise(polar * 9.5f + float2( t * 1.3f,  t * 0.4f));
+        float swirl = saturate(n1 * 0.55f + n2 * 0.30f + n3 * 0.15f);
+
+        float3 coreCol = gMaterial.m_cEmissive.rgb;
+        float3 rimCol  = gMaterial.m_cDiffuse.rgb;
+        float3 portalCol = lerp(rimCol * 0.25f, coreCol, swirl);
+
+        // 블랙홀 + 깊이감 음영 — 안쪽으로 갈수록 어두워지며 빨려드는 깊이 표현
+        // smoothstep 두 단계: 0~0.18 진한 어둠, 0.18~0.45 점차 밝아짐 → 우물 같은 깊이
+        float blackhole = smoothstep(0.0f, 0.18f, r) * smoothstep(0.0f, 0.45f, r);
+        portalCol *= blackhole;
+
+        // 외곽 림 — 부드러운 그라데이션 + 부드러운 inner highlight (마법진 위에 떠있는 듯한 광막)
+        float rimGlow = smoothstep(0.62f, 1.0f, r);
+        rimGlow *= rimGlow;
+        portalCol += rimCol * rimGlow * 1.8f;
+
+        // 부드러운 빛점 — fbm swirl 의 핫스팟
+        float hotspot = smoothstep(0.65f, 0.95f, swirl) * (1.0f - r * 0.5f);
+        portalCol += coreCol * hotspot * 1.2f;
+
+        // ── 주기적 임팩트 펄스 — 4초 주기, ring 이 중심→외곽으로 sweep ────────────
+        //   살짝의 임팩트: 너무 강하지 않게 페이드 아웃. impactR 가 r 위치에 도달했을 때 작은 발광 띠.
+        const float IMPACT_PERIOD = 4.0f;
+        float impactT = frac(g_Time / IMPACT_PERIOD);     // [0, 1)
+        float impactR = impactT * 0.95f;                  // ring 가 0→0.95 로 sweep
+        float impactWidth = 0.07f;
+        float impactBand = exp(-pow((r - impactR) / impactWidth, 2.0f));
+        float impactFade = 1.0f - impactT;                // 시간 지날수록 약해짐
+        portalCol += coreCol * impactBand * impactFade * 1.4f;
+
+        // 호흡 펄스
+        float pulse = 0.90f + 0.10f * sin(g_Time * 1.7f);
+        portalCol *= pulse;
+
+        return float4(portalCol, gMaterial.m_cDiffuse.a);
+    }
+
     // Normalize the world normal
     float3 normal = normalize(input.worldNormal);
     float3 vToCamera = normalize(g_CameraPosition - input.worldPosition); // Vector from fragment to camera
