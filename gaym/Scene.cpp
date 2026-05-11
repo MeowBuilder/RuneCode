@@ -18,6 +18,21 @@
 #include "WaveSlashBehavior.h"
 #include "FireBeamBehavior.h"
 #include "MeteorBehavior.h"
+// 물결술사
+#include "WaterWaveBehavior.h"
+#include "WaterVortexBehavior.h"
+#include "TidalWaveBehavior.h"
+#include "WaterOrbBehavior.h"
+// 바람술사
+#include "WindCutterBehavior.h"
+#include "GaleRushBehavior.h"
+#include "TornadoBehavior.h"
+#include "WindShotBehavior.h"
+// 대지술사
+#include "StoneSpikesBehavior.h"
+#include "RockThrowBehavior.h"
+#include "EarthquakeBehavior.h"
+#include "EarthShardBehavior.h"
 #include "ProjectileManager.h"
 #include "DropItemComponent.h"
 #include "InteractableComponent.h"
@@ -118,26 +133,75 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
         auto* pSkillComponent = pPlayer->AddComponent<SkillComponent>();
 
         // Q/E/R 스킬 VFXManager 연결은 VFXManager::Init 이후에 수행 (아래 참고)
-        auto waveSlash = std::make_unique<WaveSlashBehavior>();
-        waveSlash->SetScene(this);
-        pSkillComponent->EquipSkill(SkillSlot::Q, std::move(waveSlash));
+        if (m_eSelectedElement == ElementType::Fire)
+        {
+            auto q = std::make_unique<WaveSlashBehavior>(); q->SetScene(this);
+            pSkillComponent->EquipSkill(SkillSlot::Q, std::move(q));
 
-        // E - FireBeam (화염 빔)
-        auto fireBeam = std::make_unique<FireBeamBehavior>();
-        fireBeam->SetScene(this);
-        pSkillComponent->EquipSkill(SkillSlot::E, std::move(fireBeam));
+            auto e = std::make_unique<FireBeamBehavior>(); e->SetScene(this);
+            pSkillComponent->EquipSkill(SkillSlot::E, std::move(e));
 
-        // R - Meteor (메테오)
-        auto meteor = std::make_unique<MeteorBehavior>();
-        meteor->SetScene(this);
-        pSkillComponent->EquipSkill(SkillSlot::R, std::move(meteor));
+            auto r = std::make_unique<MeteorBehavior>(); r->SetScene(this);
+            pSkillComponent->EquipSkill(SkillSlot::R, std::move(r));
 
-        // RightClick - Fireball (기존 투사체 유지)
-        auto fireballRClick = std::make_unique<FireballBehavior>();
-        fireballRClick->SetProjectileManager(m_pProjectileManager.get());
-        pSkillComponent->EquipSkill(SkillSlot::RightClick, std::move(fireballRClick));
+            auto rc = std::make_unique<FireballBehavior>();
+            rc->SetProjectileManager(m_pProjectileManager.get());
+            pSkillComponent->EquipSkill(SkillSlot::RightClick, std::move(rc));
 
-        OutputDebugString(L"[Scene] Skill system initialized - Q:WaveSlash, E:FireBeam, R:Meteor, RClick:Fireball\n");
+            OutputDebugString(L"[Scene] Skills: Fire — Q:WaveSlash, E:FireBeam, R:Meteor, RC:Fireball\n");
+        }
+        else if (m_eSelectedElement == ElementType::Water)
+        {
+            auto q = std::make_unique<WaterWaveBehavior>(); q->SetScene(this);
+            pSkillComponent->EquipSkill(SkillSlot::Q, std::move(q));
+
+            auto e = std::make_unique<WaterVortexBehavior>(); e->SetScene(this);
+            pSkillComponent->EquipSkill(SkillSlot::E, std::move(e));
+
+            auto r = std::make_unique<TidalWaveBehavior>(); r->SetScene(this);
+            pSkillComponent->EquipSkill(SkillSlot::R, std::move(r));
+
+            auto rc = std::make_unique<WaterOrbBehavior>();
+            rc->SetProjectileManager(m_pProjectileManager.get());
+            pSkillComponent->EquipSkill(SkillSlot::RightClick, std::move(rc));
+
+            OutputDebugString(L"[Scene] Skills: Water — Q:WaterWave, E:WaterVortex, R:TidalWave, RC:WaterOrb\n");
+        }
+        else if (m_eSelectedElement == ElementType::Wind)
+        {
+            auto q = std::make_unique<WindCutterBehavior>(); q->SetScene(this);
+            pSkillComponent->EquipSkill(SkillSlot::Q, std::move(q));
+
+            auto e = std::make_unique<GaleRushBehavior>(); e->SetScene(this);
+            pSkillComponent->EquipSkill(SkillSlot::E, std::move(e));
+
+            auto r = std::make_unique<TornadoBehavior>(); r->SetScene(this);
+            pSkillComponent->EquipSkill(SkillSlot::R, std::move(r));
+
+            auto rc = std::make_unique<WindShotBehavior>();
+            rc->SetProjectileManager(m_pProjectileManager.get());
+            pSkillComponent->EquipSkill(SkillSlot::RightClick, std::move(rc));
+
+            OutputDebugString(L"[Scene] Skills: Wind — Q:WindCutter, E:GaleRush, R:Tornado, RC:WindShot\n");
+        }
+        else  // Earth
+        {
+            auto q = std::make_unique<StoneSpikesBehavior>(); q->SetScene(this);
+            pSkillComponent->EquipSkill(SkillSlot::Q, std::move(q));
+
+            auto e = std::make_unique<RockThrowBehavior>();
+            e->SetProjectileManager(m_pProjectileManager.get());
+            pSkillComponent->EquipSkill(SkillSlot::E, std::move(e));
+
+            auto r = std::make_unique<EarthquakeBehavior>(); r->SetScene(this);
+            pSkillComponent->EquipSkill(SkillSlot::R, std::move(r));
+
+            auto rc = std::make_unique<EarthShardBehavior>();
+            rc->SetProjectileManager(m_pProjectileManager.get());
+            pSkillComponent->EquipSkill(SkillSlot::RightClick, std::move(rc));
+
+            OutputDebugString(L"[Scene] Skills: Earth — Q:StoneSpikes, E:RockThrow, R:Earthquake, RC:EarthShard\n");
+        }
 
         AddRenderComponentsToHierarchy(pDevice, pCommandList, pPlayer, pShader.get(), true);  // Player casts shadow
     }
@@ -182,12 +246,12 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
         if (auto* pSC = m_pPlayerGameObject->GetComponent<SkillComponent>())
         {
             FluidSkillVFXManager* pPlayerVFX = m_pVFXManager->GetPlayerVFX();
-            if (auto* pQ = dynamic_cast<WaveSlashBehavior*>(pSC->GetSkill(SkillSlot::Q)))
-                pQ->SetVFXManager(pPlayerVFX);
-            if (auto* pE = dynamic_cast<FireBeamBehavior*>(pSC->GetSkill(SkillSlot::E)))
-                pE->SetVFXManager(pPlayerVFX);
-            if (auto* pR = dynamic_cast<MeteorBehavior*>(pSC->GetSkill(SkillSlot::R)))
-                pR->SetVFXManager(pPlayerVFX);
+            // ISkillBehavior::SetVFXManager(default: no-op) — 각 Behavior가 override로 처리
+            for (int s = 0; s < (int)SkillSlot::Count; ++s)
+            {
+                if (auto* pBeh = pSC->GetSkill(static_cast<SkillSlot>(s)))
+                    pBeh->SetVFXManager(pPlayerVFX);
+            }
         }
     }
 

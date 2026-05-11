@@ -1,0 +1,120 @@
+#include "stdafx.h"
+#include "StoneSpikesBehavior.h"
+#include "FluidSkillVFXManager.h"
+#include "EffectRegistry.h"
+#include "GameObject.h"
+#include "TransformComponent.h"
+#include "SkillComponent.h"
+#include "Scene.h"
+#include "Room.h"
+#include "EnemyComponent.h"
+
+StoneSpikesBehavior::StoneSpikesBehavior()
+    : m_SkillData(EarthSkillPresets::StoneSpikes())
+{
+}
+
+void StoneSpikesBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
+{
+    m_bActive = false;
+    m_spikes.clear();
+
+    if (!m_pVFXManager) { return; }
+
+    XMFLOAT3 origin = { 0.f, 0.f, 0.f };
+    if (caster && caster->GetTransform())
+        origin = caster->GetTransform()->GetPosition();
+
+    XMVECTOR oV = XMLoadFloat3(&origin);
+    XMVECTOR tV = XMLoadFloat3(&targetPosition);
+    XMVECTOR dV = XMVector3Normalize(XMVectorSetY(XMVectorSubtract(tV, oV), 0.f));
+    if (XMVectorGetX(XMVector3LengthSq(dV)) < 0.001f && caster && caster->GetTransform())
+        dV = XMVector3Normalize(XMVectorSetY(caster->GetTransform()->GetLook(), 0.f));
+
+    XMFLOAT3 dir;
+    XMStoreFloat3(&dir, dV);
+
+    // 첫 번째 기둥은 캐릭터 앞 약간 거리부터
+    for (int i = 0; i < SPIKE_COUNT; ++i)
+    {
+        SpikeEntry e;
+        XMVECTOR posV = XMVectorAdd(oV, XMVectorScale(dV, SPIKE_SPACING * (float)(i + 1)));
+        XMStoreFloat3(&e.pos, posV);
+        e.pos.y      = 0.f;
+        e.triggerAt  = i * SPIKE_INTERVAL;
+        m_spikes.push_back(e);
+    }
+
+    m_bActive    = true;
+    m_damageMult = damageMultiplier > 0.f ? damageMultiplier : 1.f;
+    m_elapsed    = 0.f;
+}
+
+void StoneSpikesBehavior::Update(float deltaTime)
+{
+    if (!m_bActive) return;
+    m_elapsed += deltaTime;
+
+    for (int i = 0; i < (int)m_spikes.size(); ++i)
+    {
+        auto& s = m_spikes[i];
+        if (!s.triggered && m_elapsed >= s.triggerAt)
+            TriggerSpike(i);
+    }
+
+    if (m_elapsed >= TOTAL_DURATION)
+        m_bActive = false;
+}
+
+void StoneSpikesBehavior::TriggerSpike(int idx)
+{
+    auto& s = m_spikes[idx];
+    s.triggered = true;
+
+    // VFX 스폰
+    if (m_pVFXManager)
+    {
+        XMFLOAT3 up = { 0.f, 1.f, 0.f };
+        EffectDef def = EffectRegistry::Get().GetEffect("Q_StoneSpike");
+        s.vfxId = m_pVFXManager->SpawnEffectDef(s.pos, up, def, true);
+    }
+
+    HitEnemiesAtSpike(s.pos, m_SkillData.damage * m_damageMult);
+}
+
+void StoneSpikesBehavior::HitEnemiesAtSpike(const DirectX::XMFLOAT3& center, float damage)
+{
+    if (!m_pScene) return;
+    CRoom* pRoom = m_pScene->GetCurrentRoom();
+    if (!pRoom) return;
+
+    for (const auto& obj : pRoom->GetGameObjects())
+    {
+        if (!obj) continue;
+        auto* pEnemy = obj->GetComponent<EnemyComponent>();
+        if (!pEnemy || pEnemy->IsDead()) continue;
+        auto* pT = obj->GetTransform();
+        if (!pT) continue;
+
+        XMFLOAT3 ep = pT->GetPosition();
+        float dx = ep.x - center.x, dz = ep.z - center.z;
+        float distSq = dx * dx + dz * dz;
+        if (distSq > HIT_RADIUS * HIT_RADIUS) continue;
+        if (fabsf(ep.y - center.y) > HIT_HEIGHT) continue;
+
+        pEnemy->TakeDamage(damage, true);
+    }
+}
+
+bool StoneSpikesBehavior::IsFinished() const { return !m_bActive; }
+
+void StoneSpikesBehavior::Reset()
+{
+    if (m_pVFXManager)
+    {
+        for (auto& s : m_spikes)
+            if (s.triggered && s.vfxId >= 0) m_pVFXManager->StopEffect(s.vfxId);
+    }
+    m_bActive = false;
+    m_spikes.clear();
+}
