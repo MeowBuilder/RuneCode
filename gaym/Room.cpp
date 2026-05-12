@@ -389,7 +389,7 @@ void CRoom::SpawnPortalCube()
     }
 
     // 포탈 비주얼 — 바닥 마법진. 반경 9u (시작방 베이스 크기 매칭). 베이스 표면 위에 깔리도록 y=1.5.
-    m_pPortalCube->GetTransform()->SetPosition(spawnPos.x, 2.5f, spawnPos.z);
+    m_pPortalCube->GetTransform()->SetPosition(spawnPos.x, spawnPos.y, spawnPos.z);
     m_pPortalCube->GetTransform()->SetScale(9.0f, 9.0f, 9.0f);
     m_pPortalCube->GetTransform()->SetRotation(0.0f, 0.0f, 0.0f);
 

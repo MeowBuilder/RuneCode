@@ -2132,13 +2132,14 @@ static const char* GetMonsterAttackClipForType(uint32 monsterType, uint32 attack
         case 20: return "Flame Attack";       // DiveBomb (다이브 + 화염)
         default: return "Flame Attack";
         }
-    case 7:  // Kraken — Anim: Attack_Forward_RM / Sweep_Attack / Sweep_Smash_Attack_3_HIt_Combo / Unreal Take
+    case 7:  // Kraken
         switch (attackType)
         {
-        case 5:  return "Attack_Forward_RM";                  // Breath (잉크)
-        case 8:  return "Sweep_Attack";                       // TailSweep
-        case 9:  return "Sweep_Smash_Attack_3_HIt_Combo";     // GroundRupture (3연타 콤보)
-        case 4:  return "Sweep_Attack";                       // RushFront → 휩쓸기로 대체
+        case 5:  return "Attack_Forward_RM";              // Breath
+        case 8:  return "Sweep_Attack";                   // TailSweep
+        case 11:  return "Sweep_Smash_Attack_3_HIt_Combo"; // KrakenCombo라면
+        case 12: return "Attack_Forward_RM";              // SideSmash
+        case 13: return "Unreal Take";                    // WaterBurst
         default: return "Attack_Forward_RM";
         }
     case 8:  // Golem — Anim: Golem_battle_attack01_ge / attack02 / jump_ge
@@ -2159,10 +2160,11 @@ static const char* GetMonsterAttackClipForType(uint32 monsterType, uint32 attack
     case 10: // BlueDragon — Anim: Fireball Shoot / Tail Attack / Run
         switch (attackType)
         {
-        case 5:  return "Fireball Shoot";    // Breath
-        case 4:  return "Run";               // RushFront
-        case 8:  return "Tail Attack";       // TailSweep
-        case 7:  return "Fireball Shoot";    // JumpSlam (대체 클립 없음)
+        case 5:  return "Fireball Shoot"; // Breath
+        case 4:  return "Run";            // RushFront
+        case 8:  return "Tail Attack";    // TailSweep
+        case 7:  return "Tail Attack";    // JumpSlam 대체
+        case 15: return "Tail Attack";    // HeavyCombo
         default: return "Fireball Shoot";
         }
     default:

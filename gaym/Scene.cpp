@@ -989,7 +989,6 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
                 NetworkManager::GetInstance()->SetCutscenePlaying(false);
                 WriteNetworkLog("[Network] Cutscene lock OFF");
 
-				// 컷신 종료 알림 
                 NetworkManager::GetInstance()->SendBossCutsceneEnd(
                     m_nNetworkKrakenCutsceneMonsterId,
                     static_cast<uint32>(Protocol::BOSS_EVENT_PHASE_CHANGE),
