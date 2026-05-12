@@ -900,6 +900,17 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
                 // 카메라 / 조작 권한 플레이어에게 반환 — WaterRise는 일반 게임플레이
                 m_pCamera->StopCinematic();
 
+				// 온라인 모드: 컷신용 Kraken 오브젝트 제거 (서버가 스폰한 GameObject이므로 클라이언트에서 직접 삭제)
+                NetworkManager::GetInstance()->SetCutscenePlaying(false);
+                WriteNetworkLog("[Network] Cutscene lock OFF");
+
+				// 컷신 종료 알림 
+                NetworkManager::GetInstance()->SendBossCutsceneEnd(
+                    m_nNetworkKrakenCutsceneMonsterId,
+                    static_cast<uint32>(Protocol::BOSS_EVENT_PHASE_CHANGE),
+                    2
+                );
+
                 // 크라켄이 플레이어 타겟팅 시작 (슬램 지점에서 전투 재개, WaterRise 중에도 물 따라 부상)
                 if (m_pPreloadedKraken)
                     m_pPreloadedKraken->SetTarget(m_pPlayerGameObject);
@@ -955,6 +966,9 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
             {
                 m_eKrakenStage = KrakenCutsceneStage::None;
                 m_pPreloadedKraken = nullptr;
+                m_pNetworkKrakenCutsceneObject = nullptr;
+                m_nNetworkKrakenCutsceneMonsterId = 0;
+
                 OutputDebugString(L"[Scene] Water rise complete — battle at upper water level\n");
             }
         }
@@ -3449,7 +3463,7 @@ void Scene::TransitionToWaterBossRoom()
     OutputDebugString(L"[Scene] Water boss room ready - Kraken spawned!\n");
 }
 
-void Scene::StartNetworkKrakenCutscene(GameObject* pKrakenObj)
+void Scene::StartNetworkKrakenCutscene(GameObject* pKrakenObj, uint64 monsterId)
 {
     // 1. 서버가 스폰한 Kraken 오브젝트가 없으면 컷신 시작 불가
     if (!pKrakenObj)
@@ -3459,6 +3473,7 @@ void Scene::StartNetworkKrakenCutscene(GameObject* pKrakenObj)
     // 온라인 모드에서는 서버 몬스터가 EnemyComponent 없이 GameObject로만 존재하므로
     // 기존 m_pPreloadedKraken 대신 별도 GameObject 포인터를 사용한다.
     m_pNetworkKrakenCutsceneObject = pKrakenObj;
+    m_nNetworkKrakenCutsceneMonsterId = monsterId;
 
     // 3. 컷신 기준 위치 저장
     // 이후 Rumble/Rise/Burst/Jump/Slam 단계에서 기준 좌표로 사용된다.

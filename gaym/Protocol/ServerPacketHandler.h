@@ -33,6 +33,7 @@ enum : uint16
 	// 정식 패치 시 별도 message 로 분리할 것.
 	PKT_C_DEBUG_KILL_ALL = 1023,
 	PKT_S_BOSS_EVENT = 1024,
+	PKT_C_BOSS_CUTSCENE_END = 1025,
 };
 
 // Custom Handlers
@@ -92,8 +93,10 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::C_PORTAL_INTERACT& pkt) { return MakeSendBuffer(pkt, PKT_C_PORTAL_INTERACT); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_TORCH_INTERACT& pkt) { return MakeSendBuffer(pkt, PKT_C_TORCH_INTERACT); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_PLAYER_ATTACK& pkt) { return MakeSendBuffer(pkt, PKT_C_PLAYER_ATTACK); }
+	static SendBufferRef MakeSendBuffer(Protocol::C_BOSS_CUTSCENE_END& pkt) { return MakeSendBuffer(pkt, PKT_C_BOSS_CUTSCENE_END); }
 	// [DEBUG] 빈 본문 — C_PORTAL_INTERACT 메시지 형식만 빌려서 ID 만 다르게 보냄
 	static SendBufferRef MakeDebugKillAllSendBuffer() { Protocol::C_PORTAL_INTERACT pkt; return MakeSendBuffer(pkt, PKT_C_DEBUG_KILL_ALL); }
+	
 
 private:
 	template<typename PacketType, typename ProcessFunc>

@@ -8,3 +8,20 @@ enum PlayerType
 	PLAYER_TYPE_MAGE = 2;
 	PLAYER_TYPE_ARCHER = 3;
 }
+
+enum SkillType
+{
+	SKILL_TYPE_NONE = 0;           // 기본값(스킬 미사용 상태)
+	SKILL_TYPE_Q = 1;              // 플레이어 Q 스킬
+	SKILL_TYPE_E = 2;              // 플레이어 E 스킬
+	SKILL_TYPE_R = 3;              // 플레이어 R 스킬
+	SKILL_TYPE_MOUSE_RIGHT = 4;    // 플레이어 마우스 우클릭 스킬
+}
+
+enum BossEventType
+{
+	BOSS_EVENT_NONE = 0;          // 보스 이벤트 없음
+	BOSS_EVENT_INTRO = 1;         // 보스 등장 인트로 컷씬 시작
+	BOSS_EVENT_PHASE_CHANGE = 2;  // 보스 페이즈 전환 컷씬/패턴 시작
+	BOSS_EVENT_DEATH = 3;         // 보스 사망 컷씬/연출 시작
+}

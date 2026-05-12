@@ -212,8 +212,8 @@ public:
     D3D12_GPU_VIRTUAL_ADDRESS GetPassCBVAddress() const { if(m_pd3dcbPass) return m_pd3dcbPass->GetGPUVirtualAddress(); return 0; }
 
     // 서버 BossEvent PhaseChange 수신 시 호출되는 네트워크 Kraken 컷신 시작 함수
-    // 서버가 스폰한 Kraken GameObject를 기존 컷신 상태머신에 연결한다.
-    void StartNetworkKrakenCutscene(GameObject* pKrakenObj);
+    // 서버가 스폰한 Kraken GameObject와 monsterId를 기존 컷신 상태머신에 연결한다.
+    void StartNetworkKrakenCutscene(GameObject* pKrakenObj, uint64 monsterId);
 
 private:
     // 캐릭터 선택 화면에서 결정된 플레이어 원소 (Init() 전에 SetSelectedElement로 설정)
@@ -339,6 +339,10 @@ private:
     // 기존 오프라인 컷신은 EnemyComponent* m_pPreloadedKraken 기준이지만,
     // 서버 권위 몬스터는 EnemyComponent가 없으므로 GameObject*를 별도로 보관한다.
     GameObject* m_pNetworkKrakenCutsceneObject = nullptr;
+
+    // 온라인/네트워크 Kraken 컷신 대상 몬스터 ID
+    // 컷신 종료 시 C_BOSS_CUTSCENE_END 패킷에 실어 서버로 보낸다.
+    uint64 m_nNetworkKrakenCutsceneMonsterId = 0;
 
     // Kraken 컷씬: Rumble→Rise→Burst→Reveal→Roar→Jump→Slam→WaterRise→None
     //  - Jump: Roar 위치 → 맵 바깥 수면 위로 포물선 점프

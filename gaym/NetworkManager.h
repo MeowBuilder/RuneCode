@@ -148,6 +148,9 @@ public:
                           float dirX, float dirY, float dirZ,
                           float targetX, float targetY, float targetZ);
 
+    // 보스 컷신 종료 알림 전송
+    void SendBossCutsceneEnd(uint64 monsterId, uint32 eventType, uint32 phaseIndex);
+
     // [DEBUG] 현재 방 전체 즉사 (서버 권위) — F8 키 (F11 은 전체화면과 겹침). 서버가 모든 살아있는 몬스터에
     // 9999 데미지 적용 후 정상적인 S_MONSTER_DAMAGE(isDead=true) → 사망 애니 → S_ROOM_CLEARED 자연 진행
     void SendDebugKillAll();
@@ -155,6 +158,10 @@ public:
     // 로컬 플레이어 ID 설정/조회 (atomic으로 스레드 안전)
     void SetLocalPlayerId(uint64 playerId) { m_nLocalPlayerId.store(playerId); }
     uint64 GetLocalPlayerId() const { return m_nLocalPlayerId.load(); }
+
+    // 컷신 중 입력/패킷 차단용
+    void SetCutscenePlaying(bool playing) { m_bCutscenePlaying = playing; }
+    bool IsCutscenePlaying() const { return m_bCutscenePlaying; }
 
     // 세션 참조 설정 (GameSession::OnConnected에서 호출)
     void SetSession(std::shared_ptr<GameSession> session) { m_pSession = session; }
@@ -275,6 +282,9 @@ private:
     bool m_bPendingTorchInteract = false;
     int m_nPendingTorchInteractFrame = 0;
     bool m_bInRoomTransition = false;
+
+    // 보스 이벤트 중복 방지
+    bool m_bCutscenePlaying = false;
 
     // 서버 MOVE 패킷 간격이 띄엄띄엄해서 직접 SetPosition하면 순간이동처럼 보임.
     // 타겟 pos/yaw 저장 → 매 프레임 exponential smoothing으로 접근.

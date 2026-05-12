@@ -346,6 +346,13 @@ void NetworkManager::SendMove(float x, float y, float z, float dirX, float dirY,
     if (!m_bConnected || !m_pSession)
         return;
 
+	// 컷신 중이면 이동 패킷 전송 차단 
+    if (m_bCutscenePlaying)
+    {
+        WriteNetworkLog("[Network] C_SKILL blocked: cutscene playing");
+        return;
+    }
+
     Protocol::C_MOVE movePkt;
     movePkt.set_x(x);
     movePkt.set_y(y);
@@ -362,6 +369,13 @@ void NetworkManager::SendSkill(int skillType, float x, float y, float z, float d
 {
     if (!m_bConnected || !m_pSession)
         return;
+
+	// 컷신 중이면 스킬 패킷 전송 차단
+    if (m_bCutscenePlaying)
+    {
+        WriteNetworkLog("[Network] C_SKILL blocked: cutscene playing");
+        return;
+    }
 
     Protocol::C_SKILL skillPkt;
     skillPkt.set_skilltype(static_cast<Protocol::SkillType>(skillType));
@@ -433,6 +447,13 @@ void NetworkManager::SendPlayerAttack(int skillType,
     if (!m_bConnected || !m_pSession)
         return;
 
+    // 컷신 중이면 공격 패킷 전송 차단
+    if (m_bCutscenePlaying)
+    {
+        WriteNetworkLog("[Network] C_PLAYER_ATTACK blocked: cutscene playing");
+        return;
+    }
+
     Protocol::C_PLAYER_ATTACK pkt;
     pkt.set_skilltype(static_cast<Protocol::SkillType>(skillType));
     pkt.set_x(x);
@@ -451,6 +472,27 @@ void NetworkManager::SendPlayerAttack(int skillType,
     char buf[256];
     sprintf_s(buf, "[Network] C_PLAYER_ATTACK sent: skillType=%d pos=(%.2f,%.2f,%.2f) target=(%.2f,%.2f,%.2f)",
         skillType, x, y, z, targetX, targetY, targetZ);
+    WriteNetworkLog(buf);
+}
+
+// 보스 컷신 종료 알림 전송
+// Kraken 등장 컷신이 끝났을 때 서버에 알려서 서버 AI 잠금을 해제한다.
+void NetworkManager::SendBossCutsceneEnd(uint64 monsterId, uint32 eventType, uint32 phaseIndex)
+{
+    if (!m_bConnected || !m_pSession)
+        return;
+
+    Protocol::C_BOSS_CUTSCENE_END pkt;
+    pkt.set_monsterid(monsterId);
+    pkt.set_eventtype(static_cast<Protocol::BossEventType>(eventType));
+    pkt.set_phaseindex(phaseIndex);
+
+    auto sendBuffer = ServerPacketHandler::MakeSendBuffer(pkt);
+    m_pSession->Send(sendBuffer);
+
+    char buf[160];
+    sprintf_s(buf, "[Network] C_BOSS_CUTSCENE_END sent: monsterId=%llu eventType=%u phase=%u",
+        monsterId, eventType, phaseIndex);
     WriteNetworkLog(buf);
 }
 
@@ -2757,7 +2799,10 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
         {
             if (pBoss)
             {
-                pScene->StartNetworkKrakenCutscene(pBoss);
+                SetCutscenePlaying(true);
+                WriteNetworkLog("[Network] Cutscene lock ON");
+
+                pScene->StartNetworkKrakenCutscene(pBoss, monsterId);
                 WriteNetworkLog("[Network] Kraken phase 2 cutscene requested");
             }
             else

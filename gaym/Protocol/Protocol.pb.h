@@ -48,7 +48,7 @@ struct TableStruct_Protocol_2eproto {
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::AuxiliaryParseTableField aux[]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
-  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[25]
+  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[26]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::FieldMetadata field_metadata[];
   static const ::PROTOBUF_NAMESPACE_ID::internal::SerializationTable serialization_table[];
@@ -56,6 +56,9 @@ struct TableStruct_Protocol_2eproto {
 };
 extern const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_Protocol_2eproto;
 namespace Protocol {
+class C_BOSS_CUTSCENE_END;
+struct C_BOSS_CUTSCENE_ENDDefaultTypeInternal;
+extern C_BOSS_CUTSCENE_ENDDefaultTypeInternal _C_BOSS_CUTSCENE_END_default_instance_;
 class C_CHAT;
 struct C_CHATDefaultTypeInternal;
 extern C_CHATDefaultTypeInternal _C_CHAT_default_instance_;
@@ -133,6 +136,7 @@ struct S_SPAWNDefaultTypeInternal;
 extern S_SPAWNDefaultTypeInternal _S_SPAWN_default_instance_;
 }  // namespace Protocol
 PROTOBUF_NAMESPACE_OPEN
+template<> ::Protocol::C_BOSS_CUTSCENE_END* Arena::CreateMaybeMessage<::Protocol::C_BOSS_CUTSCENE_END>(Arena*);
 template<> ::Protocol::C_CHAT* Arena::CreateMaybeMessage<::Protocol::C_CHAT>(Arena*);
 template<> ::Protocol::C_ENTER_GAME* Arena::CreateMaybeMessage<::Protocol::C_ENTER_GAME>(Arena*);
 template<> ::Protocol::C_LOGIN* Arena::CreateMaybeMessage<::Protocol::C_LOGIN>(Arena*);
@@ -4234,6 +4238,160 @@ class S_BOSS_EVENT final :
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
+// -------------------------------------------------------------------
+
+class C_BOSS_CUTSCENE_END final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.C_BOSS_CUTSCENE_END) */ {
+ public:
+  inline C_BOSS_CUTSCENE_END() : C_BOSS_CUTSCENE_END(nullptr) {}
+  ~C_BOSS_CUTSCENE_END() override;
+  explicit constexpr C_BOSS_CUTSCENE_END(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  C_BOSS_CUTSCENE_END(const C_BOSS_CUTSCENE_END& from);
+  C_BOSS_CUTSCENE_END(C_BOSS_CUTSCENE_END&& from) noexcept
+    : C_BOSS_CUTSCENE_END() {
+    *this = ::std::move(from);
+  }
+
+  inline C_BOSS_CUTSCENE_END& operator=(const C_BOSS_CUTSCENE_END& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline C_BOSS_CUTSCENE_END& operator=(C_BOSS_CUTSCENE_END&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const C_BOSS_CUTSCENE_END& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const C_BOSS_CUTSCENE_END* internal_default_instance() {
+    return reinterpret_cast<const C_BOSS_CUTSCENE_END*>(
+               &_C_BOSS_CUTSCENE_END_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    25;
+
+  friend void swap(C_BOSS_CUTSCENE_END& a, C_BOSS_CUTSCENE_END& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(C_BOSS_CUTSCENE_END* other) {
+    if (other == this) return;
+    if (GetOwningArena() == other->GetOwningArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(C_BOSS_CUTSCENE_END* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline C_BOSS_CUTSCENE_END* New() const final {
+    return new C_BOSS_CUTSCENE_END();
+  }
+
+  C_BOSS_CUTSCENE_END* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<C_BOSS_CUTSCENE_END>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const C_BOSS_CUTSCENE_END& from);
+  void MergeFrom(const C_BOSS_CUTSCENE_END& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(C_BOSS_CUTSCENE_END* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.C_BOSS_CUTSCENE_END";
+  }
+  protected:
+  explicit C_BOSS_CUTSCENE_END(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kMonsterIdFieldNumber = 1,
+    kEventTypeFieldNumber = 2,
+    kPhaseIndexFieldNumber = 3,
+  };
+  // uint64 monsterId = 1;
+  void clear_monsterid();
+  ::PROTOBUF_NAMESPACE_ID::uint64 monsterid() const;
+  void set_monsterid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_monsterid() const;
+  void _internal_set_monsterid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
+  // .Protocol.BossEventType eventType = 2;
+  void clear_eventtype();
+  ::Protocol::BossEventType eventtype() const;
+  void set_eventtype(::Protocol::BossEventType value);
+  private:
+  ::Protocol::BossEventType _internal_eventtype() const;
+  void _internal_set_eventtype(::Protocol::BossEventType value);
+  public:
+
+  // uint32 phaseIndex = 3;
+  void clear_phaseindex();
+  ::PROTOBUF_NAMESPACE_ID::uint32 phaseindex() const;
+  void set_phaseindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_phaseindex() const;
+  void _internal_set_phaseindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.C_BOSS_CUTSCENE_END)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 monsterid_;
+  int eventtype_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 phaseindex_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_Protocol_2eproto;
+};
 // ===================================================================
 
 
@@ -6394,9 +6552,75 @@ inline void S_BOSS_EVENT::set_phaseindex(::PROTOBUF_NAMESPACE_ID::uint32 value) 
   // @@protoc_insertion_point(field_set:Protocol.S_BOSS_EVENT.phaseIndex)
 }
 
+// -------------------------------------------------------------------
+
+// C_BOSS_CUTSCENE_END
+
+// uint64 monsterId = 1;
+inline void C_BOSS_CUTSCENE_END::clear_monsterid() {
+  monsterid_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 C_BOSS_CUTSCENE_END::_internal_monsterid() const {
+  return monsterid_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 C_BOSS_CUTSCENE_END::monsterid() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_BOSS_CUTSCENE_END.monsterId)
+  return _internal_monsterid();
+}
+inline void C_BOSS_CUTSCENE_END::_internal_set_monsterid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  monsterid_ = value;
+}
+inline void C_BOSS_CUTSCENE_END::set_monsterid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_monsterid(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_BOSS_CUTSCENE_END.monsterId)
+}
+
+// .Protocol.BossEventType eventType = 2;
+inline void C_BOSS_CUTSCENE_END::clear_eventtype() {
+  eventtype_ = 0;
+}
+inline ::Protocol::BossEventType C_BOSS_CUTSCENE_END::_internal_eventtype() const {
+  return static_cast< ::Protocol::BossEventType >(eventtype_);
+}
+inline ::Protocol::BossEventType C_BOSS_CUTSCENE_END::eventtype() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_BOSS_CUTSCENE_END.eventType)
+  return _internal_eventtype();
+}
+inline void C_BOSS_CUTSCENE_END::_internal_set_eventtype(::Protocol::BossEventType value) {
+  
+  eventtype_ = value;
+}
+inline void C_BOSS_CUTSCENE_END::set_eventtype(::Protocol::BossEventType value) {
+  _internal_set_eventtype(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_BOSS_CUTSCENE_END.eventType)
+}
+
+// uint32 phaseIndex = 3;
+inline void C_BOSS_CUTSCENE_END::clear_phaseindex() {
+  phaseindex_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 C_BOSS_CUTSCENE_END::_internal_phaseindex() const {
+  return phaseindex_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 C_BOSS_CUTSCENE_END::phaseindex() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_BOSS_CUTSCENE_END.phaseIndex)
+  return _internal_phaseindex();
+}
+inline void C_BOSS_CUTSCENE_END::_internal_set_phaseindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  phaseindex_ = value;
+}
+inline void C_BOSS_CUTSCENE_END::set_phaseindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_phaseindex(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_BOSS_CUTSCENE_END.phaseIndex)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
