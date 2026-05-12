@@ -959,6 +959,100 @@ void EffectRegistry::Initialize()
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // Q_WaterFall — 공중에서 쏟아지는 물기둥 (Cone 이미터, 아래 방향)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectLayer fall;
+        fall.type           = EmitterType::Cone;
+        fall.element        = ElementType::Water;
+        fall.overrideColors = true;
+        fall.coreColor      = { 0.55f, 0.90f, 1.0f, 1.0f };
+        fall.edgeColor      = { 0.10f, 0.50f, 0.90f, 0.0f };
+        fall.particleCount  = 280;
+        fall.speedMin       = 10.f;
+        fall.speedMax       = 24.f;
+        fall.lifetimeMin    = 0.25f;
+        fall.lifetimeMax    = 0.60f;
+        fall.sizeScale      = 2.2f;
+        fall.duration       = -1.f;   // 행동에서 수동 종료 (FALL_DURATION 후 StopEffect)
+
+        fall.cone.halfAngle     = 20.f;   // 좁은 집중 낙하 기둥
+        fall.cone.gravityScale  = 0.35f;
+        fall.cone.startSizeMult = 1.0f;
+        fall.cone.endSizeMult   = 0.12f;
+        fall.cone.fadeAlpha     = true;
+        fall.cone.fadeSize      = true;
+        fall.cone.spawnRadius   = 1.0f;   // 낙하 시작점 분산
+
+        EffectDef def;
+        def.name    = "Q_WaterFall";
+        def.element = ElementType::Water;
+        def.layers.push_back(std::move(fall));
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Q_WaterPuddle — 유체 웅덩이 2페이즈
+    // Phase0: 박스 없음 → 뭉친 채 자유낙하
+    // Phase1: 바닥 슬랩(y=0) 활성 → 낙하 운동량 + SPH 압력으로 XZ 폭발 확산
+    // origin=(x,2.5,z) + dir=(0,-1,0) → 박스 center=(x,0,z)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectLayer layer = MakeSPHLayer(ElementType::Water);
+        layer.overrideColors = true;
+        layer.coreColor = { 0.20f, 0.68f, 1.0f, 1.0f };
+        layer.edgeColor = { 0.04f, 0.22f, 0.62f, 0.65f };
+        layer.useSSF    = true;
+
+        SPHEmitterParams& s     = layer.sph;
+        s.particleCount         = 750;
+        s.spawnRadius           = 1.5f;    // 뭉친 물방울처럼 작게 스폰
+        s.masterCPFallSpeed     = 0.f;
+        s.masterCPStrength      = 0.f;
+        s.masterCPSphereRadius  = 0.f;
+        s.maxParticleSpeed      = 30.f;  // 기본 12.0f → SPH 확산 속도 허용
+
+        s.overridePhysics       = true;
+        s.sphStiffness          = 80.f;    // 충돌 시 폭발적 반발
+        s.sphNearPressureMult   = 4.0f;
+        s.sphRestDensity        = 0.5f;    // 항상 밀려나려는 상태
+        s.sphViscosity          = 0.05f;   // 거의 점성 없음 → 자유 확산
+        s.sphSmoothingRadius    = 3.0f;
+
+        // Phase 0: 박스 없이 자유낙하 (뭉친 물방울)
+        VFXPhase p0;
+        p0.startTime  = 0.f;
+        p0.duration   = 0.7f;
+        p0.motionMode = ParticleMotionMode::Gravity;
+        p0.gravityDesc.gravity         = { 0.f, -22.f, 0.f };
+        p0.gravityDesc.initialSpeedMin = 0.f;
+        p0.gravityDesc.initialSpeedMax = 0.f;
+        p0.boxDesc.active      = false;
+        p0.boxDesc.halfExtents = { 9.f, 9.f, 0.5f }; // lerp 시작점 = Phase 1과 동일 (즉시 풀사이즈)
+        s.phases.push_back(p0);
+
+        // Phase 1: 바닥 슬랩 활성 → 충격 운동량 + SPH로 폭발 확산
+        VFXPhase p1;
+        p1.startTime  = 0.7f;
+        p1.duration   = 99.f;
+        p1.motionMode = ParticleMotionMode::Gravity;
+        p1.gravityDesc.gravity         = { 0.f, -6.f, 0.f };  // 가벼운 중력으로 바닥 유지
+        p1.gravityDesc.initialSpeedMin = 0.f;
+        p1.gravityDesc.initialSpeedMax = 0.f;
+        p1.boxDesc.active      = true;
+        p1.boxDesc.halfExtents = { 9.f, 9.f, 0.5f };
+        s.phases.push_back(p1);
+
+        FinalizeSPHLayer(layer);
+
+        EffectDef def;
+        def.name    = "Q_WaterPuddle";
+        def.element = ElementType::Water;
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // E_WaterVortex — 물 소용돌이 (OrbitalCP, 3개 위성이 안쪽으로 나선형)
     // ──────────────────────────────────────────────────────────────────────────
     {
@@ -971,6 +1065,7 @@ void EffectRegistry::Initialize()
         SPHEmitterParams& s     = layer.sph;
         s.particleCount         = 500;
         s.spawnRadius           = 3.0f;
+        s.masterCPFallSpeed     = 0.f;   // 장판 스킬 — 낙하 없음
         s.masterCPStrength      = 20.f;
         s.masterCPSphereRadius  = 3.5f;
 

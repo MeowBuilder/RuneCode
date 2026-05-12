@@ -72,6 +72,13 @@ namespace FireSkillPresets
 
 namespace WaterSkillPresets
 {
+    inline SkillData WaterPuddle()
+    {
+        SkillData d; d.name = "WaterPuddle"; d.element = ElementType::Water;
+        d.activationType = ActivationType::Instant;
+        d.damage = 18.0f; d.cooldown = 6.0f; d.range = 20.0f; d.radius = 7.0f;
+        return d;
+    }
     inline SkillData WaterWave()
     {
         SkillData d; d.name = "WaterWave"; d.element = ElementType::Water;

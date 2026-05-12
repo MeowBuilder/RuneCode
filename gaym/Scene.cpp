@@ -19,7 +19,7 @@
 #include "FireBeamBehavior.h"
 #include "MeteorBehavior.h"
 // 물결술사
-#include "WaterWaveBehavior.h"
+#include "WaterPuddleBehavior.h"
 #include "WaterVortexBehavior.h"
 #include "TidalWaveBehavior.h"
 #include "WaterOrbBehavior.h"
@@ -152,7 +152,7 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
         }
         else if (m_eSelectedElement == ElementType::Water)
         {
-            auto q = std::make_unique<WaterWaveBehavior>(); q->SetScene(this);
+            auto q = std::make_unique<WaterPuddleBehavior>(); q->SetScene(this);
             pSkillComponent->EquipSkill(SkillSlot::Q, std::move(q));
 
             auto e = std::make_unique<WaterVortexBehavior>(); e->SetScene(this);

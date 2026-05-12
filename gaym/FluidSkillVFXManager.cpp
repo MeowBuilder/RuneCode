@@ -982,8 +982,9 @@ void FluidSkillVFXManager::UpdatePhase(FluidVFXSlot& slot, float dt)
                 cps.push_back(cp);
             }
             slot.pSystem->SetControlPoints(cps);
-        } else if (phase.motionMode == ParticleMotionMode::ControlPoint && phase.cpDescs.empty()) {
-            // CP 없음: 빈 CP 리스트 설정 (박스 경계력만으로 동작)
+        } else {
+            // ControlPoint(cpDescs 없음) 또는 Gravity/Beam 등 비-CP 모드:
+            // 이전 페이즈에서 남은 CP 잔류를 방지해 명시적으로 초기화
             slot.pSystem->SetControlPoints({});
         }
 
@@ -1134,10 +1135,11 @@ void FluidSkillVFXManager::UpdatePhase(FluidVFXSlot& slot, float dt)
         bd.halfExtents.y = prev.y + (curr.y - prev.y) * phaseProgress;
         bd.halfExtents.z = prev.z + (curr.z - prev.z) * phaseProgress;
 
-        // center: 박스가 앞으로 이동하는 경우 direction 기준으로 offset
+        // center: origin + direction * 2.5f (phase 진입 시와 동일한 고정 공식)
+        // halfExtents.z 를 쓰면 웅덩이처럼 박스가 얇은 이펙트에서 center가 잘못 계산됨
         XMVECTOR centerV = XMVectorAdd(
             XMLoadFloat3(&slot.origin),
-            XMVectorScale(XMLoadFloat3(&slot.direction), bd.halfExtents.z)
+            XMVectorScale(XMLoadFloat3(&slot.direction), 2.5f)
         );
         XMStoreFloat3(&bd.center, centerV);
 

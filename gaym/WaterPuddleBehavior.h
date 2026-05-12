@@ -1,0 +1,50 @@
+#pragma once
+#include "ISkillBehavior.h"
+#include "SkillData.h"
+#include <unordered_set>
+
+class FluidSkillVFXManager;
+class Scene;
+class EnemyComponent;
+
+// Q 슬롯 (물결술사) — 물 웅덩이 장판: 범위 슬로우 + 지속 피해
+class WaterPuddleBehavior : public ISkillBehavior
+{
+public:
+    WaterPuddleBehavior();
+    virtual ~WaterPuddleBehavior() = default;
+
+    virtual void SetVFXManager(FluidSkillVFXManager* mgr) override { m_pVFXManager = mgr; }
+    virtual void SetScene(Scene* pScene)                  override { m_pScene = pScene; }
+
+    virtual void Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier = 1.0f) override;
+    virtual void Update(float deltaTime) override;
+    virtual bool IsFinished() const override;
+    virtual void Reset() override;
+    virtual const SkillData& GetSkillData() const override { return m_SkillData; }
+
+private:
+    void TickPuddle(float deltaTime);
+    void RemoveSlowFromAll();
+
+    SkillData             m_SkillData;
+    FluidSkillVFXManager* m_pVFXManager = nullptr;
+    Scene*                m_pScene      = nullptr;
+    int                   m_vfxId       = -1;
+    int                   m_fallVfxId   = -1;   // 낙하 이펙트 (FALL_DURATION 후 자동 종료)
+
+    bool                  m_bActive     = false;
+    float                 m_elapsed     = 0.f;
+    float                 m_tickTimer   = 0.f;
+    float                 m_damageMult  = 1.f;
+    DirectX::XMFLOAT3     m_center      = {};
+
+    std::unordered_set<EnemyComponent*> m_slowedEnemies;
+
+    static constexpr float DURATION      = 6.0f;
+    static constexpr float FALL_DURATION = 1.5f;   // 낙하 이펙트 지속 시간
+    static constexpr float PUDDLE_RADIUS = 7.0f;
+    static constexpr float TICK_INTERVAL = 0.5f;
+    static constexpr float DMG_PER_TICK  = 0.12f;
+    static constexpr float SLOW_FACTOR   = 0.4f;
+};

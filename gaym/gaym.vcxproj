@@ -48,7 +48,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v145</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -226,6 +226,7 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClInclude Include="WaveSlashBehavior.h" />
     <ClInclude Include="FireBeamBehavior.h" />
     <ClInclude Include="MeteorBehavior.h" />
+    <ClInclude Include="WaterPuddleBehavior.h" />
     <ClInclude Include="WaterWaveBehavior.h" />
     <ClInclude Include="WaterVortexBehavior.h" />
     <ClInclude Include="TidalWaveBehavior.h" />
@@ -361,6 +362,7 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClCompile Include="FireballBehavior.cpp" />
     <ClCompile Include="WaveSlashBehavior.cpp" />
     <ClCompile Include="FireBeamBehavior.cpp" />
+    <ClCompile Include="WaterPuddleBehavior.cpp" />
     <ClCompile Include="WaterWaveBehavior.cpp" />
     <ClCompile Include="WaterVortexBehavior.cpp" />
     <ClCompile Include="TidalWaveBehavior.cpp" />
