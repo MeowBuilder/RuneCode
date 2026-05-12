@@ -1028,7 +1028,7 @@ void EffectRegistry::Initialize()
         p0.gravityDesc.initialSpeedMin = 0.f;
         p0.gravityDesc.initialSpeedMax = 0.f;
         p0.boxDesc.active      = false;
-        p0.boxDesc.halfExtents = { 9.f, 9.f, 0.5f }; // lerp 시작점 = Phase 1과 동일 (즉시 풀사이즈)
+        p0.boxDesc.halfExtents = { 50.f, 50.f, 0.5f }; // lerp 시작점 = Phase 1과 동일, XZ 충분히 크게 → 원형 확산
         s.phases.push_back(p0);
 
         // Phase 1: 바닥 슬랩 활성 → 충격 운동량 + SPH로 폭발 확산
@@ -1040,7 +1040,7 @@ void EffectRegistry::Initialize()
         p1.gravityDesc.initialSpeedMin = 0.f;
         p1.gravityDesc.initialSpeedMax = 0.f;
         p1.boxDesc.active      = true;
-        p1.boxDesc.halfExtents = { 9.f, 9.f, 0.5f };
+        p1.boxDesc.halfExtents = { 50.f, 50.f, 0.5f }; // XZ 사실상 무한 → 파티클이 벽에 안 닿아 원형 유지
         s.phases.push_back(p1);
 
         FinalizeSPHLayer(layer);
