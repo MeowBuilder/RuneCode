@@ -5,6 +5,8 @@
 
 class GameObject;
 struct SkillData;
+class FluidSkillVFXManager;
+class Scene;
 
 // Strategy pattern interface for skill execution
 class ISkillBehavior
@@ -34,6 +36,10 @@ public:
 
     // Optional per-frame geometry render (override in behaviors that need a mesh)
     virtual void Render(ID3D12GraphicsCommandList* pCmdList) {}
+
+    // VFX/Scene 연결 — 기본 구현은 아무것도 안 함 (필요한 서브클래스만 override)
+    virtual void SetVFXManager(FluidSkillVFXManager*) {}
+    virtual void SetScene(Scene*) {}
 
     // Slot assignment (set by SkillComponent::EquipSkill)
     void      SetSlot(SkillSlot s) { m_slot = s; }

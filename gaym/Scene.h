@@ -228,10 +228,12 @@ private:
     float m_fDebugWindVFXTimer = 0.0f;
     DirectX::XMFLOAT3 m_xmf3DebugWindPos = { 0.0f, 0.0f, 0.0f };
 
-    // 인터랙션 큐브 포탈 VFX — Portal_Ring 보라 링만 사용. Ring 이미터는 1회 spawn 후 입자가 죽으므로
+    // 인터랙션 큐브 포탈 VFX — 3 레이어(Ring + Suction + Beam) 무한 루프. 각 이미터 1회 spawn 후 입자가 죽으므로
     // 주기적으로 재 spawn 하여 continuous 유지. RespawnTimer 가 PORTAL_RING_RESPAWN_INTERVAL 도달 시 stop+spawn.
-    int   m_nInteractionCubePortalRingVFXId = -1; // Portal_Ring 슬롯
-    float m_fPortalRingRespawnTimer = 0.0f;       // 재 spawn 누적 타이머
+    int   m_nInteractionCubePortalRingVFXId    = -1; // Portal_Ring 슬롯 (보색 마젠타-시안 회전 링)
+    int   m_nInteractionCubePortalSuctionVFXId = -1; // Portal_Suction 슬롯 (외곽→중심 흡입)
+    int   m_nInteractionCubePortalBeamVFXId    = -1; // Portal_Beam 슬롯 (수직 광주)
+    float m_fPortalRingRespawnTimer = 0.0f;          // 재 spawn 누적 타이머 (3 레이어 공통)
 
     // 4스테이지 바람 ambient — 절차적 풀 군집
     //   각 군집 = 1 GameObject + 1 GrassClumpMesh. mesh refcount는 GameObject SetMesh가 1로 만듦.

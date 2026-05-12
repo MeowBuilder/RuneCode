@@ -887,28 +887,521 @@ void EffectRegistry::Initialize()
         EffectLayer ring;
         ring.type           = EmitterType::Ring;
         ring.element        = ElementType::Wind;
-        ring.particleCount  = 200;
+        ring.particleCount  = 220;
         ring.overrideColors = true;
-        // 보라/마젠타 — 디스크 색과 어울리는 게이트 자기장
-        ring.coreColor      = { 0.85f, 0.40f, 1.00f, 1.00f };
-        ring.edgeColor      = { 0.45f, 0.10f, 0.85f, 0.55f };
+        // 라벤더 코어 + 딥 바이올렛 엣지 — 디스크와 같은 보라 톤으로 통일
+        ring.coreColor      = { 1.00f, 0.80f, 0.95f, 0.95f };
+        ring.edgeColor      = { 0.50f, 0.25f, 0.85f, 0.50f };
         ring.sizeScale      = 1.4f;
         ring.speedMin       = 0.3f;
         ring.speedMax       = 0.9f;
         ring.lifetimeMin    = 1.2f;
         ring.lifetimeMax    = 2.0f;
         ring.duration       = 9999.f;       // 무한 루프 (포탈 활성 동안 계속)
-        ring.emitRate       = 90.f;
+        ring.emitRate       = 120.f;
 
-        ring.ring.radius         = 3.0f;     // 디스크 반경과 매칭
-        ring.ring.width          = 0.5f;
-        ring.ring.expandSpeed    = 0.0f;     // 확장 안 함 (제자리에서 회전)
+        ring.ring.radius         = 8.5f;     // 디스크 반경 9 와 매칭 (외곽 림 위에 입자)
+        ring.ring.width          = 1.0f;
+        ring.ring.expandSpeed    = 0.0f;     // 제자리 회전
         ring.ring.tiltX          = 0.f;
-        ring.ring.rotateSpeed    = 4.0f;     // 적당한 회전 속도
+        ring.ring.rotateSpeed    = 3.0f;     // 회전 속도 약간 낮춤 (반경 커져서 외형상 속도는 유지)
         ring.ring.normalSpeedMin = 0.2f;
         ring.ring.normalSpeedMax = 0.8f;     // 살짝 위로 떠오르는 입자
 
         def.layers.push_back(ring);
+        Register(std::move(def));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ▌ 물결술사 스킬 VFX
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Q_WaterWave — 넓은 물 파도 (선명한 틸/시안, 맑은 물 느낌)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectLayer layer = MakeSPHLayer(ElementType::Water);
+        layer.overrideColors = true;
+        layer.coreColor = { 0.00f, 0.78f, 0.88f, 1.0f };   // 선명한 시안/틸
+        layer.edgeColor = { 0.00f, 0.28f, 0.65f, 0.80f };   // 짙은 파란 테두리
+        layer.useSSF    = true;
+
+        SPHEmitterParams& s    = layer.sph;
+        s.particleCount        = 700;
+        s.spawnRadius          = 1.2f;
+        s.isWave               = true;
+        s.waveSpeed            = 8.f;
+        s.wavePushForce        = 45.f;
+        s.waveMaxDist          = 18.f;
+        s.waveHalfW            = 7.0f;
+        s.waveHalfH            = 2.5f;
+        s.waveOscAmplitude     = 15.f;
+        s.waveOscFrequency     = 4.f;
+        s.waveOscWaveNumber    = 0.6f;
+        s.maxParticleSpeed     = 18.f;
+        s.overridePhysics      = true;
+        s.sphStiffness         = 18.f;
+        s.sphNearPressureMult  = 0.5f;
+        s.sphRestDensity       = 0.0f;
+        s.sphViscosity         = 0.5f;
+        s.sphSmoothingRadius   = 1.8f;
+
+        FinalizeSPHLayer(layer);
+
+        EffectDef def;
+        def.name    = "Q_WaterWave";
+        def.element = ElementType::Water;
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+
+        VFXModifier enhMod; enhMod.particleCountMult = 1.5f; enhMod.sizeScaleMult = 1.2f;
+        RegisterRuneMod("Q_WaterWave", RUNE_ENHANCE, enhMod);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // E_WaterVortex — 물 소용돌이 (OrbitalCP, 3개 위성이 안쪽으로 나선형)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectLayer layer = MakeSPHLayer(ElementType::Water);
+        layer.overrideColors = true;
+        layer.coreColor = { 0.45f, 0.80f, 1.0f, 1.0f };
+        layer.edgeColor = { 0.05f, 0.30f, 0.75f, 0.80f };
+        layer.useSSF    = true;
+
+        SPHEmitterParams& s     = layer.sph;
+        s.particleCount         = 500;
+        s.spawnRadius           = 3.0f;
+        s.masterCPStrength      = 20.f;
+        s.masterCPSphereRadius  = 3.5f;
+
+        auto makeSat = [](float r, float spd, float phase, float tilt) {
+            SatelliteCPDesc sat;
+            sat.orbitRadius = r; sat.orbitSpeed = spd; sat.orbitPhase = phase;
+            sat.verticalOffset = 0.f; sat.attractionStrength = 12.f;
+            sat.sphereRadius = 1.4f; sat.orbitTiltX = tilt;
+            sat.breatheAmplitude = 0.3f; sat.breatheSpeed = 1.5f;
+            return sat;
+        };
+        s.satelliteCPs.push_back(makeSat(3.5f, 4.0f, 0.f,      0.4f));
+        s.satelliteCPs.push_back(makeSat(3.5f, 4.0f, 2.094f,   0.4f));
+        s.satelliteCPs.push_back(makeSat(3.5f, 4.0f, 4.189f,   0.4f));
+
+        VFXPhase p0;
+        p0.startTime  = 0.f;
+        p0.duration   = 99.f;
+        p0.motionMode = ParticleMotionMode::OrbitalCP;
+        s.phases.push_back(p0);
+
+        FinalizeSPHLayer(layer);
+
+        EffectDef def;
+        def.name    = "E_WaterVortex";
+        def.element = ElementType::Water;
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // R_TidalWave — 거대 해일 (다크 네이비 본체 + 흰 거품 테두리, 심해 쓰나미)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectLayer layer = MakeSPHLayer(ElementType::Water);
+        layer.overrideColors = true;
+        layer.coreColor = { 0.02f, 0.06f, 0.38f, 1.0f };   // 다크 네이비 (파도 본체)
+        layer.edgeColor = { 0.68f, 0.92f, 1.0f, 0.95f };   // 흰 거품 (edge/얇은 부분)
+        layer.useSSF    = true;
+
+        SPHEmitterParams& s    = layer.sph;
+        s.particleCount        = 1400;
+        s.spawnRadius          = 2.5f;
+        s.isWave               = true;
+        s.waveSpeed            = 8.f;
+        s.wavePushForce        = 65.f;
+        s.waveMaxDist          = 35.f;
+        s.waveHalfW            = 16.0f;
+        s.waveHalfH            = 6.5f;   // 더 높은 파도
+        s.waveOscAmplitude     = 30.f;   // 더 격렬한 진동
+        s.waveOscFrequency     = 2.5f;
+        s.waveOscWaveNumber    = 0.3f;
+        s.maxParticleSpeed     = 20.f;
+        s.overridePhysics      = true;
+        s.sphStiffness         = 14.f;
+        s.sphNearPressureMult  = 0.35f;
+        s.sphRestDensity       = 0.0f;
+        s.sphViscosity         = 0.5f;
+        s.sphSmoothingRadius   = 2.5f;   // 입자 크기 증가 → 더 묵직해 보임
+
+        FinalizeSPHLayer(layer);
+
+        EffectDef def;
+        def.name    = "R_TidalWave";
+        def.element = ElementType::Water;
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // R_TidalWave_Foam — 해일 선두에서 위로 분출하는 흰 거품 (TidalWaveBehavior::DropFoam 사용)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "R_TidalWave_Foam";
+        def.element = ElementType::Water;
+
+        EffectLayer foam;
+        foam.type           = EmitterType::Cone;
+        foam.element        = ElementType::Water;
+        foam.overrideColors = true;
+        foam.coreColor      = { 1.0f, 1.0f, 1.0f, 0.92f };   // 흰 포말
+        foam.edgeColor      = { 0.55f, 0.88f, 1.0f, 0.0f };   // 투명 시안 에지
+        foam.particleCount  = 90;
+        foam.duration       = 0.35f;   // 짧은 분출
+        foam.sizeScale      = 2.6f;
+        foam.speedMin       = 4.f;  foam.speedMax  = 12.f;
+        foam.lifetimeMin    = 0.3f; foam.lifetimeMax = 0.65f;
+        foam.cone.halfAngle     = 55.f;   // 위로 퍼지는 분무
+        foam.cone.gravityScale  = 0.10f;
+        foam.cone.startSizeMult = 1.3f;
+        foam.cone.endSizeMult   = 0.0f;
+        foam.cone.fadeAlpha     = true;
+        foam.cone.fadeSize      = true;
+        def.layers.push_back(foam);
+        Register(std::move(def));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ▌ 바람술사 스킬 VFX
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Q_WindCutter — 좁고 빠른 진공 커터 (Wave 모드, halfW=2 좁음)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectLayer layer = MakeSPHLayer(ElementType::Wind);
+        layer.overrideColors = true;
+        layer.coreColor = { 0.90f, 1.0f,  0.92f, 1.0f };
+        layer.edgeColor = { 0.40f, 0.85f, 0.50f, 0.70f };
+        layer.useSSF    = false;  // 바람 커터는 빌보드 렌더 (얇고 빠름)
+
+        SPHEmitterParams& s    = layer.sph;
+        s.particleCount        = 380;
+        s.spawnRadius          = 0.5f;
+        s.isWave               = true;
+        s.waveSpeed            = 20.f;
+        s.wavePushForce        = 80.f;
+        s.waveMaxDist          = 22.f;
+        s.waveHalfW            = 2.0f;
+        s.waveHalfH            = 2.0f;
+        s.waveOscAmplitude     = 0.f;   // 직선 커터 — 진동 없음
+        s.maxParticleSpeed     = 35.f;
+        s.overridePhysics      = true;
+        s.sphStiffness         = 30.f;
+        s.sphNearPressureMult  = 0.4f;
+        s.sphRestDensity       = 0.0f;
+        s.sphViscosity         = 0.2f;
+        s.sphSmoothingRadius   = 1.2f;
+
+        FinalizeSPHLayer(layer);
+
+        EffectDef def;
+        def.name    = "Q_WindCutter";
+        def.element = ElementType::Wind;
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // E_GaleRush_Cone — 전방 폭풍 콘 (Cone 타입)
+    // E_GaleRush_Ring — 충격파 링 (Ring 타입)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "E_GaleRush_Cone";
+        def.element = ElementType::Wind;
+
+        EffectLayer cone;
+        cone.type           = EmitterType::Cone;
+        cone.element        = ElementType::Wind;
+        cone.overrideColors = true;
+        cone.coreColor      = { 0.88f, 1.0f,  0.88f, 1.0f  };
+        cone.edgeColor      = { 0.35f, 0.80f, 0.40f, 0.0f  };
+        cone.particleCount  = 600;
+        cone.speedMin       = 20.f; cone.speedMax = 50.f;
+        cone.lifetimeMin    = 0.2f; cone.lifetimeMax = 0.5f;
+        cone.sizeScale      = 2.2f;
+        cone.duration       = 0.5f;
+
+        cone.cone.halfAngle     = 50.f;
+        cone.cone.gravityScale  = 0.05f;
+        cone.cone.startSizeMult = 1.4f;
+        cone.cone.endSizeMult   = 0.0f;
+        cone.cone.fadeAlpha     = true;
+        cone.cone.fadeSize      = true;
+
+        def.layers.push_back(cone);
+        Register(std::move(def));
+    }
+    {
+        EffectDef def;
+        def.name    = "E_GaleRush_Ring";
+        def.element = ElementType::Wind;
+
+        EffectLayer ring;
+        ring.type           = EmitterType::Ring;
+        ring.element        = ElementType::Wind;
+        ring.overrideColors = true;
+        ring.coreColor      = { 0.85f, 1.0f,  0.85f, 0.85f };
+        ring.edgeColor      = { 0.30f, 0.75f, 0.35f, 0.0f  };
+        ring.particleCount  = 200;
+        ring.duration       = 0.6f;
+        ring.speedMin       = 2.f; ring.speedMax = 5.f;
+        ring.lifetimeMin    = 0.3f; ring.lifetimeMax = 0.6f;
+        ring.sizeScale      = 2.5f;
+
+        ring.ring.radius         = 0.5f;
+        ring.ring.width          = 2.0f;
+        ring.ring.expandSpeed    = 25.f;
+        ring.ring.tiltX          = 0.f;
+        ring.ring.rotateSpeed    = 2.0f;
+        ring.ring.normalSpeedMin = 2.f;
+        ring.ring.normalSpeedMax = 6.f;
+
+        def.layers.push_back(ring);
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // R_TornadoPlayer — 플레이어 소환 토네이도 (Demon_Tornado 강화판, 더 크고 강렬)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "R_TornadoPlayer";
+        def.element = ElementType::Wind;
+
+        // [Outer] 넓은 외곽 선회
+        {
+            EffectLayer outer;
+            outer.type           = EmitterType::Linear;
+            outer.element        = ElementType::Wind;
+            outer.particleCount  = 900;
+            outer.overrideColors = true;
+            outer.coreColor      = { 0.75f, 0.95f, 0.78f, 1.0f };
+            outer.edgeColor      = { 0.30f, 0.60f, 0.38f, 0.30f };
+            outer.sizeScale      = 1.8f;
+            outer.speedMin       = 5.f;  outer.speedMax  = 10.f;
+            outer.lifetimeMin    = 2.2f; outer.lifetimeMax = 3.8f;
+            outer.duration       = -1.f;
+            outer.linear.length      = 18.0f;
+            outer.linear.width       = 4.5f;
+            outer.linear.recycleRate = 1.0f;
+            outer.linear.swirlSpeed  = 6.0f;
+            def.layers.push_back(outer);
+        }
+        // [Inner] 좁고 빠른 코어
+        {
+            EffectLayer inner;
+            inner.type           = EmitterType::Linear;
+            inner.element        = ElementType::Wind;
+            inner.particleCount  = 550;
+            inner.overrideColors = true;
+            inner.coreColor      = { 0.95f, 1.0f,  0.95f, 1.0f };
+            inner.edgeColor      = { 0.55f, 0.88f, 0.62f, 0.55f };
+            inner.sizeScale      = 1.0f;
+            inner.speedMin       = 8.f;  inner.speedMax  = 14.f;
+            inner.lifetimeMin    = 1.3f; inner.lifetimeMax = 2.2f;
+            inner.duration       = -1.f;
+            inner.linear.length      = 20.0f;
+            inner.linear.width       = 1.8f;
+            inner.linear.recycleRate = 1.0f;
+            inner.linear.swirlSpeed  = 11.0f;
+            def.layers.push_back(inner);
+        }
+        Register(std::move(def));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ▌ 대지술사 스킬 VFX
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Q_StoneSpike — 바위 기둥 단위 VFX (Burst + Cone)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Q_StoneSpike";
+        def.element = ElementType::Earth;
+
+        // 파편 폭발
+        {
+            EffectLayer burst;
+            burst.type           = EmitterType::Cone;
+            burst.element        = ElementType::Earth;
+            burst.overrideColors = true;
+            burst.coreColor      = { 0.75f, 0.60f, 0.28f, 1.0f };
+            burst.edgeColor      = { 0.45f, 0.30f, 0.10f, 0.0f };
+            burst.particleCount  = 280;
+            burst.duration       = 0.6f;
+            burst.speedMin       = 8.f;  burst.speedMax  = 28.f;
+            burst.lifetimeMin    = 0.3f; burst.lifetimeMax = 0.8f;
+            burst.sizeScale      = 2.8f;
+
+            burst.cone.halfAngle     = 75.f;
+            burst.cone.gravityScale  = 0.55f;
+            burst.cone.startSizeMult = 1.5f;
+            burst.cone.endSizeMult   = 0.05f;
+            burst.cone.fadeAlpha     = true;
+            burst.cone.fadeSize      = true;
+            def.layers.push_back(burst);
+        }
+        // 먼지 기둥
+        {
+            EffectLayer pillar;
+            pillar.type           = EmitterType::Cone;
+            pillar.element        = ElementType::Earth;
+            pillar.overrideColors = true;
+            pillar.coreColor      = { 0.68f, 0.55f, 0.35f, 0.85f };
+            pillar.edgeColor      = { 0.35f, 0.22f, 0.08f, 0.0f  };
+            pillar.particleCount  = 180;
+            pillar.duration       = 1.2f;
+            pillar.emitRate       = 200.f;
+            pillar.speedMin       = 5.f;  pillar.speedMax  = 15.f;
+            pillar.lifetimeMin    = 0.5f; pillar.lifetimeMax = 1.3f;
+            pillar.sizeScale      = 3.5f;
+
+            pillar.cone.halfAngle     = 20.f;
+            pillar.cone.gravityScale  = 0.15f;
+            pillar.cone.startSizeMult = 1.2f;
+            pillar.cone.endSizeMult   = 0.1f;
+            pillar.cone.fadeAlpha     = true;
+            pillar.cone.fadeSize      = true;
+            def.layers.push_back(pillar);
+        }
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // R_Earthquake_Burst — 지진 초기 중심 폭발 (Sphere 방사)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "R_Earthquake_Burst";
+        def.element = ElementType::Earth;
+
+        EffectLayer burst;
+        burst.type           = EmitterType::Sphere;
+        burst.element        = ElementType::Earth;
+        burst.overrideColors = true;
+        burst.coreColor      = { 0.80f, 0.65f, 0.30f, 1.0f };
+        burst.edgeColor      = { 0.50f, 0.30f, 0.10f, 0.3f };
+        burst.particleCount  = 350;
+        burst.duration       = 0.4f;
+        burst.speedMin       = 20.f; burst.speedMax  = 55.f;
+        burst.lifetimeMin    = 0.3f; burst.lifetimeMax = 0.7f;
+        burst.sizeScale      = 5.5f;
+
+        burst.sphere.radius        = 1.0f;
+        burst.sphere.shellFraction = 0.4f;
+        burst.sphere.inward        = false;
+
+        def.layers.push_back(burst);
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // R_Earthquake_Ring — 지진 충격파 링 (반복 스폰)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "R_Earthquake_Ring";
+        def.element = ElementType::Earth;
+
+        EffectLayer ring;
+        ring.type           = EmitterType::Ring;
+        ring.element        = ElementType::Earth;
+        ring.overrideColors = true;
+        ring.coreColor      = { 0.85f, 0.70f, 0.35f, 1.0f };
+        ring.edgeColor      = { 0.55f, 0.32f, 0.10f, 0.0f };
+        ring.particleCount  = 350;
+        ring.duration       = 1.8f;
+        ring.speedMin       = 3.f; ring.speedMax  = 10.f;
+        ring.lifetimeMin    = 0.5f; ring.lifetimeMax = 1.2f;
+        ring.sizeScale      = 4.5f;
+
+        ring.ring.radius         = 0.5f;
+        ring.ring.width          = 3.0f;
+        ring.ring.expandSpeed    = 30.f;
+        ring.ring.tiltX          = 0.f;
+        ring.ring.rotateSpeed    = 1.0f;
+        ring.ring.normalSpeedMin = 5.f;
+        ring.ring.normalSpeedMax = 18.f;
+
+        def.layers.push_back(ring);
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Portal_Suction — 외곽에서 중심으로 빨려들어가는 흡입 입자 (차원문 인력 연출)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Portal_Suction";
+        def.element = ElementType::Wind;
+
+        EffectLayer suck;
+        suck.type           = EmitterType::Sphere;
+        suck.element        = ElementType::Wind;
+        suck.particleCount  = 70;            // 약간 늘림 — 흐름이 너무 빈약하지 않게
+        suck.overrideColors = true;
+        suck.coreColor      = { 1.00f, 0.75f, 0.95f, 0.80f };  // 라벤더
+        suck.edgeColor      = { 0.30f, 0.10f, 0.60f, 0.0f };   // 딥 바이올렛 페이드
+        suck.sizeScale      = 0.45f;
+        suck.speedMin       = 1.5f;          // ↓ 느리게 — 빨려들어가는 속도가 자연스러워짐
+        suck.speedMax       = 2.8f;
+        suck.lifetimeMin    = 1.2f;          // ↑ 길게 — trail 이 더 부드럽게 보임
+        suck.lifetimeMax    = 1.8f;
+        suck.duration       = 9999.f;
+        suck.emitRate       = 40.f;
+
+        suck.sphere.radius        = 8.5f;    // 디스크 외곽 직전 (반경 9)
+        suck.sphere.shellFraction = 1.0f;
+        suck.sphere.inward        = true;
+        suck.sphere.rotationSpeed = 0.5f;    // 부드러운 나선 (큰 반경에 맞춰 약간 느리게)
+
+        def.layers.push_back(suck);
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Portal_Beam — 디스크에서 위로 솟는 수직 광주 (멀리서도 인지)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Portal_Beam";
+        def.element = ElementType::Wind;
+
+        // Linear emitter — 위로 솟는 빛줄기 + swirl(공전) 으로 토네이도/소용돌이 형태
+        // recycle 켜져 있어 위쪽 끝 도달 시 바닥에서 재스폰 → 끊김 없는 흐름
+        EffectLayer beam;
+        beam.type           = EmitterType::Linear;
+        beam.element        = ElementType::Wind;
+        beam.particleCount  = 90;            // 토네이도 흐름은 입자 수 필요
+        beam.overrideColors = true;
+        beam.coreColor      = { 1.00f, 0.80f, 0.95f, 0.85f }; // 라벤더
+        beam.edgeColor      = { 0.40f, 0.15f, 0.75f, 0.0f };  // 딥 바이올렛 페이드
+        beam.sizeScale      = 0.5f;
+        beam.speedMin       = 1.8f;
+        beam.speedMax       = 3.0f;
+        beam.lifetimeMin    = 1.8f;
+        beam.lifetimeMax    = 2.6f;
+        beam.duration       = 9999.f;
+        beam.emitRate       = 50.f;
+
+        beam.linear.length      = 7.5f;     // 디스크 위로 7.5u 솟음 (디스크 커져서 비례)
+        beam.linear.width       = 2.2f;     // 토네이도 둘레 반경
+        beam.linear.recycleRate = 1.0f;     // 끝 도달 후 재스폰 (지속 흐름)
+        beam.linear.swirlSpeed  = 3.0f;     // 회전 — 진짜 소용돌이 느낌
+
+        def.layers.push_back(beam);
         Register(std::move(def));
     }
 

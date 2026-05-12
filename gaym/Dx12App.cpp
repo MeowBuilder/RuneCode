@@ -632,18 +632,27 @@ void Dx12App::FrameAdvance()
             float cx = (float)m_nWndClientWidth  / 2.0f;
             float cy = (float)m_nWndClientHeight / 2.0f;
 
-            // "계속하기" button region
             float btnW = 220.0f, btnH = 40.0f;
-            float resumeY = cy - 10.0f;
-            float quitY   = cy + 54.0f;
+            float resumeY     = cy - 30.0f;
+            float charSelectY = cy + 30.0f;
+            float quitY       = cy + 90.0f;
 
-            if (mp.x >= cx - btnW / 2.0f && mp.x <= cx + btnW / 2.0f &&
-                mp.y >= resumeY && mp.y <= resumeY + btnH)
+            auto inBtn = [&](float btnY) {
+                return mp.x >= cx - btnW/2.f && mp.x <= cx + btnW/2.f &&
+                       mp.y >= btnY && mp.y <= btnY + btnH;
+            };
+
+            if (inBtn(resumeY))
             {
                 m_bShowPauseMenu = false;
             }
-            else if (mp.x >= cx - btnW / 2.0f && mp.x <= cx + btnW / 2.0f &&
-                     mp.y >= quitY && mp.y <= quitY + btnH)
+            else if (inBtn(charSelectY))
+            {
+                m_bShowPauseMenu = false;
+                if (m_pCharSelect) m_pCharSelect->Reset();
+                m_eAppState = AppState::CharacterSelect;
+            }
+            else if (inBtn(quitY))
             {
                 ::PostQuitMessage(0);
             }
@@ -1153,33 +1162,31 @@ void Dx12App::RenderPauseMenu()
     XMFLOAT2 mp = m_inputSystem.GetMousePosition();
 
     constexpr float btnW = 220.0f, btnH = 40.0f;
-    float resumeY = cy - 10.0f;
-    float quitY   = cy + 54.0f;
+    float resumeY     = cy - 30.0f;
+    float charSelectY = cy + 30.0f;
+    float quitY       = cy + 90.0f;
+
+    auto isHover = [&](float btnY) {
+        return mp.x >= cx - btnW/2.f && mp.x <= cx + btnW/2.f &&
+               mp.y >= btnY && mp.y <= btnY + btnH;
+    };
+    auto drawBtn = [&](const wchar_t* text, float btnY, DirectX::XMVECTORF32 normal, DirectX::XMVECTORF32 hovered) {
+        XMVECTOR sz = m_spriteFont->MeasureString(text);
+        m_spriteFont->DrawString(m_spriteBatch.get(), text,
+            XMFLOAT2(cx - XMVectorGetX(sz) / 2.0f, btnY),
+            isHover(btnY) ? hovered : normal);
+    };
 
     // Title
     const wchar_t* title = L"===  일시정지  ===";
     XMVECTOR tsz = m_spriteFont->MeasureString(title);
     m_spriteFont->DrawString(m_spriteBatch.get(), title,
-        XMFLOAT2(cx - XMVectorGetX(tsz) / 2.0f, cy - 70.0f),
+        XMFLOAT2(cx - XMVectorGetX(tsz) / 2.0f, cy - 90.0f),
         DirectX::Colors::White);
 
-    // "계속하기" button
-    bool resumeHover = (mp.x >= cx - btnW / 2.0f && mp.x <= cx + btnW / 2.0f &&
-                        mp.y >= resumeY && mp.y <= resumeY + btnH);
-    const wchar_t* resumeText = L"계속하기";
-    XMVECTOR rsz = m_spriteFont->MeasureString(resumeText);
-    m_spriteFont->DrawString(m_spriteBatch.get(), resumeText,
-        XMFLOAT2(cx - XMVectorGetX(rsz) / 2.0f, resumeY),
-        resumeHover ? DirectX::Colors::Yellow : DirectX::Colors::White);
-
-    // "게임 종료" button
-    bool quitHover = (mp.x >= cx - btnW / 2.0f && mp.x <= cx + btnW / 2.0f &&
-                      mp.y >= quitY && mp.y <= quitY + btnH);
-    const wchar_t* quitText = L"게임 종료";
-    XMVECTOR qsz = m_spriteFont->MeasureString(quitText);
-    m_spriteFont->DrawString(m_spriteBatch.get(), quitText,
-        XMFLOAT2(cx - XMVectorGetX(qsz) / 2.0f, quitY),
-        quitHover ? DirectX::Colors::OrangeRed : DirectX::Colors::Gray);
+    drawBtn(L"계속하기",              resumeY,     DirectX::Colors::White,     DirectX::Colors::Yellow);
+    drawBtn(L"캐릭터 선택 화면으로",   charSelectY, DirectX::Colors::LightBlue, DirectX::Colors::Cyan);
+    drawBtn(L"게임 종료",             quitY,       DirectX::Colors::Gray,      DirectX::Colors::OrangeRed);
 
     // Hint
     const wchar_t* hint = L"[ESC] 계속하기";

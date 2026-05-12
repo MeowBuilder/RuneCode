@@ -107,8 +107,10 @@ protected:
 
     // Portal cube system
     GameObject* m_pPortalCube = nullptr;
-    // Portal_Ring VFX (Scene::Update 가 매 프레임 spawn/track) — Ring 이미터 lifetime 짧아 주기 재 spawn 필요
-    int   m_nPortalCubeRingVFXId = -1;
+    // Portal VFX (3 레이어 무한 루프) — 각 이미터 lifetime 짧아 주기 재 spawn 필요
+    int   m_nPortalCubeRingVFXId    = -1; // Portal_Ring (회전 링)
+    int   m_nPortalCubeSuctionVFXId = -1; // Portal_Suction (흡입)
+    int   m_nPortalCubeBeamVFXId    = -1; // Portal_Beam (수직 광주)
     float m_fPortalCubeRingRespawnTimer = 0.0f;
 
     // Lava Geyser system
