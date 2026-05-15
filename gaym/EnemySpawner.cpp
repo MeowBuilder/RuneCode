@@ -28,6 +28,9 @@
 #include "RockBarrageAttackBehavior.h"
 #include "GroundRuptureAttackBehavior.h"
 #include "SequentialCrossAttackBehavior.h"
+#include "TornadoFieldAttackBehavior.h"
+#include "GaleSlashAttackBehavior.h"
+#include "ShockwaveRingAttackBehavior.h"
 #include "BossPhaseConfig.h"
 #include "BossPhaseController.h"
 #include "Room.h"
@@ -564,14 +567,14 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     // 바닥 인디케이터 — Circle 타입 (각 behavior 가 GetIndicatorRadius() 로 실제 반경 제공)
     //   preset 의 m_fHitRadius 는 fallback 기본값 (override 없을 때만 사용)
     golem.m_IndicatorConfig.m_eType      = IndicatorType::Circle;
-    golem.m_IndicatorConfig.m_fHitRadius = 30.0f;
+    golem.m_IndicatorConfig.m_fHitRadius = 42.0f;
 
     // Primary: "주먹 내려찍기" — attack01 @ 0.7× = 8.1s
     //   windup 을 애니 slam 피크 (~45% = 3.6s) 에 맞춤 → 찍는 순간에 데미지/파편 동기화
     //   3.5 → 3.8: 사용자 체감상 데미지가 애니보다 빨라 windup 뒤로 살짝 이동
     golem.m_fnCreateAttack = []() {
         return std::make_unique<JumpSlamAttackBehavior>(
-            160.0f, 0.0f, 0.25f, 50.0f,
+            160.0f, 0.0f, 0.25f, 70.0f,
             3.8f, 1.3f,                     // windup 3.5→3.8
             false,
             2.5f, 0.5f,
@@ -591,7 +594,7 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         {
             // 점프 진동
             return std::make_unique<JumpSlamAttackBehavior>(
-                140.0f, 6.5f, 1.8f, 60.0f,
+                140.0f, 6.5f, 1.8f, 85.0f,
                 1.3f, 0.7f,
                 false,
                 3.6f, 0.7f,
@@ -601,9 +604,9 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         }
         else if (r == 1)
         {
-            // 광역 내려찍기 (dddradius 85) — Primary 와 같은 slam 피크 타이밍
+            // 광역 내려찍기 (radius 120) — Primary 와 같은 slam 피크 타이밍
             return std::make_unique<JumpSlamAttackBehavior>(
-                150.0f, 0.0f, 0.3f, 85.0f,
+                150.0f, 0.0f, 0.3f, 120.0f,
                 3.6f, 1.8f,                 // windup 2.3→3.6 (피크 타이밍), recovery 2.0→1.8
                 false,
                 3.4f, 0.65f,
@@ -614,16 +617,16 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         {
             // 바위 발사 — 애니 1회 재생 후 idle 자동 전환. 총 시간 자유롭게 설정 가능
             return std::make_unique<RockBarrageAttackBehavior>(
-                12,      // 바위 개수
+                16,      // 바위 개수
                 90.0f,   // 데미지
-                3.0f,    // 투사체 반경
-                38.0f,   // 속도
-                16.0f,   // 궤도 반경
-                16.0f,   // 보스 위 높이
+                4.0f,    // 투사체 반경
+                44.0f,   // 속도
+                22.0f,   // 궤도 반경
+                18.0f,   // 보스 위 높이
                 2.6f,    // summon
                 0.6f,    // charge
-                0.18f,   // fire 간격
-                3.0f,    // flight timeout
+                0.16f,   // fire 간격
+                3.5f,    // flight timeout
                 2.2f,    // recovery — 바위 비행 + 보스 idle 잠시 대기
                 0.0f, 0.0f,
                 1.1f
@@ -633,11 +636,11 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         {
             // 바위 낙하 — 애니 1회 재생 후 idle 자동 전환
             return std::make_unique<RockFallAttackBehavior>(
-                10,      // 바위 개수
+                14,      // 바위 개수
                 90.0f,   // 바위 당 데미지
-                10.0f,   // 바위 당 AOE 반경
-                18.0f,   // 최소 스폰 반경
-                65.0f,   // 최대 스폰 반경
+                14.0f,   // 바위 당 AOE 반경
+                25.0f,   // 최소 스폰 반경
+                95.0f,   // 최대 스폰 반경
                 2.0f,    // windup
                 0.8f,    // drop
                 2.0f,    // recovery
@@ -653,8 +656,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
             return std::make_unique<GroundRuptureAttackBehavior>(
                 shape,
                 100.0f,  // damage
-                70.0f,   // 균열 길이
-                4.0f,    // 균열 반폭
+                100.0f,  // 균열 길이
+                6.0f,    // 균열 반폭
                 2.2f,    // windup
                 0.6f,    // impact
                 1.8f,    // recovery
@@ -668,8 +671,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
             // 안전 웨지를 선점해야 한다.
             return std::make_unique<SequentialCrossAttackBehavior>(
                 55.0f,   // damage per cross
-                70.0f,   // 막대 반길이 (전체 140 — 원거리 이탈 불가)
-                9.0f,    // 막대 반폭 (30° 웨지 d≈33까지 완전히 덮임)
+                100.0f,  // 막대 반길이 (전체 200 — 원거리 이탈 불가)
+                13.0f,   // 막대 반폭 (30° 웨지 d≈48까지 완전히 덮임)
                 2.5f,    // windup
                 0.65f,   // 폭발 간격 — 인접 웨지 이동이 "가능은 하지만 근거리에서만"
                 0.35f,   // 폭발 flash
@@ -691,20 +694,21 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     demon.m_xmf3Scale = XMFLOAT3(8.0f, 8.0f, 8.0f);  // 보스급 위압감
     demon.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 
-    demon.m_Stats.m_fMaxHP              = 1500.0f;
-    demon.m_Stats.m_fCurrentHP          = 1500.0f;
-    demon.m_Stats.m_fMoveSpeed          = 14.0f;    // 살짝 더 빠름
+    demon.m_Stats.m_fMaxHP              = 3500.0f;
+    demon.m_Stats.m_fCurrentHP          = 3500.0f;
+    // 어그로 대상이 회피에 집중해야 하는 압박감 — 이속 대폭 강화 + 공격 텀 대폭 단축
+    demon.m_Stats.m_fMoveSpeed          = 20.0f;    // 14→20, 추격 끈질김
     // 사거리를 짧게 — 안에 들어오면 즉시 공격, 밖이면 계속 추격 (대기 프레임 최소화)
     //   사이즈 업으로 몸체 외곽이 늘어나서 6.0 정도가 "딱 붙는" 거리
     demon.m_Stats.m_fAttackRange        = 6.0f;
-    demon.m_Stats.m_fAttackCooldown     = 0.6f;
+    demon.m_Stats.m_fAttackCooldown     = 0.4f;     // 0.6→0.4, 기본 공격 텀 짧음
     demon.m_Stats.m_fLongRangeThreshold = 32.0f;    // 더 멀리서도 압박
     demon.m_Stats.m_fMidRangeThreshold  = 15.0f;
 
     demon.m_bIsBoss = true;
-    demon.m_fSpecialAttackCooldown = 1.8f;          // 3.0→1.8, 돌진 매우 자주
-    demon.m_nSpecialAttackChance   = 75;
-    demon.m_fAnimationPlaybackSpeed = 1.15f;        // 살짝 빠른 모션 (민첩한 인상)
+    demon.m_fSpecialAttackCooldown = 1.2f;          // 1.8→1.2, 특수기 더 자주
+    demon.m_nSpecialAttackChance   = 80;            // 75→80
+    demon.m_fAnimationPlaybackSpeed = 1.25f;        // 1.15→1.25, 민첩한 인상 강화
 
     demon.m_AnimConfig.m_strIdleClip    = "Idle1";
     demon.m_AnimConfig.m_strChaseClip   = "Run";
@@ -759,17 +763,19 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         //   긴  돌진  — 멀리,   후딜 1.2s (회피 쉬움, 딜윈도우 큼)
         // 특수공격 풀: 짧은 돌진 / 긴 돌진 / 어글락 차지 (1/3 씩)
         //   FixatedCharge = 핵심 기믹. 어글자 추적 텔레그래프 → 장거리 돌진 → 기둥 박으면 그로기
+        //   p1 풀: 짧은돌진(2) / 긴돌진(2) / 어글락(2) / 회오리장판(1) / 돌풍슬래시(1) / 충격파링(1)
+        //   기존 돌진 3종은 등장 빈도 유지 위해 가중치 2배, 신규 풍속성 3종은 각 1배
         phase1.m_fnSpecialAttack = []() -> std::unique_ptr<IAttackBehavior> {
-            int choice = rand() % 3;
-            if (choice == 0) {
+            int choice = rand() % 9;
+            if (choice < 2) {
                 // 짧은 돌진 — 거리/범위 모두 확장, 위협적
                 return std::make_unique<RushFrontAttackBehavior>(
                     55.0f, 28.0f, 0.85f, 0.25f, 0.15f, 1.0f, 8.5f, 75.0f);
-            } else if (choice == 1) {
+            } else if (choice < 4) {
                 // 긴 돌진 — 방 가로지르는 거리
                 return std::make_unique<RushFrontAttackBehavior>(
                     70.0f, 34.0f, 1.2f, 0.30f, 0.20f, 1.2f, 10.5f, 95.0f);
-            } else {
+            } else if (choice < 6) {
                 // 어글자 락온 차지 — 매우 멀리, 더 두꺼운 인디케이터
                 return std::make_unique<FixatedChargeAttackBehavior>(
                     85.0f /*damage*/, 3.0f /*telegraph*/, 0.2f /*locked*/,
@@ -777,6 +783,25 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
                     6.5f  /*playerHitR*/, 8.0f /*pillarHitR*/,
                     6.0f  /*indicatorHalfW 두껍게*/,
                     4.5f  /*groggyDur*/, 0.9f /*missRecovery*/);
+            } else if (choice == 6) {
+                // 회오리 장판 — 4개 토네이도, 지속 4초 area denial
+                return std::make_unique<TornadoFieldAttackBehavior>(
+                    4 /*count*/, 18.0f /*tickDmg*/, 0.45f /*tickInterval*/,
+                    5.0f /*radius*/, 12.0f, 28.0f,
+                    1.8f /*windup*/, 4.0f /*active*/, 1.0f /*recovery*/);
+            } else if (choice == 7) {
+                // 돌풍 슬래시 — 4방향 (랜덤 십자/X자), 즉발성 라인 데미지
+                auto shape = (rand() % 2 == 0)
+                    ? GaleSlashAttackBehavior::SlashShape::Cross
+                    : GaleSlashAttackBehavior::SlashShape::XDiag;
+                return std::make_unique<GaleSlashAttackBehavior>(
+                    shape, 75.0f, 30.0f, 3.5f,
+                    1.4f /*windup*/, 0.4f /*impact*/, 1.2f /*recovery*/);
+            } else {
+                // 충격파 링 — 보스 중심에서 외곽으로 wave 확장
+                return std::make_unique<ShockwaveRingAttackBehavior>(
+                    85.0f /*damage*/, 35.0f /*maxRadius*/, 4.0f /*thickness*/,
+                    1.6f /*windup*/, 1.0f /*expand*/, 1.0f /*recovery*/);
             }
         };
 
@@ -785,9 +810,9 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         // ----- Phase 2 (50% - 0% HP): Rage Mode -----
         BossPhaseData phase2;
         phase2.m_fHealthThreshold = 0.5f;
-        phase2.m_fSpeedMultiplier = 1.35f;
-        phase2.m_fAttackSpeedMultiplier = 0.65f;  // 쿨 짧아짐
-        phase2.m_nSpecialAttackChance = 85;
+        phase2.m_fSpeedMultiplier = 1.55f;        // 1.35→1.55, 추격 속도 살벌하게
+        phase2.m_fAttackSpeedMultiplier = 0.50f;  // 0.65→0.50, 쿨 더 짧아짐
+        phase2.m_nSpecialAttackChance = 90;       // 85→90, 특수기 거의 항상
         phase2.m_bCanFly = false;
 
         // Primary 강화: 더 빠른 회전, 길게 끌고감, 후딜 짧음
@@ -800,17 +825,20 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         };
 
         // 더 빠른 돌진. 후딜도 같이 짧아져서 딜 윈도우 좁음 (빡빡한 패링)
+        //   Rage 모드 특수 풀 (가중치): 짧은돌진(2)/긴돌진(2)/어글락(2)/
+        //                              회오리장판 강화(1)/돌풍슬래시 강화(1)/충격파링 강화(1)/공중 슬램(1)
+        //   공중 슬램은 시그니처 패턴 — 가끔 등장해서 광역 슬램으로 압박. 총 10 슬롯
         phase2.m_fnSpecialAttack = []() -> std::unique_ptr<IAttackBehavior> {
-            int choice = rand() % 3;
-            if (choice == 0) {
+            int choice = rand() % 10;
+            if (choice < 2) {
                 // 빠른 짧은 돌진
                 return std::make_unique<RushFrontAttackBehavior>(
                     60.0f, 36.0f, 0.7f, 0.20f, 0.15f, 0.70f, 8.5f, 75.0f);
-            } else if (choice == 1) {
+            } else if (choice < 4) {
                 // 빠른 긴 돌진
                 return std::make_unique<RushFrontAttackBehavior>(
                     78.0f, 42.0f, 1.05f, 0.22f, 0.18f, 0.85f, 10.5f, 95.0f);
-            } else {
+            } else if (choice < 6) {
                 // Rage 모드의 차지 — 텔레그래프 짧고 더 빠름, 더 멀리
                 return std::make_unique<FixatedChargeAttackBehavior>(
                     100.0f /*damage*/, 2.4f /*telegraph 짧게*/, 0.15f /*locked*/,
@@ -818,10 +846,38 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
                     6.5f   /*playerHitR*/, 8.0f /*pillarHitR*/,
                     6.0f   /*indicatorHalfW*/,
                     4.0f   /*groggyDur*/, 0.7f /*missRecovery*/);
+            } else if (choice == 6) {
+                // 회오리 장판 강화 — 6개, 더 큰 반경, 더 긴 지속
+                return std::make_unique<TornadoFieldAttackBehavior>(
+                    6, 22.0f, 0.4f, 6.0f, 12.0f, 32.0f,
+                    1.5f, 5.0f, 0.8f);
+            } else if (choice == 7) {
+                // 돌풍 슬래시 강화 — windup 짧고 데미지 큼
+                auto shape = (rand() % 2 == 0)
+                    ? GaleSlashAttackBehavior::SlashShape::Cross
+                    : GaleSlashAttackBehavior::SlashShape::XDiag;
+                return std::make_unique<GaleSlashAttackBehavior>(
+                    shape, 100.0f, 36.0f, 4.0f,
+                    1.1f, 0.4f, 1.0f);
+            } else if (choice == 8) {
+                // 충격파 링 강화 — 더 큰 반경, 빠른 확장
+                return std::make_unique<ShockwaveRingAttackBehavior>(
+                    110.0f, 42.0f, 4.5f,
+                    1.3f, 0.85f, 0.8f);
+            } else {
+                // 공중 슬램 (시그니처) — 점프 후 광역 강하. 데몬에 "Take Off/Land" 클립이
+                //   없어서 jump 모션은 자체 Y 곡선만 의존. attack4 를 clipOverride 로 주면
+                //   EnemyComponent 가 attack4 를 먼저 재생 → Execute 가 즉시 CrossFade 시도하나
+                //   해당 클립 부재로 attack4 가 유지되어 점프 동안 공격 모션 노출.
+                return std::make_unique<JumpSlamAttackBehavior>(
+                    130.0f /*damage*/, 18.0f /*jumpHeight*/, 1.1f /*jumpDur*/,
+                    16.0f /*slamRadius*/, 0.35f /*windup*/, 1.0f /*recovery*/,
+                    true /*trackTarget*/, 3.0f /*shake*/, 0.5f /*shakeDur*/,
+                    "attack4" /*clipOverride*/);
             }
         };
 
-        // 페이즈 전환: Rage 포효 + 무적 (전환공격 없음)
+        // 페이즈 전환: Rage 포효 + 무적 (원본 입장 연출 유지)
         phase2.m_bHasTransitionAttack = false;
         phase2.m_bInvincibleDuringTransition = true;
         phase2.m_fTransitionDuration = 2.4f;          // Rage 클립 2.37s 매칭

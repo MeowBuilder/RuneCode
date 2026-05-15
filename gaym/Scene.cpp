@@ -4112,19 +4112,7 @@ void Scene::SetupWindAmbient(const BoundingBox& roomBB)
         if (id >= 0) m_vAmbientWindIds.push_back(id);
     }
 
-    // 업드래프트 작은 기둥 5 — 방 중-외곽 영역
-    XMFLOAT3 ud[5] = {
-        { center.x - ex * 0.55f, 0.5f, center.z + ez * 0.45f },
-        { center.x + ex * 0.60f, 0.5f, center.z + ez * 0.50f },
-        { center.x - ex * 0.50f, 0.5f, center.z - ez * 0.55f },
-        { center.x + ex * 0.55f, 0.5f, center.z - ez * 0.50f },
-        { center.x,              0.5f, center.z + ez * 0.70f },
-    };
-    for (auto& p : ud)
-    {
-        int id = m_pVFXManager->Spawn("Wind_UpdraftSmall", p, up, 0u, false);
-        if (id >= 0) m_vAmbientWindIds.push_back(id);
-    }
+    // (작은 업드래프트 기둥 5종 제거 — 방 전환 시 정리되지 않고 누적되어 시각 노이즈 유발)
 
     // 잎 드리프트 6 인스턴스 — 맵 전역에 흩뿌려지도록 위치/방향 다양화
     //   각 인스턴스 width 50, length 160 → 영역 곳곳에서 흘러나오는 잎이 맵을 가로지름
@@ -4242,9 +4230,27 @@ void Scene::CleanupWindAmbient()
     //   1) shader 렌더 리스트에서 RenderComponent 제거 (이번 프레임 이후 렌더 X)
     //   2) GameObject SetMesh(nullptr) → mesh refcount 1→0 → delete (Mesh 메모리 회수)
     //   3) MarkForDeletion → 다음 ProcessPendingDeletions에서 GameObject 정리
+    //
+    // Dangling 방어: TransitionToGrassBossRoom 등 일부 경로에서 m_vRooms.clear() 가
+    //   먼저 grass clump GameObject 를 파괴하고 m_vGrassClumpObjects 의 raw pointer 들은
+    //   stale 한 상태로 남는다. 그 상태에서 본 함수가 호출되면 pClump->GetComponent()
+    //   가 freed 메모리를 dereference → 크래시. 처리 전 alive 여부를 직접 확인.
+    auto IsAlive = [this](GameObject* pObj) -> bool {
+        if (!pObj) return false;
+        for (auto& up : m_vGameObjects)
+            if (up.get() == pObj) return true;
+        for (auto& pRoom : m_vRooms)
+        {
+            if (!pRoom) continue;
+            for (auto& up : pRoom->GetGameObjects())
+                if (up.get() == pObj) return true;
+        }
+        return false;
+    };
+
     for (GameObject* pClump : m_vGrassClumpObjects)
     {
-        if (!pClump) continue;
+        if (!IsAlive(pClump)) continue;
         if (auto* pRC = pClump->GetComponent<RenderComponent>())
         {
             if (!m_vShaders.empty()) m_vShaders[0]->RemoveRenderComponent(pRC);

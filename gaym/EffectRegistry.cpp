@@ -1266,6 +1266,76 @@ void EffectRegistry::Initialize()
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // Demon_RushWind — 돌진 궤적 양옆 평행 트레일 단위 (behaviors 가 좌+우 두 개 스폰)
+    //   Spawn pos = 보스 위치 ± perpendicular * offset (좌/우 오프셋)
+    //   Spawn dir = 진행 방향의 **반대** (뒤로 흘러 보스 지나간 자리에 잔류)
+    //   → 보스가 직진할 때 양옆에 평행한 두 줄의 바람 트레일이 깔림.
+    //   좁은 콘 + 긴 lifetime + 느린 속도 = 길게 늘어지는 wake.
+    // ──────────────────────────────────────────────────────────────────────────
+    // 트레일 도달거리 = (rushSpeed + driftSpeed) × lifetime
+    //   RushFront 최대 ~44u (긴 돌진), FixatedCharge 최대 110u → 두 케이스 다 커버하도록
+    //   _Big 쪽을 더 길게 잡음.
+    {
+        EffectDef def;
+        def.name    = "Demon_RushWind";
+        def.element = ElementType::Wind;
+
+        EffectLayer cone;
+        cone.type           = EmitterType::Cone;
+        cone.element        = ElementType::Wind;
+        cone.overrideColors = true;
+        cone.coreColor      = { 0.95f, 1.00f, 0.95f, 1.0f  };
+        cone.edgeColor      = { 0.30f, 0.70f, 0.40f, 0.0f  };
+        cone.particleCount  = 500;
+        cone.speedMin       = 25.f; cone.speedMax = 45.f;
+        cone.lifetimeMin    = 0.7f;  cone.lifetimeMax = 1.4f;   // (42+45)*1.4 = ~120u 도달
+        cone.sizeScale      = 2.4f;
+        cone.duration       = -1.f;
+
+        cone.cone.halfAngle     = 9.f;      // 좀 더 좁게 — 라인 더 또렷
+        cone.cone.gravityScale  = 0.02f;
+        cone.cone.startSizeMult = 1.5f;
+        cone.cone.endSizeMult   = 0.0f;
+        cone.cone.fadeAlpha     = true;
+        cone.cone.fadeSize      = true;
+
+        def.layers.push_back(cone);
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Demon_RushWind_Big — 강화 평행 트레일 (FixatedCharge / 페이즈2)
+    //   FixatedCharge 110u 풀 커버 목표: (58+60)*2.0 = ~236u 여유
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Demon_RushWind_Big";
+        def.element = ElementType::Wind;
+
+        EffectLayer cone;
+        cone.type           = EmitterType::Cone;
+        cone.element        = ElementType::Wind;
+        cone.overrideColors = true;
+        cone.coreColor      = { 0.98f, 1.00f, 0.95f, 1.0f  };
+        cone.edgeColor      = { 0.25f, 0.65f, 0.35f, 0.0f  };
+        cone.particleCount  = 850;
+        cone.speedMin       = 38.f; cone.speedMax = 60.f;
+        cone.lifetimeMin    = 1.1f;  cone.lifetimeMax = 2.0f;
+        cone.sizeScale      = 3.0f;
+        cone.duration       = -1.f;
+
+        cone.cone.halfAngle     = 10.f;
+        cone.cone.gravityScale  = 0.02f;
+        cone.cone.startSizeMult = 1.7f;
+        cone.cone.endSizeMult   = 0.0f;
+        cone.cone.fadeAlpha     = true;
+        cone.cone.fadeSize      = true;
+
+        def.layers.push_back(cone);
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // R_TornadoPlayer — 플레이어 소환 토네이도 (Demon_Tornado 강화판, 더 크고 강렬)
     // ──────────────────────────────────────────────────────────────────────────
     {

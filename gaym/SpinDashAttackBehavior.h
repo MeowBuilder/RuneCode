@@ -57,4 +57,7 @@ private:
 
     // 회오리 wind VFX (sub_wind 이펙트). -1 = 활성 슬롯 없음
     int m_nWindVFXId = -1;
+    // 좌/우 윈드월 (궤적 양옆 바람 벽)
+    int m_nBoosterVFXIdL = -1;
+    int m_nBoosterVFXIdR = -1;
 };

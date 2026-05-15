@@ -75,4 +75,6 @@ private:
     float    m_fDashTraveled = 0.0f;
     bool     m_bFinished = false;
     XMFLOAT3 m_xmf3DashDir = { 0.0f, 0.0f, 0.0f };
+    int      m_nWindVFXIdL = -1;  // Dash 좌/우 윈드월 슬롯
+    int      m_nWindVFXIdR = -1;
 };

@@ -183,6 +183,15 @@
     <ClInclude Include="SequentialCrossAttackBehavior.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="TornadoFieldAttackBehavior.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="GaleSlashAttackBehavior.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="ShockwaveRingAttackBehavior.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
     <ClInclude Include="DebugRenderer.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -585,6 +594,15 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="SequentialCrossAttackBehavior.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="TornadoFieldAttackBehavior.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="GaleSlashAttackBehavior.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="ShockwaveRingAttackBehavior.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="DebugRenderer.cpp">

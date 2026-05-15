@@ -183,6 +183,19 @@ void AnimationComponent::Update(float deltaTime)
         m_fAccumDelta = 0.f;
     }
 
+    // 매 프레임 캐시 재구축 — Init 시점 raw pointer 캐싱은 보스 전환 등
+    //   hierarchy mutation 타이밍에 dangling 위험 (m_vSkinnedMeshes / m_mapBoneTransforms /
+    //   m_vHierarchyTransforms). owner 가 유효하면 tree 가 곧 ground truth 이므로 매 프레임
+    //   소규모 재스캔으로 처리. 보스급 1마리 ~수십 노드 수준이라 비용 무시 가능.
+    if (m_pOwner)
+    {
+        m_mapBoneTransforms.clear();
+        m_vSkinnedMeshes.clear();
+        m_vHierarchyTransforms.clear();
+        BuildBoneCache(m_pOwner);
+        CollectHierarchyNodes(m_pOwner);
+    }
+
     // Apply playback speed
     float scaledDelta = deltaTime * m_fPlaybackSpeed;
 
@@ -256,12 +269,20 @@ void AnimationComponent::Update(float deltaTime)
     }
 
     // Apply to bones
+    //   캐시 dangling 방어 — m_mapBoneTransforms 도 raw pointer 캐시이므로
+    //   동일하게 유저공간 범위 체크 후 사용.
+    auto IsValidPtr = [](const void* p) -> bool {
+        auto v = reinterpret_cast<uintptr_t>(p);
+        return v >= 0x10000ULL && v <= 0x00007FFFFFFFFFFFULL;
+    };
+
     for (const auto& track : m_pCurrentClip->m_vBoneTracks)
     {
         auto it = m_mapBoneTransforms.find(track.m_strBoneName);
         if (it == m_mapBoneTransforms.end()) continue;
 
         TransformComponent* pTransform = it->second;
+        if (!IsValidPtr(pTransform)) continue;
 
         // Skip root object - its transform is managed by game logic (position, scale)
         if (pTransform == m_pOwner->GetTransform()) continue;
@@ -332,16 +353,31 @@ void AnimationComponent::Update(float deltaTime)
 
     if (!m_vSkinnedMeshes.empty())
     {
+        // 캐시된 raw pointer 가 보스 전환 타이밍에 간헐적으로 dangling 되는 케이스 보호.
+        // x64 Windows 유저공간은 [0x10000, 0x7FFFFFFFFFFF] 범위 — 그 밖 값은 명백한 invalid.
+        //   ex) 0xFFFFFFFFFFFFFFEF (스폰 직후 hierarchy 재구축 중 등) → 즉시 skip.
+        auto IsValidPtr = [](const void* p) -> bool {
+            auto v = reinterpret_cast<uintptr_t>(p);
+            return v >= 0x10000ULL && v <= 0x00007FFFFFFFFFFFULL;
+        };
+
         // 캐시된 TransformComponent 들에 대해 Update(0) 호출 (world matrix 갱신)
         for (TransformComponent* pT : m_vHierarchyTransforms)
+        {
+            if (!IsValidPtr(pT)) continue;
             pT->Update(0.0f);
+        }
 
         for (const auto& entry : m_vSkinnedMeshes)
         {
             SkinnedMesh* pSkinnedMesh = entry.pMesh;
             GameObject* pMeshHolder = entry.pHolder;
+            if (!IsValidPtr(pSkinnedMesh) || !IsValidPtr(pMeshHolder)) continue;
 
-            XMMATRIX matRootInvWorld = XMMatrixInverse(nullptr, XMLoadFloat4x4(&pMeshHolder->GetTransform()->GetWorldMatrix()));
+            TransformComponent* pHolderT = pMeshHolder->GetTransform();
+            if (!IsValidPtr(pHolderT)) continue;
+
+            XMMATRIX matRootInvWorld = XMMatrixInverse(nullptr, XMLoadFloat4x4(&pHolderT->GetWorldMatrix()));
 
             for (size_t i = 0; i < pSkinnedMesh->m_vBoneNames.size(); ++i)
             {
@@ -349,6 +385,7 @@ void AnimationComponent::Update(float deltaTime)
                 if (it != m_mapBoneTransforms.end())
                 {
                     TransformComponent* pBoneTransform = it->second;
+                    if (!IsValidPtr(pBoneTransform)) continue;
 
                     XMMATRIX matBoneWorld = XMLoadFloat4x4(&pBoneTransform->GetWorldMatrix());
                     XMMATRIX matInvBindPose = XMLoadFloat4x4(&pSkinnedMesh->m_vBindPoses[i]);

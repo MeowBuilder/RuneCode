@@ -55,6 +55,9 @@ private:
     bool m_bRushHitDealt = false;  // Separate flag for rush collision damage
     bool m_bFinished = false;
     XMFLOAT3 m_xmf3RushDirection = { 0.0f, 0.0f, 0.0f };
+    // 돌진 좌/우 윈드월 VFX 슬롯 — 궤적에 맞춰 양옆으로 바람 벽 분사
+    int   m_nWindVFXIdL = -1;
+    int   m_nWindVFXIdR = -1;
 
     static constexpr float RUSH_HIT_RADIUS = 2.5f;  // Collision radius during rush
 };

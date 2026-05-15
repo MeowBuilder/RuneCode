@@ -9,6 +9,7 @@
 #include "Dx12App.h"
 #include "Scene.h"
 #include "Camera.h"
+#include "VFXManager.h"
 #include <algorithm>
 
 namespace {
@@ -17,6 +18,13 @@ namespace {
         if (auto* pApp = Dx12App::GetInstance())
             if (auto* pScene = pApp->GetScene())
                 return pScene->GetCamera();
+        return nullptr;
+    }
+    VFXManager* GetVFX()
+    {
+        if (auto* pApp = Dx12App::GetInstance())
+            if (auto* pScene = pApp->GetScene())
+                return pScene->GetVFXManager();
         return nullptr;
     }
 }
@@ -103,6 +111,20 @@ void FixatedChargeAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
         pT->SetPosition(pos);
         m_fDashTraveled += moveAmt;
 
+        // 좌/우 트레일 위치 갱신 (보스 따라 ± perpOffset)
+        if (auto* pVFX = GetVFX())
+        {
+            const float kOffset = 4.5f;
+            XMFLOAT3 bp = pos;
+            bp.y += 1.0f;
+            XMFLOAT3 perpRight( m_xmf3DashDir.z, 0.0f, -m_xmf3DashDir.x);
+            XMFLOAT3 trailDir (-m_xmf3DashDir.x, 0.0f, -m_xmf3DashDir.z);
+            XMFLOAT3 leftPos { bp.x - perpRight.x * kOffset, bp.y, bp.z - perpRight.z * kOffset };
+            XMFLOAT3 rightPos{ bp.x + perpRight.x * kOffset, bp.y, bp.z + perpRight.z * kOffset };
+            if (m_nWindVFXIdL >= 0) pVFX->Track(m_nWindVFXIdL, leftPos,  trailDir);
+            if (m_nWindVFXIdR >= 0) pVFX->Track(m_nWindVFXIdR, rightPos, trailDir);
+        }
+
         // 충돌 우선순위: 기둥 > 플레이어 (기둥에 박는 게 핵심 기믹이므로)
         if (TryHitPillar(pEnemy))  { EnterGroggy(pEnemy); break; }
         if (TryHitPlayer(pEnemy))  { EnterPlayerHitRecovery(pEnemy); break; }
@@ -132,6 +154,13 @@ void FixatedChargeAttackBehavior::Reset()
     m_bFinished = false;
     m_xmf3DashDir = XMFLOAT3(0.0f, 0.0f, 0.0f);
 
+    // 잔존 VFX 슬롯이 있다면 정리
+    if (auto* pVFX = GetVFX())
+    {
+        if (m_nWindVFXIdL >= 0) { pVFX->Stop(m_nWindVFXIdL); m_nWindVFXIdL = -1; }
+        if (m_nWindVFXIdR >= 0) { pVFX->Stop(m_nWindVFXIdR); m_nWindVFXIdR = -1; }
+    }
+
     // 안전장치: 카메라 pull-back 가 남아있을 수 있으니 0 으로 리셋 신호
     if (auto* pCam = GetActiveCamera()) pCam->SetExtraOrbitDistanceTarget(0.0f);
 }
@@ -149,6 +178,21 @@ void FixatedChargeAttackBehavior::StartDash(EnemyComponent* pEnemy)
         {
             float yawRad = XMConvertToRadians(pT->GetRotation().y);
             m_xmf3DashDir = XMFLOAT3(sinf(yawRad), 0.0f, cosf(yawRad));
+
+            // 좌/우 평행 트레일 — 핵심 기믹이라 Big 버전 사용
+            //   spawn pos = bossPos ± perpendicular * offset, dir = 진행 반대
+            if (auto* pVFX = GetVFX())
+            {
+                const float kOffset = 4.5f;
+                XMFLOAT3 bp = pT->GetPosition();
+                bp.y += 1.0f;
+                XMFLOAT3 perpRight( m_xmf3DashDir.z, 0.0f, -m_xmf3DashDir.x);
+                XMFLOAT3 trailDir (-m_xmf3DashDir.x, 0.0f, -m_xmf3DashDir.z);
+                XMFLOAT3 leftPos { bp.x - perpRight.x * kOffset, bp.y, bp.z - perpRight.z * kOffset };
+                XMFLOAT3 rightPos{ bp.x + perpRight.x * kOffset, bp.y, bp.z + perpRight.z * kOffset };
+                m_nWindVFXIdL = pVFX->Spawn("Demon_RushWind_Big", leftPos,  trailDir, 0u, false);
+                m_nWindVFXIdR = pVFX->Spawn("Demon_RushWind_Big", rightPos, trailDir, 0u, false);
+            }
         }
     }
 
@@ -196,6 +240,12 @@ bool FixatedChargeAttackBehavior::TryHitPillar(EnemyComponent* pEnemy)
 
 void FixatedChargeAttackBehavior::EnterGroggy(EnemyComponent* pEnemy)
 {
+    // Dash 회오리 VFX 정리
+    if (auto* pVFX = GetVFX())
+    {
+        if (m_nWindVFXIdL >= 0) { pVFX->Stop(m_nWindVFXIdL); m_nWindVFXIdL = -1; }
+        if (m_nWindVFXIdR >= 0) { pVFX->Stop(m_nWindVFXIdR); m_nWindVFXIdR = -1; }
+    }
     m_ePhase = Phase::Recovery;
     m_fPhaseTimer = 0.0f;
     m_fRecoveryDuration = m_fGroggyDuration;
@@ -220,6 +270,11 @@ void FixatedChargeAttackBehavior::EnterGroggy(EnemyComponent* pEnemy)
 
 void FixatedChargeAttackBehavior::EnterPlayerHitRecovery(EnemyComponent* pEnemy)
 {
+    if (auto* pVFX = GetVFX())
+    {
+        if (m_nWindVFXIdL >= 0) { pVFX->Stop(m_nWindVFXIdL); m_nWindVFXIdL = -1; }
+        if (m_nWindVFXIdR >= 0) { pVFX->Stop(m_nWindVFXIdR); m_nWindVFXIdR = -1; }
+    }
     m_ePhase = Phase::Recovery;
     m_fPhaseTimer = 0.0f;
     m_fRecoveryDuration = m_fNormalRecovery;
@@ -232,6 +287,11 @@ void FixatedChargeAttackBehavior::EnterPlayerHitRecovery(EnemyComponent* pEnemy)
 
 void FixatedChargeAttackBehavior::EnterMissRecovery(EnemyComponent* pEnemy)
 {
+    if (auto* pVFX = GetVFX())
+    {
+        if (m_nWindVFXIdL >= 0) { pVFX->Stop(m_nWindVFXIdL); m_nWindVFXIdL = -1; }
+        if (m_nWindVFXIdR >= 0) { pVFX->Stop(m_nWindVFXIdR); m_nWindVFXIdR = -1; }
+    }
     m_ePhase = Phase::Recovery;
     m_fPhaseTimer = 0.0f;
     m_fRecoveryDuration = m_fNormalRecovery;
