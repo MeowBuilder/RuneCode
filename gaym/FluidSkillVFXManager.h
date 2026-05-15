@@ -54,6 +54,10 @@ struct FluidVFXSlot {
     std::unique_ptr<LightEmitterSystem> pLightEmitter;
     EffectLayer      lightLayer;        // useLightEmitter=true 일 때만 유효
     bool             useLightEmitter = false;
+
+    // 다중 레이어 연결 (SpawnEffectDef가 레이어마다 슬롯을 만들 때 연결)
+    // StopEffect/TrackEffect 가 체인을 따라 모든 레이어에 적용됨
+    int              nextLinkedId = -1;
 };
 
 class FluidSkillVFXManager

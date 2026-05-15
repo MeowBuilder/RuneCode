@@ -341,6 +341,14 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
         displacement = moveDir * moveSpeed * deltaTime;
     }
 
+    // 스킬 대쉬 활성 중이면 displacement 를 스킬 방향으로 덮어씀
+    if (m_fSkillDashTimer > 0.f)
+    {
+        m_fSkillDashTimer = fmaxf(0.f, m_fSkillDashTimer - deltaTime);
+        XMVECTOR sDir = XMLoadFloat3(&m_xmf3SkillDashDir);
+        displacement = sDir * m_fSkillDashSpeed * deltaTime;
+    }
+
     // Apply displacement (keep current Y from gravity system)
     currentPosition += displacement;
     float currentY = pTransform->GetPosition().y;
@@ -526,6 +534,13 @@ void PlayerComponent::UpdateFlightMode(float deltaTime, InputSystem* pInputSyste
             pScene->FlightShoot(muzzlePos, dirF);
         }
     }
+}
+
+void PlayerComponent::StartSkillDash(const XMFLOAT3& dir, float speed, float duration)
+{
+    m_xmf3SkillDashDir = dir;
+    m_fSkillDashSpeed  = speed;
+    m_fSkillDashTimer  = duration;
 }
 
 void PlayerComponent::EnableFallZone(const XMFLOAT3& safeCenter, const XMFLOAT3& safeExtents)

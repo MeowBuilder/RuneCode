@@ -7,7 +7,7 @@ class FluidSkillVFXManager;
 class Scene;
 class EnemyComponent;
 
-// E 슬롯 (바람술사) — 돌풍 질주: 전방 넓은 콘 범위 즉발 폭풍, 적 넉백
+// E 슬롯 (바람술사) — 돌풍 질주: 전방으로 돌진하며 주변 적에게 데미지 + 넉백
 class GaleRushBehavior : public ISkillBehavior
 {
 public:
@@ -24,23 +24,28 @@ public:
     virtual const SkillData& GetSkillData() const override { return m_SkillData; }
 
 private:
-    void HitEnemiesInCone(float damage);
+    void HitEnemiesNearCaster(float damage);
 
     SkillData             m_SkillData;
     FluidSkillVFXManager* m_pVFXManager = nullptr;
     Scene*                m_pScene      = nullptr;
+    GameObject*           m_pCaster     = nullptr;
     int                   m_vfxId       = -1;
     int                   m_ringVfxId   = -1;
 
     bool  m_bActive    = false;
     float m_damageMult = 1.f;
     float m_elapsed    = 0.f;
-    bool  m_bHit       = false;
     DirectX::XMFLOAT3 m_origin    = {};
     DirectX::XMFLOAT3 m_direction = {};
 
-    // 전방 콘 판정: 거리 MAX_RANGE + 반각 CONE_HALF_ANGLE
-    static constexpr float DURATION         = 0.5f;
-    static constexpr float MAX_RANGE        = 15.0f;
-    static constexpr float CONE_HALF_ANGLE  = 50.0f;  // 도
+    std::unordered_set<EnemyComponent*> m_hitEnemies;  // 이번 대쉬에서 이미 맞은 적
+    std::vector<int> m_trailVfxIds;                    // 트레일 VFX ID 목록 (Reset 시 정리)
+    float m_trailTimer = 0.f;                          // 다음 트레일 스폰까지 남은 시간
+
+    // 돌진 대쉬 파라미터
+    static constexpr float DURATION        = 0.45f;
+    static constexpr float DASH_SPEED      = 55.f;
+    static constexpr float HIT_RADIUS      = 5.5f;
+    static constexpr float TRAIL_INTERVAL  = 0.05f;   // 배기 분사 스폰 주기 (밀집)
 };

@@ -141,6 +141,7 @@ enum class EmitterType {
     Sphere,      // 구형: 오라, 폭발구
     Ring,        // 링/충격파
     Burst,       // 중력 영향 폭발 파편
+    Crescent,    // 초승달/칼날 아크 — 부분 링이 전방으로 고속 비행
 
     // SPH 물리 (기존 FluidParticleSystem 래핑)
     SPH_Attract, // ControlPoint 모드
@@ -196,6 +197,19 @@ struct BurstEmitterParams {
     float groundY     = -999.f;   // 바닥 높이
     bool  fadeOut     = true;     // 수명에 따라 알파 감소
     bool  fadeSize    = true;     // 수명에 따라 크기 감소
+};
+
+// 초승달/칼날 아크 — 부분 링(arc) 형태가 전방으로 고속 비행
+// Ring과 유사하되 arcAngle로 각도 범위를 제한해 초승달·칼날 실루엣 형성
+struct CrescentEmitterParams {
+    float radius         = 2.0f;    // 아크 반경
+    float thickness      = 0.5f;    // 아크 두께 (날 폭)
+    float arcAngle       = 220.0f;  // 아크 각도 범위 (도, <360 = 부분 링)
+    float arcOffset      = -110.0f; // 아크 시작 각도 오프셋 (도, 0=right)
+    float tiltX          = 25.0f;   // X축 기울기 (도) → 초승달 실루엣
+    float normalSpeedMin = 40.0f;   // 전방 비행 속도 min (units/sec)
+    float normalSpeedMax = 80.0f;   // 전방 비행 속도 max
+    float rotateSpeed    = 9.0f;    // 비행 중 자전 (rad/s)
 };
 
 // ── SPH 이미터 래핑 파라미터 ──────────────────────────────────────────────────
@@ -302,6 +316,7 @@ struct EffectLayer {
     SphereEmitterParams   sphere;
     RingEmitterParams     ring;
     BurstEmitterParams    burst;
+    CrescentEmitterParams crescent;    // 초승달/칼날 아크 전용
     SPHEmitterParams      sph;         // SPH_* 타입 전용
     DecalParams           decal;       // 향후
     MagicCircleParams     magicCircle; // 향후

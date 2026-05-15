@@ -38,6 +38,13 @@ cbuffer LightEmitterCB : register(b0) {
     float  ringRadius; float ringWidth; float ringExpandSpeed; float ringTiltX;
     float  ringRotateSpeed; float ringNormalSpeedMin; float ringNormalSpeedMax; float _rpad;
     float  burstBounceCoeff; float burstGroundY; float coneSpawnRadius; float _bpad1;
+    // Crescent (emitterType==5)
+    float  crescentRadius; float crescentThickness; float crescentArcAngle; float crescentArcOffset;
+    float  crescentTiltX; float crescentNSpeedMin; float crescentNSpeedMax; float crescentRotateSpeed;
+    // 카메라 벡터 (Crescent 스크린-페이싱 스폰)
+    float3 camRight3; float _crpad;
+    float3 camUp3;    float _cupad;
+    float4 _extPad[12];
 };
 
 RWStructuredBuffer<LightParticle>           gParticles : register(u0);
@@ -102,6 +109,26 @@ void CS_LightEmit(uint3 DTid:SV_DispatchThreadID) {
         float3 ndir=direction*cosT+upAxis*sinT;
         p.vel=ndir*lerp(ringNormalSpeedMin,ringNormalSpeedMax,r2);
         p.size=sizeBase*sizeScale; p.startSize=p.size;
+    } else if(emitterType==5){ // Crescent — 진행 방향 기준 카메라 평면 스폰
+        float arcStartRad=crescentArcOffset*0.017453293f;
+        float arcRangeRad=crescentArcAngle*0.017453293f;
+        float ang=arcStartRad+r0*arcRangeRad;
+        float roff=(r1-0.5f)*crescentThickness;
+        // 진행 방향을 카메라 평면에 투영 → 아크 X축 (볼록 쪽이 항상 진행 방향을 향함)
+        float3 camFwd=normalize(cross(camRight3,camUp3));
+        float3 proj=direction-dot(direction,camFwd)*camFwd;
+        float  plen=length(proj);
+        float3 arcX=(plen>0.001f)?proj/plen:camRight3;
+        float3 arcY=cross(camFwd,arcX);
+        float3 radDir=arcX*cos(ang)+arcY*sin(ang);
+        // 앞뒤 두께: direction 축으로 랜덤 분산 (r0와 독립된 seed)
+        uint ds=WangHash(seed^0x1234ABCDu); float depthR=Rand01(ds);
+        p.pos=origin+radDir*(crescentRadius+roff)+direction*(depthR-0.5f)*crescentThickness*2.5f;
+        p.vel=direction*lerp(crescentNSpeedMin,crescentNSpeedMax,r2);
+        p.size=sizeBase*sizeScale; p.startSize=p.size;
+        // 색상: r0(아크 위치)와 독립된 seed로 균일하게 분포
+        uint cs=WangHash(seed^0x9E3779B9u);
+        p.startColor=lerp(edgeColor,coreColor,Rand01(cs));
     } else { // Burst
         p.pos=origin; p.vel=RandomOnSphere(seed)*speed;
         p.size=sizeBase*sizeScale; p.startSize=p.size;
@@ -199,6 +226,7 @@ void CS_LightToRender(uint3 DTid:SV_DispatchThreadID) {
         float szMult=1.f;
         if(emitterType==1){rd.color.a*=(1.f-t);szMult=lerp(coneStartSizeMult,coneEndSizeMult,t);}
         else if(emitterType==4){rd.color.a*=(1.f-t);szMult=lerp(1.f,0.2f,t);}
+        else if(emitterType==5){rd.color.a*=(1.f-t*t);szMult=lerp(1.f,0.3f,t);}
         rd.size=p.startSize*szMult;
     }
     gRenderBuf[idx]=rd;
@@ -419,11 +447,12 @@ void LightEmitterSystem::FillConstants(LightEmitterConstants& cb, float dt, bool
 
     // emitterType
     switch (m_Layer.type) {
-    case EmitterType::Linear: cb.emitterType = 0; break;
-    case EmitterType::Cone:   cb.emitterType = 1; break;
-    case EmitterType::Sphere: cb.emitterType = 2; break;
-    case EmitterType::Ring:   cb.emitterType = 3; break;
-    default:                  cb.emitterType = 4; break; // Burst
+    case EmitterType::Linear:   cb.emitterType = 0; break;
+    case EmitterType::Cone:     cb.emitterType = 1; break;
+    case EmitterType::Sphere:   cb.emitterType = 2; break;
+    case EmitterType::Ring:     cb.emitterType = 3; break;
+    case EmitterType::Crescent: cb.emitterType = 5; break;
+    default:                    cb.emitterType = 4; break; // Burst
     }
 
     cb.origin    = m_Origin;    cb.pad0 = 0;
@@ -490,6 +519,20 @@ void LightEmitterSystem::FillConstants(LightEmitterConstants& cb, float dt, bool
     cb.burstGroundY      = m_Layer.burst.groundY;
     cb.coneSpawnRadius   = m_Layer.cone.spawnRadius;
     cb._bpad1            = 0;
+
+    // Crescent
+    cb.crescentRadius      = m_Layer.crescent.radius;
+    cb.crescentThickness   = m_Layer.crescent.thickness;
+    cb.crescentArcAngle    = m_Layer.crescent.arcAngle;
+    cb.crescentArcOffset   = m_Layer.crescent.arcOffset;
+    cb.crescentTiltX       = m_Layer.crescent.tiltX;  // 현재 미사용 (카메라 평면 모드)
+    cb.crescentNSpeedMin   = m_Layer.crescent.normalSpeedMin;
+    cb.crescentNSpeedMax   = m_Layer.crescent.normalSpeedMax;
+    cb.crescentRotateSpeed = m_Layer.crescent.rotateSpeed;
+
+    // 카메라 벡터 (Crescent 스크린-페이싱 스폰에 사용)
+    cb.camRight3 = m_LastCamRight; cb._crpad = 0;
+    cb.camUp3    = m_LastCamUp;    cb._cupad = 0;
 }
 
 // ── 배리어 헬퍼 ───────────────────────────────────────────────────────────────
@@ -621,6 +664,10 @@ void LightEmitterSystem::Render(ID3D12GraphicsCommandList* pCmdList,
         }
         return;
     }
+
+    // 다음 프레임 Dispatch(Crescent 스폰)를 위해 카메라 벡터 저장
+    m_LastCamRight = camRight;
+    m_LastCamUp    = camUp;
 
     // 패스 CB 업데이트
     LightPassCB pcb = {};

@@ -23,6 +23,10 @@ public:
     bool IsDashing() const { return m_fDashTimer > 0.0f; }
     float GetDashCooldownRatio() const { return (m_fDashCooldown > 0.0f) ? (m_fDashCooldownRemain / m_fDashCooldown) : 0.0f; }
 
+    // 스킬이 트리거하는 대쉬 이동 (GaleRushBehavior 등에서 호출)
+    void StartSkillDash(const DirectX::XMFLOAT3& dir, float speed, float duration);
+    bool IsSkillDashing() const { return m_fSkillDashTimer > 0.f; }
+
     // HP System
     void TakeDamage(float fDamage);
     void Heal(float fAmount);
@@ -114,6 +118,11 @@ private:
     float m_fDashFlashTail = 0.0f;       // 대쉬 종료 후 HitFlash 잔상 타이머
     XMFLOAT3 m_xmf3DashDir = { 0, 0, 1 };// 대쉬 방향 (시작 시 고정)
     float m_fDashTrailAccum = 0.0f;      // 대쉬 트레일 LightEmitter 재스폰 누적 타이머
+
+    // 스킬 대쉬 (GaleRush 등) — 스페이스 대쉬와 독립적으로 이동만 처리
+    float     m_fSkillDashTimer = 0.f;
+    float     m_fSkillDashSpeed = 0.f;
+    DirectX::XMFLOAT3 m_xmf3SkillDashDir = { 0.f, 0.f, 1.f };
 
     // 대쉬 파라미터 — SetElementType()으로 원소별 값으로 덮어씀
     // (m_fDashDuration / m_fDashCooldown / m_fDashSpeedMult 가 실제 사용)

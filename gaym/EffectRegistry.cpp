@@ -1169,71 +1169,67 @@ void EffectRegistry::Initialize()
     // ═══════════════════════════════════════════════════════════════════════════
 
     // ──────────────────────────────────────────────────────────────────────────
-    // Q_WindCutter — 좁고 빠른 진공 커터 (Wave 모드, halfW=2 좁음)
+    // Q_WindCutter — 초승달 칼날 하나가 앞으로 날아감
     // ──────────────────────────────────────────────────────────────────────────
     {
-        EffectLayer layer = MakeSPHLayer(ElementType::Wind);
-        layer.overrideColors = true;
-        layer.coreColor = { 0.90f, 1.0f,  0.92f, 1.0f };
-        layer.edgeColor = { 0.40f, 0.85f, 0.50f, 0.70f };
-        layer.useSSF    = false;  // 바람 커터는 빌보드 렌더 (얇고 빠름)
-
-        SPHEmitterParams& s    = layer.sph;
-        s.particleCount        = 380;
-        s.spawnRadius          = 0.5f;
-        s.isWave               = true;
-        s.waveSpeed            = 20.f;
-        s.wavePushForce        = 80.f;
-        s.waveMaxDist          = 22.f;
-        s.waveHalfW            = 2.0f;
-        s.waveHalfH            = 2.0f;
-        s.waveOscAmplitude     = 0.f;   // 직선 커터 — 진동 없음
-        s.maxParticleSpeed     = 35.f;
-        s.overridePhysics      = true;
-        s.sphStiffness         = 30.f;
-        s.sphNearPressureMult  = 0.4f;
-        s.sphRestDensity       = 0.0f;
-        s.sphViscosity         = 0.2f;
-        s.sphSmoothingRadius   = 1.2f;
-
-        FinalizeSPHLayer(layer);
-
         EffectDef def;
         def.name    = "Q_WindCutter";
         def.element = ElementType::Wind;
-        def.layers.push_back(std::move(layer));
+
+        {
+            EffectLayer blade;
+            blade.type           = EmitterType::Crescent;
+            blade.element        = ElementType::Wind;
+            blade.overrideColors = true;
+            blade.coreColor      = { 0.60f, 1.0f, 0.65f, 1.0f };  // 밝은 민트 초록
+            blade.edgeColor      = { 0.05f, 0.50f, 0.15f, 0.0f };  // 진한 초록, 투명 소멸
+            blade.particleCount  = 350;
+            blade.sizeScale      = 3.5f;
+            blade.lifetimeMin    = 0.55f; blade.lifetimeMax = 0.75f;
+            blade.duration       = 0.90f;
+
+            blade.crescent.radius         = 2.8f;    // 칼날 반경
+            blade.crescent.thickness      = 1.0f;    // 날 두께 (radial + depth×2.5 에 영향)
+            blade.crescent.arcAngle       = 200.0f;  // 200° → 뚜렷한 초승달
+            blade.crescent.arcOffset      = -100.0f; // 카메라 공간 기준: 볼록 오른쪽(camRight)
+            blade.crescent.tiltX          = 0.0f;    // 카메라 평면 모드에서 미사용
+            blade.crescent.normalSpeedMin = 62.f;
+            blade.crescent.normalSpeedMax = 62.f;
+            blade.crescent.rotateSpeed    = 0.0f;
+            def.layers.push_back(blade);
+        }
+
         Register(std::move(def));
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // E_GaleRush_Cone — 전방 폭풍 콘 (Cone 타입)
-    // E_GaleRush_Ring — 충격파 링 (Ring 타입)
+    // E_GaleRush_Burst — 출발 시 몸통 주변 구체 폭발 (이제 전방 제트 대신)
+    // E_GaleRush_Ring  — 출발 지면 충격파 링
+    // E_GaleRush_Trail — 대쉬 중 후방 배기 분사 (로켓 추진력)
     // ──────────────────────────────────────────────────────────────────────────
     {
         EffectDef def;
-        def.name    = "E_GaleRush_Cone";
+        def.name    = "E_GaleRush_Burst";
         def.element = ElementType::Wind;
 
-        EffectLayer cone;
-        cone.type           = EmitterType::Cone;
-        cone.element        = ElementType::Wind;
-        cone.overrideColors = true;
-        cone.coreColor      = { 0.88f, 1.0f,  0.88f, 1.0f  };
-        cone.edgeColor      = { 0.35f, 0.80f, 0.40f, 0.0f  };
-        cone.particleCount  = 600;
-        cone.speedMin       = 20.f; cone.speedMax = 50.f;
-        cone.lifetimeMin    = 0.2f; cone.lifetimeMax = 0.5f;
-        cone.sizeScale      = 2.2f;
-        cone.duration       = 0.5f;
+        // 출발 구체 폭발 — 몸통에서 사방으로 바람이 터져나옴
+        EffectLayer burst;
+        burst.type           = EmitterType::Sphere;
+        burst.element        = ElementType::Wind;
+        burst.overrideColors = true;
+        burst.coreColor      = { 0.90f, 1.0f,  0.92f, 1.0f  };
+        burst.edgeColor      = { 0.18f, 0.70f, 0.28f, 0.0f  };
+        burst.particleCount  = 180;
+        burst.speedMin       = 14.f;  burst.speedMax    = 38.f;
+        burst.lifetimeMin    = 0.14f; burst.lifetimeMax = 0.34f;
+        burst.sizeScale      = 2.2f;
+        burst.duration       = 0.28f;
 
-        cone.cone.halfAngle     = 50.f;
-        cone.cone.gravityScale  = 0.05f;
-        cone.cone.startSizeMult = 1.4f;
-        cone.cone.endSizeMult   = 0.0f;
-        cone.cone.fadeAlpha     = true;
-        cone.cone.fadeSize      = true;
-
-        def.layers.push_back(cone);
+        burst.sphere.radius        = 2.2f;
+        burst.sphere.shellFraction = 0.55f;
+        burst.sphere.inward        = false;
+        burst.sphere.rotationSpeed = 14.f;
+        def.layers.push_back(burst);
         Register(std::move(def));
     }
     {
@@ -1241,27 +1237,79 @@ void EffectRegistry::Initialize()
         def.name    = "E_GaleRush_Ring";
         def.element = ElementType::Wind;
 
+        // 출발 지면 충격파 — 빠르게 바깥으로 퍼지는 링
         EffectLayer ring;
         ring.type           = EmitterType::Ring;
         ring.element        = ElementType::Wind;
         ring.overrideColors = true;
-        ring.coreColor      = { 0.85f, 1.0f,  0.85f, 0.85f };
-        ring.edgeColor      = { 0.30f, 0.75f, 0.35f, 0.0f  };
-        ring.particleCount  = 200;
-        ring.duration       = 0.6f;
-        ring.speedMin       = 2.f; ring.speedMax = 5.f;
-        ring.lifetimeMin    = 0.3f; ring.lifetimeMax = 0.6f;
-        ring.sizeScale      = 2.5f;
+        ring.coreColor      = { 0.88f, 1.0f,  0.88f, 1.0f  };
+        ring.edgeColor      = { 0.25f, 0.72f, 0.32f, 0.0f  };
+        ring.particleCount  = 260;
+        ring.duration       = 0.55f;
+        ring.speedMin       = 3.f;   ring.speedMax    = 8.f;
+        ring.lifetimeMin    = 0.25f; ring.lifetimeMax = 0.50f;
+        ring.sizeScale      = 2.8f;
 
-        ring.ring.radius         = 0.5f;
-        ring.ring.width          = 2.0f;
-        ring.ring.expandSpeed    = 25.f;
+        ring.ring.radius         = 1.0f;
+        ring.ring.width          = 2.5f;
+        ring.ring.expandSpeed    = 40.f;
         ring.ring.tiltX          = 0.f;
-        ring.ring.rotateSpeed    = 2.0f;
-        ring.ring.normalSpeedMin = 2.f;
-        ring.ring.normalSpeedMax = 6.f;
-
+        ring.ring.rotateSpeed    = 3.5f;
+        ring.ring.normalSpeedMin = 4.f;
+        ring.ring.normalSpeedMax = 10.f;
         def.layers.push_back(ring);
+        Register(std::move(def));
+    }
+    {
+        EffectDef def;
+        def.name    = "E_GaleRush_Trail";
+        def.element = ElementType::Wind;
+
+        // 후방 배기 분사 — 로켓 추진처럼 뒤로 집중 분출
+        // [내층] 밝고 좁은 배기 코어
+        {
+            EffectLayer core;
+            core.type           = EmitterType::Cone;
+            core.element        = ElementType::Wind;
+            core.overrideColors = true;
+            core.coreColor      = { 0.95f, 1.0f,  0.95f, 1.0f  };  // 거의 흰색 고온 코어
+            core.edgeColor      = { 0.20f, 0.78f, 0.30f, 0.0f  };
+            core.particleCount  = 70;
+            core.speedMin       = 12.f;  core.speedMax    = 32.f;
+            core.lifetimeMin    = 0.08f; core.lifetimeMax = 0.22f;
+            core.sizeScale      = 1.6f;
+            core.duration       = 0.22f;
+
+            core.cone.halfAngle     = 18.f;
+            core.cone.gravityScale  = 0.0f;
+            core.cone.startSizeMult = 2.2f;
+            core.cone.endSizeMult   = 0.0f;
+            core.cone.fadeAlpha     = true;
+            core.cone.fadeSize      = true;
+            def.layers.push_back(core);
+        }
+        // [외층] 넓게 퍼지는 초록 분사 연기
+        {
+            EffectLayer plume;
+            plume.type           = EmitterType::Cone;
+            plume.element        = ElementType::Wind;
+            plume.overrideColors = true;
+            plume.coreColor      = { 0.38f, 0.92f, 0.48f, 0.75f };
+            plume.edgeColor      = { 0.08f, 0.40f, 0.14f, 0.0f  };
+            plume.particleCount  = 55;
+            plume.speedMin       = 6.f;   plume.speedMax    = 18.f;
+            plume.lifetimeMin    = 0.14f; plume.lifetimeMax = 0.32f;
+            plume.sizeScale      = 2.8f;
+            plume.duration       = 0.22f;
+
+            plume.cone.halfAngle     = 36.f;
+            plume.cone.gravityScale  = 0.01f;
+            plume.cone.startSizeMult = 1.4f;
+            plume.cone.endSizeMult   = 0.0f;
+            plume.cone.fadeAlpha     = true;
+            plume.cone.fadeSize      = true;
+            def.layers.push_back(plume);
+        }
         Register(std::move(def));
     }
 
