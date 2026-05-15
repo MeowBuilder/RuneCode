@@ -350,14 +350,23 @@ void FluidSkillVFXManager::TrackEffect(int id, const XMFLOAT3& origin, const XMF
     if (id < 0 || id >= MAX_EFFECTS || !m_Slots[id].isActive) return;
     m_Slots[id].origin    = origin;
     m_Slots[id].direction = direction;
+
+    // 연결된 레이어도 같이 이동
+    int nextId = m_Slots[id].nextLinkedId;
+    if (nextId >= 0) TrackEffect(nextId, origin, direction);
 }
 
 void FluidSkillVFXManager::StopEffect(int id)
 {
     if (id < 0 || id >= MAX_EFFECTS) return;
     auto& slot = m_Slots[id];
-    slot.isActive    = false;
-    slot.useSequence = false;
+
+    // 연결된 다음 레이어를 먼저 기억해두고 (재귀 전에 초기화하면 잃어버림)
+    int nextId = slot.nextLinkedId;
+
+    slot.isActive     = false;
+    slot.useSequence  = false;
+    slot.nextLinkedId = -1;
     if (slot.useLightEmitter)
     {
         slot.useLightEmitter = false;
@@ -367,6 +376,9 @@ void FluidSkillVFXManager::StopEffect(int id)
     {
         slot.pSystem->Clear();
     }
+
+    // 체인을 따라 나머지 레이어도 모두 정리
+    if (nextId >= 0) StopEffect(nextId);
 }
 
 int FluidSkillVFXManager::SpawnFireTrailEffect(const XMFLOAT3& pos,
@@ -513,14 +525,20 @@ int FluidSkillVFXManager::SpawnEffectDef(const XMFLOAT3& origin, const XMFLOAT3&
                                           const EffectDef& def, bool isPlayerEffect)
 {
     int firstId = -1;
+    int prevId  = -1;
     for (const auto& layer : def.layers)
     {
-        // emitDelay 미지원 — 즉시 스폰. element는 EffectDef가 권위를 가짐
-        EffectLayer l   = layer;
-        l.element       = def.element;
+        EffectLayer l = layer;
+        l.element     = def.element;
 
         int id = SpawnEffectLayer(origin, direction, def.name, l, isPlayerEffect);
-        if (id >= 0 && firstId < 0) firstId = id;
+        if (id < 0) continue;
+
+        if (firstId < 0) firstId = id;
+
+        // 이전 레이어 슬롯과 연결 — StopEffect/TrackEffect가 체인을 따라 전체 정리
+        if (prevId >= 0) m_Slots[prevId].nextLinkedId = id;
+        prevId = id;
     }
     return firstId;
 }

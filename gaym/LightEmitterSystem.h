@@ -70,8 +70,25 @@ struct alignas(256) LightEmitterConstants
     float    burstGroundY;
     float    coneSpawnRadius; // Cone 스폰 분산 반경 (0=점 스폰)
     float    _bpad1;
+
+    // [256-287] Crescent 이미터 (8 floats = 32 bytes)
+    float    crescentRadius;
+    float    crescentThickness;
+    float    crescentArcAngle;    // 도 단위
+    float    crescentArcOffset;   // 도 단위 (시작 각도 오프셋)
+    float    crescentTiltX;       // 도 단위 → 셰이더에서 rad 변환
+    float    crescentNSpeedMin;
+    float    crescentNSpeedMax;
+    float    crescentRotateSpeed;
+
+    // [288-319] 카메라 벡터 (Crescent 스크린-페이싱 스폰용)
+    XMFLOAT3 camRight3; float _crpad;
+    XMFLOAT3 camUp3;    float _cupad;
+
+    // [320-511] padding (48 floats = 192 bytes)
+    float    _extPad[48];
 };
-static_assert(sizeof(LightEmitterConstants) == 256, "LightEmitterConstants must be 256 bytes");
+static_assert(sizeof(LightEmitterConstants) == 512, "LightEmitterConstants must be 512 bytes");
 
 // 경량 파티클 이미터
 // - 5종 기본 이미터 (Linear/Cone/Sphere/Ring/Burst) 를 컴퓨트 셰이더로 처리
@@ -144,6 +161,10 @@ private:
     bool        m_bNeedsSpawn = false;
 
     uint32_t    m_FrameSeed = 0;
+
+    // 직전 Render() 에서 저장한 카메라 벡터 (다음 Dispatch Crescent 스폰에 사용)
+    XMFLOAT3    m_LastCamRight = { 1.f, 0.f, 0.f };
+    XMFLOAT3    m_LastCamUp    = { 0.f, 1.f, 0.f };
 
     D3D12_RESOURCE_STATES m_eStateBufState  = D3D12_RESOURCE_STATE_COMMON;
     D3D12_RESOURCE_STATES m_eRenderBufState = D3D12_RESOURCE_STATE_COMMON;
