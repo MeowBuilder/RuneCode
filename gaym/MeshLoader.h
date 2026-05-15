@@ -7,6 +7,10 @@
 
 #include "Mesh.h"
 
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 
 
 class Scene; // Forward declaration
@@ -96,6 +100,17 @@ private:
 
 
     static void LoadMaterialsInfoFromFile(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList, FILE* pInFile, GameObject* pGameObject, Scene* pScene, const std::string& strMeshDir);
+
+
+
+    // ── 메쉬 GPU 리소스 공유 캐시 ─────────────────────────────────────────────
+    //   같은 파일을 N번 로드해도 SkinnedMesh/MeshFromFile 등은 1번만 생성.
+    //   <Mesh>: 디렉티브 순서대로 캐싱. t_meshCounter 가 frame 카운터.
+    //   AddRef 로 재사용 → GameObject hierarchy 자체는 매번 새로 생성됨 (per-instance state OK).
+    static std::unordered_map<std::string, std::vector<Mesh*>> s_meshCache;
+    thread_local static std::string                            t_currentLoadPath;
+    thread_local static int                                    t_meshCounter;
+    thread_local static bool                                   t_isCacheHit;
 
 };
 

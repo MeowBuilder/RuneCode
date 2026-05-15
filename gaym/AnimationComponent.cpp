@@ -8,6 +8,9 @@
 #include "Camera.h"
 #include <functional>
 #include <vector>
+#include <unordered_map>
+#include <memory>
+#include <string>
 
 bool AnimationComponent::s_bDebugStaticPose = false;
 int  AnimationComponent::s_nGlobalFrame    = 0;
@@ -67,7 +70,23 @@ void AnimationComponent::CollectHierarchyNodes(GameObject* pGameObject)
 
 void AnimationComponent::LoadAnimation(const char* pstrFileName)
 {
+    // AnimationSet 공유 캐시 — 같은 .Anim.bin 은 한 번만 로드 후 모든 enemy 인스턴스가 공유.
+    //   shared_ptr 이므로 마지막 enemy 가 해제되면 자동 정리. 별도 lifetime 관리 불필요.
+    //   Demon_Anim.bin 등 수 MB 짜리 파일 N회 디스크 읽기 + 파싱을 1회로 압축.
+    static std::unordered_map<std::string, std::shared_ptr<AnimationSet>> s_animCache;
+
+    std::string key = pstrFileName ? pstrFileName : "";
+    if (key.empty()) return;
+
+    auto it = s_animCache.find(key);
+    if (it != s_animCache.end())
+    {
+        m_pAnimationSet = it->second;
+        return;
+    }
+
     m_pAnimationSet->LoadAnimationFromFile(pstrFileName);
+    s_animCache[key] = m_pAnimationSet;
 }
 
 void AnimationComponent::Play(std::string strClipName, bool bLoop)

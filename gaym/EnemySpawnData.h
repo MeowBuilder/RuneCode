@@ -71,11 +71,43 @@ struct EnemySpawnData
     }
 };
 
+// 한 웨이브의 스폰 정보. 다중 웨이브 룸에서 사용.
+//   trigger 는 직전 웨이브 대비 조건 (첫 웨이브는 Immediate 권장).
+//   AfterTimer:        직전 웨이브 스폰 시점부터 fTriggerValue 초 경과
+//   AfterPrevCleared:  직전 웨이브의 적이 전부 사망
+//   AfterKillN:        직전 웨이브에서 nKillThreshold 마리 처치
+struct EnemyWave
+{
+    enum class TriggerType
+    {
+        Immediate,
+        AfterTimer,
+        AfterPrevCleared,
+        AfterKillN
+    };
+
+    std::vector<std::pair<std::string, XMFLOAT3>> spawns;
+    TriggerType trigger        = TriggerType::Immediate;
+    float       fTriggerValue  = 0.0f;   // AfterTimer 의 초
+    int         nKillThreshold = 0;      // AfterKillN 의 임계 수
+
+    void AddSpawn(const std::string& presetName, const XMFLOAT3& position)
+    {
+        spawns.push_back({ presetName, position });
+    }
+    void AddSpawn(const std::string& presetName, float x, float y, float z)
+    {
+        spawns.push_back({ presetName, XMFLOAT3(x, y, z) });
+    }
+};
+
 // Configuration for spawning enemies in a room
+//   - 단일 웨이브 (기존): m_vEnemySpawns 만 채우면 됨
+//   - 다중 웨이브: m_vWaves 를 채우면 우선 사용됨 (m_vEnemySpawns 는 무시)
 struct RoomSpawnConfig
 {
-    // List of (preset name, position) pairs for enemies to spawn
-    std::vector<std::pair<std::string, XMFLOAT3>> m_vEnemySpawns;
+    std::vector<std::pair<std::string, XMFLOAT3>> m_vEnemySpawns;   // legacy 호환
+    std::vector<EnemyWave>                        m_vWaves;          // 신규 다중 웨이브
 
     void AddSpawn(const std::string& presetName, const XMFLOAT3& position)
     {
@@ -87,8 +119,24 @@ struct RoomSpawnConfig
         m_vEnemySpawns.push_back({ presetName, XMFLOAT3(x, y, z) });
     }
 
+    // 다중 웨이브 추가 헬퍼 — 빈 EnemyWave 를 push 후 reference 리턴
+    EnemyWave& AddWave(EnemyWave::TriggerType trigger = EnemyWave::TriggerType::Immediate,
+                       float fTriggerValue = 0.0f, int nKillThreshold = 0)
+    {
+        EnemyWave w;
+        w.trigger        = trigger;
+        w.fTriggerValue  = fTriggerValue;
+        w.nKillThreshold = nKillThreshold;
+        m_vWaves.push_back(std::move(w));
+        return m_vWaves.back();
+    }
+
     void Clear()
     {
         m_vEnemySpawns.clear();
+        m_vWaves.clear();
     }
+
+    // 호환성: m_vWaves 가 비어있으면 m_vEnemySpawns 를 단일 Immediate 웨이브로 취급
+    bool HasMultiWave() const { return !m_vWaves.empty(); }
 };

@@ -101,6 +101,38 @@ protected:
     GameObject* m_pPlayerTarget = nullptr;
     bool m_bEnemiesSpawned = false;
 
+    // 다중 웨이브 상태 — m_SpawnConfig.HasMultiWave() 일 때만 사용 (오프라인 한정)
+    //   m_nNextWaveIndex == m_vWaves.size() 이면 모든 웨이브 스폰 완료 → 클리어 판정 활성
+    int   m_nNextWaveIndex            = 0;
+    float m_fSinceLastWaveSpawn       = 0.0f;   // AfterTimer 트리거용
+    int   m_nKillsAtLastWaveSpawn     = 0;      // 직전 웨이브 스폰 시점의 누적 dead count
+    int   m_nLastWaveSpawnedSize      = 0;      // 직전 웨이브가 실제 스폰한 적 마릿수
+
+    // 웨이브 등장 연출: 2 단계
+    //   Phase A (portal countdown): 공중 포탈 VFX 만 표시, 적 아직 미등장 (fDelay > 0).
+    //   Phase B (fall): 적이 sky 위치에 실제 스폰 → kFallDuration 동안 ease-in 낙하.
+    //                   pEnemy != nullptr 면 fall 단계.
+    struct PendingWaveSpawn
+    {
+        std::string preset;
+        XMFLOAT3    pos               = { 0, 0, 0 };   // 최종 ground 위치
+        float       fDelay            = 0.0f;          // Phase A 남은 카운트다운
+        int         nPortalVFXId      = -1;            // 공중 포탈
+        int         nGroundVFXId      = -1;            // 지면 경고 링
+
+        GameObject* pEnemy            = nullptr;       // Phase B 진입 시점에 세팅
+        float       fFallTimer        = 0.0f;
+        float       fSkyY             = 0.0f;          // 낙하 시작 Y
+        float       fGroundY          = 0.0f;          // 낙하 종료 Y
+    };
+    std::vector<PendingWaveSpawn> m_vPendingSpawns;
+
+    // 헬퍼 — m_SpawnConfig 의 트리거 평가 + 스폰. 오프라인에서만 호출.
+    void TrySpawnNextWave(float dt);
+    void SpawnSingleWave(const EnemyWave& wave);
+    void UpdatePendingSpawns(float dt);
+    void CleanupPendingSpawns();
+
     // Drop item system
     Scene* m_pScene = nullptr;
     GameObject* m_pDropItem = nullptr;

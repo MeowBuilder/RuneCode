@@ -3,6 +3,9 @@
 #include "EffectRegistry.h"
 #include "ScreenSpaceFluid.h"
 #include "DescriptorHeap.h"
+#include "Dx12App.h"
+#include "Scene.h"
+#include "Camera.h"
 #include <algorithm>
 #include <cmath>
 
@@ -607,8 +610,37 @@ void FluidSkillVFXManager::ExplodeEffect(int id, const XMFLOAT3& impactPos)
     slot.pSystem->SetExplodeFade(1.0f);  // 즉시 폭발 모드: coreColor 강제 + 크기 축소 준비
 }
 
+void FluidSkillVFXManager::UpdateCachedFrustum()
+{
+    m_frustumValid = false;
+    auto* pApp = Dx12App::GetInstance();
+    if (!pApp) return;
+    auto* pScene = pApp->GetScene();
+    if (!pScene) return;
+    auto* pCam = pScene->GetCamera();
+    if (!pCam) return;
+
+    XMMATRIX matProj = XMLoadFloat4x4(&pCam->GetProjectionMatrix());
+    XMMATRIX matView = XMLoadFloat4x4(&pCam->GetViewMatrix());
+    BoundingFrustum::CreateFromMatrix(m_cachedFrustum, matProj);
+    XMVECTOR det;
+    XMMATRIX matInvView = XMMatrixInverse(&det, matView);
+    m_cachedFrustum.Transform(m_cachedFrustum, matInvView);
+    m_frustumValid = true;
+}
+
+bool FluidSkillVFXManager::IsSlotVisible(const FluidVFXSlot& slot) const
+{
+    if (!m_frustumValid) return true;   // fallback — 다 렌더
+    // 슬롯 origin 중심 sphere — 광선 emitter / 큰 SPH 도 커버할 정도로 넉넉히
+    BoundingSphere sph(slot.origin, 22.0f);
+    return m_cachedFrustum.Intersects(sph);
+}
+
 void FluidSkillVFXManager::Update(float deltaTime)
 {
+    UpdateCachedFrustum();
+
     for (auto& slot : m_Slots)
     {
         if (!slot.isActive) continue;
@@ -778,6 +810,7 @@ void FluidSkillVFXManager::Render(ID3D12GraphicsCommandList* pCommandList,
     for (auto& slot : m_Slots)
     {
         if (!slot.isActive) continue;
+        if (!IsSlotVisible(slot)) continue;   // frustum cull
         if (slot.useLightEmitter)
         {
             slot.pLightEmitter->Render(pCommandList, viewProj, camRight, camUp);
@@ -797,6 +830,7 @@ void FluidSkillVFXManager::RenderEnemyEffects(ID3D12GraphicsCommandList* pComman
     {
         if (!slot.isActive) continue;
         if (slot.isPlayerEffect) continue;  // 플레이어 슬롯 건너뜀
+        if (!IsSlotVisible(slot)) continue;
         if (slot.useLightEmitter)
         {
             slot.pLightEmitter->Render(pCommandList, viewProj, camRight, camUp);

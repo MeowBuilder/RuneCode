@@ -1,16 +1,19 @@
 ﻿// GameObject.inl  — 템플릿 '정의'만 둔다
 #pragma once
 #include <type_traits>
+#include <typeinfo>
 #include <utility>
 
 template<typename T>
 T* GameObject::GetComponent()
 {
 	static_assert(std::is_base_of_v<Component, T>, "T must derive from Component");
+	// typeid 비교 — dynamic_cast 대비 수십배 빠름. 단 Component 파생 클래스간 상속이 없을 때만 안전.
+	//   현재 프로젝트의 모든 컴포넌트는 Component 를 직접 상속하므로 OK.
 	for (auto& c : m_vComponents)
 	{
-		if (auto p = dynamic_cast<T*>(c.get()))
-			return p;
+		if (typeid(*c) == typeid(T))
+			return static_cast<T*>(c.get());
 	}
 	return nullptr;
 }

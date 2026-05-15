@@ -176,6 +176,13 @@ private:
     //   결과: 보스 VFX 가 풀 채워도 플레이어 스킬 시각이 보장됨. 비플레이어 스폰은 free 만 사용.
     int FindSlotForSpawn(bool isPlayerEffect);
 
+    // 프레임 단위 frustum 캐시 — Update 시작 시 Camera 로부터 갱신, Render 에서 슬롯 cull 에 사용.
+    //   m_frustumValid=false 면 cull 없이 모두 렌더 (안전 fallback).
+    void UpdateCachedFrustum();
+    bool IsSlotVisible(const FluidVFXSlot& slot) const;
+    DirectX::BoundingFrustum m_cachedFrustum;
+    bool                     m_frustumValid = false;
+
     std::array<FluidVFXSlot, MAX_EFFECTS> m_Slots;
     uint32_t         m_nextSpawnGeneration = 0;
     ID3D12Device*    m_pDevice    = nullptr; // 경량 이미터 지연 초기화용

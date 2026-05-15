@@ -794,6 +794,26 @@ bool MapLoader::LoadIntoScene(
         }
     }
 
+    // [임시 — 웨이브 시스템 검증용]
+    //   웨이브당 최대 kPerWave 마리로 자동 분할 (프레임 압박 완화 + 페이즈 체감).
+    //   첫 웨이브 Immediate, 이후는 AfterPrevCleared (직전 웨이브 전멸 시).
+    //   JSON 직접 지정 (waves 필드) 추가 전까지의 임시 처리.
+    constexpr size_t kPerWave = 7;
+    if (spawnConfig.m_vEnemySpawns.size() > kPerWave && !spawnConfig.HasMultiWave())
+    {
+        const auto& src = spawnConfig.m_vEnemySpawns;
+        for (size_t i = 0; i < src.size(); i += kPerWave)
+        {
+            EnemyWave w;
+            w.trigger = (i == 0) ? EnemyWave::TriggerType::Immediate
+                                 : EnemyWave::TriggerType::AfterPrevCleared;
+            size_t end = (std::min)(i + kPerWave, src.size());
+            for (size_t k = i; k < end; ++k) w.spawns.push_back(src[k]);
+            spawnConfig.m_vWaves.push_back(std::move(w));
+        }
+        // m_vEnemySpawns 는 그대로 두지만 HasMultiWave()==true 라 무시됨
+    }
+
     // Assign spawn config to current room
     CRoom* pRoom = pScene->GetCurrentRoom();
     if (pRoom) {

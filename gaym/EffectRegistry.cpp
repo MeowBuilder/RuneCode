@@ -912,6 +912,77 @@ void EffectRegistry::Initialize()
         Register(std::move(def));
     }
 
+    // ──────────────────────────────────────────────────────────────────────────
+    // Spawn_Portal — 일반 몬스터 웨이브 등장용 공중 포탈 (강화판)
+    //   웨이브 시작 시각 신호. 크고 밝게 + 입자 위/아래로 분사하여 볼륨감.
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Spawn_Portal";
+        def.element = ElementType::Wind;
+
+        EffectLayer ring;
+        ring.type           = EmitterType::Ring;
+        ring.element        = ElementType::Wind;
+        ring.particleCount  = 320;
+        ring.overrideColors = true;
+        ring.coreColor      = { 1.00f, 0.80f, 1.00f, 1.0f  };  // 밝은 핑크-라벤더
+        ring.edgeColor      = { 0.60f, 0.20f, 0.95f, 0.55f };
+        ring.sizeScale      = 2.8f;
+        ring.speedMin       = 1.0f;
+        ring.speedMax       = 2.5f;
+        ring.lifetimeMin    = 0.4f;
+        ring.lifetimeMax    = 0.8f;
+        ring.duration       = 9999.f;
+        ring.emitRate       = 220.f;
+
+        ring.ring.radius         = 5.0f;
+        ring.ring.width          = 1.2f;
+        ring.ring.expandSpeed    = 2.0f;    // 살짝 펄스
+        ring.ring.tiltX          = 0.f;
+        ring.ring.rotateSpeed    = 7.0f;
+        ring.ring.normalSpeedMin = 0.6f;
+        ring.ring.normalSpeedMax = 2.0f;    // 위로 솟구침 → 볼륨감
+
+        def.layers.push_back(ring);
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Spawn_PortalGround — 지면 경고 링 (적 착지 예정 지점 표시, 보조 인디케이터)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Spawn_PortalGround";
+        def.element = ElementType::Wind;
+
+        EffectLayer ring;
+        ring.type           = EmitterType::Ring;
+        ring.element        = ElementType::Wind;
+        ring.particleCount  = 140;
+        ring.overrideColors = true;
+        ring.coreColor      = { 1.00f, 0.40f, 0.70f, 0.9f  };
+        ring.edgeColor      = { 0.50f, 0.05f, 0.50f, 0.0f  };
+        ring.sizeScale      = 2.0f;
+        ring.speedMin       = 0.4f;
+        ring.speedMax       = 1.0f;
+        ring.lifetimeMin    = 0.5f;
+        ring.lifetimeMax    = 0.9f;
+        ring.duration       = 9999.f;
+        ring.emitRate       = 160.f;
+
+        ring.ring.radius         = 3.5f;
+        ring.ring.width          = 0.6f;
+        ring.ring.expandSpeed    = 1.0f;
+        ring.ring.tiltX          = 0.f;
+        ring.ring.rotateSpeed    = 4.0f;
+        ring.ring.normalSpeedMin = 0.2f;
+        ring.ring.normalSpeedMax = 0.6f;
+
+        def.layers.push_back(ring);
+        Register(std::move(def));
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ▌ 물결술사 스킬 VFX
     // ═══════════════════════════════════════════════════════════════════════════

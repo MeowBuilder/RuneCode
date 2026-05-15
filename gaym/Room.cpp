@@ -20,6 +20,9 @@ CRoom::CRoom()
 
 CRoom::~CRoom()
 {
+    // 미처 등장 못 한 웨이브 포탈 VFX 정리
+    CleanupPendingSpawns();
+
     // Portal VFX 3 레이어 정리 — Scene/VFXManager 가 살아있을 때만
     if (m_pScene)
     {
@@ -66,6 +69,19 @@ void CRoom::Update(float deltaTime)
         if (!m_bEnemiesSpawned)
         {
             SpawnEnemies();
+        }
+
+        // 다중 웨이브: 첫 스폰 이후에도 다음 웨이브 트리거를 매 프레임 평가
+        //   오프라인 모드에서만 동작 — 온라인은 서버 권위 (SpawnEnemies 안에서 skip 됨)
+        if (m_SpawnConfig.HasMultiWave())
+        {
+            NetworkManager* pNet = NetworkManager::GetInstance();
+            bool bOnline = (pNet && pNet->IsConnected());
+            if (!bOnline)
+            {
+                UpdatePendingSpawns(deltaTime);
+                TrySpawnNextWave(deltaTime);
+            }
         }
 
         // Update lava geyser manager
@@ -236,6 +252,18 @@ void CRoom::CheckClearCondition()
     if (m_eState != RoomState::Active || !m_bEnemiesSpawned)
         return;
 
+    // 다중 웨이브: 모든 웨이브 스폰 + 모든 pending 등장 연출 완료 전에는 클리어 판정 안 함
+    //   - m_nNextWaveIndex < size:  아직 트리거 안 된 웨이브 남음
+    //   - !m_vPendingSpawns.empty(): 마지막 웨이브 포탈 카운트다운 중 (실제 적 아직 미등장)
+    //     이 race 가 빠지면 직전 웨이브 전멸 직후 ClearCondition 이 오판됨.
+    if (m_SpawnConfig.HasMultiWave())
+    {
+        if (m_nNextWaveIndex < static_cast<int>(m_SpawnConfig.m_vWaves.size()))
+            return;
+        if (!m_vPendingSpawns.empty())
+            return;
+    }
+
     // Check if all enemies are dead
     if (m_nTotalEnemies > 0 && m_nDeadEnemies >= m_nTotalEnemies)
     {
@@ -288,6 +316,24 @@ void CRoom::SpawnEnemies()
         return;
     }
 
+    // 다중 웨이브 모드: 첫 웨이브만 스폰. 나머지는 Update 의 TrySpawnNextWave 가 처리.
+    if (m_SpawnConfig.HasMultiWave())
+    {
+        wchar_t buf[128];
+        swprintf_s(buf, L"[Room] Multi-wave config (%zu waves) — spawning wave 0\n",
+                   m_SpawnConfig.m_vWaves.size());
+        OutputDebugString(buf);
+
+        // 첫 웨이브는 강제로 즉시 스폰 (trigger 설정과 무관)
+        const EnemyWave& first = m_SpawnConfig.m_vWaves[0];
+        SpawnSingleWave(first);
+        m_nNextWaveIndex          = 1;
+        m_fSinceLastWaveSpawn     = 0.0f;
+        m_nKillsAtLastWaveSpawn   = m_nDeadEnemies;
+        m_nLastWaveSpawnedSize    = static_cast<int>(first.spawns.size());
+        return;
+    }
+
     if (m_SpawnConfig.m_vEnemySpawns.empty())
     {
         OutputDebugString(L"[Room] No spawn config set - no enemies to spawn\n");
@@ -299,6 +345,189 @@ void CRoom::SpawnEnemies()
     OutputDebugString(buffer);
 
     m_pSpawner->SpawnRoomEnemies(this, m_SpawnConfig, m_pPlayerTarget);
+}
+
+// 등장 연출 파라미터 (CRoom 전역)
+namespace {
+    constexpr float kSpawnPortalDelay = 0.7f;   // Phase A: 포탈 표시 시간
+    constexpr float kSpawnPortalY     = 6.0f;   // 공중 포탈/낙하 시작 높이
+    constexpr float kSpawnFallTime    = 0.4f;   // Phase B: 낙하 시간
+}
+
+void CRoom::SpawnSingleWave(const EnemyWave& wave)
+{
+    if (!m_pSpawner) return;
+    if (wave.spawns.empty()) return;
+
+    VFXManager* pVFX = (m_pScene ? m_pScene->GetVFXManager() : nullptr);
+
+    // 스폰 stagger — 한 프레임에 mesh/texture 로드가 몰리면 hitch 발생.
+    //   포탈은 즉시 다 띄우고, 실제 적 등장(Phase A 종료)만 살짝씩 시간 차.
+    constexpr float kStaggerPerSpawn = 0.08f;
+    int spawnIdx = 0;
+
+    for (const auto& s : wave.spawns)
+    {
+        PendingWaveSpawn pending;
+        pending.preset = s.first;
+        pending.pos    = s.second;
+        pending.fDelay = kSpawnPortalDelay + spawnIdx * kStaggerPerSpawn;
+
+        if (pVFX)
+        {
+            XMFLOAT3 up(0.0f, 1.0f, 0.0f);
+            // 공중 포탈 (모두 즉시 표시 — VFX 자체는 가벼움)
+            XMFLOAT3 portalPos{ s.second.x, s.second.y + kSpawnPortalY, s.second.z };
+            pending.nPortalVFXId = pVFX->Spawn("Spawn_Portal", portalPos, up, 0u, false);
+            XMFLOAT3 groundPos{ s.second.x, s.second.y + 0.15f, s.second.z };
+            pending.nGroundVFXId = pVFX->Spawn("Spawn_PortalGround", groundPos, up, 0u, false);
+        }
+
+        m_vPendingSpawns.push_back(std::move(pending));
+        ++spawnIdx;
+    }
+
+    // 웨이브 시작 임팩트 — 카메라 쉐이크 (가볍게)
+    if (m_pScene)
+    {
+        if (auto* pCam = m_pScene->GetCamera())
+            pCam->StartShake(0.6f, 0.3f);
+    }
+
+    wchar_t buf[160];
+    swprintf_s(buf, L"[Room] Scheduled wave with %zu pending spawns (portal %.2fs + fall %.2fs)\n",
+               wave.spawns.size(), kSpawnPortalDelay, kSpawnFallTime);
+    OutputDebugString(buf);
+}
+
+void CRoom::UpdatePendingSpawns(float dt)
+{
+    if (m_vPendingSpawns.empty()) return;
+
+    VFXManager* pVFX = (m_pScene ? m_pScene->GetVFXManager() : nullptr);
+
+    for (auto it = m_vPendingSpawns.begin(); it != m_vPendingSpawns.end(); )
+    {
+        // Phase A — 포탈 카운트다운 중
+        if (it->pEnemy == nullptr)
+        {
+            it->fDelay -= dt;
+            if (it->fDelay <= 0.0f)
+            {
+                // 포탈에서 적 emerge — sky 위치에 spawn 후 Phase B 진입
+                XMFLOAT3 skyPos = it->pos;
+                skyPos.y += kSpawnPortalY;
+
+                GameObject* pNewEnemy = nullptr;
+                if (m_pSpawner)
+                    pNewEnemy = m_pSpawner->SpawnEnemy(this, it->preset, skyPos, m_pPlayerTarget);
+
+                if (pNewEnemy)
+                {
+                    it->pEnemy     = pNewEnemy;
+                    it->fFallTimer = 0.0f;
+                    it->fSkyY      = skyPos.y;
+                    it->fGroundY   = it->pos.y;
+                    // 포탈은 낙하 동안에도 보이게 그대로 둠 (착지 시 stop)
+                }
+                else
+                {
+                    // 스폰 실패 — 포탈만 닫고 제거
+                    if (pVFX && it->nPortalVFXId >= 0) pVFX->Stop(it->nPortalVFXId);
+                    if (pVFX && it->nGroundVFXId >= 0) pVFX->Stop(it->nGroundVFXId);
+                    it = m_vPendingSpawns.erase(it);
+                    continue;
+                }
+            }
+            ++it;
+            continue;
+        }
+
+        // Phase B — 적 낙하 중
+        it->fFallTimer += dt;
+        float t = (std::min)(it->fFallTimer / kSpawnFallTime, 1.0f);
+        // ease-in (gravity 느낌): y = sky - (sky-ground) * t^2
+        float curY = it->fSkyY - (it->fSkyY - it->fGroundY) * (t * t);
+
+        if (auto* pT = it->pEnemy->GetTransform())
+        {
+            XMFLOAT3 p = pT->GetPosition();
+            p.y = curY;
+            pT->SetPosition(p);
+        }
+
+        if (t >= 1.0f)
+        {
+            // 착지 — 포탈/지면링 stop, 큐에서 제거
+            if (pVFX && it->nPortalVFXId >= 0) pVFX->Stop(it->nPortalVFXId);
+            if (pVFX && it->nGroundVFXId >= 0) pVFX->Stop(it->nGroundVFXId);
+            it = m_vPendingSpawns.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
+void CRoom::CleanupPendingSpawns()
+{
+    if (m_vPendingSpawns.empty()) return;
+    VFXManager* pVFX = (m_pScene ? m_pScene->GetVFXManager() : nullptr);
+    for (auto& p : m_vPendingSpawns)
+    {
+        if (pVFX && p.nPortalVFXId >= 0) pVFX->Stop(p.nPortalVFXId);
+        if (pVFX && p.nGroundVFXId >= 0) pVFX->Stop(p.nGroundVFXId);
+    }
+    m_vPendingSpawns.clear();
+}
+
+void CRoom::TrySpawnNextWave(float dt)
+{
+    if (m_nNextWaveIndex >= static_cast<int>(m_SpawnConfig.m_vWaves.size()))
+        return;   // 더 이상 스폰할 웨이브 없음
+
+    m_fSinceLastWaveSpawn += dt;
+
+    const EnemyWave& next = m_SpawnConfig.m_vWaves[m_nNextWaveIndex];
+
+    bool bTrigger = false;
+    switch (next.trigger)
+    {
+    case EnemyWave::TriggerType::Immediate:
+        bTrigger = true;
+        break;
+    case EnemyWave::TriggerType::AfterTimer:
+        bTrigger = (m_fSinceLastWaveSpawn >= next.fTriggerValue);
+        break;
+    case EnemyWave::TriggerType::AfterPrevCleared:
+    {
+        // 직전 웨이브가 스폰한 적이 전부 사망했는지 확인
+        int killsSinceWaveStart = m_nDeadEnemies - m_nKillsAtLastWaveSpawn;
+        bTrigger = (m_nLastWaveSpawnedSize > 0
+                 && killsSinceWaveStart >= m_nLastWaveSpawnedSize);
+        break;
+    }
+    case EnemyWave::TriggerType::AfterKillN:
+    {
+        int killsSinceWaveStart = m_nDeadEnemies - m_nKillsAtLastWaveSpawn;
+        bTrigger = (killsSinceWaveStart >= next.nKillThreshold);
+        break;
+    }
+    }
+
+    if (bTrigger)
+    {
+        wchar_t buf[128];
+        swprintf_s(buf, L"[Room] Wave %d triggered\n", m_nNextWaveIndex);
+        OutputDebugString(buf);
+
+        SpawnSingleWave(next);
+        ++m_nNextWaveIndex;
+        m_fSinceLastWaveSpawn   = 0.0f;
+        m_nKillsAtLastWaveSpawn = m_nDeadEnemies;
+        m_nLastWaveSpawnedSize  = static_cast<int>(next.spawns.size());
+    }
 }
 
 void CRoom::SpawnDropItem()

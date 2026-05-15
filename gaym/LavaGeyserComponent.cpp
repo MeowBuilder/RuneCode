@@ -121,30 +121,59 @@ void LavaGeyserComponent::Erupt()
     // 2. 인디케이터 숨기기 (폭발 시 사라짐)
     HideIndicator();
 
-    // 3. LightEmitterSystem(Cone, 위 방향)으로 용암 기둥 폭발!
+    // 3. LightEmitterSystem(Cone, 위 방향)으로 용암 폭발!
+    //   duration 명시 필수 — 기본 -1(무한)이면 입자 영원히 분사됨.
     if (m_pVFXManager && !m_bEruptSpawned)
     {
-        EffectLayer layer;
-        layer.type          = EmitterType::Cone;
-        layer.element       = ElementType::Fire;
-        layer.particleCount = 600;                       // 큰 분출 (1회 Burst)
-        layer.coreColor     = { 1.0f, 0.6f, 0.1f, 1.0f };
-        layer.edgeColor     = { 0.8f, 0.15f, 0.0f, 0.0f };
-        layer.sizeScale     = 1.4f;
-        layer.speedMin      = 18.0f;
-        layer.speedMax      = 55.0f;
-        layer.lifetimeMin   = 0.18f;
-        layer.lifetimeMax   = 0.55f;
-        layer.cone.halfAngle     = 18.0f;                // 좁은 기둥
-        layer.cone.gravityScale  = 0.4f;                 // 약한 중력 (오를 때 자연 감속)
-        layer.cone.startSizeMult = 1.0f;
-        layer.cone.endSizeMult   = 0.5f;
-        layer.cone.fadeAlpha     = true;
-        layer.cone.fadeSize      = true;
+        // [Layer 1] 두꺼운 폭발 콘 (메인) — 넓고 강렬
+        EffectLayer burst;
+        burst.type          = EmitterType::Cone;
+        burst.element       = ElementType::Fire;
+        burst.overrideColors = true;
+        burst.particleCount = 900;
+        burst.coreColor     = { 1.00f, 0.70f, 0.15f, 1.0f };  // 밝은 주황
+        burst.edgeColor     = { 0.85f, 0.10f, 0.00f, 0.0f };  // 짙은 적
+        burst.sizeScale     = 3.0f;
+        burst.speedMin      = 28.0f;
+        burst.speedMax      = 78.0f;                           // 위로 더 강하게
+        burst.lifetimeMin   = 0.40f;
+        burst.lifetimeMax   = 0.95f;
+        burst.duration      = 0.5f;                            // 명시! 0.5s 후 emission 종료
+        burst.cone.halfAngle     = 20.0f;                      // 38 → 20 좁게 (기둥 컨셉 유지)
+        burst.cone.gravityScale  = 0.35f;                      // 약한 중력 — 높게 솟음
+        burst.cone.startSizeMult = 1.7f;
+        burst.cone.endSizeMult   = 0.3f;
+        burst.cone.fadeAlpha     = true;
+        burst.cone.fadeSize      = true;
 
-        // direction = 위쪽 (Y+)
         m_pVFXManager->SpawnLightLayer(m_vTargetPosition, XMFLOAT3(0, 1, 0),
-                                       layer, /*isPlayer*/false);
+                                       burst, /*isPlayer*/false);
+
+        // [Layer 2] 지면 방사 링 (충격파) — 폭발 확산감
+        EffectLayer ring;
+        ring.type          = EmitterType::Ring;
+        ring.element       = ElementType::Fire;
+        ring.overrideColors = true;
+        ring.particleCount = 220;
+        ring.coreColor     = { 1.00f, 0.55f, 0.10f, 1.0f };
+        ring.edgeColor     = { 0.60f, 0.05f, 0.00f, 0.0f };
+        ring.sizeScale     = 2.4f;
+        ring.speedMin      = 3.0f;
+        ring.speedMax      = 6.0f;
+        ring.lifetimeMin   = 0.35f;
+        ring.lifetimeMax   = 0.7f;
+        ring.duration      = 0.4f;
+        ring.ring.radius         = m_fRadius * 0.5f;
+        ring.ring.width          = 1.0f;
+        ring.ring.expandSpeed    = m_fRadius * 1.2f;   // 빠르게 외곽으로
+        ring.ring.tiltX          = 0.f;
+        ring.ring.rotateSpeed    = 2.0f;
+        ring.ring.normalSpeedMin = 1.0f;
+        ring.ring.normalSpeedMax = 3.0f;
+
+        m_pVFXManager->SpawnLightLayer(m_vTargetPosition, XMFLOAT3(0, 1, 0),
+                                       ring, /*isPlayer*/false);
+
         m_bEruptSpawned = true;
     }
 }

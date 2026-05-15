@@ -131,6 +131,14 @@ void MeshLoader::LoadMaterialsInfoFromFile(ID3D12Device* pd3dDevice, ID3D12Graph
 
 
 
+// 같은 파일에서 같은 순서로 등장하는 Mesh* 를 공유 — GPU 버텍스/인덱스 버퍼 한 번만 생성.
+// 키: filepath, 값: <Mesh> 디렉티브 순서대로의 Mesh* 리스트.
+// LoadFrameHierarchyFromFile 에서 frame 순회 시 정수 counter 와 함께 사용.
+std::unordered_map<std::string, std::vector<Mesh*>> MeshLoader::s_meshCache;
+thread_local std::string                            MeshLoader::t_currentLoadPath;
+thread_local int                                    MeshLoader::t_meshCounter = 0;
+thread_local bool                                   MeshLoader::t_isCacheHit  = false;
+
 GameObject* MeshLoader::LoadGeometryFromFile(Scene* pScene, ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList, ID3D12RootSignature* pd3dGraphicsRootSignature, const char* pstrFileName)
 {
 	FILE* pInFile = NULL;
@@ -144,6 +152,11 @@ GameObject* MeshLoader::LoadGeometryFromFile(Scene* pScene, ID3D12Device* pd3dDe
 	std::string strMeshDir = pstrFileName;
 	size_t lastSlash = strMeshDir.find_last_of("/\\");
 	strMeshDir = (lastSlash != std::string::npos) ? strMeshDir.substr(0, lastSlash + 1) : "";
+
+	// 메쉬 공유 캐시 초기화 (이 로드 세션 전용 스레드로컬 상태)
+	t_currentLoadPath = pstrFileName ? pstrFileName : "";
+	t_meshCounter     = 0;
+	t_isCacheHit      = (s_meshCache.find(t_currentLoadPath) != s_meshCache.end());
 
 	GameObject* pGameObject = NULL;
 	char pstrToken[64] = { '\0' };
@@ -162,6 +175,11 @@ GameObject* MeshLoader::LoadGeometryFromFile(Scene* pScene, ID3D12Device* pd3dDe
 		}
 	}
     fclose(pInFile);
+
+    // 로드 세션 종료 — 스레드로컬 상태 클리어
+    t_currentLoadPath.clear();
+    t_isCacheHit = false;
+
 	return(pGameObject);
 }
 
@@ -206,40 +224,43 @@ GameObject* MeshLoader::LoadFrameHierarchyFromFile(Scene* pScene, ID3D12Device* 
             MeshLoadInfo *pMeshInfo = MeshLoader::LoadMeshInfoFromFile(pInFile);
             if (pGameObject && pMeshInfo)
             {
-                Mesh *pMesh = NULL;
-                if (pMeshInfo->m_nType & VERTEXT_BONE_INDEX_WEIGHT)
+                Mesh *pMesh = nullptr;
+                const int meshIdx = t_meshCounter++;
+
+                // 캐시 hit — 같은 파일 같은 순번 Mesh* 재사용 (GPU 리소스 공유)
+                if (t_isCacheHit && !t_currentLoadPath.empty())
                 {
-                    char _dbgBuf[512];
-                    sprintf_s(_dbgBuf, "MeshLoader: SkinnedMesh AABB center=(%.2f,%.2f,%.2f) extents=(%.2f,%.2f,%.2f) bones=%d\n",
-                        pMeshInfo->m_xmf3AABBCenter.x, pMeshInfo->m_xmf3AABBCenter.y, pMeshInfo->m_xmf3AABBCenter.z,
-                        pMeshInfo->m_xmf3AABBExtents.x, pMeshInfo->m_xmf3AABBExtents.y, pMeshInfo->m_xmf3AABBExtents.z,
-                        (int)pMeshInfo->m_vBoneNames.size());
-                    OutputDebugStringA(_dbgBuf);
-                    // Print first 5 vertex positions to verify if mesh is upright or flat
-                    if (pMeshInfo->m_pxmf3Positions)
+                    auto cit = s_meshCache.find(t_currentLoadPath);
+                    if (cit != s_meshCache.end() && meshIdx < (int)cit->second.size())
                     {
-                        int nPrint = min(5, pMeshInfo->m_nVertices);
-                        for (int _vi = 0; _vi < nPrint; ++_vi)
-                        {
-                            sprintf_s(_dbgBuf, "  v[%d]=(%.3f, %.3f, %.3f)\n", _vi,
-                                pMeshInfo->m_pxmf3Positions[_vi].x,
-                                pMeshInfo->m_pxmf3Positions[_vi].y,
-                                pMeshInfo->m_pxmf3Positions[_vi].z);
-                            OutputDebugStringA(_dbgBuf);
-                        }
+                        pMesh = cit->second[meshIdx];
+                        // SetMesh 가 AddRef 하지만 캐시 자체도 외부 참조이므로 정상.
                     }
-                    pMesh = new SkinnedMesh(pd3dDevice, pd3dCommandList, pMeshInfo);
                 }
-                else if (pMeshInfo->m_nType & VERTEXT_NORMAL)
+
+                if (!pMesh)
                 {
-                    OutputDebugStringA("MeshLoader: Creating MeshIlluminatedFromFile (Static)\n");
-                    pMesh = new MeshIlluminatedFromFile(pd3dDevice, pd3dCommandList, pMeshInfo);
+                    if (pMeshInfo->m_nType & VERTEXT_BONE_INDEX_WEIGHT)
+                    {
+                        pMesh = new SkinnedMesh(pd3dDevice, pd3dCommandList, pMeshInfo);
+                    }
+                    else if (pMeshInfo->m_nType & VERTEXT_NORMAL)
+                    {
+                        pMesh = new MeshIlluminatedFromFile(pd3dDevice, pd3dCommandList, pMeshInfo);
+                    }
+                    else
+                    {
+                        pMesh = new MeshFromFile(pd3dDevice, pd3dCommandList, pMeshInfo);
+                    }
+
+                    // 캐시 등록 (첫 로드 시) — 캐시 보유 ref 유지 위해 AddRef
+                    if (pMesh && !t_currentLoadPath.empty())
+                    {
+                        pMesh->AddRef();   // 캐시가 소유하는 ref
+                        s_meshCache[t_currentLoadPath].push_back(pMesh);
+                    }
                 }
-                else
-                {
-                    OutputDebugStringA("MeshLoader: Creating MeshFromFile (Basic)\n");
-                    pMesh = new MeshFromFile(pd3dDevice, pd3dCommandList, pMeshInfo);
-                }
+
                 if (pMesh) pGameObject->SetMesh(pMesh);
                 delete pMeshInfo;
             }
