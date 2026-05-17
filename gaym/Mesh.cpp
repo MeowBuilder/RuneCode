@@ -917,3 +917,72 @@ void GrassClumpMesh::Render(ID3D12GraphicsCommandList* pd3dCommandList, int nSub
     pd3dCommandList->IASetIndexBuffer(&m_d3dIndexBufferView);
     pd3dCommandList->DrawIndexedInstanced(m_nIndices, 1, 0, 0, 0);
 }
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// QuadMesh — 1x1 flat quad on XZ plane for ground decals
+
+QuadMesh::QuadMesh(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList)
+{
+    m_nVertices = 4;
+    m_nIndices  = 6;
+    m_nType = VERTEXT_POSITION | VERTEXT_NORMAL | VERTEXT_TEXTURE_COORD0;
+
+    XMFLOAT3 positions[4] = {
+        { -0.5f, 0.f, -0.5f }, {  0.5f, 0.f, -0.5f },
+        {  0.5f, 0.f,  0.5f }, { -0.5f, 0.f,  0.5f }
+    };
+    XMFLOAT3 normals[4] = {
+        { 0, 1, 0 }, { 0, 1, 0 }, { 0, 1, 0 }, { 0, 1, 0 }
+    };
+    XMFLOAT2 texCoords[4] = {
+        { 0, 1 }, { 1, 1 }, { 1, 0 }, { 0, 0 }
+    };
+    UINT indices[6] = { 0, 1, 2, 0, 2, 3 };
+
+    m_pd3dPositionBuffer = Dx12App::CreateBufferResource(positions, sizeof(XMFLOAT3) * m_nVertices,
+        D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, &m_pd3dPositionUploadBuffer);
+    m_d3dPositionBufferView.BufferLocation = m_pd3dPositionBuffer->GetGPUVirtualAddress();
+    m_d3dPositionBufferView.StrideInBytes  = sizeof(XMFLOAT3);
+    m_d3dPositionBufferView.SizeInBytes    = sizeof(XMFLOAT3) * m_nVertices;
+
+    m_pd3dNormalBuffer = Dx12App::CreateBufferResource(normals, sizeof(XMFLOAT3) * m_nVertices,
+        D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, &m_pd3dNormalUploadBuffer);
+    m_d3dNormalBufferView.BufferLocation = m_pd3dNormalBuffer->GetGPUVirtualAddress();
+    m_d3dNormalBufferView.StrideInBytes  = sizeof(XMFLOAT3);
+    m_d3dNormalBufferView.SizeInBytes    = sizeof(XMFLOAT3) * m_nVertices;
+
+    m_pd3dTexCoordBuffer = Dx12App::CreateBufferResource(texCoords, sizeof(XMFLOAT2) * m_nVertices,
+        D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, &m_pd3dTexCoordUploadBuffer);
+    m_d3dTexCoordBufferView.BufferLocation = m_pd3dTexCoordBuffer->GetGPUVirtualAddress();
+    m_d3dTexCoordBufferView.StrideInBytes  = sizeof(XMFLOAT2);
+    m_d3dTexCoordBufferView.SizeInBytes    = sizeof(XMFLOAT2) * m_nVertices;
+
+    m_pd3dIndexBuffer = Dx12App::CreateBufferResource(indices, sizeof(UINT) * m_nIndices,
+        D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_INDEX_BUFFER, &m_pd3dIndexUploadBuffer);
+    m_d3dIndexBufferView.BufferLocation = m_pd3dIndexBuffer->GetGPUVirtualAddress();
+    m_d3dIndexBufferView.Format         = DXGI_FORMAT_R32_UINT;
+    m_d3dIndexBufferView.SizeInBytes    = sizeof(UINT) * m_nIndices;
+}
+
+QuadMesh::~QuadMesh()
+{
+}
+
+void QuadMesh::ReleaseUploadBuffers()
+{
+    if (m_pd3dPositionUploadBuffer)  m_pd3dPositionUploadBuffer  = nullptr;
+    if (m_pd3dNormalUploadBuffer)    m_pd3dNormalUploadBuffer    = nullptr;
+    if (m_pd3dTexCoordUploadBuffer)  m_pd3dTexCoordUploadBuffer  = nullptr;
+    if (m_pd3dIndexUploadBuffer)     m_pd3dIndexUploadBuffer     = nullptr;
+}
+
+void QuadMesh::Render(ID3D12GraphicsCommandList* pd3dCommandList, int nSubSet)
+{
+    pd3dCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    D3D12_VERTEX_BUFFER_VIEW pVertexBufferViews[3] = {
+        m_d3dPositionBufferView, m_d3dNormalBufferView, m_d3dTexCoordBufferView
+    };
+    pd3dCommandList->IASetVertexBuffers(0, 3, pVertexBufferViews);
+    pd3dCommandList->IASetIndexBuffer(&m_d3dIndexBufferView);
+    pd3dCommandList->DrawIndexedInstanced(m_nIndices, 1, 0, 0, 0);
+}

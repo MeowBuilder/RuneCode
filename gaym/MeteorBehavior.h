@@ -7,6 +7,7 @@
 
 class FluidSkillVFXManager;
 class Scene;
+class DecalManager;
 
 struct SmallMeteorData
 {
@@ -26,8 +27,9 @@ public:
     MeteorBehavior(const SkillData& customData);
     virtual ~MeteorBehavior() = default;
 
-    void SetVFXManager(FluidSkillVFXManager* mgr) { m_pVFXManager = mgr; }
-    void SetScene(Scene* pScene)                   { m_pScene = pScene; }
+    void SetVFXManager(FluidSkillVFXManager* mgr)    { m_pVFXManager    = mgr; }
+    void SetScene(Scene* pScene)                     { m_pScene         = pScene; }
+    void SetDecalManager(DecalManager* m) override   { m_pDecalManager  = m; }
 
     virtual void Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier = 1.0f) override;
     virtual void Update(float deltaTime) override;
@@ -45,8 +47,9 @@ private:
 
     SkillData             m_SkillData;
     bool                  m_bIsFinished = true;
-    FluidSkillVFXManager* m_pVFXManager = nullptr;
-    Scene*                m_pScene      = nullptr;
+    FluidSkillVFXManager* m_pVFXManager    = nullptr;
+    Scene*                m_pScene         = nullptr;
+    DecalManager*         m_pDecalManager  = nullptr;
     ElementType           m_elementType = ElementType::Fire;
 
     // 최종 메테오 VFX IDs

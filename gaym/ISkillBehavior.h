@@ -40,6 +40,7 @@ public:
     // VFX/Scene 연결 — 기본 구현은 아무것도 안 함 (필요한 서브클래스만 override)
     virtual void SetVFXManager(FluidSkillVFXManager*) {}
     virtual void SetScene(Scene*) {}
+    virtual void SetDecalManager(class DecalManager*) {}
 
     // Slot assignment (set by SkillComponent::EquipSkill)
     void      SetSlot(SkillSlot s) { m_slot = s; }

@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "WaveSlashBehavior.h"
+#include "DecalManager.h"
 #include "FluidSkillVFXManager.h"
 #include "EffectRegistry.h"
 #include "GameObject.h"
@@ -133,6 +134,15 @@ void WaveSlashBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& tar
         m_trailDropTimer = 0.f;
         m_hitEnemies.clear();
         m_fireTrail.clear();
+
+        // 파도 진행로 데칼 — 발사 지점 지면에 스코치 자국
+        if (m_pDecalManager)
+        {
+            XMFLOAT3 groundOrigin = origin;
+            groundOrigin.y -= 5.0f; // origin.y가 +5 오프셋 적용됐으므로 원위치
+            float rotY = atan2f(direction.x, direction.z);
+            m_pDecalManager->Spawn(DecalTexture::Scorch3, groundOrigin, 4.0f, rotY, 4.f);
+        }
     }
     else
     {

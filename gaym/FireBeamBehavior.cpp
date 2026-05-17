@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "FireBeamBehavior.h"
+#include "DecalManager.h"
 #include "FluidSkillVFXManager.h"
 #include "EffectRegistry.h"
 #include "FluidParticle.h"
@@ -343,14 +344,20 @@ bool FireBeamBehavior::IsFinished() const
 
 void FireBeamBehavior::Reset()
 {
-    if (m_bIsActive && m_pVFXManager)
+    if (m_bIsActive)
     {
-        if (m_vfxCoreId  >= 0) m_pVFXManager->StopEffect(m_vfxCoreId);
-        if (m_vfxSwirlId >= 0) m_pVFXManager->StopEffect(m_vfxSwirlId);
-        if (m_vfxBurstId >= 0) m_pVFXManager->StopEffect(m_vfxBurstId);
-        for (int sid : m_subVFXIds)
-            if (sid >= 0) m_pVFXManager->StopEffect(sid);
-        OutputDebugString(L"[FireBeam] Stopped\n");
+        if (m_pVFXManager)
+        {
+            if (m_vfxCoreId  >= 0) m_pVFXManager->StopEffect(m_vfxCoreId);
+            if (m_vfxSwirlId >= 0) m_pVFXManager->StopEffect(m_vfxSwirlId);
+            if (m_vfxBurstId >= 0) m_pVFXManager->StopEffect(m_vfxBurstId);
+            for (int sid : m_subVFXIds)
+                if (sid >= 0) m_pVFXManager->StopEffect(sid);
+            OutputDebugString(L"[FireBeam] Stopped\n");
+        }
+        // 빔 끝점에 소각 자국 데칼 생성
+        if (m_pDecalManager)
+            m_pDecalManager->Spawn(DecalTexture::Scorch2, m_lastTargetPos, 2.0f, 0.f, 3.f);
     }
     m_bIsFinished = true;
     m_bIsActive   = false;

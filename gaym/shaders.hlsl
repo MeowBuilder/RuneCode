@@ -21,7 +21,7 @@ cbuffer cbGameObject : register(b0)
     uint bIsRocky;
     uint bIsGrass;   // 절차적 풀(grass) 셰이딩 플래그 — VS sway + PS vertex 그라데이션
     uint bIsPortal;  // 차원문 셰이딩 — 시안/마젠타 듀얼톤 와류 + 블랙홀 + 림 글로우
-    uint _gpad1;
+    uint bIsDecal;   // 지면 데칼 — 텍스처 알파 마스킹, 조명 우회
     uint _gpad2;
     MATERIAL gMaterial;
     matrix gBoneTransforms[128];
@@ -713,6 +713,10 @@ float4 PS(PS_INPUT input) : SV_TARGET
     }
     // Combine with material diffuse (optional: multiply)
     float4 baseColor = albedoColor * gMaterial.m_cDiffuse;
+
+    // 지면 데칼: 텍스처 알파로 마스킹, 조명 계산 우회
+    if (bIsDecal)
+        return float4(baseColor.rgb, albedoColor.a * gMaterial.m_cDiffuse.a);
 
     // Apply water AO to base color
     if (bIsWater)
