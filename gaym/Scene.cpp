@@ -295,19 +295,9 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
         DecalTexture::Magic2,  L"Assets/Textures/VFX/magic_02.png");
     OutputDebugString(L"[Scene] Decal system initialized\n");
 
-    // 불 스킬 Behavior에 DecalManager 연결
-    if (m_pPlayerGameObject)
-    {
-        if (auto* pSC = m_pPlayerGameObject->GetComponent<SkillComponent>())
-        {
-            for (int s = 0; s < (int)SkillSlot::Count; ++s)
-            {
-                if (auto* pBeh = pSC->GetSkill(static_cast<SkillSlot>(s)))
-                    pBeh->SetDecalManager(m_pDecalManager.get());
-            }
-        }
-    }
-    m_pProjectileManager->SetDecalManager(m_pDecalManager.get());
+    // [DISABLED] 데칼 스킬 연결 — 위치 보정 후 재활성화 예정
+    // if (m_pPlayerGameObject) { ... pBeh->SetDecalManager(m_pDecalManager.get()); }
+    // m_pProjectileManager->SetDecalManager(m_pDecalManager.get());
 
     // Debug Renderer (no descriptors)
     m_pDebugRenderer->Init(pDevice, pCommandList);
@@ -1823,9 +1813,8 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
 
     // 구 ParticleSystem.Render 호출은 LightEmitterSystem 통합으로 제거됨.
 
-    // Ground decals (scorch marks / magic circles) — 스킬 지오메트리 뒤, SSF 앞
-    if (m_pDecalManager)
-        m_pDecalManager->Render(pCommandList, GetPassCBVAddress());
+    // [DISABLED] Ground decals — 위치 보정 후 재활성화 예정
+    // if (m_pDecalManager) m_pDecalManager->Render(pCommandList, GetPassCBVAddress());
 
     // ---------- Screen-Space Fluid 렌더링 (VFXManager 통합 경로) ----------
     bool bHasFluid = (m_pVFXManager != nullptr); // 매니저 있으면 SSF 시도
