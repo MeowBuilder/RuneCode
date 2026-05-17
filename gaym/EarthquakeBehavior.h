@@ -52,8 +52,8 @@ private:
 
     static constexpr int   RING_COUNT      = 3;
     static constexpr float RING_INTERVAL   = 0.35f;
-    static constexpr float RING_SPEED      = 10.0f;   // 확장 속도 (units/s)
-    static constexpr float RING_MAX_RADIUS = 14.0f;
+    static constexpr float RING_SPEED      = 12.0f;   // 확장 속도 (units/s)
+    static constexpr float RING_MAX_RADIUS = 20.0f;
     static constexpr float RING_THICKNESS  = 4.0f;
     static constexpr float RING_HEIGHT     = 4.5f;
     static constexpr float TOTAL_DURATION  = RING_COUNT * RING_INTERVAL + RING_MAX_RADIUS / RING_SPEED + 0.3f;

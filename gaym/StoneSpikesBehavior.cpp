@@ -40,7 +40,7 @@ void StoneSpikesBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& t
         SpikeEntry e;
         XMVECTOR posV = XMVectorAdd(oV, XMVectorScale(dV, SPIKE_SPACING * (float)(i + 1)));
         XMStoreFloat3(&e.pos, posV);
-        e.pos.y      = 0.f;
+        e.pos.y      = origin.y;  // 플레이어 높이 기준 (수중 보스 등 고도 변화 대응)
         e.triggerAt  = i * SPIKE_INTERVAL;
         m_spikes.push_back(e);
     }

@@ -240,6 +240,7 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClInclude Include="WindShotBehavior.h" />
     <ClInclude Include="StoneSpikesBehavior.h" />
     <ClInclude Include="RockThrowBehavior.h" />
+    <ClInclude Include="EarthArmorBehavior.h" />
     <ClInclude Include="EarthquakeBehavior.h" />
     <ClInclude Include="EarthShardBehavior.h" />
     <ClInclude Include="DamageNumberManager.h" />
@@ -379,6 +380,7 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClCompile Include="WindShotBehavior.cpp" />
     <ClCompile Include="StoneSpikesBehavior.cpp" />
     <ClCompile Include="RockThrowBehavior.cpp" />
+    <ClCompile Include="EarthArmorBehavior.cpp" />
     <ClCompile Include="EarthquakeBehavior.cpp" />
     <ClCompile Include="EarthShardBehavior.cpp" />
     <ClCompile Include="MeteorBehavior.cpp" />

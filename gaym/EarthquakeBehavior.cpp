@@ -26,7 +26,7 @@ void EarthquakeBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& ta
     m_epicenter = { 0.f, 0.f, 0.f };
     if (caster && caster->GetTransform())
         m_epicenter = caster->GetTransform()->GetPosition();
-    m_epicenter.y = 0.f;
+    // m_epicenter.y는 캐릭터 실제 높이 유지 — Y=0 강제 시 수중 보스 등에서 미스 발생
 
     // 초기 버스트 VFX (중심 폭발)
     XMFLOAT3 up = { 0.f, 1.f, 0.f };

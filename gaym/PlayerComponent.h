@@ -40,6 +40,11 @@ public:
     float GetShield() const { return m_fShield; }
     float GetShieldRatio() const { return m_fShield / MAX_SHIELD; }
 
+    // 피해감소 시스템 (대지의 갑옷 E스킬)
+    void  SetDamageReduction(float ratio, float duration);
+    float GetDamageReductionRatio() const { return m_fDamageReductionRatio; }
+    bool  HasDamageReduction() const { return m_fDamageReductionTimer > 0.f; }
+
     // 네트워크 권위 HP 세팅 — 서버에서 S_PLAYER_DAMAGE 받아 호출. 로컬 TakeDamage 우회.
     void SetCurrentHP(float fHP);
     // 서버 데미지 알림 — HP 갱신은 SetCurrentHP 로 별도. 이건 피격 연출만 트리거.
@@ -86,6 +91,9 @@ private:
     float m_fCurrentHP = 100.0f;
     float m_fShield    = 0.0f;
     static constexpr float MAX_SHIELD = 500.f;
+
+    float m_fDamageReductionRatio = 0.f;
+    float m_fDamageReductionTimer = 0.f;
 
     // Gravity system
     float m_fVelocityY = 0.0f;

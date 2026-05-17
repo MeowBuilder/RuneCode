@@ -1605,21 +1605,193 @@ void EffectRegistry::Initialize()
         ring.overrideColors = true;
         ring.coreColor      = { 0.85f, 0.70f, 0.35f, 1.0f };
         ring.edgeColor      = { 0.55f, 0.32f, 0.10f, 0.0f };
-        ring.particleCount  = 350;
-        ring.duration       = 1.8f;
-        ring.speedMin       = 3.f; ring.speedMax  = 10.f;
-        ring.lifetimeMin    = 0.5f; ring.lifetimeMax = 1.2f;
+        ring.particleCount  = 500;
+        ring.duration       = 2.0f;   // 20u / 12 u/s ≈ 1.67s 커버
+        ring.speedMin       = 1.5f; ring.speedMax  = 4.0f;  // 산란 줄여 선명한 링
+        ring.lifetimeMin    = 0.3f; ring.lifetimeMax = 0.65f;
         ring.sizeScale      = 4.5f;
 
-        ring.ring.radius         = 0.5f;
-        ring.ring.width          = 3.0f;
-        ring.ring.expandSpeed    = 30.f;
+        ring.ring.radius         = 0.f;    // 피격 링과 동일하게 중심에서 시작
+        ring.ring.width          = 8.5f;   // 피격 두께(RING_THICKNESS*2=8)에 맞춤
+        ring.ring.expandSpeed    = 12.f;   // RING_SPEED와 일치 — VFX·피격 동기화
         ring.ring.tiltX          = 0.f;
-        ring.ring.rotateSpeed    = 1.0f;
+        ring.ring.rotateSpeed    = 0.8f;
         ring.ring.normalSpeedMin = 5.f;
         ring.ring.normalSpeedMax = 18.f;
 
         def.layers.push_back(ring);
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // E_RockThrow — 바위 투척: 입자들이 뭉쳐 하나의 돌덩이처럼 날아가는 형태
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "E_RockThrow";
+        def.element = ElementType::Earth;
+
+        // 레이어 1: SPH 암석 코어 — ControlPoint 인력으로 뭉쳐 이동
+        {
+            EffectLayer core = MakeSPHLayer(ElementType::Earth);
+            core.overrideColors = true;
+            core.coreColor = { 0.85f, 0.68f, 0.40f, 1.0f };  // 모래빛 암석
+            core.edgeColor = { 0.50f, 0.32f, 0.14f, 0.85f }; // 짙은 흙빛
+
+            SPHEmitterParams& s = core.sph;
+            s.particleCount        = 380;
+            s.spawnRadius          = 0.28f;
+            s.masterCPStrength     = 55.f;
+            s.masterCPSphereRadius = 0.35f;
+            s.masterCPFallSpeed    = 20.f;
+            s.maxParticleSpeed     = 8.f;
+
+            s.overridePhysics     = true;
+            s.sphStiffness        = 65.f;
+            s.sphNearPressureMult = 2.5f;
+            s.sphRestDensity      = 11.f;
+            s.sphViscosity        = 0.55f;
+            s.sphSmoothingRadius  = 0.85f;
+
+            VFXPhase p0;
+            p0.startTime  = 0.f;
+            p0.duration   = 99.f;
+            p0.motionMode = ParticleMotionMode::ControlPoint;
+            p0.offsetParticlesWithOrigin = true;
+
+            FluidCPDesc nucleus;
+            nucleus.orbitRadius        = 0.f;
+            nucleus.orbitSpeed         = 0.f;
+            nucleus.attractionStrength = 50.f;
+            nucleus.sphereRadius       = 0.35f;
+            p0.cpDescs.push_back(nucleus);
+            s.phases.push_back(p0);
+
+            FinalizeSPHLayer(core);
+            def.layers.push_back(std::move(core));
+        }
+
+        // 레이어 2: 흙먼지 꼬리 — 바위 주위에서 먼지·파편 지속 방출
+        {
+            EffectLayer dust;
+            dust.type           = EmitterType::Sphere;
+            dust.element        = ElementType::Earth;
+            dust.overrideColors = true;
+            dust.coreColor      = { 0.72f, 0.58f, 0.35f, 0.70f };
+            dust.edgeColor      = { 0.42f, 0.28f, 0.10f, 0.00f };
+            dust.particleCount  = 160;
+            dust.emitRate       = 70.f;
+            dust.duration       = -1.f;
+            dust.speedMin       = 0.8f;
+            dust.speedMax       = 2.8f;
+            dust.lifetimeMin    = 0.25f;
+            dust.lifetimeMax    = 0.55f;
+            dust.sizeScale      = 1.3f;
+
+            dust.sphere.radius        = 0.65f;
+            dust.sphere.shellFraction = 0.5f;
+            dust.sphere.inward        = false;
+            def.layers.push_back(dust);
+        }
+
+        Register(std::move(def));
+
+        VFXModifier enhMod;
+        enhMod.particleCountMult = 1.4f;
+        enhMod.sizeScaleMult     = 1.2f;
+        RegisterRuneMod("E_RockThrow", RUNE_ENHANCE, enhMod);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // E_EarthArmor_Burst — 대지의 갑옷 발동: 발 아래에서 빠르게 퍼지는 링 폭발
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "E_EarthArmor_Burst";
+        def.element = ElementType::Earth;
+
+        // 링 폭발
+        {
+            EffectLayer ring;
+            ring.type           = EmitterType::Ring;
+            ring.element        = ElementType::Earth;
+            ring.overrideColors = true;
+            ring.coreColor      = { 0.88f, 0.72f, 0.32f, 1.0f };  // 황금빛 갈색
+            ring.edgeColor      = { 0.55f, 0.35f, 0.12f, 0.0f };
+            ring.particleCount  = 260;
+            ring.duration       = 0.8f;
+            ring.speedMin       = 1.5f;
+            ring.speedMax       = 5.5f;
+            ring.lifetimeMin    = 0.30f;
+            ring.lifetimeMax    = 0.70f;
+            ring.sizeScale      = 2.8f;
+
+            ring.ring.radius         = 0.4f;
+            ring.ring.width          = 2.5f;
+            ring.ring.expandSpeed    = 22.f;
+            ring.ring.normalSpeedMin = 3.f;
+            ring.ring.normalSpeedMax = 10.f;
+            ring.ring.rotateSpeed    = 0.5f;
+            def.layers.push_back(ring);
+        }
+
+        // 파편 콘 (위로 튀는 암석 조각)
+        {
+            EffectLayer debris;
+            debris.type           = EmitterType::Cone;
+            debris.element        = ElementType::Earth;
+            debris.overrideColors = true;
+            debris.coreColor      = { 0.80f, 0.62f, 0.30f, 1.0f };
+            debris.edgeColor      = { 0.48f, 0.28f, 0.10f, 0.0f };
+            debris.particleCount  = 120;
+            debris.duration       = 0.4f;
+            debris.speedMin       = 5.f;
+            debris.speedMax       = 16.f;
+            debris.lifetimeMin    = 0.3f;
+            debris.lifetimeMax    = 0.65f;
+            debris.sizeScale      = 2.2f;
+
+            debris.cone.halfAngle     = 60.f;
+            debris.cone.gravityScale  = 0.7f;
+            debris.cone.startSizeMult = 1.2f;
+            debris.cone.endSizeMult   = 0.1f;
+            debris.cone.fadeAlpha     = true;
+            debris.cone.fadeSize      = true;
+            def.layers.push_back(debris);
+        }
+
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // E_EarthArmor_Aura — 대지의 갑옷 지속 오라: 캐릭터 주위를 감싸는 흙먼지
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "E_EarthArmor_Aura";
+        def.element = ElementType::Earth;
+
+        EffectLayer aura;
+        aura.type           = EmitterType::Sphere;
+        aura.element        = ElementType::Earth;
+        aura.overrideColors = true;
+        aura.coreColor      = { 0.78f, 0.62f, 0.30f, 0.65f };  // 황토 먼지
+        aura.edgeColor      = { 0.48f, 0.30f, 0.12f, 0.00f };
+        aura.particleCount  = 160;
+        aura.emitRate       = 50.f;
+        aura.duration       = -1.f;   // 무한 — Behavior에서 StopEffect로 종료
+        aura.speedMin       = 0.5f;
+        aura.speedMax       = 2.2f;
+        aura.lifetimeMin    = 0.45f;
+        aura.lifetimeMax    = 0.90f;
+        aura.sizeScale      = 1.4f;
+
+        aura.sphere.radius        = 1.6f;
+        aura.sphere.shellFraction = 0.7f;
+        aura.sphere.inward        = false;
+        aura.sphere.rotationSpeed = 0.8f;   // 천천히 회전하는 먼지 구름
+        def.layers.push_back(aura);
+
         Register(std::move(def));
     }
 

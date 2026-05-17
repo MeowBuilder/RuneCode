@@ -55,6 +55,10 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
         return;
     }
 
+    // 피해감소 타이머
+    if (m_fDamageReductionTimer > 0.f)
+        m_fDamageReductionTimer = fmaxf(0.f, m_fDamageReductionTimer - deltaTime);
+
     // Hit flash 페이드 — 대쉬 중이 아닐 때만 (대쉬는 자기 플래시 적용)
     if (m_fHitFlashTimer > 0.0f)
     {
@@ -564,6 +568,10 @@ void PlayerComponent::TakeDamage(float fDamage)
         if (fDamage <= 0.f) return;
     }
 
+    // 피해감소 적용 (대지의 갑옷 E스킬)
+    if (m_fDamageReductionTimer > 0.f && fDamage > 0.f)
+        fDamage *= (1.f - m_fDamageReductionRatio);
+
     m_fCurrentHP -= fDamage;
     if (m_fCurrentHP < 0.0f)
     {
@@ -592,6 +600,12 @@ void PlayerComponent::AddShield(float amount)
 {
     if (amount <= 0.f) return;
     m_fShield = min(m_fShield + amount, MAX_SHIELD);
+}
+
+void PlayerComponent::SetDamageReduction(float ratio, float duration)
+{
+    m_fDamageReductionRatio = max(0.f, min(ratio, 1.f));
+    m_fDamageReductionTimer = max(0.f, duration);
 }
 
 void PlayerComponent::SetCurrentHP(float fHP)

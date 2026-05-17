@@ -30,7 +30,7 @@
 #include "WindShotBehavior.h"
 // 대지술사
 #include "StoneSpikesBehavior.h"
-#include "RockThrowBehavior.h"
+#include "EarthArmorBehavior.h"
 #include "EarthquakeBehavior.h"
 #include "EarthShardBehavior.h"
 #include "ProjectileManager.h"
@@ -189,8 +189,7 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
             auto q = std::make_unique<StoneSpikesBehavior>(); q->SetScene(this);
             pSkillComponent->EquipSkill(SkillSlot::Q, std::move(q));
 
-            auto e = std::make_unique<RockThrowBehavior>();
-            e->SetProjectileManager(m_pProjectileManager.get());
+            auto e = std::make_unique<EarthArmorBehavior>(); e->SetScene(this);
             pSkillComponent->EquipSkill(SkillSlot::E, std::move(e));
 
             auto r = std::make_unique<EarthquakeBehavior>(); r->SetScene(this);
@@ -200,7 +199,7 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
             rc->SetProjectileManager(m_pProjectileManager.get());
             pSkillComponent->EquipSkill(SkillSlot::RightClick, std::move(rc));
 
-            OutputDebugString(L"[Scene] Skills: Earth — Q:StoneSpikes, E:RockThrow, R:Earthquake, RC:EarthShard\n");
+            OutputDebugString(L"[Scene] Skills: Earth — Q:StoneSpikes, E:EarthArmor, R:Earthquake, RC:EarthShard\n");
         }
 
         AddRenderComponentsToHierarchy(pDevice, pCommandList, pPlayer, pShader.get(), true);  // Player casts shadow

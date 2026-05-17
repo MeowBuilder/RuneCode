@@ -118,18 +118,19 @@ void ProjectileManager::SpawnProjectile(const Projectile& projectile)
             // 1차 원소: elementSet이 있으면 그 색상 사용, 없으면 기본 element
             ElementType primaryElem = proj.elementSet.empty() ? proj.element : proj.elementSet[0];
 
-            // SkillSlot → EffectRegistry effectId 매핑
-            auto slotToEffectId = [](SkillSlot slot) -> const char* {
+            // SkillSlot + 원소 → EffectRegistry effectId 매핑
+            auto slotToEffectId = [](SkillSlot slot, ElementType elem) -> const char* {
                 switch (slot)
                 {
                 case SkillSlot::Q:          return "Q_WaveSlash";
-                case SkillSlot::E:          return "E_FireBeam_Core";
+                case SkillSlot::E:
+                    return (elem == ElementType::Earth) ? "E_RockThrow" : "E_FireBeam_Core";
                 case SkillSlot::R:          return "R_Meteor";
                 case SkillSlot::RightClick: return "RC_Fireball";
                 default:                    return "RC_Fireball";
                 }
             };
-            const char* effectId = slotToEffectId(vfxSlot);
+            const char* effectId = slotToEffectId(vfxSlot, primaryElem);
 
             // 1차 원소 VFX: EffectRegistry → EffectDef → 색상 오버라이드 후 SpawnEffectDef
             // primaryElem: elementSet이 있으면 룬 원소, 없으면 proj.element (캐릭터 기본 원소)

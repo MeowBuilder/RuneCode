@@ -161,7 +161,7 @@ namespace EarthSkillPresets
     {
         SkillData d; d.name = "Earthquake"; d.element = ElementType::Earth;
         d.activationType = ActivationType::Instant;
-        d.damage = 110.0f; d.cooldown = 25.0f; d.range = 14.0f; d.radius = 14.0f;
+        d.damage = 110.0f; d.cooldown = 25.0f; d.range = 20.0f; d.radius = 20.0f;
         return d;
     }
     inline SkillData EarthShard()
@@ -169,6 +169,14 @@ namespace EarthSkillPresets
         SkillData d; d.name = "EarthShard"; d.element = ElementType::Earth;
         d.activationType = ActivationType::Instant;
         d.damage = 42.0f; d.cooldown = 2.8f; d.range = 40.0f; d.radius = 3.0f;
+        return d;
+    }
+    inline SkillData EarthArmor()
+    {
+        SkillData d; d.name = "EarthArmor"; d.element = ElementType::Earth;
+        d.activationType = ActivationType::Instant;
+        d.damage = 60.0f;   // 보호막 수치로 재활용
+        d.cooldown = 8.0f; d.range = 0.f; d.radius = 0.f;
         return d;
     }
 }
