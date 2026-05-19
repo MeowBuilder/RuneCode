@@ -216,6 +216,8 @@ public:
     // 서버 BossEvent PhaseChange 수신 시 호출되는 네트워크 Kraken 컷신 시작 함수
     // 서버가 스폰한 Kraken GameObject와 monsterId를 기존 컷신 상태머신에 연결한다.
     void StartNetworkKrakenCutscene(GameObject* pKrakenObj, uint64 monsterId);
+	// 컷신 진행 중 매 프레임마다 Update에서 호출하여 컷신 상태머신 업데이트 및 Kraken GameObject 제어
+    bool IsNetworkKrakenCutsceneTarget(uint64 monsterId) const;
 
 private:
     // 캐릭터 선택 화면에서 결정된 플레이어 원소 (Init() 전에 SetSelectedElement로 설정)

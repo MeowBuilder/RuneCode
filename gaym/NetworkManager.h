@@ -267,7 +267,7 @@ private:
 
     // 공격 애니 재생 중인 몬스터 — 이 시간 동안은 Move 와서도 Walk 로 덮어쓰지 않음
     std::unordered_map<uint64, float> m_mapServerMonsterAttackTimer;
-    static constexpr float ATTACK_ANIM_LOCK = 0.6f;  // 공격 애니 지속 (대략)
+    static constexpr float ATTACK_ANIM_LOCK = 1.4f;  // 공격 애니 지속 (대략)
 
     // 서버 몬스터 hit flash 타이머 — 피격 시 glow 페이드아웃 (원격 플레이어와 동일 패턴)
     std::unordered_map<uint64, float> m_mapServerMonsterHitFlashTimer;

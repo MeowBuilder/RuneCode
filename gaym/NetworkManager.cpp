@@ -1547,6 +1547,15 @@ void NetworkManager::ProcessMonsterMove(uint64 monsterId, float x, float y, floa
         return;
     }
 
+    Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
+    if (pScene && pScene->IsNetworkKrakenCutsceneTarget(monsterId))
+    {
+        // Kraken 2페이즈 컷신 중에는 Scene 컷신 상태머신이 위치를 직접 제어한다.
+        // 서버 S_MONSTER_MOVE가 컷신 위치를 덮어쓰면 Kraken이 안 보이거나
+        // 컷신 종료 후 텔레포트처럼 보이므로 MOVE는 무시한다.
+        return;
+    }
+
     auto it = m_mapServerMonsters.find(monsterId);
     if (it == m_mapServerMonsters.end())
         return;
@@ -2738,6 +2747,45 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
             break;
         }
 
+        // BlueDragon 전용 가벼운 등장 연출
+        // 카메라 컷신 없음.
+        // RedDragon용 m_mapServerBossIntros에 넣지 않는다.
+        // 그래야 UpdateServerBossIntros()의 StartCinematic/Landing/Roaring 로직을 타지 않는다.
+        if (mt == 10)
+        {
+            if (pBoss)
+            {
+                ServerBossIntroState st;
+                st.phase = BossIntroPhase::FlyingIn;
+                st.phaseTimer = 0.0f;
+                st.startHeight = 5.0f;
+                st.active = true;
+
+                if (auto* pT = pBoss->GetTransform())
+                {
+                    XMFLOAT3 p = pT->GetPosition();
+
+                    st.bossX = p.x;
+                    st.bossZ = p.z;
+                    st.groundY = p.y;
+                    st.curY = p.y + st.startHeight;
+
+                    pT->SetPosition(p.x, st.curY, p.z);
+                }
+
+                m_mapServerBossIntros[monsterId] = st;
+
+                if (auto* pAnim = pBoss->GetComponent<AnimationComponent>())
+                    pAnim->CrossFade("Fly Glide", 0.15f, true, true);
+
+                m_mapServerBossIntros[monsterId].flyAnimFired = true;
+
+                WriteNetworkLog("[Network] BlueDragon light intro started - no camera");
+            }
+
+            break;
+        }
+
         if (pBoss)
         {
             ServerBossIntroState st;
@@ -2782,22 +2830,32 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
         }
         break;
 
-    case 2: // BOSS_EVENT_PHASE_CHANGE — 페이즈 전환: 중간 쉐이크 + 포효 + hit flash 대체 invincibility flash
+    case 2: // BOSS_EVENT_PHASE_CHANGE
+    {
+        bool isKrakenPhase2 = (mt == 7 && phaseIndex == 2);
+
         if (pCam) pCam->StartShake(3.0f, 1.0f);
+
         if (pBoss)
         {
-            if (roarClip)
-                if (auto* pAnim = pBoss->GetComponent<AnimationComponent>())
-                    pAnim->CrossFade(roarClip, 0.2f, false, true);
-            // 무적 페이즈 — 흰 glow 한 번 강하게 깜빡 (이미 있는 hit flash 시스템 재활용)
+            // Kraken 2페이즈 등장 컷신은 오프라인처럼
+            // 스폰 직후부터 Idle/촉수 애니가 자연스럽게 움직여야 하므로
+            // 공통 Roar 클립 강제 재생을 건너뛴다.
+            if (!isKrakenPhase2)
+            {
+                if (roarClip)
+                {
+                    if (auto* pAnim = pBoss->GetComponent<AnimationComponent>())
+                        pAnim->CrossFade(roarClip, 0.2f, false, true);
+                }
+            }
+
+            // 무적 페이즈 flash는 Kraken에도 적용 가능
             pBoss->SetHitFlashAll(1.0f);
-            m_mapServerMonsterHitFlashTimer[monsterId] = 0.4f;  // 평소(0.15)보다 길게
+            m_mapServerMonsterHitFlashTimer[monsterId] = 0.4f;
         }
 
-        // Kraken 2페이즈 전용 컷신 처리
-        // 서버에서 eventType=2, phaseIndex=2를 보내면
-        // 서버가 스폰한 Kraken GameObject를 기존 Kraken 컷신 상태머신에 연결한다.
-        if (mt == 7 && phaseIndex == 2)
+        if (isKrakenPhase2)
         {
             if (pBoss)
             {
@@ -2813,6 +2871,7 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
             }
         }
         break;
+    }
 
     case 3: // BOSS_EVENT_DEATH — 사망 컷씬: 가장 강한 쉐이크 (사망 애니는 S_MONSTER_DAMAGE 가 별도 처리)
         if (pCam) pCam->StartShake(5.0f, 2.0f);
@@ -3469,21 +3528,34 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
         {
         case BossIntroPhase::FlyingIn:
         {
-            // y 등속 강하 (오프라인 EnemyComponent::UpdateBossIntro 와 동일)
-            st.curY -= DESCEND_SPEED * deltaTime;
+            auto clipItSpeed = m_mapServerMonsterClips.find(it->first);
+            uint32 mtSpeed = (clipItSpeed != m_mapServerMonsterClips.end()) ? clipItSpeed->second.monsterType : 0;
+
+            // BlueDragon은 카메라 컷신 없이 보이므로 조금 천천히 내려오게 한다.
+            float descendSpeed = (mtSpeed == 10) ? 8.0f : DESCEND_SPEED;
+
+            st.curY -= descendSpeed * deltaTime;
+            
             if (st.curY <= st.groundY + 0.5f)
             {
                 st.curY = st.groundY;
                 pBoss->GetTransform()->SetPosition(st.bossX, st.curY, st.bossZ);
+
+                auto clipIt = m_mapServerMonsterClips.find(it->first);
+                uint32 mt = (clipIt != m_mapServerMonsterClips.end()) ? clipIt->second.monsterType : 0;
+
+                // BlueDragon은 RedDragon처럼 Landing/Roaring 컷신까지 가지 않고,
+                // 가볍게 날아와 착지한 뒤 바로 전투 상태로 넘긴다.
                 st.phase = BossIntroPhase::Landing;
                 st.phaseTimer = 0.0f;
+         
                 if (pAnim && !st.landAnimFired)
                 {
                     pAnim->CrossFade("Land", 0.15f, false);
                     st.landAnimFired = true;
                 }
                 // Landing 카메라 — 오프라인 Scene.cpp:1249 와 100% 동일
-                if (pCam)
+                if (mt != 10 && pCam)
                 {
                     pCam->StartCinematic(XMFLOAT3{ st.bossX, 2.0f, st.bossZ }, 60.0f, 25.0f, 200.0f);
                     pCam->StartShake(0.4f, 1.5f);
@@ -3494,13 +3566,15 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
                 pBoss->GetTransform()->SetPosition(st.bossX, st.curY, st.bossZ);
             }
 
-            // FlyingIn 카메라 — 오프라인 Scene.cpp:1265-1266 와 100% 동일 (매 프레임 갱신)
-            //   focusY = dragonY * 0.45 + 3, dist 95, pitch 22, yaw 185
-            if (pCam)
+            auto clipItCam = m_mapServerMonsterClips.find(it->first);
+            uint32 mtCam = (clipItCam != m_mapServerMonsterClips.end()) ? clipItCam->second.monsterType : 0;
+
+            if (mtCam != 10 && pCam)
             {
                 float focusY = st.curY * 0.45f + 3.0f;
                 pCam->StartCinematic(XMFLOAT3{ st.bossX, focusY, st.bossZ }, 95.0f, 22.0f, 185.0f);
             }
+
             break;
         }
         case BossIntroPhase::Landing:
@@ -3521,7 +3595,11 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
                     st.roarAnimFired = true;
                 }
                 // Roaring 카메라 — 오프라인 Scene.cpp:1254 와 100% 동일
-                if (pCam)
+                auto clipItRoarCam = m_mapServerMonsterClips.find(it->first);
+                uint32 mtRoarCam = (clipItRoarCam != m_mapServerMonsterClips.end())
+                    ? clipItRoarCam->second.monsterType : 0;
+
+                if (mtRoarCam != 10 && pCam)
                 {
                     pCam->StartCinematic(XMFLOAT3{ st.bossX, 4.0f, st.bossZ }, 42.0f, 30.0f, 230.0f);
                     pCam->StartShake(2.2f, 2.2f);
@@ -3550,7 +3628,12 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
         case BossIntroPhase::Done:
         default:
         {
-            if (pCam) pCam->StopCinematic();
+            auto clipItDone = m_mapServerMonsterClips.find(it->first);
+            uint32 mtDone = (clipItDone != m_mapServerMonsterClips.end()) ? clipItDone->second.monsterType : 0;
+
+            if (mtDone != 10 && pCam)
+                pCam->StopCinematic();
+
             // 보간 타겟을 ground 위치(스폰)로 동기화 — 인트로 종료 후 보스가 다른 위치로 튀는 것 방지
             auto tIt = m_mapServerMonsterTarget.find(it->first);
             if (tIt != m_mapServerMonsterTarget.end())
@@ -3591,6 +3674,12 @@ void NetworkManager::InterpolateServerMonsters(float deltaTime)
         uint64 monsterId = kv.first;
         const ServerMonsterTarget& tgt = kv.second;
         if (!tgt.hasTarget) continue;
+
+        Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
+        if (pScene && pScene->IsNetworkKrakenCutsceneTarget(monsterId))
+        {
+            continue;
+        }
 
         // 인트로/메가브레스 컷신 진행 중인 보스는 보간 스킵 — Update*가 위치 직접 제어
         if (m_mapServerBossIntros.find(monsterId) != m_mapServerBossIntros.end())

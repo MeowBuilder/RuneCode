@@ -3600,6 +3600,14 @@ void Scene::StartNetworkKrakenCutscene(GameObject* pKrakenObj, uint64 monsterId)
     pKrakenObj->GetTransform()->SetPosition(pos);
     pKrakenObj->GetTransform()->SetScale(0.05f, 0.05f, 0.05f);
 
+    // 온라인 Kraken은 EnemyComponent 없이 서버 몬스터 GameObject로 존재한다.
+    // 오프라인 Kraken처럼 등장 순간부터 촉수 Idle 애니가 계속 움직이도록
+    // 컷신 시작 시 Idle 계열 클립을 강제로 루프 재생한다.
+    if (auto* pAnim = pKrakenObj->GetComponent<AnimationComponent>())
+    {
+        pAnim->CrossFade("Idle", 0.1f, true, true);
+    }
+
     // 6. 물 Plane 범위 보정
     // 보스룸의 현재 방 바운딩 박스 기준으로 수면 크기와 중심을 맞춘다.
     if (m_pWaterPlane && m_pCurrentRoom)
@@ -3632,6 +3640,16 @@ void Scene::StartNetworkKrakenCutscene(GameObject* pKrakenObj, uint64 monsterId)
 
     // 8. 로그 출력
     WriteNetworkLog("[Scene] Network Kraken cutscene: RUMBLE");
+}
+
+bool Scene::IsNetworkKrakenCutsceneTarget(uint64 monsterId) const
+{
+    // WaterRise 단계부터는 조작권이 돌아오고 Kraken 전투가 시작되므로
+    // 서버 S_MONSTER_MOVE를 막으면 안 된다.
+    // Rumble~Slam까지만 Scene 컷신 상태머신이 Kraken 위치를 직접 제어한다.
+    return m_nNetworkKrakenCutsceneMonsterId == monsterId &&
+        m_eKrakenStage != KrakenCutsceneStage::None &&
+        m_eKrakenStage != KrakenCutsceneStage::WaterRise;
 }
 
 void Scene::TransitionToEarthStage(int roomIndex)
