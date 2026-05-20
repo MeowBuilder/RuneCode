@@ -28,6 +28,7 @@ private:
     SkillData             m_SkillData;
     FluidSkillVFXManager* m_pVFXManager = nullptr;
     Scene*                m_pScene      = nullptr;
+    GameObject*           m_pCaster     = nullptr;
     int                   m_vfxId       = -1;
     std::vector<int>      m_extraVFXIds;
 

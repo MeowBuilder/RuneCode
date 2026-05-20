@@ -1,6 +1,7 @@
 #pragma once
 #include "ISkillBehavior.h"
 #include "SkillData.h"
+#include "SkillTypes.h"
 #include <vector>
 #include <unordered_set>
 
@@ -46,6 +47,8 @@ private:
     float m_damageMult = 1.f;
     float m_elapsed    = 0.f;
     DirectX::XMFLOAT3 m_epicenter = {};
+    ElementType m_cachedElem = ElementType::None;
+    GameObject* m_pCaster    = nullptr;
 
     std::vector<ShockRing>              m_rings;
     std::unordered_set<EnemyComponent*> m_hitEnemies;

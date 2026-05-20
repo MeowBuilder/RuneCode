@@ -3,7 +3,10 @@
 #include <DirectXMath.h>
 #include <vector>
 #include <string>
+#include <unordered_set>
 #include "SkillTypes.h"
+
+class EnemyComponent;
 
 using namespace DirectX;
 
@@ -49,6 +52,9 @@ struct Projectile
     float cdResetChance   = 0.f;    // 무한: 적중 시 쿨다운 초기화 확률
     int   spawnOnHitCount = 0;      // 반향: 적중 시 주변 적으로 추가 투사체 생성
     SkillSlot skillSlot   = SkillSlot::Count; // 적중 시 onHit 훅 호출용 슬롯 정보
+
+    // 관통 히트 추적 — 이미 맞은 적은 재타격하지 않음
+    std::unordered_set<EnemyComponent*> piercedEnemies;
 
     // 궤도 운동 (궤도/중궤도 룬)
     bool      isOrbital          = false;

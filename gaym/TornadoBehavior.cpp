@@ -18,6 +18,7 @@ TornadoBehavior::TornadoBehavior()
 void TornadoBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
     m_bActive = false;
+    m_pCaster = caster;
 
     if (!m_pVFXManager) { return; }
 
@@ -25,7 +26,16 @@ void TornadoBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targe
     origin.y           = 0.f;  // 토네이도는 지면에서 상승
     XMFLOAT3 direction = { 0.f, 1.f, 0.f };
 
+    SkillStats stats;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count)
+            stats = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+    }
+
     EffectDef def = EffectRegistry::Get().GetEffect("R_TornadoPlayer");
+    if (!stats.elementSet.empty())
+        ApplyElementToEffectDef(def, stats.elementSet[0]);
     m_vfxId = m_pVFXManager->SpawnEffectDef(origin, direction, def, true);
 
     if (m_vfxId >= 0)
@@ -116,6 +126,25 @@ void TornadoBehavior::DamageEnemiesNearby(float dt)
         if (dist > DMG_RADIUS) continue;
 
         pEnemy->TakeDamage(dmg, false);
+
+        if (m_pCaster) {
+            auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+            if (pSC && m_slot != SkillSlot::Count) {
+                SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+                if (!sts.onHitHooks.empty()) {
+                    SkillContext ctx;
+                    ctx.caster             = m_pCaster;
+                    ctx.baseDamage         = dmg;
+                    ctx.damageDealt        = dmg;
+                    ctx.hitEnemy           = pEnemy;
+                    ctx.hitEnemyPos        = ep;
+                    ctx.scene              = m_pScene;
+                    ctx.statusChanceMult   = sts.statusChanceMult;
+                    ctx.statusDurationMult = sts.statusDurationMult;
+                    for (auto& hook : sts.onHitHooks) hook(ctx);
+                }
+            }
+        }
     }
 }
 

@@ -112,140 +112,216 @@ void RuneRegistry::Register(RuneDef def)
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-//  모든 룬 정의 (RuneList.md 기반, 50종)
+//  룬 정의 (docs/RuneDesign.md 기반)
 //  추가/수정은 이 파일 한 곳에서만 작업
 // ═════════════════════════════════════════════════════════════════════════════
+
+static bool RollStatus(float basePct, float chanceMult)
+{
+    float chance = (std::min)(basePct * chanceMult, 1.f);
+    return ((float)(rand() % 1000) / 1000.f) < chance;
+}
+
 RuneRegistry::RuneRegistry()
 {
-    // ─── 노멀 등급 (15종) ────────────────────────────────────────────────────
+    // ─── 🔥 화속성 계열 ───────────────────────────────────────────────────────
 
-    // 원소 강화 (Normal)
-    Register({ .id="W01", .name="수속성",       .grade=RuneGrade::Normal,  .element=ElementType::Water, .damageMult=1.10f, .subVFXId="sub_water" });
-    Register({ .id="F01", .name="화속성",       .grade=RuneGrade::Normal,  .element=ElementType::Fire,  .damageMult=1.10f, .subVFXId="sub_fire"  });
-    Register({ .id="E01", .name="토속성",       .grade=RuneGrade::Normal,  .element=ElementType::Earth, .damageMult=1.10f, .subVFXId="sub_earth" });
-    Register({ .id="A01", .name="풍속성",       .grade=RuneGrade::Normal,  .element=ElementType::Wind,  .damageMult=1.10f, .subVFXId="sub_wind"  });
+    // FIR_1 화속 (Normal): 화상 1중첩, 25% 기본 확률
+    Register({ .id="FIR_1", .name="화속", .category="속성 변경",
+               .description="25% 확률로 화상 1중첩 (5초, 매초 틱 피해)",
+               .grade=RuneGrade::Normal, .element=ElementType::Fire,
+               .subVFXId="sub_fire",
+               .onHit=[](SkillContext& ctx){
+                   if (!ctx.hitEnemy) return;
+                   if (!RollStatus(0.25f, ctx.statusChanceMult)) return;
+                   static_cast<EnemyComponent*>(ctx.hitEnemy)
+                       ->ApplyBurn(1, 5.f * ctx.statusDurationMult, ctx.baseDamage * 0.08f);
+               }});
 
-    // 발동 방식 (Normal)
-    Register({ .id="I01", .name="신속",         .grade=RuneGrade::Normal,  .castTimeMult=0.85f });
-    Register({ .id="I02", .name="연사",         .grade=RuneGrade::Normal,  .damageMult=0.85f,  .extraProjectiles=1 });
-    Register({ .id="C01", .name="차징 파괴",    .grade=RuneGrade::Normal,  .damageMult=1.30f,  .activationOverride=ActivationType::Charge });
-    Register({ .id="C02", .name="차징 신속",    .grade=RuneGrade::Normal,  .castTimeMult=0.80f, .activationOverride=ActivationType::Charge });
-    Register({ .id="T01", .name="채널 파괴",    .grade=RuneGrade::Normal,  .damageMult=1.15f,  .activationOverride=ActivationType::Channel });
-    Register({ .id="T02", .name="채널 신속",    .grade=RuneGrade::Normal,  .castTimeMult=0.85f, .activationOverride=ActivationType::Channel });
-    Register({ .id="S01", .name="설치 연장",    .grade=RuneGrade::Normal,  .durationMult=1.25f, .activationOverride=ActivationType::Place });
-    Register({ .id="S02", .name="설치 파괴",    .grade=RuneGrade::Normal,  .damageMult=1.30f,  .activationOverride=ActivationType::Place });
-    Register({ .id="B01", .name="증강 파괴",    .grade=RuneGrade::Normal,  .damageMult=1.15f,  .activationOverride=ActivationType::Enhance });
-    Register({ .id="B02", .name="증강 연장",    .grade=RuneGrade::Normal,  .durationMult=1.30f, .activationOverride=ActivationType::Enhance });
-    Register({ .id="X01", .name="강격",         .grade=RuneGrade::Normal,  .damageMult=1.05f });
+    // FIR_2 점화 (Rare): 확률+, 지속+
+    Register({ .id="FIR_2", .name="점화", .category="속성 강화",
+               .description="화상 확률 35%, 지속 6초로 강화",
+               .grade=RuneGrade::Rare, .element=ElementType::Fire,
+               .subVFXId="sub_fire",
+               .onHit=[](SkillContext& ctx){
+                   if (!ctx.hitEnemy) return;
+                   if (!RollStatus(0.35f, ctx.statusChanceMult)) return;
+                   static_cast<EnemyComponent*>(ctx.hitEnemy)
+                       ->ApplyBurn(1, 6.f * ctx.statusDurationMult, ctx.baseDamage * 0.08f);
+               }});
 
-    // ─── 레어 등급 (12종) ────────────────────────────────────────────────────
+    // FIR_3 작열 (Epic): 화상 한도 5중첩, 틱 데미지 +20%
+    Register({ .id="FIR_3", .name="작열", .category="속성 강화",
+               .description="화상 최대 5중첩, 틱 피해 +20%, 확률 40%",
+               .grade=RuneGrade::Epic, .element=ElementType::Fire,
+               .subVFXId="sub_fire",
+               .onHit=[](SkillContext& ctx){
+                   if (!ctx.hitEnemy) return;
+                   if (!RollStatus(0.40f, ctx.statusChanceMult)) return;
+                   static_cast<EnemyComponent*>(ctx.hitEnemy)
+                       ->ApplyBurn(1, 5.f * ctx.statusDurationMult, ctx.baseDamage * 0.096f, 5);
+               }});
 
-    // 원소 강화 (Rare)
-    Register({ .id="W02", .name="냉속성",       .grade=RuneGrade::Rare,    .element=ElementType::Water, .damageMult=1.15f, .statusDurationMult=1.20f, .subVFXId="sub_water" });
-    Register({ .id="W03", .name="빙속성",       .grade=RuneGrade::Rare,    .element=ElementType::Water, .statusChanceMult=1.40f,                        .subVFXId="sub_water" });
-    Register({ .id="F02", .name="점화",         .grade=RuneGrade::Rare,    .element=ElementType::Fire,  .damageMult=1.15f, .statusDurationMult=1.15f,  .subVFXId="sub_fire"  });
-    Register({ .id="F03", .name="작열",         .grade=RuneGrade::Rare,    .element=ElementType::Fire,  .damageMult=1.10f, .statusChanceMult=1.30f,    .subVFXId="sub_fire"  });
-    Register({ .id="E02", .name="암석",         .grade=RuneGrade::Rare,    .element=ElementType::Earth, .damageMult=1.15f,                              .subVFXId="sub_earth" });
-    Register({ .id="E03", .name="진동",         .grade=RuneGrade::Rare,    .element=ElementType::Earth, .statusDurationMult=1.30f,                      .subVFXId="sub_earth" });
-    Register({ .id="A02", .name="질풍",         .grade=RuneGrade::Rare,    .element=ElementType::Wind,  .damageMult=1.15f,                              .subVFXId="sub_wind"  });
-    Register({ .id="A03", .name="냉각풍",       .grade=RuneGrade::Rare,    .element=ElementType::Wind,  .cooldownMult=0.90f,                            .subVFXId="sub_wind"  });
-
-    // 발동 방식 (Rare)
-    Register({ .id="I03", .name="관통",         .grade=RuneGrade::Rare,    .piercing=true });
-    Register({ .id="C03", .name="차징 범위",    .grade=RuneGrade::Rare,    .radiusMult=1.30f,  .activationOverride=ActivationType::Charge });
-    Register({ .id="T03", .name="채널 냉각",    .grade=RuneGrade::Rare,    .cooldownMult=0.90f, .activationOverride=ActivationType::Channel });
-    Register({ .id="S03", .name="설치 연사",    .grade=RuneGrade::Rare,    .activationOverride=ActivationType::Place, .extraProjectiles=1 });
-
-    // ─── 에픽 등급 (8종) ─────────────────────────────────────────────────────
-
-    // 원소 강화 (Epic)
-    Register({ .id="W04", .name="급류",         .grade=RuneGrade::Epic,    .element=ElementType::Water, .damageMult=1.25f,                              .subVFXId="sub_water" });
-    Register({ .id="F04", .name="폭염",         .grade=RuneGrade::Epic,    .element=ElementType::Fire,  .damageMult=1.25f, .radiusMult=1.20f,           .subVFXId="sub_fire"  });
-    Register({ .id="E04", .name="대지",         .grade=RuneGrade::Epic,    .element=ElementType::Earth, .damageMult=1.25f,                              .subVFXId="sub_earth" });
-    Register({ .id="A04", .name="회오리",       .grade=RuneGrade::Epic,    .element=ElementType::Wind,  .damageMult=1.25f, .knockbackMult=1.40f,        .subVFXId="sub_wind"  });
-
-    // 발동 방식 (Epic)
-    Register({ .id="I04", .name="분열",         .grade=RuneGrade::Epic,    .extraProjectiles=3 });
-    Register({ .id="C04", .name="차징 냉각",    .grade=RuneGrade::Epic,    .cooldownMult=0.75f, .activationOverride=ActivationType::Charge });
-    Register({ .id="T04", .name="채널 범위",    .grade=RuneGrade::Epic,    .radiusMult=1.40f,  .activationOverride=ActivationType::Channel });
-    // 증강 강화: 증강 모드 + 데미지 1.15배 + 범위 1.20배
-    Register({ .id="B03", .name="증강 강화",    .grade=RuneGrade::Epic,    .damageMult=1.15f, .radiusMult=1.20f, .activationOverride=ActivationType::Enhance });
-
-    // ─── 유니크 등급 (5종) ───────────────────────────────────────────────────
-    // 흡혈류: 수속성 + 데미지 1.35배 + 흡혈 8%
-    Register({ .id="W05", .name="흡혈류",       .grade=RuneGrade::Unique,  .element=ElementType::Water, .damageMult=1.35f, .lifestealRatio=0.08f, .subVFXId="sub_water" });
-    // 방어 분쇄: 화속성 + 데미지 1.35배 + 방어력 25% 감소 디버프 (3초)
-    Register({ .id="F05", .name="방어 분쇄",    .grade=RuneGrade::Unique,  .element=ElementType::Fire,  .damageMult=1.35f, .subVFXId="sub_fire",
+    // FIR_4 업화 (Unique): 화상 3중첩 이상 적 피격 시 즉시 추가 폭발 피해
+    Register({ .id="FIR_4", .name="업화", .category="속성 강화",
+               .description="화상 3중첩 이상 적중 시 중첩수×20% 즉발 폭발 피해",
+               .grade=RuneGrade::Unique, .element=ElementType::Fire,
+               .subVFXId="sub_fire",
                .onHit=[](SkillContext& ctx){
                    if (!ctx.hitEnemy) return;
                    auto* pEnemy = static_cast<EnemyComponent*>(ctx.hitEnemy);
-                   pEnemy->ApplyDefenseDebuff(0.75f, 3.0f);
-               } });
-    Register({ .id="E05", .name="광물",         .grade=RuneGrade::Unique,  .element=ElementType::Earth, .damageMult=1.35f, .subVFXId="sub_earth" });
-    Register({ .id="A05", .name="폭풍",         .grade=RuneGrade::Unique,  .element=ElementType::Wind,  .damageMult=1.35f, .subVFXId="sub_wind"  });
-    // 연쇄 번개: 설치 모드 + 적중 시 가장 가까운 다른 적에게 50% 피해 연쇄
-    Register({ .id="S04", .name="연쇄 번개",    .grade=RuneGrade::Unique,  .activationOverride=ActivationType::Place,
+                   int burnStacks = pEnemy->GetBurnStacks();
+                   if (burnStacks >= 3)
+                       pEnemy->TakeDamage(ctx.baseDamage * 0.20f * burnStacks, false);
+                   if (!RollStatus(0.40f, ctx.statusChanceMult)) return;
+                   pEnemy->ApplyBurn(1, 5.f * ctx.statusDurationMult, ctx.baseDamage * 0.08f, 5);
+               }});
+
+    // ─── 💧 수속성 계열 ───────────────────────────────────────────────────────
+
+    // WAT_1 수속 (Normal): 빙결 1중첩, 25%
+    Register({ .id="WAT_1", .name="수속", .category="속성 변경",
+               .description="25% 확률로 냉기 1중첩 (5초, 이동속도 -15%). 3중첩 시 완전 빙결",
+               .grade=RuneGrade::Normal, .element=ElementType::Water,
+               .subVFXId="sub_water",
                .onHit=[](SkillContext& ctx){
-                   if (!ctx.scene || !ctx.hitEnemy) return;
-                   auto* pScene   = static_cast<Scene*>(ctx.scene);
-                   auto* pHitEnemy = static_cast<EnemyComponent*>(ctx.hitEnemy);
-                   CRoom* pRoom   = pScene->GetCurrentRoom();
-                   if (!pRoom) return;
-                   EnemyComponent* pNearest = nullptr;
-                   float nearestDist = 12.f;
-                   XMVECTOR origin = XMLoadFloat3(&ctx.hitEnemyPos);
-                   for (const auto& obj : pRoom->GetGameObjects()) {
-                       if (!obj) continue;
-                       EnemyComponent* e = obj->GetComponent<EnemyComponent>();
-                       if (!e || e->IsDead() || e == pHitEnemy) continue;
-                       TransformComponent* t = obj->GetTransform();
-                       if (!t) continue;
-                       XMFLOAT3 ep = t->GetPosition();
-                       float d = XMVectorGetX(XMVector3Length(XMLoadFloat3(&ep) - origin));
-                       if (d < nearestDist) { nearestDist = d; pNearest = e; }
-                   }
-                   if (pNearest) pNearest->TakeDamage(ctx.damageDealt * 0.5f, false);
-               } });
+                   if (!ctx.hitEnemy) return;
+                   if (!RollStatus(0.25f, ctx.statusChanceMult)) return;
+                   static_cast<EnemyComponent*>(ctx.hitEnemy)
+                       ->ApplyChill(1, 5.f * ctx.statusDurationMult);
+               }});
 
-    // ─── 추가타 계열 (4종) ───────────────────────────────────────────────────
-    Register({ .id="O01", .name="궤도",         .grade=RuneGrade::Rare,   .orbitalCount=2 });
-    Register({ .id="O02", .name="중궤도",       .grade=RuneGrade::Epic,   .orbitalCount=4 });
-    Register({ .id="H01", .name="반향",         .grade=RuneGrade::Rare,   .spawnOnHitCount=1 });
-    Register({ .id="H02", .name="연쇄 반향",    .grade=RuneGrade::Epic,   .damageMult=0.85f, .spawnOnHitCount=2 });
-
-    // ─── 범용 크기/데미지 계열 (4종) ─────────────────────────────────────────
-    Register({ .id="G01", .name="범위 확대",    .grade=RuneGrade::Normal, .radiusMult=1.20f });
-    Register({ .id="G02", .name="광역",         .grade=RuneGrade::Rare,   .damageMult=0.92f, .radiusMult=1.35f });
-    Register({ .id="X02", .name="강타",         .grade=RuneGrade::Normal, .damageMult=1.15f });
-    Register({ .id="X03", .name="파괴",         .grade=RuneGrade::Rare,   .damageMult=1.25f, .cooldownMult=1.15f });
-
-    // ─── 레전더리 등급 (10종) ────────────────────────────────────────────────
-    // 이중 발사: 즉시 같은 방향으로 한 번 더 발사 (50% 데미지)
-    Register({ .id="L01", .name="이중 발사",    .grade=RuneGrade::Legendary, .doublecast=true });
-    // 시간 역행: 적중 시 해당 스킬 쿨다운 1초 감소
-    Register({ .id="L02", .name="시간 역행",    .grade=RuneGrade::Legendary,
+    // WAT_2 냉기 (Rare): 확률+, 지속+
+    Register({ .id="WAT_2", .name="냉기", .category="속성 강화",
+               .description="냉기 확률 35%, 지속 6초로 강화",
+               .grade=RuneGrade::Rare, .element=ElementType::Water,
+               .subVFXId="sub_water",
                .onHit=[](SkillContext& ctx){
-                   if (!ctx.caster || ctx.skillSlot == SkillSlot::Count) return;
-                   SkillComponent* pSkill = ctx.caster->GetComponent<SkillComponent>();
-                   if (pSkill) pSkill->ReduceCooldown(ctx.skillSlot, 1.0f);
-               } });
-    // 원소 증폭: BuildSkillStats에서 2개 이상 원소 장착 감지 시 +30% (onCast 훅 불필요)
-    Register({ .id="L03", .name="원소 증폭",    .grade=RuneGrade::Legendary });
-    // 원소 변환: 시전 시마다 원소를 무작위로 변경 + 데미지 1.20배
-    Register({ .id="L04", .name="원소 변환",    .grade=RuneGrade::Legendary, .damageMult=1.20f, .randomElementOnCast=true });
-    // 흡혈: 모든 스킬 피해의 15% 회복
-    Register({ .id="L05", .name="흡혈",         .grade=RuneGrade::Legendary, .lifestealRatio=0.15f });
-    Register({ .id="L06", .name="처형자",       .grade=RuneGrade::Legendary, .execDamageBonus=0.50f });
-    // 보호막: 스킬 시전 시 기본 데미지의 30% 만큼 보호막 생성
-    Register({ .id="L07", .name="보호막",       .grade=RuneGrade::Legendary,
-               .onCast=[](SkillContext& ctx){
-                   if (!ctx.caster) return;
-                   PlayerComponent* pPlayer = ctx.caster->GetComponent<PlayerComponent>();
-                   if (pPlayer) pPlayer->AddShield(ctx.baseDamage * 0.30f);
-               } });
-    // 유도: 투사체가 가장 가까운 적을 자동 추적
-    Register({ .id="L08", .name="유도",         .grade=RuneGrade::Legendary, .homing=true });
-    // 메아리: 스킬 시전 시 50% 데미지로 즉시 재시전
-    Register({ .id="L09", .name="메아리",       .grade=RuneGrade::Legendary, .echoOnCast=true });
-    Register({ .id="L10", .name="무한",         .grade=RuneGrade::Legendary, .cdResetChance=0.10f });
+                   if (!ctx.hitEnemy) return;
+                   if (!RollStatus(0.35f, ctx.statusChanceMult)) return;
+                   static_cast<EnemyComponent*>(ctx.hitEnemy)
+                       ->ApplyChill(1, 6.f * ctx.statusDurationMult);
+               }});
+
+    // WAT_3 결빙 (Epic): 2중첩으로도 완전 빙결
+    Register({ .id="WAT_3", .name="결빙", .category="속성 강화",
+               .description="냉기 2중첩으로 완전 빙결 발동 (기본 3중첩), 확률 40%",
+               .grade=RuneGrade::Epic, .element=ElementType::Water,
+               .subVFXId="sub_water",
+               .onHit=[](SkillContext& ctx){
+                   if (!ctx.hitEnemy) return;
+                   if (!RollStatus(0.40f, ctx.statusChanceMult)) return;
+                   static_cast<EnemyComponent*>(ctx.hitEnemy)
+                       ->ApplyChill(1, 5.f * ctx.statusDurationMult, 2);
+               }});
+
+    // WAT_4 빙하 (Unique): 1중첩에서도 즉시 완전 빙결
+    Register({ .id="WAT_4", .name="빙하", .category="속성 강화",
+               .description="30% 확률로 즉시 완전 빙결 (냉기 1중첩만으로 발동)",
+               .grade=RuneGrade::Unique, .element=ElementType::Water,
+               .subVFXId="sub_water",
+               .onHit=[](SkillContext& ctx){
+                   if (!ctx.hitEnemy) return;
+                   if (!RollStatus(0.30f, ctx.statusChanceMult)) return;
+                   static_cast<EnemyComponent*>(ctx.hitEnemy)
+                       ->ApplyChill(1, 5.f * ctx.statusDurationMult, 1);
+               }});
+
+    // ─── 🌀 풍속성 계열 ───────────────────────────────────────────────────────
+
+    // WND_1 풍속 (Normal): 넉백 +20%
+    Register({ .id="WND_1", .name="풍속", .category="속성 변경",
+               .description="바람 속성 변환. 넉백 거리 증가",
+               .grade=RuneGrade::Normal, .element=ElementType::Wind,
+               .knockbackMult=1.20f, .subVFXId="sub_wind" });
+
+    // WND_2 질풍 (Rare): 넉백 +50% + 냉기 슬로우
+    Register({ .id="WND_2", .name="질풍", .category="속성 강화",
+               .description="30% 확률로 냉기 1중첩 (4초, 이동속도 -15%)",
+               .grade=RuneGrade::Rare, .element=ElementType::Wind,
+               .knockbackMult=1.50f, .subVFXId="sub_wind",
+               .onHit=[](SkillContext& ctx){
+                   if (!ctx.hitEnemy) return;
+                   if (!RollStatus(0.30f, ctx.statusChanceMult)) return;
+                   static_cast<EnemyComponent*>(ctx.hitEnemy)
+                       ->ApplyChill(1, 4.f * ctx.statusDurationMult);
+               }});
+
+    // WND_3 폭풍 (Epic): 넉백 +80% + 균열 1중첩
+    Register({ .id="WND_3", .name="폭풍", .category="속성 강화",
+               .description="25% 확률로 균열 1중첩 (5초, 방어력 -8%)",
+               .grade=RuneGrade::Epic, .element=ElementType::Wind,
+               .knockbackMult=1.80f, .subVFXId="sub_wind",
+               .onHit=[](SkillContext& ctx){
+                   if (!ctx.hitEnemy) return;
+                   if (!RollStatus(0.25f, ctx.statusChanceMult)) return;
+                   static_cast<EnemyComponent*>(ctx.hitEnemy)
+                       ->ApplyFracture(1, 5.f * ctx.statusDurationMult);
+               }});
+
+    // WND_4 뇌풍 (Unique): 넉백 +120% + 균열 2중첩
+    Register({ .id="WND_4", .name="뇌풍", .category="속성 강화",
+               .description="35% 확률로 균열 2중첩 즉시 부여 (4초)",
+               .grade=RuneGrade::Unique, .element=ElementType::Wind,
+               .knockbackMult=2.20f, .subVFXId="sub_wind",
+               .onHit=[](SkillContext& ctx){
+                   if (!ctx.hitEnemy) return;
+                   if (!RollStatus(0.35f, ctx.statusChanceMult)) return;
+                   static_cast<EnemyComponent*>(ctx.hitEnemy)
+                       ->ApplyFracture(2, 4.f * ctx.statusDurationMult);
+               }});
+
+    // ─── 🪨 토속성 계열 ───────────────────────────────────────────────────────
+
+    // ERT_1 토속 (Normal): 균열 1중첩, 25%
+    Register({ .id="ERT_1", .name="토속", .category="속성 변경",
+               .description="25% 확률로 균열 1중첩 (6초, 방어력 -8%). 3중첩 시 경직",
+               .grade=RuneGrade::Normal, .element=ElementType::Earth,
+               .subVFXId="sub_earth",
+               .onHit=[](SkillContext& ctx){
+                   if (!ctx.hitEnemy) return;
+                   if (!RollStatus(0.25f, ctx.statusChanceMult)) return;
+                   static_cast<EnemyComponent*>(ctx.hitEnemy)
+                       ->ApplyFracture(1, 6.f * ctx.statusDurationMult);
+               }});
+
+    // ERT_2 암석 (Rare): 균열 확률+, 2중첩 시 냉기도 추가
+    Register({ .id="ERT_2", .name="암석", .category="속성 강화",
+               .description="균열 확률 35%. 균열 2중첩 이상이면 냉기 1중첩도 부여",
+               .grade=RuneGrade::Rare, .element=ElementType::Earth,
+               .subVFXId="sub_earth",
+               .onHit=[](SkillContext& ctx){
+                   if (!ctx.hitEnemy) return;
+                   if (!RollStatus(0.35f, ctx.statusChanceMult)) return;
+                   auto* pEnemy = static_cast<EnemyComponent*>(ctx.hitEnemy);
+                   pEnemy->ApplyFracture(1, 6.f * ctx.statusDurationMult);
+                   if (pEnemy->GetFractureStacks() >= 2)
+                       pEnemy->ApplyChill(1, 3.5f * ctx.statusDurationMult);
+               }});
+
+    // ERT_3 지진 (Epic): 2중첩으로도 경직
+    Register({ .id="ERT_3", .name="지진", .category="속성 강화",
+               .description="균열 2중첩으로 경직 발동 (기본 3중첩), 확률 40%",
+               .grade=RuneGrade::Epic, .element=ElementType::Earth,
+               .subVFXId="sub_earth",
+               .onHit=[](SkillContext& ctx){
+                   if (!ctx.hitEnemy) return;
+                   if (!RollStatus(0.40f, ctx.statusChanceMult)) return;
+                   static_cast<EnemyComponent*>(ctx.hitEnemy)
+                       ->ApplyFracture(1, 6.f * ctx.statusDurationMult, 2);
+               }});
+
+    // ERT_4 붕괴 (Unique): 경직/빙결 상태 적에게 +60% 추가 피해 + 즉시 경직
+    Register({ .id="ERT_4", .name="붕괴", .category="속성 강화",
+               .description="경직/빙결 상태 적에게 +60% 추가 피해. 35% 확률 균열 즉시 경직",
+               .grade=RuneGrade::Unique, .element=ElementType::Earth,
+               .subVFXId="sub_earth",
+               .onHit=[](SkillContext& ctx){
+                   if (!ctx.hitEnemy) return;
+                   auto* pEnemy = static_cast<EnemyComponent*>(ctx.hitEnemy);
+                   if (pEnemy->GetState() == EnemyState::Stagger || pEnemy->IsFrozen())
+                       pEnemy->TakeDamage(ctx.damageDealt * 0.60f, false);
+                   if (!RollStatus(0.35f, ctx.statusChanceMult)) return;
+                   pEnemy->ApplyFracture(1, 6.f * ctx.statusDurationMult, 1);
+               }});
 }

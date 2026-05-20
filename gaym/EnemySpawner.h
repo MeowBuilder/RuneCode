@@ -11,6 +11,7 @@ class CRoom;
 class Scene;
 class Shader;
 class EnemyComponent;
+class FluidSkillVFXManager;
 class Mesh;
 class LineMesh;
 class FanMesh;
@@ -84,6 +85,10 @@ private:
     ID3D12GraphicsCommandList* m_pCommandList = nullptr;
     Scene* m_pScene = nullptr;
     Shader* m_pShader = nullptr;
+    FluidSkillVFXManager* m_pVFXManager = nullptr;
+
+public:
+    void SetVFXManager(FluidSkillVFXManager* mgr) { m_pVFXManager = mgr; }
 
     // Shared meshes for indicators
     RingMesh* m_pRingMesh = nullptr;   // 테두리 링 (공격 범위 윤곽)

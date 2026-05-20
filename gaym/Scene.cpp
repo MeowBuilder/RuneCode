@@ -238,6 +238,7 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
     // 디스크립터를 사용한다(SPH SRV + LightEmitter SRV).
     m_pVFXManager->Init(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex);
     OutputDebugString(L"[Scene] VFXManager initialized\n");
+    m_pEnemySpawner->SetVFXManager(m_pVFXManager->GetEnemyVFX());
 
     // VFXManager 초기화 이후 스킬 행동 클래스에 플레이어 VFX 매니저 연결
     // (Init 전에는 m_pPlayerVFX가 nullptr이므로 반드시 여기서 설정)

@@ -53,3 +53,17 @@ private:
     std::unordered_map<std::string,
         std::unordered_map<uint32_t, VFXModifier>> m_RuneMods;
 };
+
+// 변환 룬 원소에 맞춰 EffectDef 전체 레이어의 색상을 재지정한다.
+// SpawnEffectDef 호출 직전에 !stats.elementSet.empty() 조건 하에 사용.
+inline void ApplyElementToEffectDef(EffectDef& def, ElementType e)
+{
+    FluidElementColor ec = FluidElementColors::Get(e);
+    def.element = e;
+    for (auto& l : def.layers) {
+        l.element        = e;
+        l.coreColor      = ec.coreColor;
+        l.edgeColor      = ec.edgeColor;
+        l.overrideColors = true;
+    }
+}

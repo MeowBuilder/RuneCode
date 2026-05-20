@@ -19,6 +19,7 @@ TidalWaveBehavior::TidalWaveBehavior()
 void TidalWaveBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
     m_bActive = false;
+    m_pCaster = caster;
     m_hitEnemies.clear();
     m_extraVFXIds.clear();
 
@@ -39,7 +40,16 @@ void TidalWaveBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& tar
         XMStoreFloat3(&direction, dV);
     }
 
+    SkillStats stats;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count)
+            stats = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+    }
+
     EffectDef def = EffectRegistry::Get().GetEffect("R_TidalWave");
+    if (!stats.elementSet.empty())
+        ApplyElementToEffectDef(def, stats.elementSet[0]);
     m_vfxId = m_pVFXManager->SpawnEffectDef(origin, direction, def, true);
 
     if (m_vfxId >= 0)
@@ -148,6 +158,25 @@ void TidalWaveBehavior::HitEnemiesInWave(float damage)
 
         pEnemy->TakeDamage(damage, true);  // 해일은 경직 유발
         m_hitEnemies.insert(pEnemy);
+
+        if (m_pCaster) {
+            auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+            if (pSC && m_slot != SkillSlot::Count) {
+                SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+                if (!sts.onHitHooks.empty()) {
+                    SkillContext ctx;
+                    ctx.caster             = m_pCaster;
+                    ctx.baseDamage         = damage;
+                    ctx.damageDealt        = damage;
+                    ctx.hitEnemy           = pEnemy;
+                    ctx.hitEnemyPos        = ePos;
+                    ctx.scene              = m_pScene;
+                    ctx.statusChanceMult   = sts.statusChanceMult;
+                    ctx.statusDurationMult = sts.statusDurationMult;
+                    for (auto& hook : sts.onHitHooks) hook(ctx);
+                }
+            }
+        }
     }
 }
 

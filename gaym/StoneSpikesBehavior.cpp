@@ -17,6 +17,7 @@ StoneSpikesBehavior::StoneSpikesBehavior()
 void StoneSpikesBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
     m_bActive = false;
+    m_pCaster = caster;
     m_spikes.clear();
 
     if (!m_pVFXManager) { return; }
@@ -43,6 +44,17 @@ void StoneSpikesBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& t
         e.pos.y      = origin.y;  // 플레이어 높이 기준 (수중 보스 등 고도 변화 대응)
         e.triggerAt  = i * SPIKE_INTERVAL;
         m_spikes.push_back(e);
+    }
+
+    // 변환 룬 원소 캡처
+    m_cachedElem = ElementType::None;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count) {
+            SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            if (!sts.elementSet.empty())
+                m_cachedElem = sts.elementSet[0];
+        }
     }
 
     m_bActive    = true;
@@ -76,6 +88,8 @@ void StoneSpikesBehavior::TriggerSpike(int idx)
     {
         XMFLOAT3 up = { 0.f, 1.f, 0.f };
         EffectDef def = EffectRegistry::Get().GetEffect("Q_StoneSpike");
+        if (m_cachedElem != ElementType::None)
+            ApplyElementToEffectDef(def, m_cachedElem);
         s.vfxId = m_pVFXManager->SpawnEffectDef(s.pos, up, def, true);
     }
 
@@ -103,6 +117,25 @@ void StoneSpikesBehavior::HitEnemiesAtSpike(const DirectX::XMFLOAT3& center, flo
         if (fabsf(ep.y - center.y) > HIT_HEIGHT) continue;
 
         pEnemy->TakeDamage(damage, true);
+
+        if (m_pCaster) {
+            auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+            if (pSC && m_slot != SkillSlot::Count) {
+                SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+                if (!sts.onHitHooks.empty()) {
+                    SkillContext ctx;
+                    ctx.caster             = m_pCaster;
+                    ctx.baseDamage         = damage;
+                    ctx.damageDealt        = damage;
+                    ctx.hitEnemy           = pEnemy;
+                    ctx.hitEnemyPos        = ep;
+                    ctx.scene              = m_pScene;
+                    ctx.statusChanceMult   = sts.statusChanceMult;
+                    ctx.statusDurationMult = sts.statusDurationMult;
+                    for (auto& hook : sts.onHitHooks) hook(ctx);
+                }
+            }
+        }
     }
 }
 

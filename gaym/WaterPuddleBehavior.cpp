@@ -4,6 +4,7 @@
 #include "EffectRegistry.h"
 #include "GameObject.h"
 #include "TransformComponent.h"
+#include "SkillComponent.h"
 #include "Scene.h"
 #include "Room.h"
 #include "EnemyComponent.h"
@@ -13,17 +14,27 @@ WaterPuddleBehavior::WaterPuddleBehavior()
 {
 }
 
-void WaterPuddleBehavior::Execute(GameObject* /*caster*/, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
+void WaterPuddleBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
     Reset();
+    m_pCaster = caster;
 
     if (!m_pVFXManager) { return; }
+
+    SkillStats stats;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count)
+            stats = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+    }
 
     // ① 낙하 이펙트 — 타겟 위 5.5 유닛에서 아래 방향으로 스폰
     {
         XMFLOAT3 fallOrigin = { targetPosition.x, targetPosition.y + 5.5f, targetPosition.z };
         XMFLOAT3 fallDir    = { 0.f, -1.f, 0.f };
         EffectDef fallDef   = EffectRegistry::Get().GetEffect("Q_WaterFall");
+        if (!stats.elementSet.empty())
+            ApplyElementToEffectDef(fallDef, stats.elementSet[0]);
         m_fallVfxId = m_pVFXManager->SpawnEffectDef(fallOrigin, fallDir, fallDef, true);
     }
 
@@ -32,6 +43,8 @@ void WaterPuddleBehavior::Execute(GameObject* /*caster*/, const DirectX::XMFLOAT
         XMFLOAT3 puddleOrigin = { targetPosition.x, 2.5f, targetPosition.z };
         XMFLOAT3 puddleDir    = { 0.f, -1.f, 0.f };
         EffectDef puddleDef   = EffectRegistry::Get().GetEffect("Q_WaterPuddle");
+        if (!stats.elementSet.empty())
+            ApplyElementToEffectDef(puddleDef, stats.elementSet[0]);
         m_vfxId = m_pVFXManager->SpawnEffectDef(puddleOrigin, puddleDir, puddleDef, true);
     }
 
@@ -107,7 +120,27 @@ void WaterPuddleBehavior::TickPuddle(float deltaTime)
         }
 
         if (bDoTick)
+        {
             pEnemy->TakeDamage(dotDmg, false);
+            if (m_pCaster) {
+                auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+                if (pSC && m_slot != SkillSlot::Count) {
+                    SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+                    if (!sts.onHitHooks.empty()) {
+                        SkillContext ctx;
+                        ctx.caster             = m_pCaster;
+                        ctx.baseDamage         = dotDmg;
+                        ctx.damageDealt        = dotDmg;
+                        ctx.hitEnemy           = pEnemy;
+                        ctx.hitEnemyPos        = ep;
+                        ctx.scene              = m_pScene;
+                        ctx.statusChanceMult   = sts.statusChanceMult;
+                        ctx.statusDurationMult = sts.statusDurationMult;
+                        for (auto& hook : sts.onHitHooks) hook(ctx);
+                    }
+                }
+            }
+        }
     }
 
     // 범위를 벗어난 적의 슬로우 해제

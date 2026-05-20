@@ -23,6 +23,9 @@ cbuffer cbGameObject : register(b0)
     uint bIsPortal;  // 차원문 셰이딩 — 시안/마젠타 듀얼톤 와류 + 블랙홀 + 림 글로우
     uint bIsDecal;   // 지면 데칼 — 텍스처 알파 마스킹, 조명 우회
     uint _gpad2;
+    float4 g_StatusColor;     // element outline color (RGB) + unused (A)
+    float  g_StatusIntensity; // 0 = no status outline, 1 = full element tint
+    float  _spad0; float _spad1; float _spad2;
     MATERIAL gMaterial;
     matrix gBoneTransforms[128];
 };
@@ -495,6 +498,13 @@ float4 PS_Outline(VS_OUTLINE_OUTPUT input) : SV_TARGET
     float3 tint = baseColor * 0.50f;
     tint = lerp(tint, float3(0.03f, 0.03f, 0.06f), 0.15f);
     tint = max(tint, 0.0f);
+
+    // Status effect: lerp outline toward element color when intensity > 0
+    if (g_StatusIntensity > 0.0f)
+    {
+        float pulse = 0.7f + 0.3f * sin(g_Time * 4.0f);
+        tint = lerp(tint, g_StatusColor.rgb * pulse, g_StatusIntensity);
+    }
 
     return float4(tint, 1.0f);
 }

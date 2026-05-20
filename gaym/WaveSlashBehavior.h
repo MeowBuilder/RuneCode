@@ -51,6 +51,7 @@ private:
     SkillData  m_SkillData;
     bool       m_bIsFinished = true;
     bool       m_bWaveActive = false;
+    GameObject*           m_pCaster      = nullptr;
     FluidSkillVFXManager* m_pVFXManager  = nullptr;
     Scene*                m_pScene       = nullptr;
     DecalManager*         m_pDecalManager = nullptr;

@@ -30,6 +30,7 @@ private:
     SkillData             m_SkillData;
     FluidSkillVFXManager* m_pVFXManager = nullptr;
     Scene*                m_pScene      = nullptr;
+    GameObject*           m_pCaster     = nullptr;
     int                   m_vfxId       = -1;
     int                   m_fallVfxId   = -1;   // 낙하 이펙트 (FALL_DURATION 후 자동 종료)
 

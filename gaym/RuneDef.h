@@ -26,6 +26,9 @@ struct SkillContext
     void*         scene         = nullptr;          // Scene* (void* to avoid circular include)
     void*         hitEnemy      = nullptr;          // EnemyComponent* (void*)
     XMFLOAT3      hitEnemyPos   = {};
+    // 상태이상 룬에서 사용 — SkillStats에서 전달
+    float         statusChanceMult   = 1.f;
+    float         statusDurationMult = 1.f;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,6 +122,8 @@ struct RuneDef
 {
     std::string id;
     std::string name;
+    std::string category;     // "속성 변경", "속성 강화" 등
+    std::string description;  // 선택창 표시 설명 (onHit 효과 등 자동 생성 불가 내용)
     RuneGrade   grade   = RuneGrade::Normal;
     ElementType element = ElementType::None;  // None = universal
 

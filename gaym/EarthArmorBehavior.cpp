@@ -6,6 +6,7 @@
 #include "GameObject.h"
 #include "TransformComponent.h"
 #include "PlayerComponent.h"
+#include "SkillComponent.h"
 
 EarthArmorBehavior::EarthArmorBehavior()
     : m_SkillData(EarthSkillPresets::EarthArmor())
@@ -24,6 +25,17 @@ void EarthArmorBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& ta
     pPC->AddShield(SHIELD_AMOUNT);
     pPC->SetDamageReduction(DR_RATIO, DR_DURATION);
 
+    // 변환 룬 원소 확인
+    ElementType cachedElem = ElementType::None;
+    {
+        auto* pSC = caster ? caster->GetComponent<SkillComponent>() : nullptr;
+        if (pSC && m_slot != SkillSlot::Count) {
+            SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            if (!sts.elementSet.empty())
+                cachedElem = sts.elementSet[0];
+        }
+    }
+
     if (m_pVFXManager && caster && caster->GetTransform())
     {
         XMFLOAT3 pos = caster->GetTransform()->GetPosition();
@@ -33,6 +45,8 @@ void EarthArmorBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& ta
         if (EffectRegistry::Get().HasEffect("E_EarthArmor_Burst"))
         {
             EffectDef burstDef = EffectRegistry::Get().GetEffect("E_EarthArmor_Burst");
+            if (cachedElem != ElementType::None)
+                ApplyElementToEffectDef(burstDef, cachedElem);
             m_pVFXManager->SpawnEffectDef(pos, up, burstDef, true);
         }
 
@@ -40,6 +54,8 @@ void EarthArmorBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& ta
         if (EffectRegistry::Get().HasEffect("E_EarthArmor_Aura"))
         {
             EffectDef auraDef = EffectRegistry::Get().GetEffect("E_EarthArmor_Aura");
+            if (cachedElem != ElementType::None)
+                ApplyElementToEffectDef(auraDef, cachedElem);
             m_auraVfxId = m_pVFXManager->SpawnEffectDef(pos, up, auraDef, true);
         }
     }

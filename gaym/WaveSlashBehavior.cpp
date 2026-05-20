@@ -6,6 +6,7 @@
 #include "GameObject.h"
 #include "TransformComponent.h"
 #include "SkillComponent.h"
+#include "RuneDef.h"
 #include "PlayerComponent.h"
 #include "Scene.h"
 #include "Room.h"
@@ -28,6 +29,7 @@ void WaveSlashBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& tar
 {
     m_bIsFinished = false;
     m_bWaveActive = false;
+    m_pCaster     = caster;
 
     if (!m_pVFXManager)
     {
@@ -225,6 +227,27 @@ void WaveSlashBehavior::HitEnemiesInWave(float damage)
 
         pEnemy->TakeDamage(damage, false);
         m_hitEnemies.insert(pEnemy);
+
+        if (m_pCaster)
+        {
+            auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+            if (pSC && m_slot != SkillSlot::Count)
+            {
+                SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+                if (!sts.onHitHooks.empty())
+                {
+                    SkillContext ctx;
+                    ctx.caster             = m_pCaster;
+                    ctx.baseDamage         = damage;
+                    ctx.damageDealt        = damage;
+                    ctx.hitEnemy           = pEnemy;
+                    ctx.hitEnemyPos        = pTransform->GetPosition();
+                    ctx.statusChanceMult   = sts.statusChanceMult;
+                    ctx.statusDurationMult = sts.statusDurationMult;
+                    for (auto& hook : sts.onHitHooks) hook(ctx);
+                }
+            }
+        }
     }
 }
 

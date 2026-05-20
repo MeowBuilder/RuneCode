@@ -17,6 +17,7 @@ WaterVortexBehavior::WaterVortexBehavior()
 void WaterVortexBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
     m_bActive = false;
+    m_pCaster = caster;
     m_extraVFXIds.clear();
 
     if (!m_pVFXManager) { return; }
@@ -25,7 +26,16 @@ void WaterVortexBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& t
     origin.y           = 3.0f;  // OrbitalCP 중심을 지면 위로 — y=0이면 위성 궤도가 지면에 파묻힘
     XMFLOAT3 direction = { 0.f, 1.f, 0.f };  // 수직 — 소용돌이는 Y축 기준
 
+    SkillStats stats;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count)
+            stats = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+    }
+
     EffectDef def = EffectRegistry::Get().GetEffect("E_WaterVortex");
+    if (!stats.elementSet.empty())
+        ApplyElementToEffectDef(def, stats.elementSet[0]);
     m_vfxId = m_pVFXManager->SpawnEffectDef(origin, direction, def, true);
 
     if (m_vfxId >= 0)
@@ -91,9 +101,29 @@ void WaterVortexBehavior::PullAndDamageEnemies(float deltaTime)
             pT->SetPosition(ep.x, ep.y, ep.z);
         }
 
-        // 주기 피해
+        // 주기 피해 + onHit 훅
         if (bDoTick)
+        {
             pEnemy->TakeDamage(dotDmg, false);
+            if (m_pCaster) {
+                auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+                if (pSC && m_slot != SkillSlot::Count) {
+                    SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+                    if (!sts.onHitHooks.empty()) {
+                        SkillContext ctx;
+                        ctx.caster             = m_pCaster;
+                        ctx.baseDamage         = dotDmg;
+                        ctx.damageDealt        = dotDmg;
+                        ctx.hitEnemy           = pEnemy;
+                        ctx.hitEnemyPos        = ep;
+                        ctx.scene              = m_pScene;
+                        ctx.statusChanceMult   = sts.statusChanceMult;
+                        ctx.statusDurationMult = sts.statusDurationMult;
+                        for (auto& hook : sts.onHitHooks) hook(ctx);
+                    }
+                }
+            }
+        }
     }
 }
 

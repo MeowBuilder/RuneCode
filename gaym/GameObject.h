@@ -33,7 +33,13 @@ struct ObjectConstants
     UINT m_bIsGrass = 0;  // offset 96 — 절차적 풀(grass) 셰이딩(VS sway + PS vertex 그라데이션)
     UINT m_bIsPortal = 0; // offset 100 — 차원문 와류 셰이딩 (시안/마젠타 듀얼톤 + 블랙홀)
     UINT m_bIsDecal  = 0; // offset 104 — 지면 데칼 플래그
-    UINT m_grassPad2 = 0; // offset 108 → MATERIAL at offset 112 (16-aligned 유지)
+    UINT m_grassPad2 = 0; // offset 108
+    // Status effect outline: element color (RGB) + intensity (A)
+    XMFLOAT4 m_vStatusColor    = { 0.f, 0.f, 0.f, 0.f }; // offset 112
+    float    m_fStatusIntensity = 0.f;                     // offset 128
+    float    m_statusPad0 = 0.f;
+    float    m_statusPad1 = 0.f;
+    float    m_statusPad2 = 0.f;
 	MATERIAL mMaterial;
     XMFLOAT4X4 m_xmf4x4BoneTransforms[128];
 };
@@ -193,6 +199,21 @@ public:
         SetHitFlash(f);
         if (m_pChild)   m_pChild->SetHitFlashAll(f);
         if (m_pSibling) m_pSibling->SetHitFlashAll(f);
+    }
+
+    void SetStatusColor(const XMFLOAT4& color, float intensity)
+    {
+        if (m_pcbMappedGameObject)
+        {
+            m_pcbMappedGameObject->m_vStatusColor     = color;
+            m_pcbMappedGameObject->m_fStatusIntensity = intensity;
+        }
+    }
+    void SetStatusColorAll(const XMFLOAT4& color, float intensity)
+    {
+        SetStatusColor(color, intensity);
+        if (m_pChild)   m_pChild->SetStatusColorAll(color, intensity);
+        if (m_pSibling) m_pSibling->SetStatusColorAll(color, intensity);
     }
 
     // Debug: F4 = force all objects to render without texture (see raw geometry/material)

@@ -39,6 +39,7 @@ private:
     };
 
     SkillData             m_SkillData;
+    GameObject*           m_pCaster     = nullptr;
     FluidSkillVFXManager* m_pVFXManager = nullptr;
     Scene*                m_pScene      = nullptr;
     int                   m_vfxId       = -1;

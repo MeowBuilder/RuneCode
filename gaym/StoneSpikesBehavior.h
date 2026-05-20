@@ -1,6 +1,7 @@
 #pragma once
 #include "ISkillBehavior.h"
 #include "SkillData.h"
+#include "SkillTypes.h"
 #include <vector>
 
 class FluidSkillVFXManager;
@@ -41,6 +42,8 @@ private:
     bool  m_bActive    = false;
     float m_damageMult = 1.f;
     float m_elapsed    = 0.f;
+    ElementType m_cachedElem = ElementType::None;
+    GameObject* m_pCaster    = nullptr;
 
     std::vector<SpikeEntry> m_spikes;
 

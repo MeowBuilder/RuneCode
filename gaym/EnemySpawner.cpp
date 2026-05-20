@@ -1167,6 +1167,10 @@ void EnemySpawner::SetupEnemyComponents(GameObject* pEnemy, const EnemySpawnData
         }
     }
 
+    // 상태이상 파티클 VFX
+    if (m_pVFXManager)
+        pEnemyComp->SetVFXManager(m_pVFXManager);
+
     // Set death callback to notify room
     pEnemyComp->SetOnDeathCallback([pRoom](EnemyComponent* pDeadEnemy) {
         if (pRoom)

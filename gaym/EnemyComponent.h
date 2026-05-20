@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 #include "ThreatSystem.h"
+#include "StatusEffect.h"
+#include "SkillTypes.h"
 
 using namespace DirectX;
 
@@ -14,6 +16,7 @@ class CRoom;
 class AnimationComponent;
 class BossPhaseController;
 class BossPhaseConfig;
+class FluidSkillVFXManager;
 
 struct EnemyAnimationConfig
 {
@@ -129,6 +132,30 @@ public:
     }
     float GetDefenseMult() const { return m_fDefenseMult; }
 
+    // ── 상태이상 시스템 ──────────────────────────────────────────────────────
+    // 화상: 매 1초 tickDmgBase * stacks 피해. Normal=최대3중첩, Epic(작열)=최대5중첩
+    void ApplyBurn(int stacks, float duration, float tickDmgBase, int maxStacks = 3);
+    // 빙결: 이동속도 -15% per 중첩. 3중첩 달성 시 완전 빙결 1.5초
+    void ApplyChill(int stacks, float duration, int maxStacks = 3);
+    // 균열: 방어력 -8% per 중첩. 3중첩 달성 시 경직(Stagger)
+    void ApplyFracture(int stacks, float duration, int maxStacks = 3);
+
+    bool  IsBurning()    const { return m_Burn.IsActive(); }
+    bool  IsChilled()    const { return m_Chill.IsActive(); }
+    bool  IsFractured()  const { return m_Fracture.IsActive(); }
+    bool  IsFrozen()     const { return m_bFrozen; }
+    int   GetBurnStacks()     const { return m_Burn.stacks; }
+    int   GetChillStacks()    const { return m_Chill.stacks; }
+    int   GetFractureStacks() const { return m_Fracture.stacks; }
+    // 이동속도 배율: 빙결=0, 냉기 중첩당 -15%
+    float GetChillSlowMult()  const;
+
+    // 상태이상 적용/틱 시 VFX 콜백 (Scene 등 외부에서 설정)
+    using StatusVFXCallback = std::function<void(ElementType, int stacks, const XMFLOAT3& pos)>;
+    void SetStatusVFXCallback(StatusVFXCallback cb) { m_onStatusChanged = std::move(cb); }
+
+    void SetVFXManager(FluidSkillVFXManager* mgr) { m_pStatusVFXMgr = mgr; }
+
     // Attack behavior
     void SetAttackBehavior(std::unique_ptr<IAttackBehavior> pBehavior);
     IAttackBehavior* GetAttackBehavior() const { return m_pAttackBehavior.get(); }
@@ -243,6 +270,8 @@ private:
     void Die();
     void ShowIndicators();
     void HideIndicators();
+    void UpdateStatusEffects(float dt);
+    void RefreshStatusOutline();
 
 private:
     // Threat System
@@ -303,6 +332,30 @@ private:
     // 방어 분쇄 디버프
     float m_fDefenseMult       = 1.0f;  // 1.0 = 정상, 0.75 = 방어력 25% 감소
     float m_fDefenseDebuffTimer = 0.0f;
+
+    // ── 상태이상 ─────────────────────────────────────────────────────────────
+    ElementStatusState m_Burn;
+    ElementStatusState m_Chill;
+    ElementStatusState m_Fracture;
+    bool  m_bFrozen      = false;
+    float m_fFrozenTimer = 0.f;
+    StatusVFXCallback      m_onStatusChanged;
+
+    // 상태이상 파티클 VFX
+    FluidSkillVFXManager* m_pStatusVFXMgr = nullptr;
+    int m_vfxBurnId     = -1;
+    int m_vfxChillId    = -1;
+    int m_vfxFreezeId   = -1;
+    int m_vfxFractureId = -1;
+
+    void SpawnStatusVFX(const char* effectId, int& outId);
+    void StopStatusVFX(int& id);
+    void TrackStatusVFX();
+
+    static constexpr float BURN_TICK_INTERVAL    = 1.0f;
+    static constexpr float CHILL_SLOW_PER_STACK  = 0.15f;  // 중첩당 이동속도 -15%
+    static constexpr float FRACTURE_DEF_PER_STACK = 0.08f; // 중첩당 방어력 -8%
+    static constexpr float FREEZE_DURATION       = 3.5f;
 
     // Constants
     static constexpr float STAGGER_DURATION = 0.5f;

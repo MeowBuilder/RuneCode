@@ -670,6 +670,126 @@ void EffectRegistry::Initialize()
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // 상태이상 VFX — 적 머리 위로 솟아오르는 연기/파티클 (루프)
+    // verticalOffset=4.0f 위성 CP가 굴뚝 역할: 파티클이 위로 끌려 올라감
+    // → 몬스터가 뭉쳐도 머리 위 컬럼이 보임
+    // ──────────────────────────────────────────────────────────────────────────
+
+    // status_burn: 화상 — 주황/붉은 파티클이 몬스터 외곽에서 랜덤 스폰
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Sphere;
+        layer.element        = ElementType::Fire;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f, 0.65f, 0.05f, 1.0f };
+        layer.edgeColor      = { 1.0f, 0.20f, 0.0f,  1.0f };
+        layer.particleCount  = 70;
+        layer.sizeScale      = 4.0f;
+        layer.speedMin       = 1.5f;
+        layer.speedMax       = 3.5f;
+        layer.lifetimeMin    = 0.5f;
+        layer.lifetimeMax    = 1.2f;
+        layer.duration       = -1.f;
+        layer.emitRate       = 35.f;
+
+        layer.sphere.radius        = 2.0f;
+        layer.sphere.shellFraction = 0.6f;
+        layer.sphere.inward        = false;
+
+        EffectDef def;
+        def.name    = "status_burn";
+        def.element = ElementType::Fire;
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // status_chill: 빙결 중첩 — 파란 냉기 파티클이 몬스터 외곽에서 천천히 퍼짐
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Sphere;
+        layer.element        = ElementType::Water;
+        layer.overrideColors = true;
+        layer.coreColor      = { 0.70f, 0.92f, 1.0f, 1.0f };
+        layer.edgeColor      = { 0.20f, 0.55f, 1.0f, 1.0f };
+        layer.particleCount  = 55;
+        layer.sizeScale      = 3.8f;
+        layer.speedMin       = 0.5f;
+        layer.speedMax       = 1.8f;
+        layer.lifetimeMin    = 1.0f;
+        layer.lifetimeMax    = 2.0f;
+        layer.duration       = -1.f;
+        layer.emitRate       = 25.f;
+
+        layer.sphere.radius        = 2.0f;
+        layer.sphere.shellFraction = 0.6f;
+        layer.sphere.inward        = false;
+        layer.sphere.rotationSpeed = 0.5f;
+
+        EffectDef def;
+        def.name    = "status_chill";
+        def.element = ElementType::Water;
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // status_freeze: 완전 빙결 — 하얀 얼음 파편이 몬스터 외곽에서 발산
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Sphere;
+        layer.element        = ElementType::Water;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f, 1.0f, 1.0f, 1.0f };
+        layer.edgeColor      = { 0.45f, 0.80f, 1.0f, 1.0f };
+        layer.particleCount  = 75;
+        layer.sizeScale      = 4.2f;
+        layer.speedMin       = 1.0f;
+        layer.speedMax       = 2.8f;
+        layer.lifetimeMin    = 0.5f;
+        layer.lifetimeMax    = 1.0f;
+        layer.duration       = -1.f;
+        layer.emitRate       = 30.f;
+
+        layer.sphere.radius        = 2.0f;
+        layer.sphere.shellFraction = 0.6f;
+        layer.sphere.inward        = false;
+
+        EffectDef def;
+        def.name    = "status_freeze";
+        def.element = ElementType::Water;
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // status_fracture: 균열 — 흙먼지 파티클이 몬스터 외곽에서 회전하며 퍼짐
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Sphere;
+        layer.element        = ElementType::Earth;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f, 0.75f, 0.20f, 1.0f };
+        layer.edgeColor      = { 0.65f, 0.42f, 0.08f, 1.0f };
+        layer.particleCount  = 55;
+        layer.sizeScale      = 3.5f;
+        layer.speedMin       = 1.0f;
+        layer.speedMax       = 2.5f;
+        layer.lifetimeMin    = 0.8f;
+        layer.lifetimeMax    = 1.5f;
+        layer.duration       = -1.f;
+        layer.emitRate       = 22.f;
+
+        layer.sphere.radius        = 2.0f;
+        layer.sphere.shellFraction = 0.6f;
+        layer.sphere.inward        = false;
+        layer.sphere.rotationSpeed = 2.5f;
+
+        EffectDef def;
+        def.name    = "status_fracture";
+        def.element = ElementType::Earth;
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // Demon_Tornado — 4스테이지 데몬 회오리 (Linear 수직 emitter + swirl)
     //   light_emitter.hlsl 에 swirl rotation 추가 후 Linear 가 진짜 helix 흐름 생성
     //   [Outer]  넓은 반경 느린 swirl → 외곽 흙먼지

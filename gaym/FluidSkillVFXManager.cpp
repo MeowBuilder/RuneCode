@@ -351,11 +351,16 @@ int FluidSkillVFXManager::SpawnSPHLayer(const XMFLOAT3& origin, const XMFLOAT3& 
 void FluidSkillVFXManager::TrackEffect(int id, const XMFLOAT3& origin, const XMFLOAT3& direction)
 {
     if (id < 0 || id >= MAX_EFFECTS || !m_Slots[id].isActive) return;
-    m_Slots[id].origin    = origin;
-    m_Slots[id].direction = direction;
+    auto& slot = m_Slots[id];
+    slot.origin    = origin;
+    slot.direction = direction;
+
+    // LightEmitter 슬롯은 내부 origin도 즉시 갱신
+    if (slot.useLightEmitter)
+        slot.pLightEmitter->SetOrigin(origin, direction);
 
     // 연결된 레이어도 같이 이동
-    int nextId = m_Slots[id].nextLinkedId;
+    int nextId = slot.nextLinkedId;
     if (nextId >= 0) TrackEffect(nextId, origin, direction);
 }
 
@@ -829,7 +834,7 @@ void FluidSkillVFXManager::RenderEnemyEffects(ID3D12GraphicsCommandList* pComman
     for (auto& slot : m_Slots)
     {
         if (!slot.isActive) continue;
-        if (slot.isPlayerEffect) continue;  // 플레이어 슬롯 건너뜀
+        if (slot.isPlayerEffect) continue;
         if (!IsSlotVisible(slot)) continue;
         if (slot.useLightEmitter)
         {

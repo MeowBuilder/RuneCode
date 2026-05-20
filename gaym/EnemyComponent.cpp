@@ -10,6 +10,8 @@
 #include "Dx12App.h"
 #include "MathUtils.h"
 #include "BossPhaseController.h"
+#include "FluidSkillVFXManager.h"
+#include "EffectRegistry.h"
 #include <algorithm>
 
 EnemyComponent::EnemyComponent(GameObject* pOwner)
@@ -42,6 +44,9 @@ void EnemyComponent::Update(float deltaTime)
         if (m_fDefenseDebuffTimer <= 0.f)
             m_fDefenseMult = 1.0f;
     }
+
+    // 상태이상 업데이트
+    UpdateStatusEffects(deltaTime);
 
     // Boss intro cutscene takes priority
     if (IsInIntro())
@@ -277,6 +282,236 @@ void EnemyComponent::TakeDamage(float fDamage, bool bTriggerStagger)
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 상태이상 시스템
+// ─────────────────────────────────────────────────────────────────────────────
+
+float EnemyComponent::GetChillSlowMult() const
+{
+    if (m_bFrozen) return 0.f;
+    float mult = 1.f - m_Chill.stacks * CHILL_SLOW_PER_STACK;
+    return std::max(mult, 0.1f);  // 최소 10% 이동속도 보장
+}
+
+void EnemyComponent::ApplyBurn(int stacks, float duration, float tickDmgBase, int maxStacks)
+{
+    if (m_eCurrentState == EnemyState::Dead) return;
+    m_Burn.maxStacks   = maxStacks;
+    m_Burn.stacks      = (std::min)(m_Burn.stacks + stacks, maxStacks);
+    m_Burn.timer       = duration;
+    m_Burn.tickDmgBase = tickDmgBase;
+    if (m_Burn.tickTimer <= 0.f) m_Burn.tickTimer = BURN_TICK_INTERVAL;
+
+    if (m_onStatusChanged && m_pOwner && m_pOwner->GetTransform())
+        m_onStatusChanged(ElementType::Fire, m_Burn.stacks, m_pOwner->GetTransform()->GetPosition());
+    SpawnStatusVFX("status_burn", m_vfxBurnId);
+    RefreshStatusOutline();
+}
+
+void EnemyComponent::ApplyChill(int stacks, float duration, int maxStacks)
+{
+    if (m_eCurrentState == EnemyState::Dead || m_bFrozen) return;
+    m_Chill.maxStacks = maxStacks;
+    m_Chill.stacks    = (std::min)(m_Chill.stacks + stacks, maxStacks);
+    m_Chill.timer     = duration;
+
+    // 3중첩 달성 → 완전 빙결
+    if (m_Chill.stacks >= 3)
+    {
+        m_bFrozen      = true;
+        m_fFrozenTimer = FREEZE_DURATION;
+        m_Chill.Clear();
+        StopStatusVFX(m_vfxChillId);
+        SpawnStatusVFX("status_freeze", m_vfxFreezeId);
+    }
+    else
+    {
+        SpawnStatusVFX("status_chill", m_vfxChillId);
+    }
+
+    if (m_onStatusChanged && m_pOwner && m_pOwner->GetTransform())
+        m_onStatusChanged(ElementType::Water, m_bFrozen ? -1 : m_Chill.stacks,
+                          m_pOwner->GetTransform()->GetPosition());
+    RefreshStatusOutline();
+}
+
+void EnemyComponent::ApplyFracture(int stacks, float duration, int maxStacks)
+{
+    if (m_eCurrentState == EnemyState::Dead) return;
+    m_Fracture.maxStacks = maxStacks;
+    m_Fracture.stacks    = (std::min)(m_Fracture.stacks + stacks, maxStacks);
+    m_Fracture.timer     = duration;
+
+    // 중첩 수에 따라 방어력 디버프 갱신 (균열 8% per 중첩)
+    float defMult = 1.f - m_Fracture.stacks * FRACTURE_DEF_PER_STACK;
+    ApplyDefenseDebuff(std::max(defMult, 0.1f), duration);
+
+    // 3중첩 달성 → 경직
+    if (m_Fracture.stacks >= 3 &&
+        m_eCurrentState != EnemyState::Stagger &&
+        m_eCurrentState != EnemyState::Dead)
+    {
+        m_Fracture.Clear();
+        m_fDefenseMult = 1.f;
+        ChangeState(EnemyState::Stagger);
+    }
+
+    if (m_onStatusChanged && m_pOwner && m_pOwner->GetTransform())
+        m_onStatusChanged(ElementType::Earth, m_Fracture.stacks, m_pOwner->GetTransform()->GetPosition());
+    SpawnStatusVFX("status_fracture", m_vfxFractureId);
+    RefreshStatusOutline();
+}
+
+void EnemyComponent::SpawnStatusVFX(const char* effectId, int& outId)
+{
+    if (!m_pStatusVFXMgr) {
+        OutputDebugStringA("[StatusVFX] SKIP: m_pStatusVFXMgr is null\n");
+        return;
+    }
+    if (outId >= 0) return;
+    if (!EffectRegistry::Get().HasEffect(effectId)) {
+        char buf[128]; sprintf_s(buf, "[StatusVFX] SKIP: effect not found: %s\n", effectId);
+        OutputDebugStringA(buf);
+        return;
+    }
+
+    XMFLOAT3 pos = {};
+    if (m_pOwner && m_pOwner->GetTransform())
+    {
+        pos = m_pOwner->GetTransform()->GetPosition();
+        pos.y += 1.0f;
+    }
+
+    EffectDef def = EffectRegistry::Get().GetEffect(effectId);
+    outId = m_pStatusVFXMgr->SpawnEffectDef(pos, {0,1,0}, def, false);
+}
+
+void EnemyComponent::StopStatusVFX(int& id)
+{
+    if (!m_pStatusVFXMgr || id < 0) return;
+    m_pStatusVFXMgr->StopEffect(id);
+    id = -1;
+}
+
+void EnemyComponent::TrackStatusVFX()
+{
+    if (!m_pStatusVFXMgr || !m_pOwner || !m_pOwner->GetTransform()) return;
+
+    XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+    pos.y += 1.0f;
+    XMFLOAT3 dir = { 0.f, 1.f, 0.f };
+
+    if (m_vfxBurnId     >= 0) m_pStatusVFXMgr->TrackEffect(m_vfxBurnId,     pos, dir);
+    if (m_vfxChillId    >= 0) m_pStatusVFXMgr->TrackEffect(m_vfxChillId,    pos, dir);
+    if (m_vfxFreezeId   >= 0) m_pStatusVFXMgr->TrackEffect(m_vfxFreezeId,   pos, dir);
+    if (m_vfxFractureId >= 0) m_pStatusVFXMgr->TrackEffect(m_vfxFractureId, pos, dir);
+}
+
+void EnemyComponent::RefreshStatusOutline()
+{
+    if (!m_pOwner) return;
+
+    // 빙결 > 화상 > 균열 우선순위로 아웃라인 색상 결정
+    XMFLOAT4 color   = { 0.f, 0.f, 0.f, 0.f };
+    float    intensity = 0.f;
+
+    if (m_bFrozen)
+    {
+        color     = { 0.35f, 0.75f, 1.0f, 1.f };  // 얼음 파랑
+        intensity = 0.90f;
+    }
+    else if (m_Burn.IsActive())
+    {
+        float t   = static_cast<float>(m_Burn.stacks) / static_cast<float>(m_Burn.maxStacks);
+        color     = { 1.0f, 0.30f, 0.02f, 1.f };  // 오렌지-빨강
+        intensity = 0.25f + t * 0.55f;
+    }
+    else if (m_Chill.IsActive())
+    {
+        float t   = static_cast<float>(m_Chill.stacks) / static_cast<float>(m_Chill.maxStacks);
+        color     = { 0.35f, 0.75f, 1.0f, 1.f };  // 수속 파랑
+        intensity = 0.20f + t * 0.50f;
+    }
+    else if (m_Fracture.IsActive())
+    {
+        float t   = static_cast<float>(m_Fracture.stacks) / static_cast<float>(m_Fracture.maxStacks);
+        color     = { 0.85f, 0.55f, 0.10f, 1.f };  // 흙 황갈색
+        intensity = 0.20f + t * 0.50f;
+    }
+
+    m_pOwner->SetStatusColorAll(color, intensity);
+}
+
+void EnemyComponent::UpdateStatusEffects(float dt)
+{
+    TrackStatusVFX();
+
+    // ── 완전 빙결 ─────────────────────────────────────────────────────────────
+    if (m_bFrozen)
+    {
+        m_fFrozenTimer -= dt;
+        if (m_fFrozenTimer <= 0.f)
+        {
+            m_bFrozen = false;
+            StopStatusVFX(m_vfxFreezeId);
+            RefreshStatusOutline();
+        }
+        return;  // 빙결 중 다른 상태이상 틱 정지
+    }
+
+    // ── 화상 (Burn) ────────────────────────────────────────────────────────────
+    if (m_Burn.IsActive())
+    {
+        m_Burn.timer -= dt;
+        if (m_Burn.timer <= 0.f)
+        {
+            m_Burn.Clear();
+            StopStatusVFX(m_vfxBurnId);
+            RefreshStatusOutline();
+        }
+        else
+        {
+            m_Burn.tickTimer -= dt;
+            if (m_Burn.tickTimer <= 0.f)
+            {
+                m_Burn.tickTimer = BURN_TICK_INTERVAL;
+                float tickDmg = m_Burn.tickDmgBase * m_Burn.stacks;
+                TakeDamage(tickDmg, false);
+
+                if (m_onStatusChanged && m_pOwner && m_pOwner->GetTransform())
+                    m_onStatusChanged(ElementType::Fire, m_Burn.stacks,
+                                      m_pOwner->GetTransform()->GetPosition());
+            }
+        }
+    }
+
+    // ── 빙결 중첩 (Chill) ─────────────────────────────────────────────────────
+    if (m_Chill.IsActive())
+    {
+        m_Chill.timer -= dt;
+        if (m_Chill.timer <= 0.f)
+        {
+            m_Chill.Clear();
+            StopStatusVFX(m_vfxChillId);
+            RefreshStatusOutline();
+        }
+    }
+
+    // ── 균열 (Fracture) ───────────────────────────────────────────────────────
+    if (m_Fracture.IsActive())
+    {
+        m_Fracture.timer -= dt;
+        if (m_Fracture.timer <= 0.f)
+        {
+            m_Fracture.Clear();
+            StopStatusVFX(m_vfxFractureId);
+            if (m_fDefenseDebuffTimer <= 0.f)
+                m_fDefenseMult = 1.f;
+            RefreshStatusOutline();
+        }
+    }
+}
+
 void EnemyComponent::SetAttackBehavior(std::unique_ptr<IAttackBehavior> pBehavior)
 {
     m_pAttackBehavior = std::move(pBehavior);
@@ -383,6 +618,7 @@ void EnemyComponent::FaceTarget(float dt, bool bInstant)
 void EnemyComponent::MoveTowardsTarget(float dt)
 {
     if (!m_pTarget || !m_pOwner) return;
+    if (m_bFrozen) return;
 
     TransformComponent* pMyTransform = m_pOwner->GetTransform();
     TransformComponent* pTargetTransform = m_pTarget->GetTransform();
@@ -432,8 +668,9 @@ void EnemyComponent::MoveTowardsTarget(float dt)
     if (!m_bIsBoss) fEffectiveSpeed *= 1.35f;
 
     // Combine movement direction with separation force
-    float moveX = dir.x * fEffectiveSpeed;
-    float moveZ = dir.y * fEffectiveSpeed;
+    float slowMult = GetChillSlowMult();
+    float moveX = dir.x * fEffectiveSpeed * slowMult;
+    float moveZ = dir.y * fEffectiveSpeed * slowMult;
 
     // Add separation force
     moveX += separationForce.x * m_fSeparationStrength;

@@ -50,6 +50,7 @@ private:
     FluidSkillVFXManager* m_pVFXManager    = nullptr;
     Scene*                m_pScene         = nullptr;
     DecalManager*         m_pDecalManager  = nullptr;
+    GameObject*           m_pCaster        = nullptr;
     ElementType           m_elementType = ElementType::Fire;
 
     // 최종 메테오 VFX IDs

@@ -18,6 +18,7 @@ EarthquakeBehavior::EarthquakeBehavior()
 void EarthquakeBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
     m_bActive = false;
+    m_pCaster = caster;
     m_rings.clear();
     m_hitEnemies.clear();
 
@@ -28,9 +29,22 @@ void EarthquakeBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& ta
         m_epicenter = caster->GetTransform()->GetPosition();
     // m_epicenter.y는 캐릭터 실제 높이 유지 — Y=0 강제 시 수중 보스 등에서 미스 발생
 
+    // 변환 룬 원소 캡처
+    m_cachedElem = ElementType::None;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count) {
+            SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            if (!sts.elementSet.empty())
+                m_cachedElem = sts.elementSet[0];
+        }
+    }
+
     // 초기 버스트 VFX (중심 폭발)
     XMFLOAT3 up = { 0.f, 1.f, 0.f };
     EffectDef burstDef = EffectRegistry::Get().GetEffect("R_Earthquake_Burst");
+    if (m_cachedElem != ElementType::None)
+        ApplyElementToEffectDef(burstDef, m_cachedElem);
     m_burstVfxId = m_pVFXManager->SpawnEffectDef(m_epicenter, up, burstDef, true);
 
     // 충격파 링 스케줄
@@ -74,6 +88,8 @@ void EarthquakeBehavior::LaunchWave(int idx)
     {
         XMFLOAT3 up = { 0.f, 1.f, 0.f };
         EffectDef def = EffectRegistry::Get().GetEffect("R_Earthquake_Ring");
+        if (m_cachedElem != ElementType::None)
+            ApplyElementToEffectDef(def, m_cachedElem);
         r.vfxId = m_pVFXManager->SpawnEffectDef(m_epicenter, up, def, true);
     }
 }
@@ -119,6 +135,25 @@ void EarthquakeBehavior::UpdateWaves(float dt)
 
             pEnemy->TakeDamage(dmg, true);
             m_hitEnemies.insert(pEnemy);
+
+            if (m_pCaster) {
+                auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+                if (pSC && m_slot != SkillSlot::Count) {
+                    SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+                    if (!sts.onHitHooks.empty()) {
+                        SkillContext ctx;
+                        ctx.caster             = m_pCaster;
+                        ctx.baseDamage         = dmg;
+                        ctx.damageDealt        = dmg;
+                        ctx.hitEnemy           = pEnemy;
+                        ctx.hitEnemyPos        = ep;
+                        ctx.scene              = m_pScene;
+                        ctx.statusChanceMult   = sts.statusChanceMult;
+                        ctx.statusDurationMult = sts.statusDurationMult;
+                        for (auto& hook : sts.onHitHooks) hook(ctx);
+                    }
+                }
+            }
         }
     }
 }

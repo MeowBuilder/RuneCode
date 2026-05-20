@@ -101,6 +101,8 @@ void CS_LightEmit(uint3 DTid:SV_DispatchThreadID) {
         p.pos=origin+sdir*rad;
         p.vel=((sphereInward!=0)?-sdir:sdir)*speed;
         p.size=sizeBase*sizeScale; p.startSize=p.size;
+        // 초기 lifetime 분산: 파티클들이 서로 다른 시점에 죽어 부드럽게 연속 방출됨
+        p.life=lifetime*Rand01(seed);
     } else if(emitterType==3){ // Ring
         float ang=r0*6.28318f, roff=(r1-0.5f)*ringWidth;
         float cosT=cos(ringTiltX),sinT=sin(ringTiltX);
@@ -157,6 +159,18 @@ void CS_LightUpdate(uint3 DTid:SV_DispatchThreadID) {
             p.life=lt; p.maxLife=lt;
             p.startColor=lerp(edgeColor,coreColor,Rand01(s2));
             p.size=sizeBase*sizeScale*coneStartSizeMult; p.startSize=p.size;
+            p.seed=s2;
+        } else if(emitterType==2){ // Sphere: 죽은 파티클을 현재 origin 주변에서 재스폰
+            uint s2=WangHash(p.seed^asuint(elapsed)^(idx*2654435761u));
+            float lt=lerp(lifetimeMin,lifetimeMax,Rand01(s2));
+            float3 sdir=RandomOnSphere(s2);
+            float rMin=sphereRadius*(1.0f-sphereShellFraction);
+            float rad=lerp(rMin,sphereRadius,sqrt(Rand01(s2)));
+            p.pos=origin+sdir*rad;
+            p.vel=((sphereInward!=0)?-sdir:sdir)*lerp(speedMin,speedMax,Rand01(s2));
+            p.life=lt; p.maxLife=lt;
+            p.startColor=lerp(edgeColor,coreColor,Rand01(s2));
+            p.size=sizeBase*sizeScale; p.startSize=p.size;
             p.seed=s2;
         }
         gParticles[idx]=p; return;

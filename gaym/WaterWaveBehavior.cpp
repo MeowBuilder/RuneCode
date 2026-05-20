@@ -5,6 +5,7 @@
 #include "GameObject.h"
 #include "TransformComponent.h"
 #include "SkillComponent.h"
+#include "RuneDef.h"
 #include "PlayerComponent.h"
 #include "Scene.h"
 #include "Room.h"
@@ -33,6 +34,7 @@ uint32_t WaterWaveBehavior::GetRuneFlags(GameObject* caster) const
 
 void WaterWaveBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
+    m_pCaster     = caster;
     m_bWaveActive = false;
     m_hitEnemies.clear();
     m_waterPools.clear();
@@ -56,21 +58,24 @@ void WaterWaveBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& tar
     }
 
     uint32_t runeFlags = GetRuneFlags(caster);
+    SkillStats stats;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count)
+            stats = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+    }
+
     EffectDef def = EffectRegistry::Get().GetEffect("Q_WaterWave", runeFlags);
+    if (!stats.elementSet.empty())
+        ApplyElementToEffectDef(def, stats.elementSet[0]);
     m_vfxId = m_pVFXManager->SpawnEffectDef(origin, direction, def, true);
 
     m_extraVFXIds.clear();
-    if (caster) {
-        auto* pSC = caster->GetComponent<SkillComponent>();
-        if (pSC && m_slot != SkillSlot::Count) {
-            SkillStats stats = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-            for (const auto& sid : stats.subVFXIds) {
-                if (!EffectRegistry::Get().HasEffect(sid)) continue;
-                int eid = m_pVFXManager->SpawnEffectDef(origin, direction,
-                    EffectRegistry::Get().GetEffect(sid, runeFlags), true);
-                if (eid >= 0) m_extraVFXIds.push_back(eid);
-            }
-        }
+    for (const auto& sid : stats.subVFXIds) {
+        if (!EffectRegistry::Get().HasEffect(sid)) continue;
+        int eid = m_pVFXManager->SpawnEffectDef(origin, direction,
+            EffectRegistry::Get().GetEffect(sid, runeFlags), true);
+        if (eid >= 0) m_extraVFXIds.push_back(eid);
     }
 
     if (m_vfxId >= 0)
@@ -146,6 +151,27 @@ void WaterWaveBehavior::HitEnemiesInWave(float damage)
 
         pEnemy->TakeDamage(damage, false);
         m_hitEnemies.insert(pEnemy);
+
+        if (m_pCaster)
+        {
+            auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+            if (pSC && m_slot != SkillSlot::Count)
+            {
+                SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+                if (!sts.onHitHooks.empty())
+                {
+                    SkillContext ctx;
+                    ctx.caster             = m_pCaster;
+                    ctx.baseDamage         = damage;
+                    ctx.damageDealt        = damage;
+                    ctx.hitEnemy           = pEnemy;
+                    ctx.hitEnemyPos        = pT->GetPosition();
+                    ctx.statusChanceMult   = sts.statusChanceMult;
+                    ctx.statusDurationMult = sts.statusDurationMult;
+                    for (auto& hook : sts.onHitHooks) hook(ctx);
+                }
+            }
+        }
     }
 }
 

@@ -511,6 +511,10 @@ void ProjectileManager::CheckProjectileCollisions(Projectile& projectile)
 
             if (projSphere.Intersects(enemySphere))
             {
+                // 관통: 이미 타격한 적은 건너뜀 (매 프레임 재히트 방지)
+                if (projectile.isPiercing && projectile.piercedEnemies.count(pEnemy))
+                    continue;
+
                 if (projectile.explosionRadius > 0.0f)
                     ApplyAoEDamage(projectile, projectile.position);
                 else
@@ -522,8 +526,7 @@ void ProjectileManager::CheckProjectileCollisions(Projectile& projectile)
                     projectile.isActive = false;
                     return;
                 }
-                // 관통: 같은 적에 연속 히트 방지를 위해 잠깐 무적 처리 대신
-                // 단순히 충돌 구체를 통과한 뒤 다음 적을 노림 — 루프 계속
+                projectile.piercedEnemies.insert(pEnemy);
             }
         }
 
@@ -636,13 +639,15 @@ void ProjectileManager::ApplyDamage(Projectile& projectile, EnemyComponent* pEne
             if (!stats.onHitHooks.empty())
             {
                 SkillContext ctx;
-                ctx.caster      = projectile.owner;
-                ctx.element     = projectile.element;
-                ctx.baseDamage  = projectile.damage;
-                ctx.damageDealt = dmg;
-                ctx.skillSlot   = projectile.skillSlot;
-                ctx.scene       = m_pScene;
-                ctx.hitEnemy    = pEnemy;
+                ctx.caster             = projectile.owner;
+                ctx.element            = projectile.element;
+                ctx.baseDamage         = projectile.damage;
+                ctx.damageDealt        = dmg;
+                ctx.skillSlot          = projectile.skillSlot;
+                ctx.scene              = m_pScene;
+                ctx.hitEnemy           = pEnemy;
+                ctx.statusChanceMult   = stats.statusChanceMult;
+                ctx.statusDurationMult = stats.statusDurationMult;
                 if (pEnemy && pEnemy->GetOwner())
                 {
                     TransformComponent* pT = pEnemy->GetOwner()->GetTransform();

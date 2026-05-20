@@ -71,17 +71,27 @@ static std::wstring BuildRuneDesc(const RuneDef& def)
     std::wstringstream ss;
     auto pct = [](float m) { return (int)((m - 1.f) * 100.f + 0.5f); };
 
-    if (def.element != ElementType::None)
-        ss << L"[" << GetElementName(def.element) << L"] ";
+    // [변환] / [강화] 카테고리 태그
+    if (def.category == "속성 변경")
+        ss << L"[변환] ";
+    else if (def.category == "속성 강화")
+        ss << L"[강화] ";
+    else if (!def.category.empty())
+        ss << L"[" << Utf8ToWide(def.category) << L"] ";
 
+    // 설명 텍스트 (description 필드)
+    if (!def.description.empty())
+        ss << Utf8ToWide(def.description) << L"  ";
+
+    // 수치 스탯
     if (def.damageMult    != 1.f) ss << L"데미지 " << (pct(def.damageMult) >= 0 ? L"+" : L"") << pct(def.damageMult) << L"%  ";
     if (def.radiusMult    != 1.f) ss << L"범위 "   << (pct(def.radiusMult) >= 0 ? L"+" : L"") << pct(def.radiusMult) << L"%  ";
     if (def.cooldownMult  != 1.f) ss << L"쿨다운 " << (pct(def.cooldownMult) >= 0 ? L"+" : L"") << pct(def.cooldownMult) << L"%  ";
     if (def.castTimeMult  != 1.f) ss << L"시전 "   << (pct(def.castTimeMult) >= 0 ? L"+" : L"") << pct(def.castTimeMult) << L"%  ";
     if (def.durationMult  != 1.f) ss << L"지속 "   << (pct(def.durationMult) >= 0 ? L"+" : L"") << pct(def.durationMult) << L"%  ";
     if (def.knockbackMult != 1.f) ss << L"넉백 "   << (pct(def.knockbackMult) >= 0 ? L"+" : L"") << pct(def.knockbackMult) << L"%  ";
-    if (def.statusDurationMult != 1.f) ss << L"상태이상지속 " << (pct(def.statusDurationMult) >= 0 ? L"+" : L"") << pct(def.statusDurationMult) << L"%  ";
-    if (def.statusChanceMult   != 1.f) ss << L"상태이상확률 " << (pct(def.statusChanceMult) >= 0 ? L"+" : L"") << pct(def.statusChanceMult) << L"%  ";
+    if (def.statusDurationMult != 1.f) ss << L"상태지속 " << (pct(def.statusDurationMult) >= 0 ? L"+" : L"") << pct(def.statusDurationMult) << L"%  ";
+    if (def.statusChanceMult   != 1.f) ss << L"상태확률 " << (pct(def.statusChanceMult) >= 0 ? L"+" : L"") << pct(def.statusChanceMult) << L"%  ";
     if (def.extraProjectiles > 0) ss << L"투사체 +" << def.extraProjectiles << L"  ";
     if (def.orbitalCount     > 0) ss << L"궤도탄 " << def.orbitalCount << L"  ";
     if (def.spawnOnHitCount  > 0) ss << L"반향 +"  << def.spawnOnHitCount << L"  ";
@@ -92,6 +102,7 @@ static std::wstring BuildRuneDesc(const RuneDef& def)
     if (def.homing)      ss << L"유도  ";
     if (def.doublecast)  ss << L"쌍발  ";
     if (def.echoOnCast)  ss << L"잔상  ";
+    if (def.randomElementOnCast) ss << L"원소무작위  ";
     if (def.activationOverride.has_value()) {
         switch (def.activationOverride.value()) {
         case ActivationType::Charge:  ss << L"차지형  ";  break;

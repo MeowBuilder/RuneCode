@@ -38,11 +38,24 @@ void GaleRushBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
         XMStoreFloat3(&m_direction, dV);
     }
 
+    // 변환 룬 원소 캡처
+    m_cachedElem = ElementType::None;
+    {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count) {
+            SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            if (!sts.elementSet.empty())
+                m_cachedElem = sts.elementSet[0];
+        }
+    }
+
     // 출발 구체 폭발 — 몸통 높이(y+2)에서 사방으로 터짐
     {
         XMFLOAT3 burstPos = casterPos;
         burstPos.y += 2.0f;
         EffectDef burstDef = EffectRegistry::Get().GetEffect("E_GaleRush_Burst");
+        if (m_cachedElem != ElementType::None)
+            ApplyElementToEffectDef(burstDef, m_cachedElem);
         m_vfxId = m_pVFXManager->SpawnEffectDef(burstPos, m_direction, burstDef, true);
     }
 
@@ -51,6 +64,8 @@ void GaleRushBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
         XMFLOAT3 ringPos = casterPos;
         ringPos.y = 0.f;
         EffectDef ringDef = EffectRegistry::Get().GetEffect("E_GaleRush_Ring");
+        if (m_cachedElem != ElementType::None)
+            ApplyElementToEffectDef(ringDef, m_cachedElem);
         m_ringVfxId = m_pVFXManager->SpawnEffectDef(ringPos, m_direction, ringDef, true);
     }
 
@@ -91,6 +106,8 @@ void GaleRushBehavior::Update(float deltaTime)
             XMFLOAT3 backDir = { -m_direction.x, 0.f, -m_direction.z };
 
             EffectDef trailDef = EffectRegistry::Get().GetEffect("E_GaleRush_Trail");
+            if (m_cachedElem != ElementType::None)
+                ApplyElementToEffectDef(trailDef, m_cachedElem);
             int id = m_pVFXManager->SpawnEffectDef(pos, backDir, trailDef, true);
             if (id >= 0) m_trailVfxIds.push_back(id);
         }
@@ -128,6 +145,25 @@ void GaleRushBehavior::HitEnemiesNearCaster(float damage)
 
         pEnemy->TakeDamage(damage, true);
         m_hitEnemies.insert(pEnemy);
+
+        {
+            auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+            if (pSC && m_slot != SkillSlot::Count) {
+                SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+                if (!sts.onHitHooks.empty()) {
+                    SkillContext ctx;
+                    ctx.caster             = m_pCaster;
+                    ctx.baseDamage         = damage;
+                    ctx.damageDealt        = damage;
+                    ctx.hitEnemy           = pEnemy;
+                    ctx.hitEnemyPos        = ePos;
+                    ctx.scene              = m_pScene;
+                    ctx.statusChanceMult   = sts.statusChanceMult;
+                    ctx.statusDurationMult = sts.statusDurationMult;
+                    for (auto& hook : sts.onHitHooks) hook(ctx);
+                }
+            }
+        }
     }
 }
 

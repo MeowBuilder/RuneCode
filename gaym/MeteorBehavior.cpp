@@ -66,11 +66,19 @@ void MeteorBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& target
         }
     }
 
-    // 캐스터 원소 캡처
+    m_pCaster = caster;
+
+    // 캐스터 원소 캡처 (변환 룬 우선)
     m_elementType = ElementType::Fire;
     if (caster) {
         if (auto* pPC = caster->GetComponent<PlayerComponent>())
             m_elementType = pPC->GetElementType();
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count) {
+            SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            if (!sts.elementSet.empty())
+                m_elementType = sts.elementSet[0];
+        }
     }
 
     // 상태 초기화
@@ -320,7 +328,27 @@ void MeteorBehavior::ApplyExplosionDamage(float damage, float radius, const XMFL
         {
             float falloff = 1.f - (dist / (radius + eRadius)) * 0.5f;
             falloff = max(0.5f, falloff);
-            pEnemy->TakeDamage(damage * falloff, bTriggerStagger);
+            float actualDmg = damage * falloff;
+            pEnemy->TakeDamage(actualDmg, bTriggerStagger);
+
+            if (m_pCaster) {
+                auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+                if (pSC && m_slot != SkillSlot::Count) {
+                    SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+                    if (!sts.onHitHooks.empty()) {
+                        SkillContext ctx;
+                        ctx.caster             = m_pCaster;
+                        ctx.baseDamage         = damage;
+                        ctx.damageDealt        = actualDmg;
+                        ctx.hitEnemy           = pEnemy;
+                        ctx.hitEnemyPos        = ePos;
+                        ctx.scene              = m_pScene;
+                        ctx.statusChanceMult   = sts.statusChanceMult;
+                        ctx.statusDurationMult = sts.statusDurationMult;
+                        for (auto& hook : sts.onHitHooks) hook(ctx);
+                    }
+                }
+            }
         }
     }
 }

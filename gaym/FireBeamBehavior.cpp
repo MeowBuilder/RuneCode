@@ -197,6 +197,16 @@ void FireBeamBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
                 elemType = pPC->GetElementType();
         }
 
+        // 변환 룬 원소가 있으면 우선 적용
+        SkillStats stats;
+        if (caster) {
+            auto* pSkillComp = caster->GetComponent<SkillComponent>();
+            if (pSkillComp && m_slot != SkillSlot::Count)
+                stats = pSkillComp->BuildSkillStats(m_slot, m_SkillData.activationType);
+        }
+        if (!stats.elementSet.empty())
+            elemType = stats.elementSet[0];
+
         EffectDef coreDef  = BuildCoreBeamDef();
         EffectDef swirlDef = BuildSwirlDef();
         EffectDef burstDef = BuildBurstDef();
@@ -210,20 +220,12 @@ void FireBeamBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
 
         // 서브 파티클 VFX 스폰 (EffectRegistry sub_* 이펙트)
         m_subVFXIds.clear();
-        if (caster)
+        for (const auto& subId : stats.subVFXIds)
         {
-            auto* pSkillComp = caster->GetComponent<SkillComponent>();
-            if (pSkillComp && m_slot != SkillSlot::Count)
-            {
-                SkillStats stats = pSkillComp->BuildSkillStats(m_slot, m_SkillData.activationType);
-                for (const auto& subId : stats.subVFXIds)
-                {
-                    if (!EffectRegistry::Get().HasEffect(subId)) continue;
-                    EffectDef subDef = EffectRegistry::Get().GetEffect(subId);
-                    int sid = m_pVFXManager->SpawnEffectDef(origin, direction, subDef, true);
-                    if (sid >= 0) m_subVFXIds.push_back(sid);
-                }
-            }
+            if (!EffectRegistry::Get().HasEffect(subId)) continue;
+            EffectDef subDef = EffectRegistry::Get().GetEffect(subId);
+            int sid = m_pVFXManager->SpawnEffectDef(origin, direction, subDef, true);
+            if (sid >= 0) m_subVFXIds.push_back(sid);
         }
 
         wchar_t buf[96];
@@ -333,7 +335,27 @@ void FireBeamBehavior::HitEnemiesInBeam(float damage)
         float eRadius = max(1.5f, max(eScale.x, eScale.z) * 1.5f);
 
         if (lateralDist < BEAM_RADIUS + eRadius)
+        {
             pEnemy->TakeDamage(damage, false);
+
+            auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+            if (pSC && m_slot != SkillSlot::Count)
+            {
+                SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+                if (!sts.onHitHooks.empty())
+                {
+                    SkillContext ctx;
+                    ctx.caster             = m_pCaster;
+                    ctx.baseDamage         = damage;
+                    ctx.damageDealt        = damage;
+                    ctx.hitEnemy           = pEnemy;
+                    ctx.hitEnemyPos        = pTransform->GetPosition();
+                    ctx.statusChanceMult   = sts.statusChanceMult;
+                    ctx.statusDurationMult = sts.statusDurationMult;
+                    for (auto& hook : sts.onHitHooks) hook(ctx);
+                }
+            }
+        }
     }
 }
 
