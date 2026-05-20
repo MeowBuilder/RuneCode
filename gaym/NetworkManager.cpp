@@ -1304,10 +1304,11 @@ static MonsterPreset GetMonsterPresetByType(uint32 monsterType)
                  3.0f, "Idle", "Walk", "",
                  "Attack_Forward_RM", "Death" };
     case 8: // Golem
-        return { "Assets/Enemies/golem/Golem01_Generic_prefab.bin",
-                 "Assets/Enemies/golem/Golem01_Generic_prefab_Anim.bin",
-                 8.0f, "Golem_battle_stand_ge", "Golem_battle_walk_ge", "",
-                 "Golem_battle_attack01_ge", "Golem_battle_die_ge" };
+        return { "Assets/Enemies/Golem/Golem01_Generic_prefab.bin",
+                 "Assets/Enemies/Golem/Golem01_Generic_prefab_Anim.bin",
+                 14.0f, "Golem_stand_ge", "Golem_battle_stand_ge",
+                 "Assets/Enemies/Golem/Textures/chr_04_Golem_alb.png",
+                 "Golem_battle_attack01_ge", "Golem_battle_die_ge" };;
     case 9: // Demon
         return { "Assets/Enemies/demon/Demon.bin",
                  "Assets/Enemies/demon/Demon_Anim.bin",
