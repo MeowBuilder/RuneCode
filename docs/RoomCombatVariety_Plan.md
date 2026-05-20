@@ -34,27 +34,53 @@
 
 기존 `IAttackBehavior` 그대로 확장 — 적의 `m_fnCreateAttack` / `m_fnCreateSpecialAttack`에 끼워넣기.
 
+#### 로드맵 1차 묶음 (확정)
+
 | # | 클래스 | 컨셉 | 서버 부담 | 추정 |
 |---|---|---|---|---|
 | 3.1 | **`ChargedShotBehavior`** (저격수) | 1.5~2s 차징 시 라인 인디케이터 표시 → 강한 단발 직선 발사. 회피는 라인 이탈 | 서버: AI 추가 + 발사 패킷 (기존 ranged 응용) | 2d |
-| 3.2 | **`SuicideExplodeBehavior`** (자폭병) | 사거리 진입 시 1.5s 카운트다운 + 깜빡임 → 광역 폭발 (자기도 사망) | death + AoE 처리 (기존 패턴 응용) | 1.5d |
-| 3.3 | **`GuardStanceBehavior`** (방패병) | N초마다 가드 자세 (전방 90° 데미지 70% 감소). 측면/뒤는 정상 → 위치잡기 강요 | 클라가 hit angle 판정, 서버는 가드 플래그 sync | 2d |
-| 3.4 | **`SplitOnDeathBehavior`** (분열형) | 사망 hook — 작은 적 2~3마리 스폰 | 죽음 패킷 받아 서버가 미니 스폰 | 1.5d |
-| (3.5) | **`HealAuraBehavior`** (힐러) | 주변 아군 HP 회복 — *서버에 buff 시스템 필요* | 무거움, 별도 합의 | 4d+ |
-| (3.6) | **`DebuffShotBehavior`** (디버프 사수) | 맞으면 느려짐/스턴 — *상태이상 시스템 필요* | 무거움, 별도 합의 | 5d+ |
+| 3.2 | **`GrenadeThrowBehavior`** (투척병) | 포물선 투척 → 착지 지점에 0.5s 지연 광역 폭발. 회피 = 위치이동 강제 | Ranged 발사 + 지연 zone-damage 패킷 (Tier 2.1 hazard와 유사) | 2d |
+| 3.3 | **`QuickJabBehavior`** (속공) | 짧은 wind-up + 3~4타 빠른 다단 (저데미지/고빈도). 회피 타이밍 변경 | 기존 melee 다단 발동 패킷 | 1.5d |
 
-**3.5/3.6은 이번 범위 제외 권장.** buff/debuff 시스템 부재 상태에서 들어가면 서버 작업 부피 큼. 도입 시 별도 협의.
+→ 같은 메쉬 다른 행동을 1차에 시연하기 위한 묶음. Ranged 변형 1, Melee 변형 1, 신규 메커니즘 1.
+
+#### 로드맵 2차 묶음
+
+| # | 클래스 | 컨셉 | 서버 부담 | 추정 |
+|---|---|---|---|---|
+| 3.4 | **`SuicideExplodeBehavior`** (자폭병) | 사거리 진입 시 1.5s 카운트다운 + 깜빡임 → 광역 폭발 (자기도 사망) | death + AoE 처리 (기존 패턴 응용) | 1.5d |
+| 3.5 | **`DelayedStrikeBehavior`** (페이크 일격) | wind-up 중간에 정지 (페이크) → 회피 후 진짜 타격. 심리전 | melee 변형, 타이밍 sync 필요 | 1.5d |
+| 3.6 | **`SpreadShotBehavior`** (산탄) | 3~5발 부채꼴 (좁은 각). 좌우 회피 강제 | Ranged 다발 발사 패킷 | 1d |
+
+#### 로드맵 3차 묶음
+
+| # | 클래스 | 컨셉 | 서버 부담 | 추정 |
+|---|---|---|---|---|
+| 3.7 | **`GuardStanceBehavior`** (방패병) | N초마다 가드 자세 (전방 90° 데미지 70% 감소). 측면/뒤는 정상 → 위치잡기 강요 | 클라가 hit angle 판정, 서버는 가드 플래그 sync | 2d |
+| 3.8 | **`SplitOnDeathBehavior`** (분열형) | 사망 hook — 작은 적 2~3마리 스폰 | 죽음 패킷 받아 서버가 미니 스폰 | 1.5d |
+
+#### 보류 / 후순위
+
+| # | 클래스 | 사유 |
+|---|---|---|
+| `BerserkAtLowHPBehavior` | 래퍼형. 1~3차 끝난 뒤 도입 검토 |
+| `LeapStrikeBehavior` | 점프 보간 시스템 별도 필요 |
+| `KitingShotBehavior` | 이동 AI 변형. 후순위 |
+| `DeathExplodeBehavior` | Tier 2.1 hazard 시스템과 함께 묶어 처리 |
+| `PoisonPoolOnDeathBehavior` | Tier 2.1 zone 시스템 의존 |
+| `HealAuraBehavior` / `DebuffShotBehavior` | buff/debuff 시스템 부재. 별도 합의 시 도입 |
 
 ---
 
 ## 2. 실행 순서 권장
 
 ```
-주차 1   →  1.1 웨이브 스폰 + 1.2 엘리트 변형            (서버 무부담, 즉시 체감↑)
-주차 2   →  3.1 ChargedShot + 3.2 SuicideExplode        (적 다양성 핵심)
-주차 3   →  1.3 mix 다양화 + 1.4 modifier + 3.3 GuardStance
-주차 4   →  2.1 환경 hazard (보스 패턴 재활용)
-주차 5+  →  2.2 부서지는 오브젝트, 2.3 룸 타입 분기, 3.4 SplitOnDeath
+1차 묶음 (확정)  →  3.1 ChargedShot + 3.2 GrenadeThrow + 3.3 QuickJab
+                   (Ranged/Melee 변형 + 신규 메커니즘. 같은 메쉬 다른 행동 시연)
+2차 묶음        →  3.4 SuicideExplode + 3.5 DelayedStrike + 3.6 SpreadShot
+3차 묶음        →  3.7 GuardStance + 3.8 SplitOnDeath
+병행            →  1.1 웨이브 스폰(완료), 1.2 엘리트 변형
+환경 시스템     →  1.3 mix 다양화, 1.4 modifier, 2.1 hazard, 2.2 break, 2.3 room type
 ```
 
 ### 결정 포인트
@@ -132,16 +158,17 @@ RoomModifier m_eModifier = RoomModifier::None;
 
 | 단계 | 항목 | 상태 | 비고 |
 |---|---|---|---|
-| 주차 1 | 1.1 웨이브 스폰 | 미착수 | |
-| 주차 1 | 1.2 엘리트 변형 | 미착수 | |
-| 주차 2 | 3.1 ChargedShot | 미착수 | |
-| 주차 2 | 3.2 SuicideExplode | 미착수 | |
-| 주차 3 | 1.3 mix 다양화 | 미착수 | |
-| 주차 3 | 1.4 modifier | 미착수 | |
-| 주차 3 | 3.3 GuardStance | 미착수 | |
-| 주차 4 | 2.1 환경 hazard | 미착수 | |
-| 주차 5+ | 2.2 부서지는 오브젝트 | 미착수 | |
-| 주차 5+ | 2.3 룸 타입 분기 | 미착수 | |
-| 주차 5+ | 3.4 SplitOnDeath | 미착수 | |
-| 보류 | 3.5 HealAura | 보류 | buff 시스템 합의 필요 |
-| 보류 | 3.6 DebuffShot | 보류 | 상태이상 시스템 합의 필요 |
+| 완료 | 1.1 웨이브 스폰 (오프라인) | 완료 | 7마리/wave 자동 분할 + 포탈+낙하 연출 |
+| 1차 | 3.1 ChargedShot | 완료 | Magma 변종 (자주색) Room 2/3/4/6 배치 |
+| 1차 | 3.2 GrenadeThrow | 완료 | Magma 변종 (주황색) Room 2/3/4/6 배치 |
+| 1차 | 3.3 QuickJab | 완료 | FireGolem 변종 (청록색) Room 2/3/4/6 배치 |
+| 2차 | 3.4 SuicideExplode | 미착수 | |
+| 2차 | 3.5 DelayedStrike | 미착수 | |
+| 2차 | 3.6 SpreadShot | 미착수 | |
+| 3차 | 3.7 GuardStance | 미착수 | |
+| 3차 | 3.8 SplitOnDeath | 미착수 | |
+| 환경 | 1.2 엘리트 변형 | 미착수 | |
+| 환경 | 1.3 mix 다양화 | 미착수 | |
+| 환경 | 1.4 modifier | 미착수 | |
+| 환경 | 2.1 hazard / 2.2 break / 2.3 room type | 미착수 | |
+| 보류 | HealAura / DebuffShot / Berserk / Leap / Kiting / DeathExplode / PoisonPool | 보류 | 위 보류 사유 표 참조 |

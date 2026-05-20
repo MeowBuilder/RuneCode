@@ -15,11 +15,16 @@
 #include "RangedAttackBehavior.h"
 #include "RushAoEAttackBehavior.h"
 #include "RushFrontAttackBehavior.h"
+#include "ChargedShotAttackBehavior.h"
+#include "GrenadeThrowAttackBehavior.h"
+#include "QuickJabAttackBehavior.h"
+#include "SuicideExplodeAttackBehavior.h"
 #include "Dx12App.h"
 #include "TorchSystem.h"
 
 #include <fstream>
 #include <algorithm>
+#include <random>
 #include <sstream>
 #include <map>
 #include <tuple>
@@ -735,6 +740,22 @@ bool MapLoader::LoadIntoScene(
                 data.m_fnCreateAttack = [pProjMgr]() -> std::unique_ptr<IAttackBehavior> {
                     return std::make_unique<RangedAttackBehavior>(pProjMgr);
                 };
+            } else if (attackType == "ChargedShot") {
+                data.m_fnCreateAttack = [pProjMgr]() -> std::unique_ptr<IAttackBehavior> {
+                    return std::make_unique<ChargedShotAttackBehavior>(pProjMgr);
+                };
+            } else if (attackType == "GrenadeThrow") {
+                data.m_fnCreateAttack = [pProjMgr]() -> std::unique_ptr<IAttackBehavior> {
+                    return std::make_unique<GrenadeThrowAttackBehavior>(pProjMgr);
+                };
+            } else if (attackType == "QuickJab") {
+                data.m_fnCreateAttack = []() -> std::unique_ptr<IAttackBehavior> {
+                    return std::make_unique<QuickJabAttackBehavior>();
+                };
+            } else if (attackType == "SuicideExplode") {
+                data.m_fnCreateAttack = [pProjMgr]() -> std::unique_ptr<IAttackBehavior> {
+                    return std::make_unique<SuicideExplodeAttackBehavior>(pProjMgr);
+                };
             } else { // Melee (default)
                 data.m_fnCreateAttack = []() -> std::unique_ptr<IAttackBehavior> {
                     return std::make_unique<MeleeAttackBehavior>();
@@ -748,11 +769,16 @@ bool MapLoader::LoadIntoScene(
                 if      (indType == "Circle")     data.m_IndicatorConfig.m_eType = IndicatorType::Circle;
                 else if (indType == "RushCircle") data.m_IndicatorConfig.m_eType = IndicatorType::RushCircle;
                 else if (indType == "RushCone")   data.m_IndicatorConfig.m_eType = IndicatorType::RushCone;
+                else if (indType == "ForwardBox") data.m_IndicatorConfig.m_eType = IndicatorType::ForwardBox;
                 else                              data.m_IndicatorConfig.m_eType = IndicatorType::None;
 
                 data.m_IndicatorConfig.m_fRushDistance = ind["rushDistance"].f();
                 data.m_IndicatorConfig.m_fHitRadius    = ind["hitRadius"].f();
                 data.m_IndicatorConfig.m_fConeAngle    = ind["coneAngle"].f();
+                // ForwardBox 전방 길이 — ChargedShot 등 라인형 텔레그래프에서 사용
+                if (ind.has("hitLength")) {
+                    data.m_IndicatorConfig.m_fHitLength = ind["hitLength"].f();
+                }
             }
 
             // Animation clips
@@ -798,7 +824,50 @@ bool MapLoader::LoadIntoScene(
     //   웨이브당 최대 kPerWave 마리로 자동 분할 (프레임 압박 완화 + 페이즈 체감).
     //   첫 웨이브 Immediate, 이후는 AfterPrevCleared (직전 웨이브 전멸 시).
     //   JSON 직접 지정 (waves 필드) 추가 전까지의 임시 처리.
-    constexpr size_t kPerWave = 7;
+
+    // 변종/일반을 분리해 각각 셔플 후 비율 유지하며 인터리브 — 모든 wave 에 변종 비율 보장.
+    //   단순 전체 셔플은 wave 0 에 변종이 적게 떨어지는 경우 발생 (운). 비율 인터리브로 해소.
+    //   결정적 시드 → 같은 룸 입장 시 같은 배치 (재현성).
+    auto IsVariant = [](const std::pair<std::string, XMFLOAT3>& e) {
+        const std::string& n = e.first;
+        return n.find("_Jabber")    != std::string::npos
+            || n.find("_Grenadier") != std::string::npos
+            || n.find("_Sniper")    != std::string::npos
+            || n.find("_Bomber")    != std::string::npos;
+    };
+    {
+        std::vector<std::pair<std::string, XMFLOAT3>> variants, bases;
+        variants.reserve(spawnConfig.m_vEnemySpawns.size());
+        bases.reserve(spawnConfig.m_vEnemySpawns.size());
+        for (auto& s : spawnConfig.m_vEnemySpawns)
+            (IsVariant(s) ? variants : bases).push_back(s);
+
+        std::mt19937 rng(static_cast<unsigned>(spawnConfig.m_vEnemySpawns.size() * 2654435761u));
+        std::shuffle(variants.begin(), variants.end(), rng);
+        std::shuffle(bases.begin(),    bases.end(),    rng);
+
+        // 위치도 따로 셔플 — preset 슬롯이 새 위치로 흩어짐 (공간 클러스터링 해소)
+        std::vector<XMFLOAT3> positions;
+        positions.reserve(spawnConfig.m_vEnemySpawns.size());
+        for (auto& s : spawnConfig.m_vEnemySpawns) positions.push_back(s.second);
+        std::shuffle(positions.begin(), positions.end(), rng);
+
+        // 비율 인터리브 (Bresenham 스타일): v_assigned/i ≈ v_count/total 유지
+        spawnConfig.m_vEnemySpawns.clear();
+        size_t total = variants.size() + bases.size();
+        size_t vAssigned = 0;
+        for (size_t i = 0; i < total; ++i)
+        {
+            bool takeVariant = (vAssigned < variants.size())
+                            && (vAssigned * total < (i + 1) * variants.size());
+            auto& src = takeVariant ? variants[vAssigned] : bases[i - vAssigned];
+            spawnConfig.m_vEnemySpawns.push_back({ src.first, positions[i] });
+            if (takeVariant) ++vAssigned;
+        }
+    }
+
+    // 웨이브당 최대 kPerWave 마리로 자동 분할 — 페이즈 체감 + 포탈/낙하 연출 활성화.
+    constexpr size_t kPerWave = 10;
     if (spawnConfig.m_vEnemySpawns.size() > kPerWave && !spawnConfig.HasMultiWave())
     {
         const auto& src = spawnConfig.m_vEnemySpawns;

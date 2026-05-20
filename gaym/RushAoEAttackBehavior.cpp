@@ -8,7 +8,7 @@
 
 RushAoEAttackBehavior::RushAoEAttackBehavior(float fDamage, float fRushSpeed, float fRushDuration,
                                              float fWindupTime, float fHitTime, float fRecoveryTime,
-                                             float fAoERadius)
+                                             float fAoERadius, float fTelegraphTime)
     : m_fDamage(fDamage)
     , m_fRushSpeed(fRushSpeed)
     , m_fRushDuration(fRushDuration)
@@ -16,7 +16,24 @@ RushAoEAttackBehavior::RushAoEAttackBehavior(float fDamage, float fRushSpeed, fl
     , m_fHitTime(fHitTime)
     , m_fRecoveryTime(fRecoveryTime)
     , m_fAoERadius(fAoERadius)
+    , m_fTelegraphTime(fTelegraphTime)
 {
+}
+
+float RushAoEAttackBehavior::GetIndicatorRadius() const
+{
+    // RushFront 와 동일 시각 폭 — 4.5 ~ 6.0
+    //   AoE 반경이 너무 크면 corridor 가 좁아 보일 수 있으므로 AoE 반경으로 베이스 잡음
+    float halfW = m_fAoERadius;
+    if (halfW < 4.5f) halfW = 4.5f;
+    if (halfW > 6.0f) halfW = 6.0f;
+    return halfW;
+}
+
+float RushAoEAttackBehavior::GetIndicatorLength() const
+{
+    // 전체 위험 구간 = 돌진 거리 + AoE 반경 (착지 폭발까지 표시)
+    return m_fRushSpeed * m_fRushDuration + m_fAoERadius;
 }
 
 void RushAoEAttackBehavior::Execute(EnemyComponent* pEnemy)
@@ -44,8 +61,8 @@ void RushAoEAttackBehavior::Execute(EnemyComponent* pEnemy)
         }
     }
 
-    m_ePhase = Phase::Rush;
-    m_fPhaseDuration = m_fRushDuration;
+    m_ePhase = Phase::Telegraph;
+    m_fPhaseDuration = m_fTelegraphTime;
 }
 
 void RushAoEAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
@@ -56,6 +73,16 @@ void RushAoEAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
 
     switch (m_ePhase)
     {
+    case Phase::Telegraph:
+        // 정지 상태로 ForwardBox 차오름. 잠긴 방향이 명확히 표시됨 → 회피 가능
+        if (m_fTimer >= m_fTelegraphTime)
+        {
+            m_ePhase = Phase::Rush;
+            m_fTimer = 0.0f;
+            m_fPhaseDuration = m_fRushDuration;
+        }
+        break;
+
     case Phase::Rush:
         UpdateRush(dt, pEnemy);
         if (m_fTimer >= m_fRushDuration)
@@ -105,7 +132,7 @@ bool RushAoEAttackBehavior::IsFinished() const
 
 void RushAoEAttackBehavior::Reset()
 {
-    m_ePhase = Phase::Rush;
+    m_ePhase = Phase::Telegraph;
     m_fTimer = 0.0f;
     m_bHitDealt = false;
     m_bRushHitDealt = false;

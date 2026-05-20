@@ -30,8 +30,102 @@
   ],
   "enemySpawns": [
     {
+      "presetName": "FireGolem_Rd_Bomber",
+      "count": 3,
+      "activationDelay": 0.8,
+      "position": [
+        -11.11,
+        0.0,
+        -11.0
+      ],
+      "rotationY": 0.0,
+      "stats": {
+        "maxHP": 90.0,
+        "moveSpeed": 12.0,
+        "attackRange": 4.5,
+        "attackCooldown": 1.0,
+        "detectionRange": 50.0
+      },
+      "attackType": "SuicideExplode",
+      "indicator": {
+        "type": "Circle",
+        "rushDistance": 0.0,
+        "hitRadius": 4.5,
+        "coneAngle": 0.0
+      },
+      "visual": {
+        "meshPath": "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd.bin",
+        "animationPath": "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd_Anim.bin",
+        "scale": [
+          4.5,
+          4.5,
+          4.5
+        ],
+        "color": [
+          255,
+          40,
+          30,
+          255
+        ]
+      },
+      "animClips": {
+        "idle": "idle",
+        "chase": "Run_Forward",
+        "attack": "Combat_Unarmed_Attack",
+        "stagger": "Combat_Stun",
+        "death": "Death"
+      }
+    },
+    {
+      "presetName": "FireGolem_Rd_Jabber",
+      "count": 3,
+      "activationDelay": 0.3,
+      "position": [
+        -14.11,
+        0.0,
+        -9.0
+      ],
+      "rotationY": 0.0,
+      "stats": {
+        "maxHP": 110.0,
+        "moveSpeed": 9.0,
+        "attackRange": 4.0,
+        "attackCooldown": 1.4,
+        "detectionRange": 50.0
+      },
+      "attackType": "QuickJab",
+      "indicator": {
+        "type": "Circle",
+        "rushDistance": 0.0,
+        "hitRadius": 3.0,
+        "coneAngle": 0.0
+      },
+      "visual": {
+        "meshPath": "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd.bin",
+        "animationPath": "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd_Anim.bin",
+        "scale": [
+          4.0,
+          4.0,
+          4.0
+        ],
+        "color": [
+          80,
+          230,
+          230,
+          255
+        ]
+      },
+      "animClips": {
+        "idle": "idle",
+        "chase": "Run_Forward",
+        "attack": "Combat_Unarmed_Attack",
+        "stagger": "Combat_Stun",
+        "death": "Death"
+      }
+    },
+    {
       "presetName": "FireGolem_Rd",
-      "count": 2,
+      "count": 1,
       "activationDelay": 0.0,
       "position": [
         -17.11,
@@ -78,7 +172,7 @@
     },
     {
       "presetName": "ChaosElemental_Rd",
-      "count": 3,
+      "count": 1,
       "activationDelay": 5.0,
       "position": [
         -5.1,
@@ -125,7 +219,7 @@
     },
     {
       "presetName": "MoltenElemental_Rd",
-      "count": 4,
+      "count": 1,
       "activationDelay": 10.0,
       "position": [
         -9.48,
@@ -142,9 +236,10 @@
       },
       "attackType": "RushAoE",
       "indicator": {
-        "type": "RushCircle",
+        "type": "ForwardBox",
         "rushDistance": 8.0,
-        "hitRadius": 3.0,
+        "hitRadius": 5.0,
+        "hitLength": 12.5,
         "coneAngle": 60.0
       },
       "visual": {
@@ -172,7 +267,7 @@
     },
     {
       "presetName": "MagmaElemental_Rd",
-      "count": 4,
+      "count": 1,
       "activationDelay": 1.0,
       "position": [
         5.36,
@@ -206,6 +301,101 @@
           255,
           255,
           255,
+          255
+        ]
+      },
+      "animClips": {
+        "idle": "idle",
+        "chase": "Run_Forward",
+        "attack": "Combat_Unarmed_Attack",
+        "stagger": "Combat_Stun",
+        "death": "Death"
+      }
+    },
+    {
+      "presetName": "MagmaElemental_Rd_Grenadier",
+      "count": 3,
+      "activationDelay": 1.7,
+      "position": [
+        2.36,
+        0.0,
+        -21.21
+      ],
+      "rotationY": 0.0,
+      "stats": {
+        "maxHP": 180.0,
+        "moveSpeed": 3.0,
+        "attackRange": 18.0,
+        "attackCooldown": 4.0,
+        "detectionRange": 50.0
+      },
+      "attackType": "GrenadeThrow",
+      "indicator": {
+        "type": "Circle",
+        "rushDistance": 0.0,
+        "hitRadius": 4.5,
+        "coneAngle": 0.0
+      },
+      "visual": {
+        "meshPath": "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd.bin",
+        "animationPath": "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd_Anim.bin",
+        "scale": [
+          7.5,
+          7.5,
+          7.5
+        ],
+        "color": [
+          245,
+          140,
+          40,
+          255
+        ]
+      },
+      "animClips": {
+        "idle": "idle",
+        "chase": "Run_Forward",
+        "attack": "Combat_Unarmed_Attack",
+        "stagger": "Combat_Stun",
+        "death": "Death"
+      }
+    },
+    {
+      "presetName": "MagmaElemental_Rd_Sniper",
+      "count": 3,
+      "activationDelay": 1.5,
+      "position": [
+        8.36,
+        0.0,
+        -21.21
+      ],
+      "rotationY": 0.0,
+      "stats": {
+        "maxHP": 150.0,
+        "moveSpeed": 3.0,
+        "attackRange": 28.0,
+        "attackCooldown": 3.5,
+        "detectionRange": 50.0
+      },
+      "attackType": "ChargedShot",
+      "indicator": {
+        "type": "ForwardBox",
+        "rushDistance": 0.0,
+        "hitRadius": 1.2,
+        "hitLength": 34.0,
+        "coneAngle": 0.0
+      },
+      "visual": {
+        "meshPath": "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd.bin",
+        "animationPath": "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd_Anim.bin",
+        "scale": [
+          6.8,
+          6.8,
+          6.8
+        ],
+        "color": [
+          210,
+          80,
+          235,
           255
         ]
       },

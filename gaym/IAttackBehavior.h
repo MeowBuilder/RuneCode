@@ -53,4 +53,12 @@ public:
     {
         return DirectX::XMFLOAT3(1.0f, 1.0f, 1.0f);
     }
+
+    // 인디케이터 월드 위치 override (Circle 전용).
+    //   true 반환 시 outPos 가 인디케이터 중심으로 사용됨 (기본 = enemy 의 GetAttackOrigin()).
+    //   GrenadeThrow 처럼 적과 떨어진 착지 지점을 표시해야 하는 패턴에서 사용.
+    virtual bool GetIndicatorWorldPos(class EnemyComponent* /*pEnemy*/, DirectX::XMFLOAT3& /*outPos*/) const
+    {
+        return false;
+    }
 };

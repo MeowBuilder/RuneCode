@@ -9,7 +9,7 @@ class RushAoEAttackBehavior : public IAttackBehavior
 public:
     RushAoEAttackBehavior(float fDamage = 15.0f, float fRushSpeed = 15.0f, float fRushDuration = 0.5f,
                           float fWindupTime = 0.3f, float fHitTime = 0.2f, float fRecoveryTime = 0.3f,
-                          float fAoERadius = 5.0f);
+                          float fAoERadius = 5.0f, float fTelegraphTime = 0.45f);
     virtual ~RushAoEAttackBehavior() = default;
 
     virtual void Execute(EnemyComponent* pEnemy) override;
@@ -17,8 +17,18 @@ public:
     virtual bool IsFinished() const override;
     virtual void Reset() override;
 
+    // 인디케이터: 돌진 경로 + 착지 AoE 모두 포함한 ForwardBox 텔레그래프
+    virtual int   GetIndicatorTypeOverride() const override { return 4; /* ForwardBox */ }
+    virtual float GetIndicatorRadius() const override;       // corridor 절반 너비
+    virtual float GetIndicatorLength() const override;       // 돌진 거리 + AoE 사거리
+    virtual float GetTimeToHit() const override { return m_fTelegraphTime; }
+    // Telegraph phase 동안만 인디케이터 표시
+    virtual bool  ShouldShowHitZone() const override { return m_ePhase == Phase::Telegraph; }
+    // 주황빛 — 돌진형 식별 (RushFront 와 동일 톤)
+    virtual XMFLOAT3 GetIndicatorTint() const override { return XMFLOAT3(1.0f, 0.6f, 0.2f); }
+
 private:
-    enum class Phase { Rush, Windup, Hit, Recovery };
+    enum class Phase { Telegraph, Rush, Windup, Hit, Recovery };
 
     void UpdateRush(float dt, EnemyComponent* pEnemy);
     void DealAoEDamage(EnemyComponent* pEnemy);
@@ -32,9 +42,10 @@ private:
     float m_fHitTime = 0.2f;
     float m_fRecoveryTime = 0.3f;
     float m_fAoERadius = 5.0f;
+    float m_fTelegraphTime = 0.45f;
 
     // Runtime state
-    Phase m_ePhase = Phase::Rush;
+    Phase m_ePhase = Phase::Telegraph;
     float m_fTimer = 0.0f;
     float m_fPhaseDuration = 0.0f;
     bool m_bHitDealt = false;

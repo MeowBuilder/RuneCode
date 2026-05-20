@@ -426,9 +426,14 @@ void EnemyComponent::MoveTowardsTarget(float dt)
         }
     }
 
+    // 일반 몹은 전투 템포 가속 — 보스는 페이즈 별 튜닝이라 제외.
+    //   WaterPuddleBehavior 가 m_fSpeedMultiplier 를 일시적으로 낮춰 슬로우 줌 (1.0 미만일 때만 적용)
+    float fEffectiveSpeed = m_Stats.m_fMoveSpeed * m_fSpeedMultiplier;
+    if (!m_bIsBoss) fEffectiveSpeed *= 1.35f;
+
     // Combine movement direction with separation force
-    float moveX = dir.x * m_Stats.m_fMoveSpeed;
-    float moveZ = dir.y * m_Stats.m_fMoveSpeed;
+    float moveX = dir.x * fEffectiveSpeed;
+    float moveZ = dir.y * fEffectiveSpeed;
 
     // Add separation force
     moveX += separationForce.x * m_fSeparationStrength;
@@ -889,6 +894,15 @@ void EnemyComponent::ShowIndicators()
 
         // 공격 원점 기준 — 크라켄은 몸이 아니라 촉수 앞에서 공격이 나감
         XMFLOAT3 attackOrigin = GetAttackOrigin();
+        // 행동별 월드 위치 override (GrenadeThrow 의 착지 지점 등)
+        if (pActive)
+        {
+            XMFLOAT3 worldPosOverride;
+            if (pActive->GetIndicatorWorldPos(this, worldPosOverride))
+            {
+                attackOrigin = worldPosOverride;
+            }
+        }
 
         float fTimeToHit = pActive ? pActive->GetTimeToHit() : 0.0f;
         if (fTimeToHit <= 0.0f) fTimeToHit = 0.8f;  // 기본값

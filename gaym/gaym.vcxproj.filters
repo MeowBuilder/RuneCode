@@ -138,6 +138,18 @@
     <ClInclude Include="RangedAttackBehavior.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="ChargedShotAttackBehavior.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="GrenadeThrowAttackBehavior.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="QuickJabAttackBehavior.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="SuicideExplodeAttackBehavior.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
     <ClInclude Include="BreathAttackBehavior.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -558,6 +570,18 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="RangedAttackBehavior.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="ChargedShotAttackBehavior.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="GrenadeThrowAttackBehavior.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="QuickJabAttackBehavior.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="SuicideExplodeAttackBehavior.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="BreathAttackBehavior.cpp">

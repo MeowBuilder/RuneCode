@@ -5,19 +5,6 @@
 #include "TransformComponent.h"
 #include "PlayerComponent.h"
 #include "MathUtils.h"
-#include "Dx12App.h"
-#include "Scene.h"
-#include "VFXManager.h"
-
-namespace {
-    VFXManager* GetVFX()
-    {
-        if (auto* pApp = Dx12App::GetInstance())
-            if (auto* pScene = pApp->GetScene())
-                return pScene->GetVFXManager();
-        return nullptr;
-    }
-}
 
 RushFrontAttackBehavior::RushFrontAttackBehavior(float fDamage, float fRushSpeed, float fRushDuration,
                                                  float fWindupTime, float fHitTime, float fRecoveryTime,
@@ -107,61 +94,10 @@ void RushFrontAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
 
     case Phase::Rush:
     {
-        // 평행 트레일 배치:
-        //   spawn pos = 보스 위치 ± perpendicular * offset (좌/우)
-        //   spawn dir = 진행 방향의 반대 (뒤로 흘러 wake 형성)
-        // rushDir = (x, 0, z) → perpRight = (z, 0, -x)
-        const float kOffset = 4.0f;   // 보스 scale 8 기준 — 몸체 옆쪽에 트레일
-        XMFLOAT3 perpRight( m_xmf3RushDirection.z, 0.0f, -m_xmf3RushDirection.x);
-        XMFLOAT3 trailDir (-m_xmf3RushDirection.x, 0.0f, -m_xmf3RushDirection.z);
-
-        // 첫 프레임에 좌/우 한 쌍 스폰
-        if (m_nWindVFXIdL < 0 && m_nWindVFXIdR < 0)
-        {
-            if (auto* pVFX = GetVFX())
-            {
-                if (GameObject* pOwner = pEnemy->GetOwner())
-                {
-                    if (TransformComponent* pT = pOwner->GetTransform())
-                    {
-                        XMFLOAT3 bp = pT->GetPosition();
-                        bp.y += 1.0f;
-                        XMFLOAT3 leftPos { bp.x - perpRight.x * kOffset, bp.y, bp.z - perpRight.z * kOffset };
-                        XMFLOAT3 rightPos{ bp.x + perpRight.x * kOffset, bp.y, bp.z + perpRight.z * kOffset };
-                        m_nWindVFXIdL = pVFX->Spawn("Demon_RushWind", leftPos,  trailDir, 0u, false);
-                        m_nWindVFXIdR = pVFX->Spawn("Demon_RushWind", rightPos, trailDir, 0u, false);
-                    }
-                }
-            }
-        }
-
         UpdateRush(dt, pEnemy);
-
-        // 매 프레임 위치/방향 추적 (보스 따라 좌/우 오프셋 갱신)
-        if (auto* pVFX = GetVFX())
-        {
-            if (GameObject* pOwner = pEnemy->GetOwner())
-            {
-                if (TransformComponent* pT = pOwner->GetTransform())
-                {
-                    XMFLOAT3 bp = pT->GetPosition();
-                    bp.y += 1.0f;
-                    XMFLOAT3 leftPos { bp.x - perpRight.x * kOffset, bp.y, bp.z - perpRight.z * kOffset };
-                    XMFLOAT3 rightPos{ bp.x + perpRight.x * kOffset, bp.y, bp.z + perpRight.z * kOffset };
-                    if (m_nWindVFXIdL >= 0) pVFX->Track(m_nWindVFXIdL, leftPos,  trailDir);
-                    if (m_nWindVFXIdR >= 0) pVFX->Track(m_nWindVFXIdR, rightPos, trailDir);
-                }
-            }
-        }
 
         if (m_fTimer >= m_fRushDuration)
         {
-            // Rush 종료 — VFX 정리
-            if (auto* pVFX = GetVFX())
-            {
-                if (m_nWindVFXIdL >= 0) { pVFX->Stop(m_nWindVFXIdL); m_nWindVFXIdL = -1; }
-                if (m_nWindVFXIdR >= 0) { pVFX->Stop(m_nWindVFXIdR); m_nWindVFXIdR = -1; }
-            }
             m_ePhase = Phase::Windup;
             m_fTimer = 0.0f;
         }
@@ -211,12 +147,6 @@ void RushFrontAttackBehavior::Reset()
     m_bRushHitDealt = false;
     m_bFinished = false;
     m_xmf3RushDirection = XMFLOAT3(0.0f, 0.0f, 0.0f);
-    // 잔존 VFX 슬롯 정리
-    if (auto* pVFX = GetVFX())
-    {
-        if (m_nWindVFXIdL >= 0) { pVFX->Stop(m_nWindVFXIdL); m_nWindVFXIdL = -1; }
-        if (m_nWindVFXIdR >= 0) { pVFX->Stop(m_nWindVFXIdR); m_nWindVFXIdR = -1; }
-    }
 }
 
 void RushFrontAttackBehavior::UpdateRush(float dt, EnemyComponent* pEnemy)
