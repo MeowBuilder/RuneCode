@@ -17,6 +17,13 @@
 #include "DamageNumberManager.h"
 #include "Room.h"
 #include "EnemySpawner.h"
+#include "EnemyComponent.h"
+#include "IAttackBehavior.h"
+#include "JumpSlamAttackBehavior.h"
+#include "RockBarrageAttackBehavior.h"
+#include "RockFallAttackBehavior.h"
+#include "GroundRuptureAttackBehavior.h"
+#include "SequentialCrossAttackBehavior.h"
 #include "Dx12App.h"
 #include "MapLoader.h"
 #include <cmath>
@@ -1791,14 +1798,31 @@ static NetIndicatorParams GetIndicatorParamsForAttack(uint32 monsterType, uint32
         }
         break;
 
-    case 8: // Golem — preset Circle r=30, JumpSlam r 7~9, RockBarrage 등 r=30~85
+    case 8: // Golem
         p.type = NetworkManager::NetIndicatorType::Circle;
+
         switch (attackType)
         {
-        case 7:  p.radius = 9.0f;  break;       // JumpSlam (내려찍기)
-        case 9:  p.radius = 30.0f; break;       // GroundRupture (광역 균열)
-        case 8:  p.radius = 30.0f; break;       // TailSweep 도 광역
-        default: p.radius = 30.0f; break;
+        case 7:
+            // Primary Slam
+            p.radius = 70.0f;
+            break;
+
+        case 21:
+        case 22:
+        case 23:
+        case 24:
+        case 25:
+        case 26:
+            // Golem 전용 패턴은 클라 AttackBehavior 자체 인디케이터를 사용
+            // 공용 네트워크 Circle/ForwardBox 인디케이터를 켜면
+            // 큰 노란 원이 중복으로 남거나 맵 밖까지 표시됨
+            p.type = NetworkManager::NetIndicatorType::None;
+            break;
+
+        default:
+            p.radius = 42.0f;
+            break;
         }
         break;
 
@@ -1984,6 +2008,32 @@ void NetworkManager::UpdatePendingMonsterVFX(Scene* pScene, float deltaTime)
     }
 }
 
+void NetworkManager::UpdateNetworkGolemBehaviors(float deltaTime)
+{
+    for (auto it = m_vNetworkGolemBehaviors.begin(); it != m_vNetworkGolemBehaviors.end(); )
+    {
+        if (it->behavior == nullptr || it->owner == nullptr)
+        {
+            it = m_vNetworkGolemBehaviors.erase(it);
+            continue;
+        }
+
+        // nullptr이 아니라 실제 EnemyComponent를 넘겨야
+        // Rock 이동, 추적, 낙하, 인디케이터 종료가 정상 진행됨
+        it->behavior->Update(deltaTime, it->owner);
+
+        if (it->behavior->IsFinished())
+        {
+            it->behavior->Reset();
+            it = m_vNetworkGolemBehaviors.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
 void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
 {
     for (auto it = m_mapServerMonsterIndicators.begin(); it != m_mapServerMonsterIndicators.end(); ++it)
@@ -2158,6 +2208,12 @@ static const char* GetMonsterAttackClipForType(uint32 monsterType, uint32 attack
         case 7:  return "Golem_battle_attack01_ge";   // JumpSlam (내려찍기)
         case 9:  return "Golem_battle_attack02_ge";   // GroundRupture / RockBarrage / RockFall (팔 휘두르기)
         case 8:  return "Golem_battle_attack02_ge";   // TailSweep 도 attack02 로 처리
+        case 21: return "Golem_jump_ge";              // GolemJumpShock
+        case 22: return "Golem_battle_attack01_ge";   // GolemWideSlam
+        case 23: return "Golem_battle_attack02_ge";   // GolemRockBarrage
+        case 24: return "Golem_battle_attack02_ge";   // GolemRockFall
+        case 25: return "Golem_battle_attack02_ge";   // GolemGroundRupture
+        case 26: return "Golem_battle_attack02_ge";   // GolemSequentialCross
         default: return "Golem_battle_attack01_ge";
         }
     case 9:  // Demon — Anim: attack1 / Run (RushFront 는 Run 클립으로 돌진)
@@ -2575,6 +2631,21 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             }
             break;
 
+        case 21:
+        case 22:
+        case 23:
+        case 24:
+        case 25:
+        case 26:
+            // Golem 전용 패턴은 클라 오프라인 AttackBehavior를 직접 실행하여
+            // 실제 Rock mesh / 낙석 / 균열 / 순차 십자 연출을 재현한다.
+            // 데미지는 서버 권위이므로 클라는 연출만 담당한다.
+            if (mt == 8)
+            {
+                PlayNetworkGolemAttackBehavior(pScene, pMonster, monsterId, attackType);
+            }
+            break;
+
         default:
             break;
         }
@@ -2885,6 +2956,165 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
     char buf[192];
     sprintf_s(buf, "[Network] BossEvent processed: monsterId=%llu type=%u phase=%u clip=%s",
               monsterId, eventType, phaseIndex, roarClip ? roarClip : "(none)");
+    WriteNetworkLog(buf);
+}
+
+void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType)
+{
+    if (pScene == nullptr || pMonster == nullptr)
+        return;
+
+    // 1. 네트워크 Golem에 연출용 EnemyComponent가 없으면 추가
+    //    데미지/사망 판정은 서버 권위이므로 클라에서는 AI를 멈춘 연출용으로만 사용한다.
+    EnemyComponent* pEnemy = pMonster->GetComponent<EnemyComponent>();
+    if (pEnemy == nullptr)
+    {
+        pEnemy = pMonster->AddComponent<EnemyComponent>();
+        pEnemy->SetBoss(true);
+        pEnemy->SetStationary(true);
+
+        if (auto* pAnim = pMonster->GetComponent<AnimationComponent>())
+            pEnemy->SetAnimationComponent(pAnim);
+
+        if (CRoom* pRoom = pScene->GetCurrentRoom())
+            pEnemy->SetRoom(pRoom);
+
+        if (GameObject* pPlayer = pScene->GetPlayer())
+            pEnemy->SetTarget(pPlayer);
+    }
+    else
+    {
+        // 2. 이미 EnemyComponent가 있어도 네트워크 몬스터는 서버 권위 유지
+        if (GameObject* pPlayer = pScene->GetPlayer())
+            pEnemy->SetTarget(pPlayer);
+
+        if (CRoom* pRoom = pScene->GetCurrentRoom())
+            pEnemy->SetRoom(pRoom);
+    }
+
+    // 3. Golem 전용 attackType에 맞는 클라 오프라인 Behavior 생성
+    std::unique_ptr<IAttackBehavior> behavior;
+
+    switch (attackType)
+    {
+    case 21:
+        // GolemJumpShock
+        behavior = std::make_unique<JumpSlamAttackBehavior>(
+            140.0f, 6.5f, 1.8f, 85.0f,
+            1.3f, 0.7f,
+            false,
+            3.6f, 0.7f,
+            "Golem_jump_ge",
+            0.5f
+        );
+        break;
+
+    case 22:
+        // GolemWideSlam
+        behavior = std::make_unique<JumpSlamAttackBehavior>(
+            150.0f, 0.0f, 0.3f, 120.0f,
+            3.6f, 1.8f,
+            false,
+            3.4f, 0.65f,
+            "Golem_battle_attack01_ge"
+        );
+        break;
+
+    case 23:
+        // GolemRockBarrage
+        behavior = std::make_unique<RockBarrageAttackBehavior>(
+            16,
+            90.0f,
+            4.0f,
+            44.0f,
+            22.0f,
+            18.0f,
+            2.6f,
+            0.6f,
+            0.16f,
+            3.5f,
+            2.2f,
+            0.0f,
+            0.0f,
+            0.0f
+        );
+        break;
+
+    case 24:
+        // GolemRockFall
+        behavior = std::make_unique<RockFallAttackBehavior>(
+            10,
+            90.0f,
+            14.0f,
+            20.0f,
+            85.0f,
+            2.6f,
+            1.2f,
+            1.8f,
+            3.0f,
+            0.5f
+        );
+        break;
+
+    case 25:
+        // GolemGroundRupture
+        behavior = std::make_unique<GroundRuptureAttackBehavior>(
+            GroundRuptureAttackBehavior::RuptureShape::Cross,
+            100.0f,
+            100.0f,
+            6.0f,
+            2.2f,
+            0.4f,
+            1.2f,
+            3.0f,
+            0.5f
+        );
+        break;
+
+    case 26:
+        // GolemSequentialCross
+        behavior = std::make_unique<SequentialCrossAttackBehavior>(
+            55.0f,
+            100.0f,
+            13.0f,
+            1.6f,
+            0.22f,
+            1.2f,
+            2.8f,
+            0.6f
+        );
+        break;
+
+    default:
+        return;
+    }
+
+    if (!behavior)
+        return;
+
+    // 이전 Golem 연출 정리
+    // 이전 패턴 인디케이터/돌이 남아있으면 다음 패턴과 겹쳐 화면을 덮어버림
+    for (auto& entry : m_vNetworkGolemBehaviors)
+    {
+        if (entry.behavior)
+            entry.behavior->Reset();
+    }
+    m_vNetworkGolemBehaviors.clear();
+
+    // 새 Golem 연출 실행
+    behavior->Execute(pEnemy);
+
+    NetworkGolemBehaviorEntry entry;
+    entry.behavior = std::move(behavior);
+    entry.owner = pEnemy;
+
+    m_vNetworkGolemBehaviors.push_back(std::move(entry));
+
+    char buf[160];
+    sprintf_s(buf,
+        "[Network] PlayNetworkGolemAttackBehavior monsterId=%llu attackType=%u",
+        monsterId,
+        attackType);
     WriteNetworkLog(buf);
 }
 

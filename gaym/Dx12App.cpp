@@ -1915,6 +1915,9 @@ void Dx12App::UpdateNetwork(float deltaTime)
     // 보스 VFX 지연 스폰 처리 (windup 후/동안 staggered 발사)
     m_pNetworkManager->UpdatePendingMonsterVFX(m_pScene.get(), deltaTime);
 
+	// 서버 몬스터 행동 업데이트 (idle→active 전환, 행동 패턴 타이밍 등)
+    m_pNetworkManager->UpdateNetworkGolemBehaviors(deltaTime);
+
     // 서버 몬스터 위치/회전 보간 (MOVE 패킷 간격 사이 부드럽게 이동)
     m_pNetworkManager->InterpolateServerMonsters(deltaTime);
 

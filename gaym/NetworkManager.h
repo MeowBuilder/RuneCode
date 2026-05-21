@@ -11,12 +11,14 @@
 #include <mutex>
 #include <DirectXMath.h>
 #include "SkillTypes.h"   // ElementType (PendingMonsterVFX)
+#include "IAttackBehavior.h" // 네트워크 Golem AttackBehavior 보관용
 
 // 전방 선언
 struct ID3D12Device;
 struct ID3D12GraphicsCommandList;
 class GameObject;
 class Scene;
+class EnemyComponent;
 
 // 네트워크 플레이어 정보 (큐에 저장용)
 struct NetworkPlayerInfo
@@ -252,6 +254,9 @@ private:
     void ProcessRoomCleared(Scene* pScene, uint32 stageIndex, uint32 roomIndex);
     void ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 eventType, uint32 phaseIndex);
 
+	// 몬스터 공격 애니메이션 재생 (ProcessMonsterAttack에서 호출)
+    void PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType);
+
     // 서버 몬스터 관리 (메인 스레드에서만 접근)
     std::unordered_map<uint64, GameObject*> m_mapServerMonsters;
 
@@ -449,6 +454,15 @@ private:
     };
     std::vector<PendingMonsterVFX> m_vPendingMonsterVFX;
 
+    // 네트워크 Golem 전용 AttackBehavior 보관
+    struct NetworkGolemBehaviorEntry
+    {
+        std::unique_ptr<IAttackBehavior> behavior;
+        EnemyComponent* owner = nullptr;
+    };
+
+    std::vector<NetworkGolemBehaviorEntry> m_vNetworkGolemBehaviors;
+
 public:
     // 매 프레임 타겟을 향해 몬스터 transform 보간 (Dx12App 메인 루프에서 호출)
     void InterpolateServerMonsters(float deltaTime);
@@ -459,6 +473,9 @@ public:
 
     // 지연 VFX 큐 tick — windup 후/동안 스폰. 매 프레임 호출.
     void UpdatePendingMonsterVFX(Scene* pScene, float deltaTime);
+
+    // 네트워크 Golem 전용 AttackBehavior 갱신
+    void UpdateNetworkGolemBehaviors(float deltaTime);
 
 private:
     std::unordered_map<uint64, float> m_mapServerMonsterMoveTime;  // idle 전환용
