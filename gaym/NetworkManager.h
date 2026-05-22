@@ -459,6 +459,7 @@ private:
     {
         std::unique_ptr<IAttackBehavior> behavior;
         EnemyComponent* owner = nullptr;
+        float timer = 0.0f;
     };
 
     std::vector<NetworkGolemBehaviorEntry> m_vNetworkGolemBehaviors;

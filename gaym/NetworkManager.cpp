@@ -106,6 +106,13 @@ bool NetworkManager::Initialize()
 
 void NetworkManager::Shutdown()
 {
+    for (auto& entry : m_vNetworkGolemBehaviors)
+    {
+        if (entry.behavior)
+            entry.behavior->Reset();
+    }
+    m_vNetworkGolemBehaviors.clear();
+
     if (!m_bConnected && !m_pService)
         return;
 
@@ -592,6 +599,15 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
 {
     if (!pScene)
         return;
+
+    // 방 전환 전에 네트워크 Golem 연출 정리
+    // 이전 방의 EnemyComponent / Rock / Indicator를 물고 있으면 방 정리 후 크래시 가능
+    for (auto& entry : m_vNetworkGolemBehaviors)
+    {
+        if (entry.behavior)
+            entry.behavior->Reset();
+    }
+    m_vNetworkGolemBehaviors.clear();
 
     // 중복 전환 방어: 서버가 S_ROOM_TRANSITION 을 동일 프레임에 두 번 보내거나
     // 클라 큐에 중복 push 된 경우, 방 정리 중 다시 정리·재생성 호출로 dangling pointer 크래시 발생.
@@ -2018,11 +2034,11 @@ void NetworkManager::UpdateNetworkGolemBehaviors(float deltaTime)
             continue;
         }
 
-        // nullptr이 아니라 실제 EnemyComponent를 넘겨야
-        // Rock 이동, 추적, 낙하, 인디케이터 종료가 정상 진행됨
+        it->timer += deltaTime;
+
         it->behavior->Update(deltaTime, it->owner);
 
-        if (it->behavior->IsFinished())
+        if (it->behavior->IsFinished() || it->timer > 8.0f)
         {
             it->behavior->Reset();
             it = m_vNetworkGolemBehaviors.erase(it);
@@ -2643,6 +2659,7 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             if (mt == 8)
             {
                 PlayNetworkGolemAttackBehavior(pScene, pMonster, monsterId, attackType);
+                return;
             }
             break;
 
@@ -2964,6 +2981,12 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
     if (pScene == nullptr || pMonster == nullptr)
         return;
 
+    // Golem 전용 Behavior가 이미 진행 중이면 새 패턴 연출은 스킵한다.
+    // 서버 공격 패킷이 너무 빨리 들어오면 RockFall/RockBarrage가
+    // 바위 생성 전에 Reset되어 돌이 안 보이는 문제가 생김.
+    if (!m_vNetworkGolemBehaviors.empty())
+        return;
+
     // 1. 네트워크 Golem에 연출용 EnemyComponent가 없으면 추가
     //    데미지/사망 판정은 서버 권위이므로 클라에서는 AI를 멈춘 연출용으로만 사용한다.
     EnemyComponent* pEnemy = pMonster->GetComponent<EnemyComponent>();
@@ -2972,6 +2995,7 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
         pEnemy = pMonster->AddComponent<EnemyComponent>();
         pEnemy->SetBoss(true);
         pEnemy->SetStationary(true);
+        pEnemy->SetAIPaused(true);
 
         if (auto* pAnim = pMonster->GetComponent<AnimationComponent>())
             pEnemy->SetAnimationComponent(pAnim);
@@ -2985,11 +3009,18 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
     else
     {
         // 2. 이미 EnemyComponent가 있어도 네트워크 몬스터는 서버 권위 유지
+        pEnemy->SetBoss(true);
+        pEnemy->SetStationary(true);
+        pEnemy->SetAIPaused(true);
+
         if (GameObject* pPlayer = pScene->GetPlayer())
             pEnemy->SetTarget(pPlayer);
 
         if (CRoom* pRoom = pScene->GetCurrentRoom())
             pEnemy->SetRoom(pRoom);
+
+        if (auto* pAnim = pMonster->GetComponent<AnimationComponent>())
+            pEnemy->SetAnimationComponent(pAnim);
     }
 
     // 3. Golem 전용 attackType에 맞는 클라 오프라인 Behavior 생성
@@ -3036,7 +3067,7 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
             2.2f,
             0.0f,
             0.0f,
-            0.0f
+            0.8f // 유도 추적
         );
         break;
 
@@ -3046,11 +3077,11 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
             10,
             90.0f,
             14.0f,
-            20.0f,
-            85.0f,
+            12.0f,
+            45.0f,
             2.6f,
             1.2f,
-            1.8f,
+            4.0f,
             3.0f,
             0.5f
         );
@@ -3061,7 +3092,7 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
         behavior = std::make_unique<GroundRuptureAttackBehavior>(
             GroundRuptureAttackBehavior::RuptureShape::Cross,
             100.0f,
-            100.0f,
+            65.0f, // 서버 기준 더 작게
             6.0f,
             2.2f,
             0.4f,
@@ -3075,10 +3106,10 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
         // GolemSequentialCross
         behavior = std::make_unique<SequentialCrossAttackBehavior>(
             55.0f,
-            100.0f,
-            13.0f,
-            1.6f,
-            0.22f,
+            55.0f, // 기존 100.0f → 반길이 55, 전체 110
+            10.0f, // 서버 기준 폭도 축소
+            2.2f,
+            0.45f, // 순차 간격 증가
             1.2f,
             2.8f,
             0.6f
@@ -3091,15 +3122,6 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
 
     if (!behavior)
         return;
-
-    // 이전 Golem 연출 정리
-    // 이전 패턴 인디케이터/돌이 남아있으면 다음 패턴과 겹쳐 화면을 덮어버림
-    for (auto& entry : m_vNetworkGolemBehaviors)
-    {
-        if (entry.behavior)
-            entry.behavior->Reset();
-    }
-    m_vNetworkGolemBehaviors.clear();
 
     // 새 Golem 연출 실행
     behavior->Execute(pEnemy);
