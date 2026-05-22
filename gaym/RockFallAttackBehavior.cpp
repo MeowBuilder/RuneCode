@@ -55,7 +55,6 @@ RockFallAttackBehavior::RockFallAttackBehavior(int nRockCount, float fDamagePerR
 void RockFallAttackBehavior::Execute(EnemyComponent* pEnemy)
 {
     Reset();
-    OutputDebugStringA("[RockFall] Execute called\n");
     if (!pEnemy) return;
 
     m_pRoom = pEnemy->GetRoom();
@@ -198,29 +197,15 @@ void RockFallAttackBehavior::SpawnIndicators(EnemyComponent* pEnemy)
 
 void RockFallAttackBehavior::SpawnRocks(EnemyComponent* pEnemy)
 {
-    OutputDebugStringA("[RockFall] SpawnRocks called\n");
-
-    if (!m_pScene || !m_pRoom)
-    {
-        OutputDebugStringA("[RockFall] SpawnRocks failed: scene or room null\n");
-        return;
-    }
+    if (!m_pScene || !m_pRoom) return;
 
     Dx12App* pApp = Dx12App::GetInstance();
-    if (!pApp)
-    {
-        OutputDebugStringA("[RockFall] SpawnRocks failed: Dx12App null\n");
-        return;
-    }
+    if (!pApp) return;
 
     ID3D12Device* pDevice = pApp->GetDevice();
     ID3D12GraphicsCommandList* pCmdList = pApp->GetCommandList();
     Shader* pShader = m_pScene->GetDefaultShader();
-    if (!pDevice || !pCmdList || !pShader)
-    {
-        OutputDebugStringA("[RockFall] SpawnRocks failed: device/cmd/shader null\n");
-        return;
-    }
+    if (!pDevice || !pCmdList || !pShader) return;
 
     CRoom* pPrevRoom = m_pScene->GetCurrentRoom();
     m_pScene->SetCurrentRoom(m_pRoom);
@@ -230,14 +215,7 @@ void RockFallAttackBehavior::SpawnRocks(EnemyComponent* pEnemy)
         GameObject* pRock = MeshLoader::LoadGeometryFromFile(
             m_pScene, pDevice, pCmdList, nullptr,
             "Assets/Enemies/Rock&Golem/SM_Rocks_03.bin");
-
-        if (!pRock)
-        {
-            OutputDebugStringA("[RockFall] Rock mesh load failed\n");
-            continue;
-        }
-
-        OutputDebugStringA("[RockFall] Rock mesh loaded success\n");
+        if (!pRock) continue;
 
         {
             auto* pT = pRock->GetTransform();
@@ -327,8 +305,6 @@ void RockFallAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
 
         if (m_fTimer >= m_fWindupTime)
         {
-            OutputDebugStringA("[RockFall] Windup finished -> SpawnRocks\n");
-
             SpawnRocks(pEnemy);
             m_ePhase = Phase::Drop;
             m_fTimer = 0.0f;
@@ -406,19 +382,6 @@ void RockFallAttackBehavior::UpdateRockFall(float dt)
         rot.y += rock.rotationSpeed.y * dt;
         rot.z += rock.rotationSpeed.z * dt;
         pT->SetRotation(rot);
-    }
-
-    if (!m_vRocks.empty() && m_vRocks[0].pRock)
-    {
-        auto* pT0 = m_vRocks[0].pRock->GetTransform();
-        if (pT0)
-        {
-            XMFLOAT3 p = pT0->GetPosition();
-
-            char buf[160];
-            sprintf_s(buf, "[RockFall] rock0 pos=(%.2f, %.2f, %.2f)\n", p.x, p.y, p.z);
-            OutputDebugStringA(buf);
-        }
     }
 }
 

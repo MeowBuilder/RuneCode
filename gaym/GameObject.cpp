@@ -125,6 +125,13 @@ void GameObject::CreateConstantBuffer(ID3D12Device* pDevice, ID3D12GraphicsComma
 
     m_pd3dcbGameObject->Map(0, NULL, (void**)&m_pcbMappedGameObject);
 
+    // D3D12 upload heap 메모리는 zero-init 보장되지 않음 — 이전에 누가 쓰던 메모리가
+    // 재할당되면 bIsSkinned/bIsLava/bIsWater 등 flag 가 1 로 남아 shader 가 엉뚱하게 동작.
+    // 예: bIsSkinned=1 인데 boneWeight 없는 static mesh → VS 가 모든 정점을 원점으로 collapse
+    // → 화면에 안 보임. ReuseConstantBuffer 는 이미 ZeroMemory 하지만 첫 할당은 안 했음.
+    if (m_pcbMappedGameObject)
+        ZeroMemory(m_pcbMappedGameObject, nConstantBufferSize);
+
     D3D12_CONSTANT_BUFFER_VIEW_DESC d3dcbvDesc;
     d3dcbvDesc.BufferLocation = m_pd3dcbGameObject->GetGPUVirtualAddress();
     d3dcbvDesc.SizeInBytes = nConstantBufferSize;

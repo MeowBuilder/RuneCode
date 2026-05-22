@@ -548,6 +548,13 @@ void Dx12App::FrameAdvance()
         m_pNetworkManager->Update(m_pScene.get(), m_pd3dDevice.Get(), m_pd3dCommandList.Get());
     }
 
+    // 네트워크 보스 패턴 (SpawnRocks 등 GPU upload 커맨드 기록) — 반드시 cmd list Reset 이후에 호출.
+    // UpdateNetwork() 안에서 호출하면 Reset 에 의해 upload 가 폐기되어 mesh 가 안 보임.
+    if (m_pNetworkManager && m_pNetworkManager->IsConnected())
+    {
+        m_pNetworkManager->UpdateNetworkGolemBehaviors(m_GameTimer.GetTimeElapsed());
+    }
+
     // Update scene first (calculates light matrices)
     m_pScene->Update(m_GameTimer.GetTimeElapsed(), &m_inputSystem);
 
@@ -1915,8 +1922,11 @@ void Dx12App::UpdateNetwork(float deltaTime)
     // 보스 VFX 지연 스폰 처리 (windup 후/동안 staggered 발사)
     m_pNetworkManager->UpdatePendingMonsterVFX(m_pScene.get(), deltaTime);
 
-	// 서버 몬스터 행동 업데이트 (idle→active 전환, 행동 패턴 타이밍 등)
-    m_pNetworkManager->UpdateNetworkGolemBehaviors(deltaTime);
+	// 서버 몬스터 행동 업데이트 — Dx12App::Update 내부의 cmd list Reset 이후에 호출되어야 함.
+	// SpawnRocks 가 MeshLoader 로 vertex/index/texture upload 커맨드를 기록하는데,
+	// 여기서 호출하면 Reset 에 의해 그 upload 가 다 폐기되어 GPU 에 데이터가 없는
+	// 상태로 draw → 화면에 안 보임. → Dx12App::Update 에서 따로 호출하므로 여기선 빼둔다.
+	// m_pNetworkManager->UpdateNetworkGolemBehaviors(deltaTime);  // moved to Dx12App::Update after Reset
 
     // 서버 몬스터 위치/회전 보간 (MOVE 패킷 간격 사이 부드럽게 이동)
     m_pNetworkManager->InterpolateServerMonsters(deltaTime);
