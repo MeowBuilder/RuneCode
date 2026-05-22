@@ -33,6 +33,11 @@ public:
     void SetDecalManager(DecalManager* m) override   { m_pDecalManager  = m; }
 
     virtual void Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier = 1.0f) override;
+    virtual void OnChargeBegin(GameObject* caster) override;
+    virtual void OnChargeUpdate(GameObject* caster, float chargeRatio) override;
+    virtual void OnEnhanceActivate(GameObject* caster) override;
+    virtual void OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
+    virtual void OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult) override;
     virtual void Update(float deltaTime) override;
     virtual bool IsFinished() const override;
     virtual void Reset() override;
@@ -53,6 +58,9 @@ private:
     DecalManager*         m_pDecalManager  = nullptr;
     GameObject*           m_pCaster        = nullptr;
     ElementType           m_elementType = ElementType::Fire;
+
+    int m_chargeVFXId   = -1;
+    int m_enhanceAuraId = -1;
 
     // 최종 메테오 VFX IDs
     int m_finalTrailId  = -1;

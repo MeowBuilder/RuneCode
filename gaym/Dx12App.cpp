@@ -71,12 +71,7 @@ static std::wstring BuildRuneDesc(const RuneDef& def)
     std::wstringstream ss;
     auto pct = [](float m) { return (int)((m - 1.f) * 100.f + 0.5f); };
 
-    // [변환] / [강화] 카테고리 태그
-    if (def.category == "속성 변경")
-        ss << L"[변환] ";
-    else if (def.category == "속성 강화")
-        ss << L"[강화] ";
-    else if (!def.category.empty())
+    if (!def.category.empty())
         ss << L"[" << Utf8ToWide(def.category) << L"] ";
 
     // 설명 텍스트 (description 필드)
@@ -119,11 +114,11 @@ static std::wstring BuildRuneDesc(const RuneDef& def)
 }
 
 // ─── Debug Rune Inspector constants ─────────────────────────────────────────
-static constexpr int   kDebugVisibleRows = 14;
-static constexpr float kDebugRowHeight   = 34.0f;
+static constexpr int   kDebugVisibleRows = 12;
+static constexpr float kDebugRowHeight   = 42.0f;
 static constexpr float kDebugPanelLeft   = 30.0f;
 static constexpr float kDebugPanelWidth  = 900.0f;
-static constexpr float kDebugRowsStartY  = 148.0f;
+static constexpr float kDebugRowsStartY  = 158.0f;
 
 Dx12App* Dx12App::s_pInstance = nullptr;
 
@@ -1257,15 +1252,15 @@ void Dx12App::RenderDebugRuneUI()
 
         m_spriteFont->DrawString(m_spriteBatch.get(),
             L"[C] 룬 전체 초기화   [ESC/I] 닫기   [위아래 / 휠] 스크롤   [클릭] 선택",
-            XMFLOAT2(kDebugPanelLeft, 88.0f), DirectX::Colors::Gray);
+            XMFLOAT2(kDebugPanelLeft, 92.0f), DirectX::Colors::Gray);
 
         m_spriteFont->DrawString(m_spriteBatch.get(),
             L"-----------------------------------------------------------------------",
-            XMFLOAT2(kDebugPanelLeft, 110.0f), DirectX::Colors::Gray);
+            XMFLOAT2(kDebugPanelLeft, 118.0f), DirectX::Colors::Gray);
 
         m_spriteFont->DrawString(m_spriteBatch.get(),
             L"등급               이름                      설명",
-            XMFLOAT2(kDebugPanelLeft, 122.0f), DirectX::Colors::DimGray);
+            XMFLOAT2(kDebugPanelLeft, 133.0f), DirectX::Colors::DimGray);
 
         // Rune rows
         XMFLOAT2 mousePos = m_inputSystem.GetMousePosition();

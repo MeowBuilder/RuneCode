@@ -15,12 +15,89 @@ EarthquakeBehavior::EarthquakeBehavior()
 {
 }
 
+void EarthquakeBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
+{
+    // 채널 중 캐스터 위치에 충격파 링 1개 즉시 발동 — 틱마다 반경 내 적 전체 타격
+    if (!m_pScene || !caster || !caster->GetTransform()) return;
+    CRoom* pRoom = m_pScene->GetCurrentRoom();
+    if (!pRoom) return;
+
+    XMFLOAT3 epicenter = caster->GetTransform()->GetPosition();
+    epicenter.y = 0.f;
+
+    if (m_pVFXManager && EffectRegistry::Get().HasEffect("R_Earthquake_Ring"))
+    {
+        XMFLOAT3 up = { 0.f, 1.f, 0.f };
+        m_pVFXManager->SpawnEffectDef(epicenter, up,
+            EffectRegistry::Get().GetEffect("R_Earthquake_Ring"), false);
+    }
+
+    float damage   = m_SkillData.damage * tickMult;
+    float radiusSq = (RING_MAX_RADIUS * 0.6f) * (RING_MAX_RADIUS * 0.6f);
+    XMVECTOR eV = XMLoadFloat3(&epicenter);
+
+    for (const auto& obj : pRoom->GetGameObjects())
+    {
+        if (!obj) continue;
+        auto* pEnemy = obj->GetComponent<EnemyComponent>();
+        if (!pEnemy || pEnemy->IsDead()) continue;
+        auto* pT = obj->GetTransform();
+        if (!pT) continue;
+        XMFLOAT3 ep = pT->GetPosition();
+        XMVECTOR toE = XMVectorSetY(XMVectorSubtract(XMLoadFloat3(&ep), eV), 0.f);
+        if (XMVectorGetX(XMVector3LengthSq(toE)) > radiusSq) continue;
+        pEnemy->TakeDamage(damage, false);
+    }
+}
+
+void EarthquakeBehavior::OnChargeBegin(GameObject* caster)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_chargeVFXId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
+}
+
+void EarthquakeBehavior::OnChargeUpdate(GameObject* caster, float chargeRatio)
+{
+    if (!m_pVFXManager || m_chargeVFXId < 0 || !caster || !caster->GetTransform()) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    pos.y += chargeRatio * 2.f;
+    XMFLOAT3 up = { 0.f, 1.f, 0.f };
+    m_pVFXManager->TrackEffect(m_chargeVFXId, pos, up);
+}
+
+void EarthquakeBehavior::OnEnhanceActivate(GameObject* caster)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_enhanceAuraId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
+}
+
+void EarthquakeBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    if (m_pVFXManager && m_enhanceAuraId >= 0) { m_pVFXManager->StopEffect(m_enhanceAuraId); m_enhanceAuraId = -1; }
+    if (!m_pVFXManager) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 up = { 0.f, 1.f, 0.f };
+    EffectDef def = EffectRegistry::Get().GetEffect(fx);
+    for (auto& l : def.layers) l.particleCount *= 3;
+    m_pVFXManager->SpawnEffectDef(targetPosition, up, def, false);
+}
+
 void EarthquakeBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
     m_bActive = false;
     m_pCaster = caster;
     m_rings.clear();
     m_hitEnemies.clear();
+    if (m_pVFXManager && m_chargeVFXId >= 0) { m_pVFXManager->StopEffect(m_chargeVFXId); m_chargeVFXId = -1; }
 
     if (!m_pVFXManager) { return; }
 
@@ -164,12 +241,16 @@ void EarthquakeBehavior::Reset()
 {
     if (m_pVFXManager)
     {
-        if (m_burstVfxId >= 0) m_pVFXManager->StopEffect(m_burstVfxId);
+        if (m_burstVfxId  >= 0) m_pVFXManager->StopEffect(m_burstVfxId);
+        if (m_chargeVFXId  >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
+        if (m_enhanceAuraId >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
         for (auto& r : m_rings)
             if (r.launched && r.vfxId >= 0) m_pVFXManager->StopEffect(r.vfxId);
     }
-    m_bActive    = false;
-    m_burstVfxId = -1;
+    m_bActive       = false;
+    m_burstVfxId    = -1;
+    m_chargeVFXId   = -1;
+    m_enhanceAuraId = -1;
     m_rings.clear();
     m_hitEnemies.clear();
 }

@@ -14,11 +14,65 @@ WaterVortexBehavior::WaterVortexBehavior()
 {
 }
 
+void WaterVortexBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
+{
+    // 채널 중 소용돌이가 커서 위치를 실시간 추적 — 일반 발동은 고정 위치
+    if (!m_bActive) return;
+    m_center = { target.x, target.y, target.z };
+    if (m_pVFXManager && m_vfxId >= 0)
+    {
+        XMFLOAT3 up = { 0.f, 1.f, 0.f };
+        m_pVFXManager->TrackEffect(m_vfxId, m_center, up);
+    }
+}
+
+void WaterVortexBehavior::OnChargeBegin(GameObject* caster)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_chargeVFXId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
+}
+
+void WaterVortexBehavior::OnChargeUpdate(GameObject* caster, float chargeRatio)
+{
+    if (!m_pVFXManager || m_chargeVFXId < 0 || !caster || !caster->GetTransform()) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    pos.y += chargeRatio * 2.f;
+    XMFLOAT3 up = { 0.f, 1.f, 0.f };
+    m_pVFXManager->TrackEffect(m_chargeVFXId, pos, up);
+}
+
+void WaterVortexBehavior::OnEnhanceActivate(GameObject* caster)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_enhanceAuraId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
+}
+
+void WaterVortexBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    if (m_pVFXManager && m_enhanceAuraId >= 0) { m_pVFXManager->StopEffect(m_enhanceAuraId); m_enhanceAuraId = -1; }
+    if (!m_pVFXManager) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 up = { 0.f, 1.f, 0.f };
+    EffectDef def = EffectRegistry::Get().GetEffect(fx);
+    for (auto& l : def.layers) l.particleCount *= 3;
+    m_pVFXManager->SpawnEffectDef(targetPosition, up, def, false);
+}
+
 void WaterVortexBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
     m_bActive = false;
     m_pCaster = caster;
     m_extraVFXIds.clear();
+    if (m_pVFXManager && m_chargeVFXId >= 0) { m_pVFXManager->StopEffect(m_chargeVFXId); m_chargeVFXId = -1; }
 
     if (!m_pVFXManager) { return; }
 
@@ -136,10 +190,14 @@ void WaterVortexBehavior::Reset()
 {
     if (m_pVFXManager)
     {
-        if (m_vfxId >= 0) m_pVFXManager->StopEffect(m_vfxId);
+        if (m_vfxId         >= 0) m_pVFXManager->StopEffect(m_vfxId);
+        if (m_chargeVFXId   >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
+        if (m_enhanceAuraId >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
         for (int id : m_extraVFXIds) if (id >= 0) m_pVFXManager->StopEffect(id);
     }
-    m_bActive = false;
-    m_vfxId   = -1;
+    m_bActive       = false;
+    m_vfxId         = -1;
+    m_chargeVFXId   = -1;
+    m_enhanceAuraId = -1;
     m_extraVFXIds.clear();
 }

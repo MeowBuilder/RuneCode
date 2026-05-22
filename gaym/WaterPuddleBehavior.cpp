@@ -14,6 +14,92 @@ WaterPuddleBehavior::WaterPuddleBehavior()
 {
 }
 
+void WaterPuddleBehavior::OnChargeBegin(GameObject* caster)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_chargeVFXId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
+}
+
+void WaterPuddleBehavior::OnChargeUpdate(GameObject* caster, float chargeRatio)
+{
+    if (!m_pVFXManager || m_chargeVFXId < 0 || !caster || !caster->GetTransform()) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    pos.y += chargeRatio * 2.f;
+    XMFLOAT3 up = { 0.f, 1.f, 0.f };
+    m_pVFXManager->TrackEffect(m_chargeVFXId, pos, up);
+}
+
+void WaterPuddleBehavior::OnEnhanceActivate(GameObject* caster)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_enhanceAuraId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
+}
+
+void WaterPuddleBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    if (m_pVFXManager && m_enhanceAuraId >= 0) { m_pVFXManager->StopEffect(m_enhanceAuraId); m_enhanceAuraId = -1; }
+    if (!m_pVFXManager) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 up = { 0.f, 1.f, 0.f };
+    EffectDef def = EffectRegistry::Get().GetEffect(fx);
+    for (auto& l : def.layers) l.particleCount *= 3;
+    m_pVFXManager->SpawnEffectDef(targetPosition, up, def, false);
+}
+
+void WaterPuddleBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    if (!m_pVFXManager) return;
+    if (!EffectRegistry::Get().HasEffect("Q_WaterFall")) return;
+    XMFLOAT3 pos  = { targetPosition.x, targetPosition.y + 6.f, targetPosition.z };
+    XMFLOAT3 down = { 0.f, -1.f, 0.f };
+    m_channelRainId = m_pVFXManager->SpawnEffectDef(pos, down,
+        EffectRegistry::Get().GetEffect("Q_WaterFall"), true);
+}
+
+void WaterPuddleBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult)
+{
+    // 채널 중 웅덩이가 커서를 실시간 추적 — Update()의 TickPuddle이 m_center 기준으로 피해/슬로우 처리
+    m_center = { targetPosition.x, 0.f, targetPosition.z };
+
+    if (m_pVFXManager)
+    {
+        XMFLOAT3 down = { 0.f, -1.f, 0.f };
+        if (m_vfxId >= 0)
+        {
+            XMFLOAT3 puddlePos = { targetPosition.x, 2.5f, targetPosition.z };
+            m_pVFXManager->TrackEffect(m_vfxId, puddlePos, down);
+        }
+        if (m_fallVfxId >= 0)
+        {
+            XMFLOAT3 fallPos = { targetPosition.x, targetPosition.y + 5.5f, targetPosition.z };
+            m_pVFXManager->TrackEffect(m_fallVfxId, fallPos, down);
+        }
+        if (m_channelRainId >= 0)
+        {
+            XMFLOAT3 rainPos = { targetPosition.x, targetPosition.y + 6.f, targetPosition.z };
+            m_pVFXManager->TrackEffect(m_channelRainId, rainPos, down);
+        }
+    }
+}
+
+void WaterPuddleBehavior::OnChannelEnd(GameObject* caster)
+{
+    if (m_pVFXManager && m_channelRainId >= 0)
+    {
+        m_pVFXManager->StopEffect(m_channelRainId);
+        m_channelRainId = -1;
+    }
+}
+
 void WaterPuddleBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
     Reset();
@@ -22,10 +108,13 @@ void WaterPuddleBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& t
     if (!m_pVFXManager) { return; }
 
     SkillStats stats;
+    bool bChannelMode = false;
     if (caster) {
         auto* pSC = caster->GetComponent<SkillComponent>();
-        if (pSC && m_slot != SkillSlot::Count)
+        if (pSC && m_slot != SkillSlot::Count) {
             stats = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            bChannelMode = pSC->GetRuneCombo(m_slot).hasChannel;
+        }
     }
 
     // ① 낙하 이펙트 — 타겟 위 5.5 유닛에서 아래 방향으로 스폰
@@ -38,7 +127,8 @@ void WaterPuddleBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& t
         m_fallVfxId = m_pVFXManager->SpawnEffectDef(fallOrigin, fallDir, fallDef, true);
     }
 
-    // ② 웅덩이 이펙트 — origin=(x,2.5,z) + dir=(0,-1,0) → ConfinementBox center=(x,0,z)
+    // ② 웅덩이 이펙트 — 채널 모드에서는 스폰하지 않음 (커서 이동 시 이전 위치에 잔상이 남아 타격점이 헷갈림)
+    if (!bChannelMode)
     {
         XMFLOAT3 puddleOrigin = { targetPosition.x, 2.5f, targetPosition.z };
         XMFLOAT3 puddleDir    = { 0.f, -1.f, 0.f };
@@ -48,7 +138,7 @@ void WaterPuddleBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& t
         m_vfxId = m_pVFXManager->SpawnEffectDef(puddleOrigin, puddleDir, puddleDef, true);
     }
 
-    if (m_vfxId >= 0)
+    if (m_vfxId >= 0 || m_fallVfxId >= 0)
     {
         m_bActive    = true;
         m_center     = targetPosition;
@@ -175,10 +265,12 @@ void WaterPuddleBehavior::Reset()
     RemoveSlowFromAll();
     if (m_pVFXManager)
     {
-        if (m_vfxId     >= 0) m_pVFXManager->StopEffect(m_vfxId);
-        if (m_fallVfxId >= 0) m_pVFXManager->StopEffect(m_fallVfxId);
+        if (m_vfxId         >= 0) m_pVFXManager->StopEffect(m_vfxId);
+        if (m_fallVfxId     >= 0) m_pVFXManager->StopEffect(m_fallVfxId);
+        if (m_channelRainId >= 0) m_pVFXManager->StopEffect(m_channelRainId);
     }
-    m_bActive   = false;
-    m_vfxId     = -1;
-    m_fallVfxId = -1;
+    m_bActive       = false;
+    m_vfxId         = -1;
+    m_fallVfxId     = -1;
+    m_channelRainId = -1;
 }

@@ -37,6 +37,26 @@ public:
     // Broad category of this skill — used by SkillComponent for activation VFX scaling
     virtual SkillCategory GetCategory() const { return SkillCategory::Projectile; }
 
+    // ─── 발동 방식 생명주기 훅 ──────────────────────────────────────────────────
+    // 각 행동 클래스는 필요한 훅만 override. 미구현 시 기본 no-op.
+
+    // [차징] 키를 누르는 순간 (차지 시작)
+    virtual void OnChargeBegin(GameObject* caster) {}
+    // [차징] 매 프레임 (chargeRatio: 0→1). 시각적 프리뷰 VFX 업데이트에 사용
+    virtual void OnChargeUpdate(GameObject* caster, float chargeRatio) {}
+
+    // [채널] 채널 진입 순간
+    virtual void OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) {}
+    // [채널] 매 0.2초 틱 — 비-투사체 스킬이 Execute 대신 이걸 받음 (이미 구현됨)
+    virtual void OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult) {}
+    // [채널] 채널 종료 (키 해제 or 최대 지속 만료)
+    virtual void OnChannelEnd(GameObject* caster) {}
+
+    // [증강] 강화 버프가 플레이어에게 걸리는 순간
+    virtual void OnEnhanceActivate(GameObject* caster) {}
+    // [증강] 강화 버프를 소모해 스킬이 발동되는 순간
+    virtual void OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) {}
+
     // Optional per-frame geometry render (override in behaviors that need a mesh)
     virtual void Render(ID3D12GraphicsCommandList* pCmdList) {}
 
@@ -51,4 +71,17 @@ public:
 
 protected:
     SkillSlot m_slot = SkillSlot::Count;
+
+    // 원소 타입에 맞는 서브 VFX 이름 반환 (차지/강화 공용)
+    static const char* SubVFXName(ElementType e)
+    {
+        switch (e)
+        {
+            case ElementType::Fire:  return "sub_fire";
+            case ElementType::Water: return "sub_water";
+            case ElementType::Wind:  return "sub_wind";
+            case ElementType::Earth: return "sub_earth";
+            default:                 return "sub_fire";
+        }
+    }
 };

@@ -40,9 +40,70 @@ MeteorBehavior::MeteorBehavior(const SkillData& customData)
 {
 }
 
+void MeteorBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
+{
+    // 채널 중 커서 위치에 소형 메테오 즉시 낙하 — 위치를 바꿔가며 쏘는 것이 일반 스킬과의 차이
+    if (!m_pScene || !m_pVFXManager) return;
+    CRoom* pRoom = m_pScene->GetCurrentRoom();
+    if (!pRoom) return;
+
+    if (EffectRegistry::Get().HasEffect("R_MeteorSmallImpact"))
+    {
+        XMFLOAT3 impPos = { target.x, 0.f, target.z };
+        XMFLOAT3 up = { 0.f, 1.f, 0.f };
+        m_pVFXManager->SpawnEffectDef(impPos, up,
+            EffectRegistry::Get().GetEffect("R_MeteorSmallImpact"), false);
+    }
+
+    float damage = m_SkillData.damage * SMALL_DAMAGE_RATIO * tickMult;
+    ApplyExplosionDamage(damage, SMALL_EXPLODE_RADIUS, { target.x, 0.f, target.z }, false);
+}
+
+void MeteorBehavior::OnChargeBegin(GameObject* caster)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_chargeVFXId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
+}
+
+void MeteorBehavior::OnChargeUpdate(GameObject* caster, float chargeRatio)
+{
+    if (!m_pVFXManager || m_chargeVFXId < 0 || !caster || !caster->GetTransform()) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    pos.y += chargeRatio * 2.f;
+    XMFLOAT3 up = { 0.f, 1.f, 0.f };
+    m_pVFXManager->TrackEffect(m_chargeVFXId, pos, up);
+}
+
+void MeteorBehavior::OnEnhanceActivate(GameObject* caster)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_enhanceAuraId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
+}
+
+void MeteorBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    if (m_pVFXManager && m_enhanceAuraId >= 0) { m_pVFXManager->StopEffect(m_enhanceAuraId); m_enhanceAuraId = -1; }
+    if (!m_pVFXManager) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 up = { 0.f, 1.f, 0.f };
+    EffectDef def = EffectRegistry::Get().GetEffect(fx);
+    for (auto& l : def.layers) l.particleCount *= 3;
+    m_pVFXManager->SpawnEffectDef(targetPosition, up, def, false);
+}
+
 // ─── Execute: 메테오 샤워 시작 ─────────────────────────────────────────────────
 void MeteorBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
+    if (m_pVFXManager && m_chargeVFXId >= 0) { m_pVFXManager->StopEffect(m_chargeVFXId); m_chargeVFXId = -1; }
     if (!m_pVFXManager)
     {
         OutputDebugString(L"[Meteor] Warning: No VFXManager set!\n");
@@ -283,11 +344,15 @@ void MeteorBehavior::Reset()
     {
         if (m_finalTrailId >= 0) m_pVFXManager->StopEffect(m_finalTrailId);
         if (m_finalOuterId >= 0) m_pVFXManager->StopEffect(m_finalOuterId);
+        if (m_chargeVFXId  >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
+        if (m_enhanceAuraId >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
         for (auto& sm : m_smallMeteors)
             if (sm.trailVfxId >= 0) m_pVFXManager->StopEffect(sm.trailVfxId);
     }
 
     m_bIsFinished    = true;
+    m_chargeVFXId    = -1;
+    m_enhanceAuraId  = -1;
     m_elapsed        = 0.f;
     m_meteorsSpawned = 0;
     m_bFinalSpawned  = false;

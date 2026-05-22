@@ -20,6 +20,16 @@ public:
 
     virtual SkillCategory GetCategory() const override { return SkillCategory::Wave; }
     virtual void Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier = 1.0f) override;
+
+    // 발동 방식 훅
+    virtual void OnChargeBegin(GameObject* caster) override;
+    virtual void OnChargeUpdate(GameObject* caster, float chargeRatio) override;
+    virtual void OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
+    virtual void OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult) override;
+    virtual void OnChannelEnd(GameObject* caster) override;
+    virtual void OnEnhanceActivate(GameObject* caster) override;
+    virtual void OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
+
     virtual void Update(float deltaTime) override;
     virtual bool IsFinished() const override;
     virtual void Reset() override;
@@ -43,7 +53,10 @@ private:
     GameObject*           m_pCaster     = nullptr;
     FluidSkillVFXManager* m_pVFXManager = nullptr;
     Scene*                m_pScene      = nullptr;
-    int                   m_vfxId       = -1;
+    int                   m_vfxId           = -1;
+    int                   m_chargeVFXId     = -1;  // 차지 프리뷰 VFX
+    int                   m_channelAmbientId = -1; // 채널 주변 강우 VFX
+    int                   m_enhanceAuraId   = -1;  // 강화 오라 VFX
     std::vector<int>      m_extraVFXIds;
 
     bool  m_bWaveActive   = false;
@@ -60,6 +73,8 @@ private:
     static constexpr float WAVE_HALF_W        = 7.0f;
     static constexpr float WAVE_HALF_H        = 3.0f;
     static constexpr float POOL_DROP_INTERVAL = 0.2f;
+    static constexpr float MINI_WAVE_RANGE    = 10.0f;  // 채널 미니 웨이브 사거리
+    static constexpr float DROPLET_RADIUS     = 4.0f;
     static constexpr float POOL_RADIUS        = 5.0f;
     static constexpr float POOL_LIFETIME      = 4.0f;
     static constexpr float POOL_TICK_INTERVAL = 0.6f;

@@ -25,8 +25,115 @@ WaveSlashBehavior::WaveSlashBehavior(const SkillData& customData)
 {
 }
 
+void WaveSlashBehavior::OnChargeBegin(GameObject* caster)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_chargeVFXId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
+}
+
+void WaveSlashBehavior::OnChargeUpdate(GameObject* caster, float chargeRatio)
+{
+    if (!m_pVFXManager || m_chargeVFXId < 0 || !caster || !caster->GetTransform()) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    pos.y += chargeRatio * 2.f;
+    XMFLOAT3 up = { 0.f, 1.f, 0.f };
+    m_pVFXManager->TrackEffect(m_chargeVFXId, pos, up);
+}
+
+void WaveSlashBehavior::OnEnhanceActivate(GameObject* caster)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_enhanceAuraId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
+}
+
+void WaveSlashBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    if (m_pVFXManager && m_enhanceAuraId >= 0) { m_pVFXManager->StopEffect(m_enhanceAuraId); m_enhanceAuraId = -1; }
+    if (!m_pVFXManager) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 up = { 0.f, 1.f, 0.f };
+    EffectDef def = EffectRegistry::Get().GetEffect(fx);
+    for (auto& l : def.layers) l.particleCount *= 3;
+    m_pVFXManager->SpawnEffectDef(targetPosition, up, def, false);
+}
+
+void WaveSlashBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    if (!EffectRegistry::Get().HasEffect("sub_fire")) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_channelAmbientId = m_pVFXManager->SpawnEffectDef(pos, up,
+        EffectRegistry::Get().GetEffect("sub_fire"), true);
+}
+
+void WaveSlashBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
+{
+    if (!m_pScene || !caster || !caster->GetTransform()) return;
+    CRoom* pRoom = m_pScene->GetCurrentRoom();
+    if (!pRoom) return;
+
+    XMFLOAT3 origin = caster->GetTransform()->GetPosition();
+    origin.y = 0.f;
+    XMVECTOR oV = XMLoadFloat3(&origin);
+    XMVECTOR dV = XMVector3Normalize(XMVectorSetY(XMVectorSubtract(XMLoadFloat3(&target), oV), 0.f));
+    if (XMVectorGetX(XMVector3LengthSq(dV)) < 0.001f)
+        dV = XMVector3Normalize(XMVectorSetY(caster->GetTransform()->GetLook(), 0.f));
+    XMFLOAT3 dir; XMStoreFloat3(&dir, dV);
+
+    if (m_pVFXManager && EffectRegistry::Get().HasEffect("sub_fire"))
+    {
+        XMFLOAT3 spawnPos = { origin.x, origin.y + 0.5f, origin.z };
+        m_pVFXManager->SpawnEffectDef(spawnPos, dir,
+            EffectRegistry::Get().GetEffect("sub_fire"), false);
+    }
+
+    if (m_pVFXManager && m_channelAmbientId >= 0 && caster->GetTransform())
+    {
+        XMFLOAT3 cpos = caster->GetTransform()->GetPosition();
+        XMFLOAT3 up = { 0.f, 1.f, 0.f };
+        m_pVFXManager->TrackEffect(m_channelAmbientId, cpos, up);
+    }
+
+    float damage = m_SkillData.damage * tickMult;
+    for (const auto& obj : pRoom->GetGameObjects())
+    {
+        if (!obj) continue;
+        auto* pEnemy = obj->GetComponent<EnemyComponent>();
+        if (!pEnemy || pEnemy->IsDead()) continue;
+        auto* pT = obj->GetTransform();
+        if (!pT) continue;
+        XMFLOAT3 ePos = pT->GetPosition();
+        XMVECTOR toE = XMVectorSetY(XMVectorSubtract(XMLoadFloat3(&ePos), oV), 0.f);
+        float fwd = XMVectorGetX(XMVector3Dot(toE, dV));
+        if (fwd < 0.f || fwd > CHANNEL_RANGE) continue;
+        XMVECTOR latV = XMVectorSubtract(toE, XMVectorScale(dV, fwd));
+        if (XMVectorGetX(XMVector3Length(latV)) > WAVE_HALF_W) continue;
+        pEnemy->TakeDamage(damage, false);
+    }
+}
+
+void WaveSlashBehavior::OnChannelEnd(GameObject* caster)
+{
+    if (m_pVFXManager && m_channelAmbientId >= 0)
+    {
+        m_pVFXManager->StopEffect(m_channelAmbientId);
+        m_channelAmbientId = -1;
+    }
+}
+
 void WaveSlashBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
+    if (m_pVFXManager && m_chargeVFXId >= 0) { m_pVFXManager->StopEffect(m_chargeVFXId); m_chargeVFXId = -1; }
     m_bIsFinished = false;
     m_bWaveActive = false;
     m_pCaster     = caster;
@@ -355,9 +462,18 @@ void WaveSlashBehavior::Reset()
         for (int eid : m_extraVFXIds)
             if (eid >= 0) m_pVFXManager->StopEffect(eid);
     }
-    m_bIsFinished = true;
-    m_bWaveActive = false;
-    m_vfxId       = -1;
+    if (m_pVFXManager)
+    {
+        if (m_channelAmbientId >= 0) m_pVFXManager->StopEffect(m_channelAmbientId);
+        if (m_chargeVFXId      >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
+        if (m_enhanceAuraId    >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
+    }
+    m_bIsFinished      = true;
+    m_bWaveActive      = false;
+    m_vfxId            = -1;
+    m_channelAmbientId = -1;
+    m_chargeVFXId      = -1;
+    m_enhanceAuraId    = -1;
     m_extraVFXIds.clear();
     m_hitEnemies.clear();
     m_fireTrail.clear();

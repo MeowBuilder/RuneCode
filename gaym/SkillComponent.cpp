@@ -53,7 +53,9 @@ void SkillComponent::Update(float deltaTime)
     if (m_bIsCharging)
     {
         m_fChargeTime += deltaTime;
-        // Visual/audio feedback could be added here based on charge level
+        size_t chgIdx = static_cast<size_t>(m_ChargingSlot);
+        if (chgIdx < m_Skills.size() && m_Skills[chgIdx])
+            m_Skills[chgIdx]->OnChargeUpdate(m_pOwner, min(1.f, m_fChargeTime / m_fMaxChargeTime));
     }
 
     // Update channel timer
@@ -81,13 +83,21 @@ void SkillComponent::Update(float deltaTime)
                 m_bCurrentIsChannelTick = true;
                 m_bCurrentEnhanceUsed  = false;
 
-                if (combo.hasPlace)
+                SkillCategory tickCat = m_Skills[index]->GetCategory();
+                ActivationType tickDefType = m_Skills[index]->GetSkillData().activationType;
+
+                if (tickCat == SkillCategory::Projectile || tickDefType == ActivationType::Channel)
                 {
-                    m_Skills[index]->Execute(m_pOwner, m_ChannelTargetPosition, -(tickMult * 1.5f));
+                    // 투사체: 반복 발사 / 고유 채널(Beam 등): 기존 틱 로직
+                    if (combo.hasPlace)
+                        m_Skills[index]->Execute(m_pOwner, m_ChannelTargetPosition, -(tickMult * 1.5f));
+                    else
+                        ExecuteOrSplit(index, m_ChannelTargetPosition, tickMult);
                 }
                 else
                 {
-                    ExecuteOrSplit(index, m_ChannelTargetPosition, tickMult);
+                    // Wave/AoE/Summon/Dash: 커스텀 채널 틱 (Execute 재호출 대신 OnChannelTick)
+                    m_Skills[index]->OnChannelTick(m_pOwner, m_ChannelTargetPosition, tickMult);
                 }
             }
         }
@@ -138,11 +148,12 @@ void SkillComponent::Update(float deltaTime)
             OutputDebugString(L"[Skill] Channel complete!\n");
             m_bIsChanneling = false;
             m_fChannelTime = 0.0f;
-            m_fChannelTickAccum = 0.0f;  // Reset tick accumulator
+            m_fChannelTickAccum = 0.0f;
 
             size_t index = static_cast<size_t>(m_ActiveSkillSlot);
             if (index < m_Skills.size() && m_Skills[index])
             {
+                m_Skills[index]->OnChannelEnd(m_pOwner);
                 m_CooldownTimers[index] = GetEffectiveCooldown(index);
                 m_SkillStates[index] = SkillState::Cooldown;
                 m_Skills[index]->Reset();
@@ -227,6 +238,7 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
                 // Consume existing enhance buff
                 if (m_bIsEnhanced)
                 {
+                    m_Skills[index]->OnEnhanceConsumed(m_pOwner, targetPos);
                     damageMultiplier *= m_fEnhanceMultiplier;
                     m_bIsEnhanced = false;
                     m_fEnhanceTimer = 0.0f;
@@ -280,12 +292,13 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
             OutputDebugString(L"[Skill] Channel interrupted\n");
             m_bIsChanneling = false;
             m_fChannelTime = 0.0f;
-            m_fChannelTickAccum = 0.0f;  // Reset tick accumulator
+            m_fChannelTickAccum = 0.0f;
 
             size_t index = static_cast<size_t>(m_ActiveSkillSlot);
             if (index < m_Skills.size() && m_Skills[index])
             {
-                m_CooldownTimers[index] = GetEffectiveCooldown(index) * 0.5f; // 채널 중단: 절반 쿨다운
+                m_Skills[index]->OnChannelEnd(m_pOwner);
+                m_CooldownTimers[index] = GetEffectiveCooldown(index) * 0.5f;
                 m_SkillStates[index] = SkillState::Cooldown;
                 m_Skills[index]->Reset();
             }
@@ -781,55 +794,74 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
         ? m_Skills[index]->GetSkillData().activationType
         : ActivationType::Instant;
 
+    SkillCategory cat = SkillCategory::Projectile;
+    if (m_Skills[index])
+        cat = m_Skills[index]->GetCategory();
+
     if (combo.hasCharge)
     {
-        // Charge mode: hold-release (combo modifiers applied on release)
         m_bIsCharging = true;
         m_fChargeTime = 0.0f;
         m_ChargingSlot = slot;
         m_ChargeTargetPosition = targetPosition;
         m_SkillStates[index] = SkillState::Casting;
+        m_Skills[index]->OnChargeBegin(m_pOwner);
         OutputDebugString(L"[Skill] Charging started... Hold to charge, release to fire\n");
     }
     else if (combo.hasChannel || defaultType == ActivationType::Channel)
     {
-        // Channel mode: hold-sustain, ticks apply combo modifiers
         m_bIsChanneling = true;
         m_fChannelTime = 0.0f;
         m_fChannelTickAccum = 0.0f;
         m_ActiveSkillSlot = slot;
         m_ChannelTargetPosition = targetPosition;
         m_SkillStates[index] = SkillState::Casting;
+        m_Skills[index]->OnChannelBegin(m_pOwner, targetPosition);
         OutputDebugString(L"[Skill] Channeling started... Hold to continue\n");
 
-        // First tick immediately
-        float tickMult = 0.3f;
-        if (combo.hasEnhance) tickMult *= 2.0f;
-        if (m_bIsEnhanced)
+        if (cat == SkillCategory::Projectile || defaultType == ActivationType::Channel)
         {
-            tickMult *= m_fEnhanceMultiplier;
-            m_bIsEnhanced = false;
-            m_fEnhanceTimer = 0.0f;
-            OutputDebugString(L"[Skill] Enhancement consumed with Channel!\n");
-        }
-
-        // 활성화 VFX 컨텍스트 — 채널 첫 틱
-        m_currentChargeRatio    = 0.f;
-        m_bCurrentIsChannelTick = true;
-        m_bCurrentEnhanceUsed  = false;
-
-        if (combo.hasPlace)
-        {
-            m_Skills[index]->Execute(m_pOwner, targetPosition, -(tickMult * 1.5f));
+            // 투사체 / 고유 채널(Beam): 첫 틱 즉시 발사
+            float tickMult = 0.3f;
+            if (combo.hasEnhance) tickMult *= 2.0f;
+            if (m_bIsEnhanced)
+            {
+                m_Skills[index]->OnEnhanceConsumed(m_pOwner, targetPosition);
+                tickMult *= m_fEnhanceMultiplier;
+                m_bIsEnhanced = false;
+                m_fEnhanceTimer = 0.0f;
+            }
+            m_currentChargeRatio    = 0.f;
+            m_bCurrentIsChannelTick = true;
+            m_bCurrentEnhanceUsed  = false;
+            if (combo.hasPlace)
+                m_Skills[index]->Execute(m_pOwner, targetPosition, -(tickMult * 1.5f));
+            else
+                ExecuteOrSplit(index, targetPosition, tickMult);
         }
         else
         {
-            ExecuteOrSplit(index, targetPosition, tickMult);
+            // Wave/AoE/Summon/Dash + 채널 룬: 진입 시 메인 스킬 1회 정상 발동
+            float damageMultiplier = 1.0f;
+            if (combo.hasEnhance) damageMultiplier *= 2.0f;
+            if (m_bIsEnhanced)
+            {
+                m_Skills[index]->OnEnhanceConsumed(m_pOwner, targetPosition);
+                damageMultiplier *= m_fEnhanceMultiplier;
+                m_bIsEnhanced = false;
+                m_fEnhanceTimer = 0.0f;
+            }
+            m_currentChargeRatio    = 0.f;
+            m_bCurrentIsChannelTick = false;
+            m_bCurrentEnhanceUsed  = (damageMultiplier > 1.5f);
+            if (combo.hasPlace)
+                m_Skills[index]->Execute(m_pOwner, targetPosition, -(damageMultiplier * 1.5f));
+            else
+                ExecuteOrSplit(index, targetPosition, damageMultiplier);
         }
     }
     else if (enhanceOnly)
     {
-        // Enhance-only: self buff
         m_bIsEnhanced = true;
         m_fEnhanceTimer = m_fEnhanceDuration;
         m_SkillStates[index] = SkillState::Casting;
@@ -840,28 +872,27 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
         m_bCurrentEnhanceUsed  = false;
 
         DirectX::XMFLOAT3 selfPos = m_pOwner->GetTransform()->GetPosition();
+        m_Skills[index]->OnEnhanceActivate(m_pOwner);
         m_Skills[index]->Execute(m_pOwner, selfPos, 0.0f);
         OutputDebugString(L"[Skill] Enhanced! Next attack deals 2x damage for 5 seconds\n");
     }
     else
     {
-        // Instant / Place / Instant+Place / Instant+Enhance etc.
         float damageMultiplier = 1.0f;
         if (combo.hasEnhance) damageMultiplier *= 2.0f;
 
-        // Consume existing enhance buff
         if (m_bIsEnhanced)
         {
+            m_Skills[index]->OnEnhanceConsumed(m_pOwner, targetPosition);
             damageMultiplier *= m_fEnhanceMultiplier;
             m_bIsEnhanced = false;
             m_fEnhanceTimer = 0.0f;
             OutputDebugString(L"[Skill] Enhancement consumed! 2x damage!\n");
         }
 
-        // 활성화 VFX 컨텍스트 — 즉발 / 강화 소모
         m_currentChargeRatio    = 0.f;
         m_bCurrentIsChannelTick = false;
-        m_bCurrentEnhanceUsed  = (damageMultiplier > 1.5f); // enhance 소모 시 mult가 높음
+        m_bCurrentEnhanceUsed  = (damageMultiplier > 1.5f);
 
         if (combo.hasPlace)
         {

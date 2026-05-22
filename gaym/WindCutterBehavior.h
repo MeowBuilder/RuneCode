@@ -19,6 +19,13 @@ public:
 
     virtual SkillCategory GetCategory() const override { return SkillCategory::Wave; }
     virtual void Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier = 1.0f) override;
+    virtual void OnChargeBegin(GameObject* caster) override;
+    virtual void OnChargeUpdate(GameObject* caster, float chargeRatio) override;
+    virtual void OnEnhanceActivate(GameObject* caster) override;
+    virtual void OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
+    virtual void OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
+    virtual void OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult) override;
+    virtual void OnChannelEnd(GameObject* caster) override;
     virtual void Update(float deltaTime) override;
     virtual bool IsFinished() const override;
     virtual void Reset() override;
@@ -31,7 +38,10 @@ private:
     SkillData             m_SkillData;
     FluidSkillVFXManager* m_pVFXManager = nullptr;
     Scene*                m_pScene      = nullptr;
-    int                   m_vfxId       = -1;
+    int                   m_vfxId            = -1;
+    int                   m_channelAmbientId = -1;
+    int                   m_chargeVFXId      = -1;
+    int                   m_enhanceAuraId    = -1;
 
     bool  m_bActive    = false;
     float m_damageMult = 1.f;
@@ -42,6 +52,7 @@ private:
     std::unordered_set<EnemyComponent*> m_hitEnemies;
 
     // 빠르고 좁은 관통기 — 모든 적 동시 히트
+    static constexpr float CHANNEL_RANGE = 15.0f;  // 채널 미니 커터 사거리
     static constexpr float DURATION   = 0.7f;
     static constexpr float SPEED      = 35.0f;
     static constexpr float HALF_W     = 2.0f;

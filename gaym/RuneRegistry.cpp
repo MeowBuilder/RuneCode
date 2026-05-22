@@ -127,7 +127,7 @@ RuneRegistry::RuneRegistry()
     // ─── 🔥 화속성 계열 ───────────────────────────────────────────────────────
 
     // FIR_1 화속 (Normal): 화상 1중첩, 25% 기본 확률
-    Register({ .id="FIR_1", .name="화속", .category="속성 변경",
+    Register({ .id="FIR_1", .name="화속", .category="속성",
                .description="25% 확률로 화상 1중첩 (5초, 매초 틱 피해)",
                .grade=RuneGrade::Normal, .element=ElementType::Fire,
                .subVFXId="sub_fire",
@@ -139,7 +139,7 @@ RuneRegistry::RuneRegistry()
                }});
 
     // FIR_2 점화 (Rare): 확률+, 지속+
-    Register({ .id="FIR_2", .name="점화", .category="속성 강화",
+    Register({ .id="FIR_2", .name="점화", .category="속성+",
                .description="화상 확률 35%, 지속 6초로 강화",
                .grade=RuneGrade::Rare, .element=ElementType::Fire,
                .subVFXId="sub_fire",
@@ -151,7 +151,7 @@ RuneRegistry::RuneRegistry()
                }});
 
     // FIR_3 작열 (Epic): 화상 한도 5중첩, 틱 데미지 +20%
-    Register({ .id="FIR_3", .name="작열", .category="속성 강화",
+    Register({ .id="FIR_3", .name="작열", .category="속성+",
                .description="화상 최대 5중첩, 틱 피해 +20%, 확률 40%",
                .grade=RuneGrade::Epic, .element=ElementType::Fire,
                .subVFXId="sub_fire",
@@ -163,7 +163,7 @@ RuneRegistry::RuneRegistry()
                }});
 
     // FIR_4 업화 (Unique): 화상 3중첩 이상 적 피격 시 즉시 추가 폭발 피해
-    Register({ .id="FIR_4", .name="업화", .category="속성 강화",
+    Register({ .id="FIR_4", .name="업화", .category="속성+",
                .description="화상 3중첩 이상 적중 시 중첩수×20% 즉발 폭발 피해",
                .grade=RuneGrade::Unique, .element=ElementType::Fire,
                .subVFXId="sub_fire",
@@ -180,7 +180,7 @@ RuneRegistry::RuneRegistry()
     // ─── 💧 수속성 계열 ───────────────────────────────────────────────────────
 
     // WAT_1 수속 (Normal): 빙결 1중첩, 25%
-    Register({ .id="WAT_1", .name="수속", .category="속성 변경",
+    Register({ .id="WAT_1", .name="수속", .category="속성",
                .description="25% 확률로 냉기 1중첩 (5초, 이동속도 -15%). 3중첩 시 완전 빙결",
                .grade=RuneGrade::Normal, .element=ElementType::Water,
                .subVFXId="sub_water",
@@ -192,7 +192,7 @@ RuneRegistry::RuneRegistry()
                }});
 
     // WAT_2 냉기 (Rare): 확률+, 지속+
-    Register({ .id="WAT_2", .name="냉기", .category="속성 강화",
+    Register({ .id="WAT_2", .name="냉기", .category="속성+",
                .description="냉기 확률 35%, 지속 6초로 강화",
                .grade=RuneGrade::Rare, .element=ElementType::Water,
                .subVFXId="sub_water",
@@ -204,7 +204,7 @@ RuneRegistry::RuneRegistry()
                }});
 
     // WAT_3 결빙 (Epic): 2중첩으로도 완전 빙결
-    Register({ .id="WAT_3", .name="결빙", .category="속성 강화",
+    Register({ .id="WAT_3", .name="결빙", .category="속성+",
                .description="냉기 2중첩으로 완전 빙결 발동 (기본 3중첩), 확률 40%",
                .grade=RuneGrade::Epic, .element=ElementType::Water,
                .subVFXId="sub_water",
@@ -216,7 +216,7 @@ RuneRegistry::RuneRegistry()
                }});
 
     // WAT_4 빙하 (Unique): 1중첩에서도 즉시 완전 빙결
-    Register({ .id="WAT_4", .name="빙하", .category="속성 강화",
+    Register({ .id="WAT_4", .name="빙하", .category="속성+",
                .description="30% 확률로 즉시 완전 빙결 (냉기 1중첩만으로 발동)",
                .grade=RuneGrade::Unique, .element=ElementType::Water,
                .subVFXId="sub_water",
@@ -230,13 +230,13 @@ RuneRegistry::RuneRegistry()
     // ─── 🌀 풍속성 계열 ───────────────────────────────────────────────────────
 
     // WND_1 풍속 (Normal): 넉백 +20%
-    Register({ .id="WND_1", .name="풍속", .category="속성 변경",
+    Register({ .id="WND_1", .name="풍속", .category="속성",
                .description="바람 속성 변환. 넉백 거리 증가",
                .grade=RuneGrade::Normal, .element=ElementType::Wind,
                .knockbackMult=1.20f, .subVFXId="sub_wind" });
 
     // WND_2 질풍 (Rare): 넉백 +50% + 냉기 슬로우
-    Register({ .id="WND_2", .name="질풍", .category="속성 강화",
+    Register({ .id="WND_2", .name="질풍", .category="속성+",
                .description="30% 확률로 냉기 1중첩 (4초, 이동속도 -15%)",
                .grade=RuneGrade::Rare, .element=ElementType::Wind,
                .knockbackMult=1.50f, .subVFXId="sub_wind",
@@ -248,7 +248,7 @@ RuneRegistry::RuneRegistry()
                }});
 
     // WND_3 폭풍 (Epic): 넉백 +80% + 균열 1중첩
-    Register({ .id="WND_3", .name="폭풍", .category="속성 강화",
+    Register({ .id="WND_3", .name="폭풍", .category="속성+",
                .description="25% 확률로 균열 1중첩 (5초, 방어력 -8%)",
                .grade=RuneGrade::Epic, .element=ElementType::Wind,
                .knockbackMult=1.80f, .subVFXId="sub_wind",
@@ -260,7 +260,7 @@ RuneRegistry::RuneRegistry()
                }});
 
     // WND_4 뇌풍 (Unique): 넉백 +120% + 균열 2중첩
-    Register({ .id="WND_4", .name="뇌풍", .category="속성 강화",
+    Register({ .id="WND_4", .name="뇌풍", .category="속성+",
                .description="35% 확률로 균열 2중첩 즉시 부여 (4초)",
                .grade=RuneGrade::Unique, .element=ElementType::Wind,
                .knockbackMult=2.20f, .subVFXId="sub_wind",
@@ -274,7 +274,7 @@ RuneRegistry::RuneRegistry()
     // ─── 🪨 토속성 계열 ───────────────────────────────────────────────────────
 
     // ERT_1 토속 (Normal): 균열 1중첩, 25%
-    Register({ .id="ERT_1", .name="토속", .category="속성 변경",
+    Register({ .id="ERT_1", .name="토속", .category="속성",
                .description="25% 확률로 균열 1중첩 (6초, 방어력 -8%). 3중첩 시 경직",
                .grade=RuneGrade::Normal, .element=ElementType::Earth,
                .subVFXId="sub_earth",
@@ -286,7 +286,7 @@ RuneRegistry::RuneRegistry()
                }});
 
     // ERT_2 암석 (Rare): 균열 확률+, 2중첩 시 냉기도 추가
-    Register({ .id="ERT_2", .name="암석", .category="속성 강화",
+    Register({ .id="ERT_2", .name="암석", .category="속성+",
                .description="균열 확률 35%. 균열 2중첩 이상이면 냉기 1중첩도 부여",
                .grade=RuneGrade::Rare, .element=ElementType::Earth,
                .subVFXId="sub_earth",
@@ -300,7 +300,7 @@ RuneRegistry::RuneRegistry()
                }});
 
     // ERT_3 지진 (Epic): 2중첩으로도 경직
-    Register({ .id="ERT_3", .name="지진", .category="속성 강화",
+    Register({ .id="ERT_3", .name="지진", .category="속성+",
                .description="균열 2중첩으로 경직 발동 (기본 3중첩), 확률 40%",
                .grade=RuneGrade::Epic, .element=ElementType::Earth,
                .subVFXId="sub_earth",
@@ -312,7 +312,7 @@ RuneRegistry::RuneRegistry()
                }});
 
     // ERT_4 붕괴 (Unique): 경직/빙결 상태 적에게 +60% 추가 피해 + 즉시 경직
-    Register({ .id="ERT_4", .name="붕괴", .category="속성 강화",
+    Register({ .id="ERT_4", .name="붕괴", .category="속성+",
                .description="경직/빙결 상태 적에게 +60% 추가 피해. 35% 확률 균열 즉시 경직",
                .grade=RuneGrade::Unique, .element=ElementType::Earth,
                .subVFXId="sub_earth",
@@ -324,4 +324,159 @@ RuneRegistry::RuneRegistry()
                    if (!RollStatus(0.35f, ctx.statusChanceMult)) return;
                    pEnemy->ApplyFracture(1, 6.f * ctx.statusDurationMult, 1);
                }});
+
+    // ─── 🔄 변환 룬 — 발동 방식 ──────────────────────────────────────────────────
+    // 발동 방식 변환 룬은 EffectRegistry의 RUNE_CHARGE/CHANNEL/ENHANCE/PLACE 모드로
+    // 기존 이펙트를 자동으로 변형한다 (더 크게, 더 많이, 빔 강화 등).
+
+    // TRF_CHG 차징 (Rare): RUNE_CHARGE 플래그 → EffectRegistry에서 기존 VFX 변형
+    Register({ .id="TRF_CHG", .name="차징", .category="발동",
+               .description="키 홀드로 차지. 1단계 ×1.5, 2단계 ×2.5 피해·범위",
+               .grade=RuneGrade::Rare,
+               .activationOverride=ActivationType::Charge });
+
+    // TRF_CHN 채널 (Rare): RUNE_CHANNEL 플래그 → 빔/스트림 이펙트 강화
+    Register({ .id="TRF_CHN", .name="채널", .category="발동",
+               .description="키 홀드 중 연속 발동. 틱당 35% 피해",
+               .grade=RuneGrade::Rare,
+               .activationOverride=ActivationType::Channel });
+
+    // TRF_DEP 설치 (Rare): RUNE_PLACE — 설치물 이펙트 지속 증가
+    Register({ .id="TRF_DEP", .name="설치", .category="발동",
+               .description="지점에 설치물 배치. 지속시간 동안 주기적으로 스킬 발동",
+               .grade=RuneGrade::Rare,
+               .activationOverride=ActivationType::Place });
+
+    // TRF_EMP 증강 (Rare): RUNE_ENHANCE → 오라 이펙트 활성화
+    Register({ .id="TRF_EMP", .name="증강", .category="발동",
+               .description="시전 시 버프 적용. 다음 공격 피해 ×1.8 (5초 이내)",
+               .grade=RuneGrade::Rare,
+               .activationOverride=ActivationType::Enhance });
+
+    // ─── 🔄 변환 룬 — 형태 변환 ────────────────────────────────────────────────
+    // 투사체 외형이 서브 VFX로 눈에 띄게 달라진다.
+    // 추가로 vfxMod에 주 이펙트 수식값을 저장해 두었다 (후속 연결 예정).
+
+    // TRF_MLT 다연발 (Normal): 파편 트레일로 분열 느낌 강조
+    Register({ .id="TRF_MLT", .name="다연발", .category="투사체",
+               .description="투사체 +2 부채꼴 발사. 투사체당 피해 -25%",
+               .grade=RuneGrade::Normal,
+               .damageMult=0.75f,
+               .vfxMod={.particleCountMult=0.65f, .sizeScaleMult=0.80f, .speedMult=1.3f},
+               .extraProjectiles=2,
+               .subVFXId="sub_frag_trail" });
+
+    // TRF_PRC 관통 (Rare): 좁고 긴 흰 트레일 → 예리한 관통 느낌
+    Register({ .id="TRF_PRC", .name="관통", .category="투사체",
+               .description="투사체가 적을 관통해 지나감",
+               .grade=RuneGrade::Rare,
+               .vfxMod={.particleCountMult=0.85f, .sizeScaleMult=1.30f, .speedMult=1.5f},
+               .piercing=true,
+               .subVFXId="sub_pierce_trail" });
+
+    // TRF_HOM 유도 (Rare): 나선형 청백 아우라 → 추적 느낌
+    Register({ .id="TRF_HOM", .name="유도", .category="투사체",
+               .description="투사체가 가장 가까운 적을 자동 추적",
+               .grade=RuneGrade::Rare,
+               .vfxMod={.particleCountMult=1.15f, .strengthMult=1.4f},
+               .homing=true,
+               .subVFXId="sub_homing_spiral" });
+
+    // TRF_CHA 연쇄 (Epic): 노란 전기 스파크 → 번개 연쇄 느낌
+    Register({ .id="TRF_CHA", .name="연쇄", .category="연쇄",
+               .description="적중 시 인근 적 최대 2명에게 연쇄 투사체 발사 (50% 피해)",
+               .grade=RuneGrade::Epic,
+               .vfxMod={.strengthMult=1.2f},
+               .spawnOnHitCount=2,
+               .subVFXId="sub_chain_arc" });
+
+    // TRF_ORB 궤도 (Epic): 금빛 링 헤일로 → 공전 표시
+    Register({ .id="TRF_ORB", .name="궤도", .category="투사체",
+               .description="투사체가 플레이어 주위를 0.5초 공전 후 발사 (공전 중 충돌 시 즉발)",
+               .grade=RuneGrade::Epic,
+               .vfxMod={.particleCountMult=1.2f},
+               .orbitalCount=1,
+               .subVFXId="sub_orbital_halo" });
+
+    // TRF_ECH 반향 (Epic): 희미한 고스트 잔상 → 메아리 느낌
+    Register({ .id="TRF_ECH", .name="반향", .category="연쇄",
+               .description="적중 시 소형 투사체 1개 추가 생성 (50% 피해)",
+               .grade=RuneGrade::Epic,
+               .vfxMod={.particleCountMult=0.85f},
+               .spawnOnHitCount=1,
+               .subVFXId="sub_echo_ghost" });
+
+    // ─── ⚡ 증폭 룬 ─────────────────────────────────────────────────────────────
+    // 서브 VFX를 추가해 각 강화 효과를 시각적으로 나타낸다.
+    // 기존 메인 이펙트는 유지.
+
+    // AMP_DMG1 강타 (Normal): 금빛 타격 스파크
+    Register({ .id="AMP_DMG1", .name="강타", .category="피해",
+               .description="스킬 피해 +15%",
+               .grade=RuneGrade::Normal,
+               .damageMult=1.15f,
+               .subVFXId="sub_strike_spark" });
+
+    // AMP_RAD1 범위 (Normal): 확장 링 펄스
+    Register({ .id="AMP_RAD1", .name="범위", .category="범위",
+               .description="스킬 반경 +20%",
+               .grade=RuneGrade::Normal,
+               .radiusMult=1.20f,
+               .subVFXId="sub_range_pulse" });
+
+    // AMP_SPD1 신속 (Normal): 속도 스트릭 트레일
+    Register({ .id="AMP_SPD1", .name="신속", .category="속도",
+               .description="시전 속도 +15%",
+               .grade=RuneGrade::Normal,
+               .castTimeMult=0.85f,
+               .subVFXId="sub_speed_streak" });
+
+    // AMP_DUR1 지속 (Normal): 온기 있는 발광 오라
+    Register({ .id="AMP_DUR1", .name="지속", .category="지속",
+               .description="스킬 지속시간 +25%",
+               .grade=RuneGrade::Normal,
+               .durationMult=1.25f,
+               .subVFXId="sub_persist_glow" });
+
+    // AMP_DMG2 파괴 (Rare): 주황/붉은 파편 폭발
+    Register({ .id="AMP_DMG2", .name="파괴", .category="피해",
+               .description="피해 +30%. 단, 쿨다운 +15%",
+               .grade=RuneGrade::Rare,
+               .damageMult=1.30f, .cooldownMult=1.15f,
+               .subVFXId="sub_shatter_shard" });
+
+    // AMP_RAD2 광역 (Rare): 넓은 충격파 링
+    Register({ .id="AMP_RAD2", .name="광역", .category="범위",
+               .description="반경 +35%. 단, 피해 -10%",
+               .grade=RuneGrade::Rare,
+               .damageMult=0.90f, .radiusMult=1.35f,
+               .subVFXId="sub_blast_wave" });
+
+    // AMP_CD1 냉각 (Rare): 청록 냉기 미스트
+    Register({ .id="AMP_CD1", .name="냉각", .category="쿨다운",
+               .description="스킬 쿨다운 -25%",
+               .grade=RuneGrade::Rare,
+               .cooldownMult=0.75f,
+               .subVFXId="sub_cool_mist" });
+
+    // AMP_MCO 절약 (Rare): 파란 마나 위스프
+    Register({ .id="AMP_MCO", .name="절약", .category="마나",
+               .description="마나 소모 -40%. 단, 피해 -15%",
+               .grade=RuneGrade::Rare,
+               .damageMult=0.85f, .manaCostMult=0.60f,
+               .subVFXId="sub_mana_wisp" });
+
+    // AMP_DMG3 과부하 (Epic): 보라/흰 전하 폭주 (Ring+Sphere 2레이어)
+    Register({ .id="AMP_DMG3", .name="과부하", .category="피해",
+               .description="피해 +50%. 단, 쿨다운 +30%·마나 +20%",
+               .grade=RuneGrade::Epic,
+               .damageMult=1.50f, .cooldownMult=1.30f, .manaCostMult=1.20f,
+               .subVFXId="sub_overload_surge" });
+
+    // AMP_RAD3 확장 (Epic): 금빛 대형 코로나 링
+    Register({ .id="AMP_RAD3", .name="확장", .category="범위",
+               .description="반경 +50%. 단, 피해 -20%",
+               .grade=RuneGrade::Epic,
+               .damageMult=0.80f, .radiusMult=1.50f,
+               .subVFXId="sub_expand_corona" });
 }

@@ -14,11 +14,72 @@ StoneSpikesBehavior::StoneSpikesBehavior()
 {
 }
 
+void StoneSpikesBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
+{
+    // 채널 중 커서 위치에 기둥 1개 즉시 생성 — 방향을 바꿔가며 박을 수 있어 일반 스킬과 차별화
+    if (!m_pVFXManager || !m_pScene) return;
+
+    if (EffectRegistry::Get().HasEffect("Q_StoneSpike"))
+    {
+        XMFLOAT3 spawnPos = { target.x, 0.f, target.z };
+        XMFLOAT3 up = { 0.f, 1.f, 0.f };
+        EffectDef def = EffectRegistry::Get().GetEffect("Q_StoneSpike");
+        if (m_cachedElem != ElementType::None)
+            ApplyElementToEffectDef(def, m_cachedElem);
+        m_pVFXManager->SpawnEffectDef(spawnPos, up, def, false);
+    }
+
+    float damage = m_SkillData.damage * tickMult;
+    HitEnemiesAtSpike({ target.x, 0.f, target.z }, damage);
+}
+
+void StoneSpikesBehavior::OnChargeBegin(GameObject* caster)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_chargeVFXId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
+}
+
+void StoneSpikesBehavior::OnChargeUpdate(GameObject* caster, float chargeRatio)
+{
+    if (!m_pVFXManager || m_chargeVFXId < 0 || !caster || !caster->GetTransform()) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    pos.y += chargeRatio * 2.f;
+    XMFLOAT3 up = { 0.f, 1.f, 0.f };
+    m_pVFXManager->TrackEffect(m_chargeVFXId, pos, up);
+}
+
+void StoneSpikesBehavior::OnEnhanceActivate(GameObject* caster)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_enhanceAuraId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
+}
+
+void StoneSpikesBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    if (m_pVFXManager && m_enhanceAuraId >= 0) { m_pVFXManager->StopEffect(m_enhanceAuraId); m_enhanceAuraId = -1; }
+    if (!m_pVFXManager) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 up = { 0.f, 1.f, 0.f };
+    EffectDef def = EffectRegistry::Get().GetEffect(fx);
+    for (auto& l : def.layers) l.particleCount *= 3;
+    m_pVFXManager->SpawnEffectDef(targetPosition, up, def, false);
+}
+
 void StoneSpikesBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
     m_bActive = false;
     m_pCaster = caster;
     m_spikes.clear();
+    if (m_pVFXManager && m_chargeVFXId >= 0) { m_pVFXManager->StopEffect(m_chargeVFXId); m_chargeVFXId = -1; }
 
     if (!m_pVFXManager) { return; }
 
@@ -145,9 +206,13 @@ void StoneSpikesBehavior::Reset()
 {
     if (m_pVFXManager)
     {
+        if (m_chargeVFXId  >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
+        if (m_enhanceAuraId >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
         for (auto& s : m_spikes)
             if (s.triggered && s.vfxId >= 0) m_pVFXManager->StopEffect(s.vfxId);
     }
-    m_bActive = false;
+    m_bActive       = false;
+    m_chargeVFXId   = -1;
+    m_enhanceAuraId = -1;
     m_spikes.clear();
 }

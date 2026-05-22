@@ -15,6 +15,79 @@ GaleRushBehavior::GaleRushBehavior()
 {
 }
 
+void GaleRushBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
+{
+    // 채널 중 커서 위치에 바람 강타 — 돌진 없이 원거리 공격으로 패턴이 달라짐
+    if (!m_pScene || !m_pVFXManager) return;
+    CRoom* pRoom = m_pScene->GetCurrentRoom();
+    if (!pRoom) return;
+
+    if (EffectRegistry::Get().HasEffect("E_GaleRush_Burst"))
+    {
+        XMFLOAT3 impPos = { target.x, 0.f, target.z };
+        XMFLOAT3 up = { 0.f, 1.f, 0.f };
+        m_pVFXManager->SpawnEffectDef(impPos, up,
+            EffectRegistry::Get().GetEffect("E_GaleRush_Burst"), false);
+    }
+
+    float damage = m_SkillData.damage * tickMult;
+    float r2 = HIT_RADIUS * HIT_RADIUS;
+    XMVECTOR tV = XMVectorSetY(XMLoadFloat3(&target), 0.f);
+    for (const auto& obj : pRoom->GetGameObjects())
+    {
+        if (!obj) continue;
+        auto* pEnemy = obj->GetComponent<EnemyComponent>();
+        if (!pEnemy || pEnemy->IsDead()) continue;
+        auto* pT = obj->GetTransform();
+        if (!pT) continue;
+        XMFLOAT3 ep = pT->GetPosition();
+        XMVECTOR toE = XMVectorSetY(XMVectorSubtract(XMLoadFloat3(&ep), tV), 0.f);
+        if (XMVectorGetX(XMVector3LengthSq(toE)) <= r2)
+            pEnemy->TakeDamage(damage, false);
+    }
+}
+
+void GaleRushBehavior::OnChargeBegin(GameObject* caster)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_chargeVFXId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
+}
+
+void GaleRushBehavior::OnChargeUpdate(GameObject* caster, float chargeRatio)
+{
+    if (!m_pVFXManager || m_chargeVFXId < 0 || !caster || !caster->GetTransform()) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    pos.y += chargeRatio * 2.f;
+    XMFLOAT3 up = { 0.f, 1.f, 0.f };
+    m_pVFXManager->TrackEffect(m_chargeVFXId, pos, up);
+}
+
+void GaleRushBehavior::OnEnhanceActivate(GameObject* caster)
+{
+    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
+    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    m_enhanceAuraId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
+}
+
+void GaleRushBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    if (m_pVFXManager && m_enhanceAuraId >= 0) { m_pVFXManager->StopEffect(m_enhanceAuraId); m_enhanceAuraId = -1; }
+    if (!m_pVFXManager) return;
+    const char* fx = SubVFXName(m_SkillData.element);
+    if (!EffectRegistry::Get().HasEffect(fx)) return;
+    XMFLOAT3 up = { 0.f, 1.f, 0.f };
+    EffectDef def = EffectRegistry::Get().GetEffect(fx);
+    for (auto& l : def.layers) l.particleCount *= 3;
+    m_pVFXManager->SpawnEffectDef(targetPosition, up, def, false);
+}
+
 void GaleRushBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
     m_bActive  = false;
@@ -22,6 +95,7 @@ void GaleRushBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
     m_hitEnemies.clear();
     m_trailVfxIds.clear();
     m_trailTimer = TRAIL_INTERVAL;  // 첫 프레임 즉시 분사
+    if (m_pVFXManager && m_chargeVFXId >= 0) { m_pVFXManager->StopEffect(m_chargeVFXId); m_chargeVFXId = -1; }
 
     if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
 
@@ -173,15 +247,19 @@ void GaleRushBehavior::Reset()
 {
     if (m_pVFXManager)
     {
-        if (m_vfxId     >= 0) m_pVFXManager->StopEffect(m_vfxId);
-        if (m_ringVfxId >= 0) m_pVFXManager->StopEffect(m_ringVfxId);
+        if (m_vfxId         >= 0) m_pVFXManager->StopEffect(m_vfxId);
+        if (m_ringVfxId     >= 0) m_pVFXManager->StopEffect(m_ringVfxId);
+        if (m_chargeVFXId   >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
+        if (m_enhanceAuraId >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
         for (int id : m_trailVfxIds)
             if (id >= 0) m_pVFXManager->StopEffect(id);
     }
-    m_bActive   = false;
-    m_vfxId     = -1;
-    m_ringVfxId = -1;
-    m_pCaster   = nullptr;
+    m_bActive       = false;
+    m_vfxId         = -1;
+    m_ringVfxId     = -1;
+    m_chargeVFXId   = -1;
+    m_enhanceAuraId = -1;
+    m_pCaster       = nullptr;
     m_hitEnemies.clear();
     m_trailVfxIds.clear();
     m_trailTimer = 0.f;

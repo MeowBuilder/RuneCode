@@ -2014,6 +2014,450 @@ void EffectRegistry::Initialize()
         def.layers.push_back(ring);
         Register(std::move(def));
     }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // 변환 룬 서브 VFX — 투사체 외형을 룬 특성에 맞게 바꿈
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // sub_frag_trail — TRF_MLT 다연발: 작은 금빛 파편 트레일 (분열 느낌)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Cone;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f,  0.85f, 0.4f,  1.0f };
+        layer.edgeColor      = { 0.7f,  0.4f,  0.05f, 0.0f };
+        layer.particleCount  = 45;
+        layer.emitRate       = 55.f;
+        layer.speedMin       = 4.f;
+        layer.speedMax       = 12.f;
+        layer.lifetimeMin    = 0.07f;
+        layer.lifetimeMax    = 0.18f;
+        layer.sizeScale      = 0.9f;
+        layer.duration       = -1.f;
+        layer.attachToProjectile = true;
+        layer.cone.halfAngle     = 28.f;
+        layer.cone.gravityScale  = 0.12f;
+        layer.cone.startSizeMult = 1.1f;
+        layer.cone.endSizeMult   = 0.0f;
+        layer.cone.fadeAlpha     = true;
+        layer.cone.fadeSize      = true;
+        EffectDef def; def.name = "sub_frag_trail";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // sub_pierce_trail — TRF_PRC 관통: 좁고 빠른 흰 트레일 (예리한 관통 느낌)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Cone;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f,  1.0f,  1.0f,  1.0f };
+        layer.edgeColor      = { 0.75f, 0.9f,  1.0f,  0.0f };
+        layer.particleCount  = 80;
+        layer.emitRate       = 130.f;
+        layer.speedMin       = 10.f;
+        layer.speedMax       = 22.f;
+        layer.lifetimeMin    = 0.06f;
+        layer.lifetimeMax    = 0.16f;
+        layer.sizeScale      = 1.1f;
+        layer.duration       = -1.f;
+        layer.attachToProjectile = true;
+        layer.cone.halfAngle     = 4.f;
+        layer.cone.gravityScale  = 0.0f;
+        layer.cone.startSizeMult = 1.0f;
+        layer.cone.endSizeMult   = 0.08f;
+        layer.cone.fadeAlpha     = true;
+        layer.cone.fadeSize      = true;
+        EffectDef def; def.name = "sub_pierce_trail";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // sub_homing_spiral — TRF_HOM 유도: 청백 나선형 파티클 (추적 느낌)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Cone;
+        layer.overrideColors = true;
+        layer.coreColor      = { 0.80f, 0.95f, 1.0f, 1.0f };
+        layer.edgeColor      = { 0.35f, 0.65f, 1.0f, 0.0f };
+        layer.particleCount  = 60;
+        layer.emitRate       = 80.f;
+        layer.speedMin       = 2.f;
+        layer.speedMax       = 7.f;
+        layer.lifetimeMin    = 0.22f;
+        layer.lifetimeMax    = 0.5f;
+        layer.sizeScale      = 1.6f;
+        layer.duration       = -1.f;
+        layer.attachToProjectile = true;
+        layer.cone.halfAngle     = 72.f;
+        layer.cone.gravityScale  = 0.0f;
+        layer.cone.startSizeMult = 1.0f;
+        layer.cone.endSizeMult   = 0.0f;
+        layer.cone.fadeAlpha     = true;
+        layer.cone.fadeSize      = true;
+        EffectDef def; def.name = "sub_homing_spiral";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // sub_chain_arc — TRF_CHA 연쇄: 노란/흰 전기 스파크 (번개 아크 느낌)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Sphere;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f,  0.96f, 0.45f, 1.0f };
+        layer.edgeColor      = { 1.0f,  1.0f,  1.0f,  0.0f };
+        layer.particleCount  = 55;
+        layer.emitRate       = 80.f;
+        layer.speedMin       = 4.f;
+        layer.speedMax       = 12.f;
+        layer.lifetimeMin    = 0.04f;
+        layer.lifetimeMax    = 0.14f;
+        layer.sizeScale      = 0.85f;
+        layer.duration       = -1.f;
+        layer.attachToProjectile = true;
+        layer.sphere.radius        = 1.2f;
+        layer.sphere.shellFraction = 0.85f;
+        layer.sphere.inward        = false;
+        EffectDef def; def.name = "sub_chain_arc";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // sub_orbital_halo — TRF_ORB 궤도: 기울어진 금빛 링 (공전 경로 표시)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Ring;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f,  0.93f, 0.55f, 1.0f };
+        layer.edgeColor      = { 0.92f, 0.68f, 0.05f, 0.0f };
+        layer.particleCount  = 90;
+        layer.duration       = 0.55f;
+        layer.speedMin       = 1.0f;
+        layer.speedMax       = 3.5f;
+        layer.lifetimeMin    = 0.4f;
+        layer.lifetimeMax    = 0.9f;
+        layer.sizeScale      = 2.8f;
+        layer.ring.radius         = 0.4f;
+        layer.ring.width          = 3.5f;
+        layer.ring.expandSpeed    = 12.f;
+        layer.ring.tiltX          = 50.f;
+        layer.ring.rotateSpeed    = 2.5f;
+        layer.ring.normalSpeedMin = 0.5f;
+        layer.ring.normalSpeedMax = 2.0f;
+        EffectDef def; def.name = "sub_orbital_halo";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // sub_echo_ghost — TRF_ECH 반향: 희미한 청백 잔상 (메아리 느낌)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Sphere;
+        layer.overrideColors = true;
+        layer.coreColor      = { 0.78f, 0.90f, 1.0f,  0.65f };
+        layer.edgeColor      = { 0.45f, 0.65f, 1.0f,  0.0f  };
+        layer.particleCount  = 40;
+        layer.emitRate       = 28.f;
+        layer.speedMin       = 0.3f;
+        layer.speedMax       = 1.8f;
+        layer.lifetimeMin    = 0.35f;
+        layer.lifetimeMax    = 0.75f;
+        layer.sizeScale      = 3.2f;
+        layer.duration       = -1.f;
+        layer.attachToProjectile = true;
+        layer.sphere.radius        = 1.6f;
+        layer.sphere.shellFraction = 0.35f;
+        layer.sphere.inward        = false;
+        EffectDef def; def.name = "sub_echo_ghost";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // 증폭 룬 서브 VFX — 각 수치 강화의 시각적 표현
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // sub_strike_spark — AMP_DMG1 강타: 금빛 타격 스파크 (충격 강조)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Cone;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f,  0.90f, 0.18f, 1.0f };
+        layer.edgeColor      = { 1.0f,  0.52f, 0.0f,  0.0f };
+        layer.particleCount  = 50;
+        layer.emitRate       = 60.f;
+        layer.speedMin       = 5.f;
+        layer.speedMax       = 14.f;
+        layer.lifetimeMin    = 0.05f;
+        layer.lifetimeMax    = 0.12f;
+        layer.sizeScale      = 1.0f;
+        layer.duration       = -1.f;
+        layer.attachToProjectile = true;
+        layer.cone.halfAngle     = 42.f;
+        layer.cone.gravityScale  = 0.08f;
+        layer.cone.startSizeMult = 1.2f;
+        layer.cone.endSizeMult   = 0.0f;
+        layer.cone.fadeAlpha     = true;
+        layer.cone.fadeSize      = true;
+        EffectDef def; def.name = "sub_strike_spark";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // sub_range_pulse — AMP_RAD1 범위: 확장하는 얇은 흰 링 (반경 시각화)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Ring;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f,  1.0f,  0.88f, 1.0f };
+        layer.edgeColor      = { 0.80f, 0.85f, 0.45f, 0.0f };
+        layer.particleCount  = 80;
+        layer.duration       = 0.65f;
+        layer.speedMin       = 2.0f;
+        layer.speedMax       = 5.0f;
+        layer.lifetimeMin    = 0.4f;
+        layer.lifetimeMax    = 0.8f;
+        layer.sizeScale      = 1.6f;
+        layer.ring.radius         = 0.2f;
+        layer.ring.width          = 2.5f;
+        layer.ring.expandSpeed    = 28.f;
+        layer.ring.tiltX          = 0.f;
+        layer.ring.rotateSpeed    = 0.f;
+        layer.ring.normalSpeedMin = 1.0f;
+        layer.ring.normalSpeedMax = 3.5f;
+        EffectDef def; def.name = "sub_range_pulse";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // sub_speed_streak — AMP_SPD1 신속: 고속 흰 스트릭 트레일 (속도감)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Cone;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f,  1.0f,  1.0f,  1.0f };
+        layer.edgeColor      = { 0.65f, 0.88f, 1.0f,  0.0f };
+        layer.particleCount  = 100;
+        layer.emitRate       = 160.f;
+        layer.speedMin       = 12.f;
+        layer.speedMax       = 28.f;
+        layer.lifetimeMin    = 0.05f;
+        layer.lifetimeMax    = 0.11f;
+        layer.sizeScale      = 0.75f;
+        layer.duration       = -1.f;
+        layer.attachToProjectile = true;
+        layer.cone.halfAngle     = 7.f;
+        layer.cone.gravityScale  = 0.0f;
+        layer.cone.startSizeMult = 0.8f;
+        layer.cone.endSizeMult   = 0.04f;
+        layer.cone.fadeAlpha     = true;
+        layer.cone.fadeSize      = true;
+        EffectDef def; def.name = "sub_speed_streak";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // sub_persist_glow — AMP_DUR1 지속: 온기 있는 황백 발광 오라 (지속 표현)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Sphere;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f,  0.94f, 0.72f, 0.85f };
+        layer.edgeColor      = { 0.88f, 0.72f, 0.35f, 0.0f  };
+        layer.particleCount  = 38;
+        layer.emitRate       = 22.f;
+        layer.speedMin       = 0.3f;
+        layer.speedMax       = 1.1f;
+        layer.lifetimeMin    = 0.6f;
+        layer.lifetimeMax    = 1.3f;
+        layer.sizeScale      = 2.8f;
+        layer.duration       = -1.f;
+        layer.attachToProjectile = true;
+        layer.sphere.radius        = 2.0f;
+        layer.sphere.shellFraction = 0.5f;
+        layer.sphere.inward        = false;
+        EffectDef def; def.name = "sub_persist_glow";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // sub_shatter_shard — AMP_DMG2 파괴: 주황/붉은 파편 (폭발적 피해 표현)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Sphere;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f,  0.52f, 0.08f, 1.0f };
+        layer.edgeColor      = { 0.92f, 0.08f, 0.0f,  0.0f };
+        layer.particleCount  = 70;
+        layer.emitRate       = 95.f;
+        layer.speedMin       = 5.f;
+        layer.speedMax       = 16.f;
+        layer.lifetimeMin    = 0.07f;
+        layer.lifetimeMax    = 0.2f;
+        layer.sizeScale      = 1.25f;
+        layer.duration       = -1.f;
+        layer.attachToProjectile = true;
+        layer.sphere.radius        = 1.6f;
+        layer.sphere.shellFraction = 0.65f;
+        layer.sphere.inward        = false;
+        EffectDef def; def.name = "sub_shatter_shard";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // sub_blast_wave — AMP_RAD2 광역: 넓은 황금 충격파 링 (광역 반경 표현)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Ring;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f,  0.98f, 0.75f, 1.0f };
+        layer.edgeColor      = { 0.88f, 0.72f, 0.15f, 0.0f };
+        layer.particleCount  = 120;
+        layer.duration       = 0.85f;
+        layer.speedMin       = 3.0f;
+        layer.speedMax       = 8.0f;
+        layer.lifetimeMin    = 0.5f;
+        layer.lifetimeMax    = 1.1f;
+        layer.sizeScale      = 2.8f;
+        layer.ring.radius         = 0.5f;
+        layer.ring.width          = 5.5f;
+        layer.ring.expandSpeed    = 38.f;
+        layer.ring.tiltX          = 0.f;
+        layer.ring.rotateSpeed    = 0.f;
+        layer.ring.normalSpeedMin = 1.5f;
+        layer.ring.normalSpeedMax = 5.5f;
+        EffectDef def; def.name = "sub_blast_wave";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // sub_cool_mist — AMP_CD1 냉각: 청록 냉기 미스트 (빠른 쿨다운 표현)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Sphere;
+        layer.overrideColors = true;
+        layer.coreColor      = { 0.35f, 0.95f, 1.0f,  0.82f };
+        layer.edgeColor      = { 0.08f, 0.58f, 0.92f, 0.0f  };
+        layer.particleCount  = 50;
+        layer.emitRate       = 42.f;
+        layer.speedMin       = 0.5f;
+        layer.speedMax       = 2.8f;
+        layer.lifetimeMin    = 0.4f;
+        layer.lifetimeMax    = 1.0f;
+        layer.sizeScale      = 2.3f;
+        layer.duration       = -1.f;
+        layer.attachToProjectile = true;
+        layer.sphere.radius        = 1.9f;
+        layer.sphere.shellFraction = 0.4f;
+        layer.sphere.inward        = false;
+        EffectDef def; def.name = "sub_cool_mist";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // sub_mana_wisp — AMP_MCO 절약: 부드러운 파란 마나 위스프 (마나 절약 표현)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Sphere;
+        layer.overrideColors = true;
+        layer.coreColor      = { 0.28f, 0.52f, 1.0f,  0.78f };
+        layer.edgeColor      = { 0.08f, 0.22f, 0.88f, 0.0f  };
+        layer.particleCount  = 35;
+        layer.emitRate       = 24.f;
+        layer.speedMin       = 0.2f;
+        layer.speedMax       = 1.3f;
+        layer.lifetimeMin    = 0.5f;
+        layer.lifetimeMax    = 1.1f;
+        layer.sizeScale      = 2.1f;
+        layer.duration       = -1.f;
+        layer.attachToProjectile = true;
+        layer.sphere.radius        = 1.5f;
+        layer.sphere.shellFraction = 0.3f;
+        layer.sphere.inward        = true;
+        EffectDef def; def.name = "sub_mana_wisp";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // sub_overload_surge — AMP_DMG3 과부하: 보라/흰 전하 폭주 (Ring + Sphere)
+    {
+        EffectDef def; def.name = "sub_overload_surge";
+
+        // Layer 0: 보라 전기 링 (폭발 펄스)
+        {
+            EffectLayer ring;
+            ring.type           = EmitterType::Ring;
+            ring.overrideColors = true;
+            ring.coreColor      = { 0.88f, 0.28f, 1.0f, 1.0f };
+            ring.edgeColor      = { 1.0f,  0.80f, 1.0f, 0.0f };
+            ring.particleCount  = 100;
+            ring.duration       = 0.5f;
+            ring.speedMin       = 6.f;
+            ring.speedMax       = 18.f;
+            ring.lifetimeMin    = 0.18f;
+            ring.lifetimeMax    = 0.5f;
+            ring.sizeScale      = 2.6f;
+            ring.ring.radius         = 0.5f;
+            ring.ring.width          = 3.8f;
+            ring.ring.expandSpeed    = 32.f;
+            ring.ring.tiltX          = 30.f;
+            ring.ring.rotateSpeed    = 1.8f;
+            ring.ring.normalSpeedMin = 3.0f;
+            ring.ring.normalSpeedMax = 9.0f;
+            def.layers.push_back(ring);
+        }
+
+        // Layer 1: 흰/보라 전기 스파크 (지속)
+        {
+            EffectLayer spark;
+            spark.type           = EmitterType::Sphere;
+            spark.overrideColors = true;
+            spark.coreColor      = { 1.0f,  0.88f, 1.0f,  1.0f };
+            spark.edgeColor      = { 0.70f, 0.18f, 1.0f,  0.0f };
+            spark.particleCount  = 80;
+            spark.emitRate       = 125.f;
+            spark.speedMin       = 5.f;
+            spark.speedMax       = 20.f;
+            spark.lifetimeMin    = 0.04f;
+            spark.lifetimeMax    = 0.14f;
+            spark.sizeScale      = 1.05f;
+            spark.duration       = -1.f;
+            spark.attachToProjectile = true;
+            spark.sphere.radius        = 1.1f;
+            spark.sphere.shellFraction = 0.9f;
+            spark.sphere.inward        = false;
+            def.layers.push_back(spark);
+        }
+
+        Register(std::move(def));
+    }
+
+    // sub_expand_corona — AMP_RAD3 확장: 금빛 대형 코로나 링 (거대한 반경 표현)
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Ring;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f,  0.84f, 0.08f, 1.0f };
+        layer.edgeColor      = { 0.97f, 0.58f, 0.0f,  0.0f };
+        layer.particleCount  = 160;
+        layer.duration       = 1.1f;
+        layer.speedMin       = 5.f;
+        layer.speedMax       = 12.f;
+        layer.lifetimeMin    = 0.65f;
+        layer.lifetimeMax    = 1.3f;
+        layer.sizeScale      = 4.5f;
+        layer.ring.radius         = 1.2f;
+        layer.ring.width          = 7.0f;
+        layer.ring.expandSpeed    = 55.f;
+        layer.ring.tiltX          = 0.f;
+        layer.ring.rotateSpeed    = 0.f;
+        layer.ring.normalSpeedMin = 2.5f;
+        layer.ring.normalSpeedMax = 9.0f;
+        EffectDef def; def.name = "sub_expand_corona";
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
 }
 
 void EffectRegistry::Register(EffectDef def) {

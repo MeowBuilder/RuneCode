@@ -17,7 +17,15 @@ public:
     virtual void SetVFXManager(FluidSkillVFXManager* mgr) override { m_pVFXManager = mgr; }
     virtual void SetScene(Scene* pScene)                  override { m_pScene = pScene; }
 
+    virtual SkillCategory GetCategory() const override { return SkillCategory::AoE; }
     virtual void Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier = 1.0f) override;
+    virtual void OnChargeBegin(GameObject* caster) override;
+    virtual void OnChargeUpdate(GameObject* caster, float chargeRatio) override;
+    virtual void OnEnhanceActivate(GameObject* caster) override;
+    virtual void OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
+    virtual void OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
+    virtual void OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult) override;
+    virtual void OnChannelEnd(GameObject* caster) override;
     virtual void Update(float deltaTime) override;
     virtual bool IsFinished() const override;
     virtual void Reset() override;
@@ -31,8 +39,11 @@ private:
     FluidSkillVFXManager* m_pVFXManager = nullptr;
     Scene*                m_pScene      = nullptr;
     GameObject*           m_pCaster     = nullptr;
-    int                   m_vfxId       = -1;
-    int                   m_fallVfxId   = -1;   // 낙하 이펙트 (FALL_DURATION 후 자동 종료)
+    int                   m_vfxId          = -1;
+    int                   m_fallVfxId      = -1;
+    int                   m_channelRainId  = -1;
+    int                   m_chargeVFXId    = -1;
+    int                   m_enhanceAuraId  = -1;
 
     bool                  m_bActive     = false;
     float                 m_elapsed     = 0.f;
