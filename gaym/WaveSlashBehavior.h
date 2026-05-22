@@ -23,6 +23,7 @@ public:
     void SetDecalManager(DecalManager* m) override   { m_pDecalManager = m; }
 
     // ISkillBehavior 인터페이스
+    virtual SkillCategory GetCategory() const override { return SkillCategory::Wave; }
     virtual void Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier = 1.0f) override;
     virtual void Update(float deltaTime) override;
     virtual bool IsFinished() const override;

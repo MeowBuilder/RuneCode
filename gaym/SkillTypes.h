@@ -63,6 +63,17 @@ struct RuneCombo {
     int count = 0;  // Total equipped rune count
 };
 
+// Broad category of skill behavior — used for activation VFX scaling logic
+enum class SkillCategory : uint8_t
+{
+    Projectile, // 투사체 기반 (Fireball, WaterOrb, EarthShard…)
+    Wave,       // 파동 전진형 (WaveSlash, TidalWave)
+    Beam,       // 지속 빔 (FireBeam)
+    AoE,        // 즉발 범위 (Meteor, Earthquake, StoneSpikeS)
+    Dash,       // 돌진 이동 (GaleRush)
+    Summon,     // 소환/지속 오브젝트 (Tornado, WaterVortex)
+};
+
 // Current state of a skill
 enum class SkillState : uint8_t
 {

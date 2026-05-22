@@ -27,6 +27,7 @@ public:
     MeteorBehavior(const SkillData& customData);
     virtual ~MeteorBehavior() = default;
 
+    virtual SkillCategory GetCategory() const override { return SkillCategory::AoE; }
     void SetVFXManager(FluidSkillVFXManager* mgr)    { m_pVFXManager    = mgr; }
     void SetScene(Scene* pScene)                     { m_pScene         = pScene; }
     void SetDecalManager(DecalManager* m) override   { m_pDecalManager  = m; }

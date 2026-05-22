@@ -3,6 +3,7 @@
 #include "Component.h"
 #include "SkillTypes.h"
 #include "RuneDef.h"
+#include "VFXTypes.h"
 #include <memory>
 #include <array>
 
@@ -75,6 +76,16 @@ public:
 
     // Legacy: get rune combo flags (delegates to BuildSkillStats internally)
     RuneCombo GetRuneCombo(SkillSlot skill) const;
+
+    // ─── 활성화 VFX 수식자 ───────────────────────────────────────────────────
+    // 차지/채널/강화 소모 상태에 따른 VFX 스케일 수식자를 계산.
+    // 스킬 Execute() 직전에 SkillComponent가 내부 저장; 행동 클래스에서 GetCurrentActivationVFXMod() 로 읽음.
+    VFXModifier BuildActivationVFXMod(SkillSlot slot, float chargeRatio,
+                                       bool isChannelTick, bool isEnhanceConsumed) const;
+
+    // 가장 최근 Execute() 직전에 계산된 활성화 VFXModifier (행동 클래스가 VFX 스폰 시 참조)
+    VFXModifier GetCurrentActivationVFXMod() const { return m_activationVFXMod; }
+    float       GetCurrentChargeRatio()      const { return m_currentChargeRatio; }
 
     // Block rune input (e.g., during drop rune selection)
     void SetRuneInputBlocked(bool blocked) { m_bRuneInputBlocked = blocked; }
@@ -152,6 +163,12 @@ private:
 
     // Rune input blocking
     bool m_bRuneInputBlocked = false;
+
+    // 활성화 VFX 컨텍스트 (Execute 직전에 세팅, 행동 클래스가 참조)
+    VFXModifier m_activationVFXMod;
+    float       m_currentChargeRatio    = 0.f;
+    bool        m_bCurrentIsChannelTick = false;
+    bool        m_bCurrentEnhanceUsed  = false;
 
     // Execute skill based on current activation type
     void ExecuteWithActivationType(SkillSlot slot, const DirectX::XMFLOAT3& targetPosition);

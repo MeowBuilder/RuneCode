@@ -18,6 +18,7 @@ public:
     virtual void SetVFXManager(FluidSkillVFXManager* mgr) override { m_pVFXManager = mgr; }
     virtual void SetScene(Scene* pScene)                  override { m_pScene = pScene; }
 
+    virtual SkillCategory GetCategory() const override { return SkillCategory::Wave; }
     virtual void Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier = 1.0f) override;
     virtual void Update(float deltaTime) override;
     virtual bool IsFinished() const override;

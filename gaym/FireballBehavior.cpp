@@ -5,6 +5,7 @@
 #include "TransformComponent.h"
 #include "SkillComponent.h"
 #include "PlayerComponent.h"
+#include "VFXTypes.h"
 
 FireballBehavior::FireballBehavior()
     : m_SkillData(FireSkillPresets::Fireball())
@@ -119,6 +120,18 @@ void FireballBehavior::ExecuteInstant(GameObject* caster, const DirectX::XMFLOAT
     float maxDist = 100.f * stats.rangeMult;
 
     float chargeRatio = fmaxf(0.0f, fminf(1.0f, (damageMultiplier - 1.0f) / 2.0f));
+
+    // 룬 vfxMod + 활성화 vfxMod 병합 → 물리 파라미터 스케일
+    VFXModifier activationMod;
+    if (auto* pSC = caster ? caster->GetComponent<SkillComponent>() : nullptr)
+        activationMod = pSC->GetCurrentActivationVFXMod();
+    VFXModifier finalMod = MergeVFXModifiers(stats.vfxMod, activationMod);
+
+    // size / speed 보정은 차지 배율 임계값 분기 이후에 추가 적용
+    collisionRadius *= finalMod.sizeScaleMult;
+    explosionRadius *= finalMod.sizeScaleMult;
+    scale           *= finalMod.sizeScaleMult;
+    speed           *= finalMod.speedMult;
 
     DirectX::XMFLOAT3 flatTarget = targetPosition;
     flatTarget.y = m_StartPosition.y;

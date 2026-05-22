@@ -76,6 +76,11 @@ void SkillComponent::Update(float deltaTime)
                 float tickMult = 0.3f;
                 if (combo.hasEnhance) tickMult *= 2.0f;
 
+                // 활성화 VFX 컨텍스트 — 채널 틱
+                m_currentChargeRatio    = 0.f;
+                m_bCurrentIsChannelTick = true;
+                m_bCurrentEnhanceUsed  = false;
+
                 if (combo.hasPlace)
                 {
                     m_Skills[index]->Execute(m_pOwner, m_ChannelTargetPosition, -(tickMult * 1.5f));
@@ -232,6 +237,11 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
                 swprintf_s(buffer, 128, L"[Skill] Charge released! Charge: %.0f%%, Multiplier: %.1fx\n",
                     chargeRatio * 100.0f, damageMultiplier);
                 OutputDebugString(buffer);
+
+                // 활성화 VFX 컨텍스트 세팅 (Execute 직전)
+                m_currentChargeRatio    = chargeRatio;
+                m_bCurrentIsChannelTick = false;
+                m_bCurrentEnhanceUsed  = (m_bIsEnhanced); // 이미 소모됨
 
                 // Combo: Charge+Place → trap with charge damage
                 if (combo.hasPlace)
@@ -620,6 +630,54 @@ float SkillComponent::GetChargeProgress() const
     return min(1.0f, m_fChargeTime / m_fMaxChargeTime);
 }
 
+VFXModifier SkillComponent::BuildActivationVFXMod(SkillSlot slot, float chargeRatio,
+                                                    bool isChannelTick, bool isEnhanceConsumed) const
+{
+    VFXModifier mod;
+    SkillCategory cat = SkillCategory::Projectile;
+    size_t idx = static_cast<size_t>(slot);
+    if (idx < m_Skills.size() && m_Skills[idx])
+        cat = m_Skills[idx]->GetCategory();
+
+    if (chargeRatio > 0.01f)
+    {
+        float t = chargeRatio;
+        mod.particleCountMult = 1.f + t * 1.0f;
+        mod.strengthMult      = 1.f + t * 1.2f;
+        // Wave: scale lateral spread more; Beam: scale thickness; Projectile: scale size
+        if (cat == SkillCategory::Wave)
+        {
+            mod.sizeScaleMult = 1.f + t * 1.0f;
+            mod.speedMult     = 1.f + t * 0.6f;
+        }
+        else if (cat == SkillCategory::Beam)
+        {
+            mod.sizeScaleMult = 1.f + t * 0.8f;
+            mod.speedMult     = 1.f + t * 0.5f;
+        }
+        else  // Projectile / AoE / default
+        {
+            mod.sizeScaleMult = 1.f + t * 1.5f;
+            mod.speedMult     = 1.f + t * 0.4f;
+        }
+    }
+    if (isChannelTick)
+    {
+        mod.particleCountMult = 0.45f;
+        mod.sizeScaleMult     = 0.60f;
+        mod.speedMult         = 1.25f;
+        mod.strengthMult      = 0.70f;
+    }
+    if (isEnhanceConsumed)
+    {
+        mod.particleCountMult *= 1.35f;
+        mod.sizeScaleMult     *= 1.50f;
+        mod.strengthMult      *= 2.00f;
+        mod.speedMult         *= 1.10f;
+    }
+    return mod;
+}
+
 void SkillComponent::ProcessRuneInput(InputSystem* pInputSystem)
 {
     // Rune input is now handled through the drop item UI system
@@ -634,6 +692,14 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
     ActivationType defType = m_Skills[index] ? m_Skills[index]->GetSkillData().activationType : ActivationType::Instant;
     SkillStats stats = BuildSkillStats(slot, defType);
     RuneCombo combo = GetRuneCombo(slot);
+
+    // 활성화 VFX mod 계산 + 저장 (행동 클래스가 GetCurrentActivationVFXMod()로 읽음)
+    m_activationVFXMod = BuildActivationVFXMod(slot, m_currentChargeRatio,
+                                                m_bCurrentIsChannelTick, m_bCurrentEnhanceUsed);
+    // 다음 호출을 위해 초기화
+    m_currentChargeRatio    = 0.f;
+    m_bCurrentIsChannelTick = false;
+    m_bCurrentEnhanceUsed  = false;
 
     // 룬 데미지 배율 적용 — Execute에 넘기는 mult에 포함시켜 모든 스킬에 일괄 적용
     mult *= stats.damageMult;
@@ -747,6 +813,11 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
             OutputDebugString(L"[Skill] Enhancement consumed with Channel!\n");
         }
 
+        // 활성화 VFX 컨텍스트 — 채널 첫 틱
+        m_currentChargeRatio    = 0.f;
+        m_bCurrentIsChannelTick = true;
+        m_bCurrentEnhanceUsed  = false;
+
         if (combo.hasPlace)
         {
             m_Skills[index]->Execute(m_pOwner, targetPosition, -(tickMult * 1.5f));
@@ -763,6 +834,10 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
         m_fEnhanceTimer = m_fEnhanceDuration;
         m_SkillStates[index] = SkillState::Casting;
         m_ActiveSkillSlot = slot;
+
+        m_currentChargeRatio    = 0.f;
+        m_bCurrentIsChannelTick = false;
+        m_bCurrentEnhanceUsed  = false;
 
         DirectX::XMFLOAT3 selfPos = m_pOwner->GetTransform()->GetPosition();
         m_Skills[index]->Execute(m_pOwner, selfPos, 0.0f);
@@ -782,6 +857,11 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
             m_fEnhanceTimer = 0.0f;
             OutputDebugString(L"[Skill] Enhancement consumed! 2x damage!\n");
         }
+
+        // 활성화 VFX 컨텍스트 — 즉발 / 강화 소모
+        m_currentChargeRatio    = 0.f;
+        m_bCurrentIsChannelTick = false;
+        m_bCurrentEnhanceUsed  = (damageMultiplier > 1.5f); // enhance 소모 시 mult가 높음
 
         if (combo.hasPlace)
         {

@@ -129,6 +129,17 @@ struct VFXModifier {
     std::optional<std::vector<VFXPhase>> phaseOverride;
 };
 
+// 두 VFXModifier를 곱으로 병합 (룬 mod + 활성화 mod 합성에 사용)
+inline VFXModifier MergeVFXModifiers(const VFXModifier& a, const VFXModifier& b)
+{
+    VFXModifier m;
+    m.particleCountMult = a.particleCountMult * b.particleCountMult;
+    m.strengthMult      = a.strengthMult      * b.strengthMult;
+    m.sizeScaleMult     = a.sizeScaleMult     * b.sizeScaleMult;
+    m.speedMult         = a.speedMult         * b.speedMult;
+    return m;
+}
+
 // ─── 새 기반 이미터 시스템 ────────────────────────────────────────────────────
 
 #include <unordered_map>
@@ -330,3 +341,39 @@ struct EffectDef {
     ElementType              element = ElementType::Fire;
     std::vector<EffectLayer> layers;
 };
+
+// EffectDef 레이어 전체에 VFXModifier 적용 (EffectDef + EffectLayer + EmitterType 정의 후 배치)
+// SPH 레이어: particleCount, particleSize, CPstrength, beam spreadRadius 스케일
+// 경량 레이어: particleCount, sizeScale, speedMin/Max, lifetimeMin/Max 스케일
+inline void ApplyVFXModifier(EffectDef& def, const VFXModifier& mod)
+{
+    if (mod.particleCountMult == 1.f && mod.strengthMult == 1.f &&
+        mod.sizeScaleMult == 1.f && mod.speedMult == 1.f) return;
+
+    for (auto& l : def.layers)
+    {
+        const bool isSPH = (l.type >= EmitterType::SPH_Attract &&
+                            l.type <= EmitterType::SPH_Beam);
+        if (isSPH)
+        {
+            l.sph.particleCount     = (int)(l.sph.particleCount * mod.particleCountMult) < 20 ? 20 : (int)(l.sph.particleCount * mod.particleCountMult);
+            l.sph.particleSize      *= mod.sizeScaleMult;
+            l.sph.masterCPStrength  *= mod.strengthMult;
+            l.sph.spawnRadius       *= mod.sizeScaleMult;
+            for (auto& ph : l.sph.phases)
+                if (ph.motionMode == ParticleMotionMode::Beam)
+                    ph.beamDesc.spreadRadius *= mod.sizeScaleMult;
+            if (l.sph.isWave)
+                l.sph.waveHalfW *= mod.sizeScaleMult;
+        }
+        else
+        {
+            l.particleCount = (int)(l.particleCount * mod.particleCountMult) < 10 ? 10 : (int)(l.particleCount * mod.particleCountMult);
+            l.sizeScale     *= mod.sizeScaleMult;
+            l.speedMin      *= mod.speedMult;
+            l.speedMax      *= mod.speedMult;
+            l.lifetimeMin   *= mod.strengthMult;
+            l.lifetimeMax   *= mod.strengthMult;
+        }
+    }
+}

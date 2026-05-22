@@ -34,6 +34,9 @@ public:
     // Get the skill data
     virtual const SkillData& GetSkillData() const = 0;
 
+    // Broad category of this skill — used by SkillComponent for activation VFX scaling
+    virtual SkillCategory GetCategory() const { return SkillCategory::Projectile; }
+
     // Optional per-frame geometry render (override in behaviors that need a mesh)
     virtual void Render(ID3D12GraphicsCommandList* pCmdList) {}
 

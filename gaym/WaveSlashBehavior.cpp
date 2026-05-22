@@ -101,6 +101,17 @@ void WaveSlashBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& tar
     EffectDef def = EffectRegistry::Get().GetEffect("Q_WaveSlash", runeFlags);
     applyElement(def, primaryElem, stats.elementSet.size() > 1);
 
+    // 룬 vfxMod + 활성화 vfxMod 병합하여 파티클 + 파동 물리 스케일 적용
+    {
+        VFXModifier activationMod;
+        if (auto* pSC = caster ? caster->GetComponent<SkillComponent>() : nullptr)
+            activationMod = pSC->GetCurrentActivationVFXMod();
+        VFXModifier finalMod = MergeVFXModifiers(stats.vfxMod, activationMod);
+        ApplyVFXModifier(def, finalMod);
+        // 파동 폭(waveHalfW)은 이미 ApplyVFXModifier 내에서 isWave 레이어에 적용됨
+        m_damageMult = damageMultiplier > 0.f ? damageMultiplier : 1.f;
+    }
+
     // 3. VFX 스폰 (1차 원소)
     m_vfxId = m_pVFXManager->SpawnEffectDef(origin, direction, def, /*isPlayer*/true);
 
@@ -131,7 +142,7 @@ void WaveSlashBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& tar
     if (m_vfxId >= 0)
     {
         m_bWaveActive    = true;
-        m_damageMult     = damageMultiplier > 0.f ? damageMultiplier : 1.f;
+        // m_damageMult은 위 vfxMod 블록에서 이미 설정됨
         m_waveElapsed    = 0.f;
         m_trailDropTimer = 0.f;
         m_hitEnemies.clear();

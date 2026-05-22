@@ -214,6 +214,20 @@ void FireBeamBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
         ApplyElementColors(swirlDef, elemType);
         ApplyElementColors(burstDef, elemType);
 
+        // 룬 vfxMod + 활성화 vfxMod 병합하여 빔 두께/밀도 스케일 적용
+        {
+            VFXModifier activationMod;
+            if (auto* pSC = caster ? caster->GetComponent<SkillComponent>() : nullptr)
+                activationMod = pSC->GetCurrentActivationVFXMod();
+            VFXModifier finalMod = MergeVFXModifiers(stats.vfxMod, activationMod);
+            ApplyVFXModifier(coreDef,  finalMod);
+            ApplyVFXModifier(swirlDef, finalMod);
+            // burstDef는 진입 스파크 — 사이즈만 적용
+            VFXModifier burstMod;
+            burstMod.sizeScaleMult = finalMod.sizeScaleMult;
+            ApplyVFXModifier(burstDef, burstMod);
+        }
+
         m_vfxCoreId  = m_pVFXManager->SpawnEffectDef(origin, direction, coreDef,  true);
         m_vfxSwirlId = m_pVFXManager->SpawnEffectDef(origin, direction, swirlDef, true);
         m_vfxBurstId = m_pVFXManager->SpawnEffectDef(origin, direction, burstDef, true);
