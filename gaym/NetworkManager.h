@@ -19,6 +19,7 @@ struct ID3D12GraphicsCommandList;
 class GameObject;
 class Scene;
 class EnemyComponent;
+class FluidSkillVFXManager;
 
 // 네트워크 플레이어 정보 (큐에 저장용)
 struct NetworkPlayerInfo
@@ -132,6 +133,9 @@ public:
     // 프레임마다 호출 (큐에 쌓인 명령 처리)
     void Update(Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList);
 
+    // 캐릭터 선택 확정 시 호출 — playerIndex 는 ElementType(0=Fire,1=Water,2=Wind,3=Earth)
+    void SendEnterGame(int playerIndex);
+
     // 로컬 플레이어 이동 전송 (위치 + 방향)
     void SendMove(float x, float y, float z, float dirX, float dirY, float dirZ);
 
@@ -221,6 +225,8 @@ private:
 
     // 원격 플레이어 관리 (메인 스레드에서만 접근)
     std::unordered_map<uint64, GameObject*> m_mapRemotePlayers;
+    // 원격 플레이어의 캐릭터 원소 — ProcessSkill 에서 (element, slot) 매핑에 사용.
+    std::unordered_map<uint64, ElementType> m_mapRemotePlayerElement;
 
     // 네트워크 스레드에서 메인 스레드로 전달할 명령 큐
     std::mutex m_queueMutex;
@@ -512,13 +518,55 @@ private:
     // 원격 플레이어 VFX 상태 (채널링 스킬 방향 추적용)
     struct RemoteVFXState
     {
-        int vfxId = -1;
-        int skillType = 0;
-        float lastUpdateTime = 0.0f;
+        int   vfxId          = -1;
+        int   skillType      = 0;
+        float lastUpdateTime = 0.0f;     // 마지막 패킷 이후 경과 시간
+        float maxIdleTime    = 0.2f;     // 이 시간 동안 패킷 없으면 종료 (채널 종료 감지용)
+        float totalElapsed   = 0.0f;     // spawn 이후 누적 시간
+        float maxLifetime    = 0.0f;     // 0=무제한(idle 기반). >0 이면 강제 종료 시각 (스킬 로컬 DURATION 과 일치)
     };
     std::unordered_map<uint64, RemoteVFXState> m_mapRemotePlayerVFX;
 
-    // VFX 타임아웃 (초) - 이 시간 동안 스킬 패킷이 없으면 VFX 종료
+    // 단발 multi-layer 스킬용 — 고정 lifetime 후 자동 StopEffect. player 와 무관.
+    // (예: Water Q 의 fall + puddle 같이 한 스킬이 여러 vfxId 를 spawn 하고
+    //   EffectDef.duration=-1 이라 자동 종료가 없는 경우.)
+    struct TimedVFXKill
+    {
+        int   vfxId     = -1;
+        float remaining = 0.0f;
+    };
+    std::vector<TimedVFXKill> m_vTimedVFXKills;
+
+    // Fire R Meteor 샤워 시뮬레이션 — 원격 측 (MeteorBehavior::Update 와 같은 흐름의 경량 재현).
+    struct PendingSmallMeteor
+    {
+        DirectX::XMFLOAT3 scatterPos;       // 지면 착지점
+        DirectX::XMFLOAT3 spawnPos;         // scatterPos + (0, height, 0)
+        float delayUntilSpawn = 0.0f;       // shower 시작 후 trail spawn 까지의 대기
+        bool  spawned         = false;
+        int   trailVfxId      = -1;
+        float fallElapsed     = 0.0f;
+        float fallDuration    = 0.0f;
+        bool  impacted        = false;
+    };
+    struct PendingMeteorShower
+    {
+        DirectX::XMFLOAT3 targetPos;
+        std::vector<PendingSmallMeteor> smallMeteors;
+        float elapsed         = 0.0f;       // shower 시작 후 누적 시간
+        bool  finalSpawned    = false;
+        int   finalTrailId    = -1;
+        int   finalOuterId    = -1;
+        DirectX::XMFLOAT3 finalSpawnPos;
+        float finalFallElapsed   = 0.0f;
+        float finalFallDuration  = 0.0f;
+        bool  finalImpacted   = false;
+        float postImpactKeepalive = 0.0f;   // impact 후 잠시 더 살려두기 (impact VFX 자체 lifetime 위해)
+    };
+    std::vector<PendingMeteorShower> m_vPendingMeteorShowers;
+    void TickPendingMeteorShowers(FluidSkillVFXManager* pVFXManager, float deltaTime);
+
+    // VFX 기본 타임아웃 (초) - 이 시간 동안 스킬 패킷이 없으면 VFX 종료 (true channel 용)
     static constexpr float VFX_TIMEOUT = 0.2f;
 
 public:

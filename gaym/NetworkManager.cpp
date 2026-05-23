@@ -29,7 +29,10 @@
 #include "ShockwaveRingAttackBehavior.h"
 #include "Dx12App.h"
 #include "MapLoader.h"
+#include "CharacterData.h"
 #include <cmath>
+#include <random>
+#include <cstring>
 
 // ServerPacketHandler.cpp에 정의된 파일 로그 함수 — network_log.txt에 append
 extern void WriteNetworkLog(const std::string& msg);
@@ -363,6 +366,22 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             WriteNetworkLog("[Network] Delayed C_TORCH_INTERACT sent");
         }
     }
+}
+
+void NetworkManager::SendEnterGame(int playerIndex)
+{
+    // m_bConnected 만 체크. (IsConnected() 는 LocalPlayerId 도 보지만 아직 발급 전이라 안 됨)
+    if (!m_bConnected || !m_pSession)
+        return;
+
+    Protocol::C_ENTER_GAME pkt;
+    pkt.set_playerindex(static_cast<uint64>(playerIndex));
+    auto sendBuffer = ServerPacketHandler::MakeSendBuffer(pkt);
+    m_pSession->Send(sendBuffer);
+
+    char buf[128];
+    sprintf_s(buf, "[Network] C_ENTER_GAME sent (playerIndex=%d)", playerIndex);
+    OutputDebugStringA(buf);
 }
 
 void NetworkManager::SendMove(float x, float y, float z, float dirX, float dirY, float dirZ)
@@ -861,8 +880,15 @@ void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
     CRoom* pTempRoom = pScene->GetCurrentRoom();
     pScene->SetCurrentRoom(nullptr);
 
-    // 새 원격 플레이어 모델 로드
-    GameObject* pRemotePlayer = MeshLoader::LoadGeometryFromFile(pScene, pDevice, pCommandList, NULL, "Assets/Player/MageBlue.bin");
+    // 서버가 전달한 playerType(wire 1~4) → ElementType(Fire=1..Earth=4) 매핑.
+    // 범위 밖이면 Water 로 fallback.
+    ElementType remoteElement = ElementType::Water;
+    if (playerType >= 1 && playerType <= 4)
+        remoteElement = static_cast<ElementType>(playerType);
+    const CharacterData& cdata = GetCharacterData(remoteElement);
+
+    // 새 원격 플레이어 모델 로드 — 선택한 원소의 mesh 파일.
+    GameObject* pRemotePlayer = MeshLoader::LoadGeometryFromFile(pScene, pDevice, pCommandList, NULL, cdata.meshPath);
     if (!pRemotePlayer)
     {
         OutputDebugString(L"[Network] Failed to load remote player model, falling back to cube\n");
@@ -885,14 +911,14 @@ void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
     if (pTransform)
     {
         pTransform->SetPosition(x, y, z);
-        pTransform->SetScale(5.0f, 5.0f, 5.0f); 
+        pTransform->SetScale(5.0f, 5.0f, 5.0f);
     }
 
-    // 애니메이션 추가
+    // 애니메이션 추가 — 원소별 anim 파일.
     auto* pAnim = pRemotePlayer->AddComponent<AnimationComponent>();
     if (pAnim)
     {
-        pAnim->LoadAnimation("Assets/Player/MageBlue_Anim.bin");
+        pAnim->LoadAnimation(cdata.animPath);
         pAnim->Play("Idle", true);
     }
 
@@ -908,6 +934,7 @@ void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
 
     // 맵에 등록
     m_mapRemotePlayers[playerId] = pRemotePlayer;
+    m_mapRemotePlayerElement[playerId] = remoteElement;
 
     // 원격 플레이어가 방금 점유한 descriptor slot 들을 "영구" 범위로 편입.
     // 이 후 방 전환 시 m_nNextDescriptorIndex 가 m_nPersistentDescriptorEnd 로 리셋되지만,
@@ -942,6 +969,7 @@ void NetworkManager::ProcessDespawnPlayer(Scene* pScene, uint64 playerId)
 
     // 맵에서 제거
     m_mapRemotePlayers.erase(it);
+    m_mapRemotePlayerElement.erase(playerId);
     m_mapRemotePlayerMoveTime.erase(playerId);
     m_setDeadRemotePlayers.erase(playerId);
     m_mapRemotePlayerHitFlashTimer.erase(playerId);
@@ -1052,19 +1080,162 @@ void NetworkManager::CheckRemotePlayerIdle(float deltaTime)
     }
 }
 
+void NetworkManager::TickPendingMeteorShowers(FluidSkillVFXManager* pVFXManager, float deltaTime)
+{
+    if (!pVFXManager) return;
+
+    // MeteorBehavior 상수와 동일 (시각 일치).
+    constexpr int   SHOWER_COUNT       = 6;
+    constexpr float SHOWER_INTERVAL    = 0.5f;
+    constexpr float SMALL_SPAWN_HEIGHT = 40.0f;
+    constexpr float SMALL_FALL_SPEED   = 28.0f;
+    constexpr float FINAL_SPAWN_HEIGHT = 60.0f;
+    constexpr float FINAL_FALL_SPEED   = 22.0f;
+    constexpr float FINAL_DELAY        = 0.5f;
+    const XMFLOAT3 upDir = XMFLOAT3(0.0f, 1.0f, 0.0f);
+
+    for (auto it = m_vPendingMeteorShowers.begin(); it != m_vPendingMeteorShowers.end(); )
+    {
+        PendingMeteorShower& sh = *it;
+        sh.elapsed += deltaTime;
+
+        // 소형 메테오 처리
+        for (auto& sm : sh.smallMeteors)
+        {
+            if (sm.impacted) continue;
+
+            // spawn 시점 도달 시 trail spawn
+            if (!sm.spawned && sh.elapsed >= sm.delayUntilSpawn)
+            {
+                EffectDef trailDef = EffectRegistry::Get().GetEffect("R_MeteorSmallTrail", RUNE_NONE);
+                if (!trailDef.layers.empty())
+                {
+                    sm.trailVfxId = pVFXManager->SpawnEffectLayer(
+                        sm.spawnPos, upDir, trailDef.name, trailDef.layers[0], true);
+                }
+                sm.spawned      = true;
+                sm.fallElapsed  = 0.0f;
+                sm.fallDuration = SMALL_SPAWN_HEIGHT / SMALL_FALL_SPEED;
+            }
+
+            // trail 낙하 추적
+            if (sm.spawned)
+            {
+                sm.fallElapsed += deltaTime;
+                if (sm.trailVfxId >= 0)
+                {
+                    float curY = sm.spawnPos.y - SMALL_FALL_SPEED * sm.fallElapsed;
+                    XMFLOAT3 curPos = XMFLOAT3(sm.scatterPos.x, curY, sm.scatterPos.z);
+                    pVFXManager->TrackEffect(sm.trailVfxId, curPos, upDir);
+                }
+                if (sm.fallElapsed >= sm.fallDuration)
+                {
+                    if (sm.trailVfxId >= 0)
+                    {
+                        pVFXManager->StopEffect(sm.trailVfxId);
+                        sm.trailVfxId = -1;
+                    }
+                    EffectDef impDef = EffectRegistry::Get().GetEffect("R_MeteorSmallImpact", RUNE_NONE);
+                    pVFXManager->SpawnEffectDef(sm.scatterPos, upDir, impDef, true);
+                    sm.impacted = true;
+                }
+            }
+        }
+
+        // 최종 대형 메테오 — 마지막 소형 스폰 시각(=(N-1)*0.5) + FINAL_DELAY 경과 시
+        if (!sh.finalSpawned)
+        {
+            float lastSmallTime = (SHOWER_COUNT - 1) * SHOWER_INTERVAL;
+            if (sh.elapsed >= lastSmallTime + FINAL_DELAY)
+            {
+                sh.finalSpawnPos = XMFLOAT3(sh.targetPos.x, sh.targetPos.y + FINAL_SPAWN_HEIGHT, sh.targetPos.z);
+                EffectDef trailDef = EffectRegistry::Get().GetEffect("R_MeteorTrail", RUNE_NONE);
+                if (!trailDef.layers.empty())
+                    sh.finalTrailId = pVFXManager->SpawnEffectLayer(
+                        sh.finalSpawnPos, upDir, trailDef.name, trailDef.layers[0], true);
+                EffectDef outerDef = EffectRegistry::Get().GetEffect("R_MeteorTrailOuter", RUNE_NONE);
+                if (!outerDef.layers.empty())
+                    sh.finalOuterId = pVFXManager->SpawnEffectLayer(
+                        sh.finalSpawnPos, upDir, outerDef.name, outerDef.layers[0], true);
+                sh.finalFallElapsed  = 0.0f;
+                sh.finalFallDuration = FINAL_SPAWN_HEIGHT / FINAL_FALL_SPEED;
+                sh.finalSpawned      = true;
+            }
+        }
+
+        // 최종 메테오 낙하 추적 + 착지
+        if (sh.finalSpawned && !sh.finalImpacted)
+        {
+            sh.finalFallElapsed += deltaTime;
+            float curY = sh.finalSpawnPos.y - FINAL_FALL_SPEED * sh.finalFallElapsed;
+            XMFLOAT3 curPos = XMFLOAT3(sh.targetPos.x, curY, sh.targetPos.z);
+            if (sh.finalTrailId >= 0) pVFXManager->TrackEffect(sh.finalTrailId, curPos, upDir);
+            if (sh.finalOuterId >= 0) pVFXManager->TrackEffect(sh.finalOuterId, curPos, upDir);
+
+            if (sh.finalFallElapsed >= sh.finalFallDuration)
+            {
+                if (sh.finalTrailId >= 0) { pVFXManager->StopEffect(sh.finalTrailId); sh.finalTrailId = -1; }
+                if (sh.finalOuterId >= 0) { pVFXManager->StopEffect(sh.finalOuterId); sh.finalOuterId = -1; }
+                EffectDef impDef  = EffectRegistry::Get().GetEffect("R_MeteorImpact",     RUNE_NONE);
+                EffectDef fireDef = EffectRegistry::Get().GetEffect("R_MeteorGroundFire", RUNE_NONE);
+                pVFXManager->SpawnEffectDef(sh.targetPos, upDir, impDef,  true);
+                pVFXManager->SpawnEffectDef(sh.targetPos, upDir, fireDef, true);
+                sh.finalImpacted = true;
+                sh.postImpactKeepalive = 1.0f;  // impact VFX 자체 lifetime 잠시 더 보호
+            }
+        }
+
+        // shower 종료 판정
+        bool allSmallDone = true;
+        for (auto& sm : sh.smallMeteors)
+            if (!sm.impacted) { allSmallDone = false; break; }
+
+        if (allSmallDone && sh.finalImpacted)
+        {
+            sh.postImpactKeepalive -= deltaTime;
+            if (sh.postImpactKeepalive <= 0.0f)
+            {
+                it = m_vPendingMeteorShowers.erase(it);
+                continue;
+            }
+        }
+        ++it;
+    }
+}
+
 void NetworkManager::CheckRemotePlayerVFXTimeout(Scene* pScene, float deltaTime)
 {
     FluidSkillVFXManager* pVFXManager = pScene ? pScene->GetFluidVFXManager() : nullptr;
     if (!pVFXManager)
         return;
 
+    // 고정 lifetime 큐 처리 (Water Q 등) — 채널 추적과 무관, remaining 카운트다운만.
+    for (auto it = m_vTimedVFXKills.begin(); it != m_vTimedVFXKills.end(); )
+    {
+        it->remaining -= deltaTime;
+        if (it->remaining <= 0.0f)
+        {
+            if (it->vfxId >= 0) pVFXManager->StopEffect(it->vfxId);
+            it = m_vTimedVFXKills.erase(it);
+        }
+        else ++it;
+    }
+
+    // Meteor 샤워 시뮬레이션 (Fire R)
+    TickPendingMeteorShowers(pVFXManager, deltaTime);
+
     for (auto it = m_mapRemotePlayerVFX.begin(); it != m_mapRemotePlayerVFX.end(); )
     {
         RemoteVFXState& state = it->second;
         state.lastUpdateTime += deltaTime;
+        state.totalElapsed   += deltaTime;
 
-        // 타임아웃 시 VFX 종료
-        if (state.lastUpdateTime >= VFX_TIMEOUT)
+        // 종료 조건 1: maxLifetime > 0 이면 누적 시간이 그 값을 넘으면 종료 (Water Vortex 4s 등)
+        // 종료 조건 2: maxLifetime == 0 인 채널 VFX 는 패킷이 maxIdleTime 동안 안 오면 종료 (FireBeam 등)
+        bool hardExpire = (state.maxLifetime > 0.0f && state.totalElapsed >= state.maxLifetime);
+        bool idleExpire = (state.maxLifetime <= 0.0f && state.lastUpdateTime >= state.maxIdleTime);
+
+        if (hardExpire || idleExpire)
         {
             if (state.vfxId >= 0)
             {
@@ -1115,150 +1286,317 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
         pAnim->CrossFade("Attack1", 0.1f, false, true);
     }
 
-    // 스킬 원점 (캐릭터 위치 + 높이 오프셋)
-    XMFLOAT3 skillOrigin = XMFLOAT3(x, y + 1.5f, z);
-    XMFLOAT3 skillDirection = XMFLOAT3(dirX, dirY, dirZ);
+    // caster 위치(서버가 전달) — y 는 발 위치. 오프라인의 "캐릭터 머리 높이" 는 +5.0f.
+    const XMFLOAT3 casterPos    = XMFLOAT3(x, y, z);
+    const XMFLOAT3 casterHead   = XMFLOAT3(x, y + 5.0f, z);
 
-    // 방향 벡터 정규화
-    float dirLen = sqrtf(dirX * dirX + dirY * dirY + dirZ * dirZ);
-    if (dirLen > 0.001f)
+    // wire dir 슬롯: Q/E/RC 는 lookDir(정규화), R 은 절대 target 좌표 (SkillComponent.cpp).
+    // 일단 lookDir 해석부터 (R 처리에서는 별도로 target 사용).
+    XMFLOAT3 lookDir = XMFLOAT3(dirX, dirY, dirZ);
     {
-        skillDirection.x /= dirLen;
-        skillDirection.y /= dirLen;
-        skillDirection.z /= dirLen;
+        float L = sqrtf(lookDir.x*lookDir.x + lookDir.y*lookDir.y + lookDir.z*lookDir.z);
+        if (L > 0.001f) { lookDir.x/=L; lookDir.y/=L; lookDir.z/=L; }
+        else            { lookDir = XMFLOAT3(0.0f, 0.0f, 1.0f); }
     }
-    else
+    XMFLOAT3 horizontalDir = XMFLOAT3(lookDir.x, 0.0f, lookDir.z);
     {
-        skillDirection = XMFLOAT3(0.0f, 0.0f, 1.0f);  // 기본 방향
+        float L = sqrtf(horizontalDir.x*horizontalDir.x + horizontalDir.z*horizontalDir.z);
+        if (L > 0.001f) { horizontalDir.x/=L; horizontalDir.z/=L; }
+        else            { horizontalDir = XMFLOAT3(0.0f, 0.0f, 1.0f); }
     }
-
-    // 스킬 타입에 따라 분기 처리
-    // 1=Q (WaveSlash - VFX), 2=E (FireBeam - 채널링 VFX), 3=R (Meteor - 낙하 VFX), 4=RightClick (Fireball - 투사체)
 
     FluidSkillVFXManager* pVFXManager = pScene ? pScene->GetFluidVFXManager() : nullptr;
-    ProjectileManager* pProjManager = pScene ? pScene->GetProjectileManager() : nullptr;
+    ProjectileManager*    pProjManager = pScene ? pScene->GetProjectileManager() : nullptr;
+
+    // 원격 플레이어 element
+    ElementType remoteElement = ElementType::Water;
+    {
+        auto eIt = m_mapRemotePlayerElement.find(playerId);
+        if (eIt != m_mapRemotePlayerElement.end())
+            remoteElement = eIt->second;
+    }
+
+    auto spawnOneShot = [&](const char* effectName, const XMFLOAT3& origin, const XMFLOAT3& dir) -> int
+    {
+        if (!pVFXManager) return -1;
+        EffectDef def = EffectRegistry::Get().GetEffect(effectName, RUNE_NONE);
+        return pVFXManager->SpawnEffectDef(origin, dir, def, true);
+    };
+
+    // Q/E 의 target 기반 스킬 (StoneSpike Q 등) 은 wire 에 lookDir 만 와서
+    // lookDir 방향 ~8m 앞을 proxy target 으로 사용 (Earth Q 만 해당).
+    // Water Q/E (WaterPuddle/Vortex) 는 송신 측이 target 을 dir 슬롯에 실어 보냄.
+    auto proxyTargetAhead = [&](float dist) -> XMFLOAT3
+    {
+        return XMFLOAT3(casterPos.x + horizontalDir.x * dist, casterPos.y, casterPos.z + horizontalDir.z * dist);
+    };
+
+    // Water Q/E 와 R 류는 dir 슬롯이 정규화 방향이 아니라 absolute target 좌표.
+    bool dirSlotIsTarget =
+        (skillType == 3) ||
+        (remoteElement == ElementType::Water && (skillType == 1 || skillType == 2));
+    XMFLOAT3 wireTarget = XMFLOAT3(dirX, dirY, dirZ);  // dirSlotIsTarget == true 일 때만 유효
 
     switch (skillType)
     {
-    case 1:  // Q 스킬 (WaveSlash) - VFX 단발
-        if (pVFXManager)
+    case 1:  // Q
+    {
+        switch (remoteElement)
         {
-            // 수평 방향 VFX
-            XMFLOAT3 horizontalDir = skillDirection;
-            horizontalDir.y = 0.0f;
-            float hLen = sqrtf(horizontalDir.x * horizontalDir.x + horizontalDir.z * horizontalDir.z);
-            if (hLen > 0.001f)
+        case ElementType::Fire:  // WaveSlash: caster+5, target-caster dir (≈ horizontalDir)
+            spawnOneShot("Q_WaveSlash", casterHead, horizontalDir);
+            break;
+        case ElementType::Water: // WaterPuddle: target 기준 낙하 + 웅덩이 (송신 측이 dir 슬롯에 target 실어 보냄)
+        {
+            XMFLOAT3 tgt = wireTarget;
+            XMFLOAT3 fallPos   = XMFLOAT3(tgt.x, tgt.y + 5.5f, tgt.z);
+            XMFLOAT3 puddlePos = XMFLOAT3(tgt.x, tgt.y + 2.5f, tgt.z);
+            // 두 effect 모두 EffectDef.duration = -1 (offline 에선 behavior 가 수동 종료). 원격은 동일 시각에 자동 종료 필요.
+            // FALL_DURATION=1.5s, DURATION=6.0s (WaterPuddleBehavior.h).
+            int fallId = spawnOneShot("Q_WaterFall",   fallPos,   XMFLOAT3(0.0f, -1.0f, 0.0f));
+            int puddId = spawnOneShot("Q_WaterPuddle", puddlePos, XMFLOAT3(0.0f, -1.0f, 0.0f));
+            if (fallId >= 0) m_vTimedVFXKills.push_back({ fallId, 1.5f });
+            if (puddId >= 0) m_vTimedVFXKills.push_back({ puddId, 6.0f });
+            break;
+        }
+        case ElementType::Wind:  // WindCutter: caster+5, horizontalDir
+            spawnOneShot("Q_WindCutter", casterHead, horizontalDir);
+            break;
+        case ElementType::Earth: // StoneSpike: caster→앞쪽으로 SPIKE_COUNT 개 일정 간격 (오프라인은 시간차)
+        {
+            const int   SPIKE_COUNT   = 4;
+            const float SPIKE_SPACING = 2.5f;
+            for (int i = 0; i < SPIKE_COUNT; ++i)
             {
-                horizontalDir.x /= hLen;
-                horizontalDir.z /= hLen;
+                float dist = SPIKE_SPACING * (i + 1);
+                XMFLOAT3 spikePos = XMFLOAT3(
+                    casterPos.x + horizontalDir.x * dist, casterPos.y,
+                    casterPos.z + horizontalDir.z * dist);
+                spawnOneShot("Q_StoneSpike", spikePos, XMFLOAT3(0.0f, 1.0f, 0.0f));
             }
-
-            EffectDef def = EffectRegistry::Get().GetEffect("Q_WaveSlash", RUNE_NONE);
-            int vfxId = pVFXManager->SpawnEffectDef(skillOrigin, horizontalDir, def, true);
-
-            wchar_t vfxBuf[128];
-            swprintf_s(vfxBuf, L"[Network] Spawned Q (WaveSlash) VFX: vfxId=%d\n", vfxId);
-            OutputDebugString(vfxBuf);
+            break;
+        }
+        default: break;
         }
         break;
+    }
 
-    case 2:  // E 스킬 (FireBeam) - 채널링 VFX (TrackEffect 필요)
-        if (pVFXManager)
+    case 2:  // E
+    {
+        // 채널링형 (Fire/Water) — TrackEffect 로 매 패킷마다 위치/방향 갱신
+        bool isChannel = (remoteElement == ElementType::Fire || remoteElement == ElementType::Water);
+
+        if (isChannel)
         {
-            // 기존 VFX 상태 확인
+            // Fire FireBeam: caster head + forward * 1.3
+            // Water Vortex: target + y3.0 (proxy target)
+            XMFLOAT3 chanOrigin;
+            XMFLOAT3 chanDir;
+            const char* effectName;
+            if (remoteElement == ElementType::Fire)
+            {
+                chanOrigin = XMFLOAT3(casterHead.x + lookDir.x * 1.3f,
+                                      casterHead.y + lookDir.y * 1.3f,
+                                      casterHead.z + lookDir.z * 1.3f);
+                chanDir    = lookDir;
+                effectName = "E_FireBeam_Core";
+            }
+            else // Water
+            {
+                // 송신 측이 dir 슬롯에 target 실어 보냄.
+                XMFLOAT3 tgt = wireTarget;
+                chanOrigin = XMFLOAT3(tgt.x, tgt.y + 3.0f, tgt.z);
+                chanDir    = XMFLOAT3(0.0f, 1.0f, 0.0f);
+                effectName = "E_WaterVortex";
+            }
+
             auto vfxIt = m_mapRemotePlayerVFX.find(playerId);
             bool hasExistingVFX = (vfxIt != m_mapRemotePlayerVFX.end() && vfxIt->second.vfxId >= 0);
 
             if (hasExistingVFX && vfxIt->second.skillType == skillType)
             {
-                // 같은 스킬 계속 사용 중 → TrackEffect로 방향 업데이트
-                pVFXManager->TrackEffect(vfxIt->second.vfxId, skillOrigin, skillDirection);
+                pVFXManager->TrackEffect(vfxIt->second.vfxId, chanOrigin, chanDir);
                 vfxIt->second.lastUpdateTime = 0.0f;
             }
             else
             {
-                // 새 스킬 → 기존 VFX 종료 후 새로 생성
                 if (hasExistingVFX)
-                {
                     pVFXManager->StopEffect(vfxIt->second.vfxId);
-                }
 
-                EffectDef def = EffectRegistry::Get().GetEffect("E_FireBeam_Core", RUNE_NONE);
-                int vfxId = pVFXManager->SpawnEffectDef(skillOrigin, skillDirection, def, true);
+                int vfxId = spawnOneShot(effectName, chanOrigin, chanDir);
+                // Fire 는 추가 layer Swirl/Burst 도 같이 spawn
+                if (remoteElement == ElementType::Fire)
+                {
+                    spawnOneShot("E_FireBeam_Swirl", chanOrigin, chanDir);
+                    spawnOneShot("E_FireBeam_Burst", chanOrigin, chanDir);
+                }
 
                 RemoteVFXState state;
                 state.vfxId = vfxId;
                 state.skillType = skillType;
                 state.lastUpdateTime = 0.0f;
+                if (remoteElement == ElementType::Water)
+                {
+                    // WaterVortex 는 일반적으로 Instant 활성화 — 패킷이 한 번만 옴. 로컬 DURATION 4s 와 맞춤.
+                    state.maxLifetime = 4.0f;
+                    state.maxIdleTime = 10.0f;  // 패킷 끊겨도 4초까지는 살아있도록 idle 한계를 길게.
+                }
                 m_mapRemotePlayerVFX[playerId] = state;
-
-                wchar_t vfxBuf[128];
-                swprintf_s(vfxBuf, L"[Network] Spawned E (FireBeam) VFX: vfxId=%d\n", vfxId);
-                OutputDebugString(vfxBuf);
             }
         }
-        break;
-
-    case 3:  // R 스킬 (Meteor) - 상공에서 낙하 VFX
-        if (pVFXManager)
+        else if (remoteElement == ElementType::Wind)
         {
-            // R 스킬은 송신 측이 dirX/Y/Z 슬롯에 **절대 타겟 좌표**를 실어 보냄
-            // (SkillComponent 송신 로직 참조). 정규화된 방향 벡터가 아님에 주의.
-            XMFLOAT3 targetPos = XMFLOAT3(dirX, dirY, dirZ);
-
-            // 송신 측과 동일하게 MeteorBehavior::METEOR_SPAWN_HEIGHT = 50 사용
-            const float meteorSpawnHeight = 50.0f;
-            XMFLOAT3 spawnPos = XMFLOAT3(targetPos.x, targetPos.y + meteorSpawnHeight, targetPos.z);
-
-            // 낙하 방향 = 아래
-            XMFLOAT3 downDir = XMFLOAT3(0.0f, -1.0f, 0.0f);
-
-            EffectDef def = EffectRegistry::Get().GetEffect("R_Meteor", RUNE_NONE);
-            int vfxId = pVFXManager->SpawnEffectDef(spawnPos, downDir, def, true);
-
-            wchar_t vfxBuf[128];
-            swprintf_s(vfxBuf, L"[Network] Spawned R (Meteor) VFX: vfxId=%d, target=(%.1f,%.1f,%.1f) spawn=(%.1f,%.1f,%.1f)\n",
-                vfxId, targetPos.x, targetPos.y, targetPos.z, spawnPos.x, spawnPos.y, spawnPos.z);
-            OutputDebugString(vfxBuf);
+            // GaleRush: 출발 burst(caster + y2.0), ring(caster 지면, y=0), trail(caster + y2.0, -forward)
+            XMFLOAT3 burstPos = XMFLOAT3(casterPos.x, casterPos.y + 2.0f, casterPos.z);
+            XMFLOAT3 ringPos  = XMFLOAT3(casterPos.x, casterPos.y,        casterPos.z);
+            XMFLOAT3 backDir  = XMFLOAT3(-horizontalDir.x, 0.0f, -horizontalDir.z);
+            spawnOneShot("E_GaleRush_Burst", burstPos, horizontalDir);
+            spawnOneShot("E_GaleRush_Ring",  ringPos,  horizontalDir);
+            spawnOneShot("E_GaleRush_Trail", burstPos, backDir);
+        }
+        else // Earth EarthArmor
+        {
+            // caster 위치(지면), up
+            spawnOneShot("E_EarthArmor_Burst", casterPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
+            spawnOneShot("E_EarthArmor_Aura",  casterPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
         }
         break;
+    }
 
-    case 4:  // 우클릭 (Fireball) - 실제 투사체
-        if (pProjManager)
+    case 3:  // R — wire dir 슬롯 = 절대 target 좌표 (정규화 아님)
+    {
+        XMFLOAT3 targetPos = XMFLOAT3(dirX, dirY, dirZ);
+
+        // caster → target 평면 방향
+        XMFLOAT3 toTarget = XMFLOAT3(targetPos.x - casterPos.x, 0.0f, targetPos.z - casterPos.z);
         {
-            // Fireball 파라미터 (FireballBehavior 기준)
-            float speed = 30.0f;
-            float radius = 0.5f;
-            float explosionRadius = 3.0f;
-            float scale = 1.0f;
+            float L = sqrtf(toTarget.x*toTarget.x + toTarget.z*toTarget.z);
+            if (L > 0.001f) { toTarget.x/=L; toTarget.z/=L; }
+            else            { toTarget = XMFLOAT3(0.0f, 0.0f, 1.0f); }
+        }
 
-            // 타겟 위치 (수평 방향으로 50m)
-            XMFLOAT3 targetPos = XMFLOAT3(
-                skillOrigin.x + skillDirection.x * 50.0f,
-                skillOrigin.y,  // 수평 유지
-                skillOrigin.z + skillDirection.z * 50.0f
-            );
+        switch (remoteElement)
+        {
+        case ElementType::Fire:
+        {
+            // Meteor 샤워 — 즉시 spawn 이 아니라 시간차 시뮬레이션 큐에 등록.
+            // (MeteorBehavior::Update 와 동일 흐름: 6개 소형 0.5s 간격 → 마지막 후 0.5s → 최종 대형)
+            constexpr int   SHOWER_COUNT       = 6;
+            constexpr float SHOWER_INTERVAL    = 0.5f;
+            constexpr float SMALL_SPAWN_HEIGHT = 40.0f;
+            constexpr float SMALL_SCATTER_RADIUS = 12.0f;
 
-            pProjManager->SpawnProjectile(
-                skillOrigin,
-                targetPos,
-                0.0f,               // damage=0 (원격은 데미지 없음)
-                speed,
-                radius,
-                explosionRadius,
-                ElementType::Fire,
-                pRemotePlayer,
-                true,
-                scale,
-                RuneCombo{},
-                0.0f
-            );
+            PendingMeteorShower sh;
+            sh.targetPos = targetPos;
+            sh.smallMeteors.reserve(SHOWER_COUNT);
 
-            wchar_t projBuf[128];
-            swprintf_s(projBuf, L"[Network] Spawned RightClick (Fireball) projectile\n");
-            OutputDebugString(projBuf);
+            // 결정적 난수 — playerId 와 packet 의 target 좌표를 시드로 (같은 packet 에 대해 동일 패턴, 캐릭터 별 다름).
+            uint32_t tx, tz;
+            std::memcpy(&tx, &targetPos.x, sizeof(uint32_t));
+            std::memcpy(&tz, &targetPos.z, sizeof(uint32_t));
+            uint32_t seed = static_cast<uint32_t>(playerId) ^ tx ^ tz;
+            std::mt19937 rng(seed);
+            std::uniform_real_distribution<float> angleDist(0.0f, 6.2831853f);
+            std::uniform_real_distribution<float> radiusDist(0.0f, SMALL_SCATTER_RADIUS);
+
+            for (int i = 0; i < SHOWER_COUNT; ++i)
+            {
+                PendingSmallMeteor sm;
+                float angle  = angleDist(rng);
+                float radius = radiusDist(rng);
+                sm.scatterPos = XMFLOAT3(
+                    targetPos.x + radius * cosf(angle),
+                    targetPos.y,
+                    targetPos.z + radius * sinf(angle));
+                sm.spawnPos = XMFLOAT3(sm.scatterPos.x, sm.scatterPos.y + SMALL_SPAWN_HEIGHT, sm.scatterPos.z);
+                sm.delayUntilSpawn = i * SHOWER_INTERVAL;
+                sh.smallMeteors.push_back(sm);
+            }
+            m_vPendingMeteorShowers.push_back(std::move(sh));
+            break;
+        }
+        case ElementType::Water:
+        {
+            // TidalWave: caster head 에서 target 방향으로 파동 진행
+            spawnOneShot("R_TidalWave",      casterHead, toTarget);
+            spawnOneShot("R_TidalWave_Foam", casterHead, toTarget);
+            break;
+        }
+        case ElementType::Wind:
+        {
+            // Tornado 는 Instant 활성화 (TornadoBehavior::DURATION=6.0). 송신 측이 후속 패킷 안 보냄.
+            // 첫 패킷에 spawn 하고 6초 lifetime 부여. 이후 같은 player 가 R 보내면 TrackEffect 로 위치 갱신.
+            XMFLOAT3 tornadoPos = XMFLOAT3(targetPos.x, 0.0f, targetPos.z);
+            XMFLOAT3 upDir      = XMFLOAT3(0.0f, 1.0f, 0.0f);
+
+            auto vfxIt = m_mapRemotePlayerVFX.find(playerId);
+            bool hasExistingVFX = (vfxIt != m_mapRemotePlayerVFX.end() && vfxIt->second.vfxId >= 0);
+
+            if (hasExistingVFX && vfxIt->second.skillType == skillType)
+            {
+                pVFXManager->TrackEffect(vfxIt->second.vfxId, tornadoPos, upDir);
+                vfxIt->second.lastUpdateTime = 0.0f;
+            }
+            else
+            {
+                if (hasExistingVFX)
+                    pVFXManager->StopEffect(vfxIt->second.vfxId);
+
+                int vfxId = spawnOneShot("R_TornadoPlayer", tornadoPos, upDir);
+                RemoteVFXState state;
+                state.vfxId = vfxId;
+                state.skillType = skillType;
+                state.lastUpdateTime = 0.0f;
+                state.maxLifetime = 6.0f;      // TornadoBehavior::DURATION
+                state.maxIdleTime = 10.0f;     // 패킷 끊겨도 lifetime 까지는 살아있게.
+                m_mapRemotePlayerVFX[playerId] = state;
+            }
+            break;
+        }
+        case ElementType::Earth:
+        {
+            // Earthquake: **caster 위치(epicenter)** — target 좌표 사용하지 않음.
+            spawnOneShot("R_Earthquake_Burst", casterPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
+            spawnOneShot("R_Earthquake_Ring",  casterPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
+            break;
+        }
+        default: break;
         }
         break;
+    }
+
+    case 4:  // RC — 투사체, origin = caster head + lookDir 방향 50m
+    {
+        if (!pProjManager) break;
+
+        float speed = 30.0f, radius = 0.5f, explosionRadius = 3.0f, scale = 1.0f;
+        bool piercing = true;  // 클라 hit 판정 무력화
+
+        switch (remoteElement)
+        {
+        case ElementType::Fire:  speed = 30.0f; radius = 0.50f; explosionRadius = 3.0f; scale = 1.00f; break;
+        case ElementType::Water: speed = 25.0f; radius = 0.60f; explosionRadius = 3.0f; scale = 0.80f; break;
+        case ElementType::Wind:  speed = 28.0f; radius = 0.35f; explosionRadius = 3.0f; scale = 0.70f; break;
+        case ElementType::Earth: speed = 32.0f; radius = 0.70f; explosionRadius = 3.0f; scale = 0.90f; break;
+        default: break;
+        }
+
+        XMFLOAT3 projOrigin = casterHead;
+        XMFLOAT3 projTarget = XMFLOAT3(
+            projOrigin.x + horizontalDir.x * 50.0f,
+            projOrigin.y,
+            projOrigin.z + horizontalDir.z * 50.0f);
+
+        pProjManager->SpawnProjectile(
+            projOrigin, projTarget,
+            0.0f,                  // damage=0 — 서버 권위
+            speed, radius, explosionRadius,
+            remoteElement, pRemotePlayer,
+            piercing, scale,
+            RuneCombo{}, 0.0f
+        );
+        break;
+    }
 
     default:
         OutputDebugString(L"[Network] Unknown skill type\n");

@@ -43,14 +43,10 @@ bool Handle_S_LOGIN(PacketSessionRef& session, Protocol::S_LOGIN& pkt)
         WriteNetworkLog("[Network] No characters, need to create one");
     }
 
-    // 자동으로 게임 입장 요청
-    Protocol::C_ENTER_GAME enterGamePkt;
-    enterGamePkt.set_playerindex(0);  // 첫번째 캐릭터로 입장
-    auto sendBuffer = ServerPacketHandler::MakeSendBuffer(enterGamePkt);
-    session->Send(sendBuffer);
-
-    OutputDebugStringA("[Network] C_ENTER_GAME sent\n");
-    WriteNetworkLog("[Network] C_ENTER_GAME sent");
+    // C_ENTER_GAME 은 캐릭터 선택 화면에서 사용자가 원소를 확정한 시점에
+    // NetworkManager::SendEnterGame() 으로 보낸다 (playerindex = ElementType 0~3).
+    OutputDebugStringA("[Network] S_LOGIN received, awaiting character pick\n");
+    WriteNetworkLog("[Network] S_LOGIN received, awaiting character pick");
 
     return true;
 }

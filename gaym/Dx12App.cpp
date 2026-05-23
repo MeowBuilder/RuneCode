@@ -1872,6 +1872,18 @@ void Dx12App::InitSceneWithElement(ElementType e)
     m_pd3dCommandQueue->ExecuteCommandLists(_countof(ppd3dCommandLists), ppd3dCommandLists);
     WaitForGpuComplete();
 
+    // 서버에 선택한 원소를 알린다. playerIndex 0~3 = Fire/Water/Wind/Earth 슬롯.
+    // ElementType 은 None=0,Fire=1,...Earth=4 이므로 -1 보정.
+    // (S_LOGIN 단계에서 자동 ENTER_GAME 을 보내지 않도록 바꿨으므로 여기서 송신해야 LocalPlayerId 가 발급됨.)
+    // SendEnterGame 내부에서 연결 상태 체크하므로 IsConnected()로 게이트하지 않는다
+    // (IsConnected()는 LocalPlayerId 발급 후에만 true 라서 첫 호출엔 false).
+    if (m_pNetworkManager)
+    {
+        int slot = static_cast<int>(e) - 1; // Fire→0, Water→1, Wind→2, Earth→3
+        if (slot < 0) slot = 0;
+        m_pNetworkManager->SendEnterGame(slot);
+    }
+
     m_eAppState = AppState::Playing;
 }
 

@@ -8,6 +8,7 @@
 #include "TransformComponent.h"
 #include "Dx12App.h" // For runtime window size
 #include "NetworkManager.h" // For skill sync
+#include "PlayerComponent.h" // 원격 동기화 시 element 별 wire 포맷 분기용
 #include "RuneRegistry.h"
 #include <set>
 #include <random>
@@ -118,19 +119,46 @@ void SkillComponent::Update(float deltaTime)
             TransformComponent* pTransform = m_pOwner->GetTransform();
             if (pTransform)
             {
-                int skillType = 2;  // E = SKILL_TYPE_E
+                // 현재 채널 중인 스킬 슬롯 → skillType. 이전엔 E 로 하드코딩되어 있어
+                // Tornado(R 채널) 가 동기화되지 않았음.
+                int skillType = 0;
+                switch (m_ActiveSkillSlot)
+                {
+                case SkillSlot::Q:          skillType = 1; break;
+                case SkillSlot::E:          skillType = 2; break;
+                case SkillSlot::R:          skillType = 3; break;
+                case SkillSlot::RightClick: skillType = 4; break;
+                default:                    skillType = 0; break;
+                }
+
                 const DirectX::XMFLOAT3& pos = pTransform->GetPosition();
                 DirectX::XMVECTOR lookVec = pTransform->GetLook();
                 DirectX::XMFLOAT3 lookDir;
                 DirectX::XMStoreFloat3(&lookDir, lookVec);
 
-                // VFX 방향 업데이트용 C_SKILL (원격 클라가 빔 따라가도록)
-                pNetMgr->SendSkill(skillType, pos.x, pos.y, pos.z, lookDir.x, lookDir.y, lookDir.z);
+                // dir 슬롯에 target/lookDir 중 어느 걸 보낼지 element/slot 별로 결정.
+                // - R : 항상 target (수신 측이 case 3 에서 target 으로 해석)
+                // - Water Q (WaterPuddle), Water E (Vortex) : target (target 위치 기반 VFX)
+                // - 그 외 : lookDir
+                ElementType elem = ElementType::None;
+                if (auto* pc = m_pOwner->GetComponent<PlayerComponent>())
+                    elem = pc->GetElementType();
+                bool sendTarget =
+                    (skillType == 3) ||
+                    (elem == ElementType::Water && (skillType == 1 || skillType == 2));
+
+                if (sendTarget)
+                {
+                    pNetMgr->SendSkill(skillType, pos.x, pos.y, pos.z,
+                        m_ChannelTargetPosition.x, m_ChannelTargetPosition.y, m_ChannelTargetPosition.z);
+                }
+                else
+                {
+                    pNetMgr->SendSkill(skillType, pos.x, pos.y, pos.z,
+                        lookDir.x, lookDir.y, lookDir.z);
+                }
 
                 // 채널링 tick 이 발생한 이번 프레임이면 서버에 공격 판정 요청.
-                // 로컬은 FireBeamBehavior::Update 에서 HIT_INTERVAL(0.2s) 마다 다단 히트 — 서버도 같은 간격으로.
-                // (m_fChannelTickAccum 은 위에서 감소 후 여분이 남지만, 이번 프레임에 tick 이 발생했으면
-                //  감소 직후 값이 m_fChannelTickRate 보다 작다 — 간단히 "tick 발생 이번 프레임"을 따로 표시)
                 if (m_bChannelTickFiredThisFrame)
                 {
                     pNetMgr->SendPlayerAttack(skillType,
@@ -932,10 +960,16 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
             DirectX::XMFLOAT3 lookDir;
             DirectX::XMStoreFloat3(&lookDir, lookVec);
 
-            // R 스킬(Meteor)은 마우스 클릭 타겟 위치가 본질 정보.
-            // 프로토콜에 별도 target 필드가 없어서 dirX/Y/Z 슬롯을 절대 타겟 좌표로 재활용.
-            // 원격 수신 측(NetworkManager::ProcessSkill case 3)이 이를 position으로 해석.
-            if (slot == SkillSlot::R)
+            // R 스킬 + Water Q/E(WaterPuddle/Vortex) 는 target 위치가 visual 본질.
+            // dirX/Y/Z 슬롯을 absolute target 좌표로 재활용 (수신 측이 element 보고 해석).
+            ElementType elem = ElementType::None;
+            if (auto* pc = m_pOwner->GetComponent<PlayerComponent>())
+                elem = pc->GetElementType();
+            bool sendTarget =
+                (slot == SkillSlot::R) ||
+                (elem == ElementType::Water && (slot == SkillSlot::Q || slot == SkillSlot::E));
+
+            if (sendTarget)
             {
                 pNetMgr->SendSkill(skillType, pos.x, pos.y, pos.z,
                     targetPosition.x, targetPosition.y, targetPosition.z);
