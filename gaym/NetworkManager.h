@@ -464,6 +464,18 @@ private:
 
     std::vector<NetworkGolemBehaviorEntry> m_vNetworkGolemBehaviors;
 
+	// 네트워크 Demon 전용 AttackBehavior 보관 
+    struct NetworkDemonBehaviorEntry
+    {
+        std::unique_ptr<IAttackBehavior> behavior;
+        EnemyComponent* owner = nullptr;
+        float timer = 0.0f;
+    };
+
+    std::vector<NetworkDemonBehaviorEntry> m_vNetworkDemonBehaviors;
+
+    void PlayNetworkDemonAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType);
+
 public:
     // 매 프레임 타겟을 향해 몬스터 transform 보간 (Dx12App 메인 루프에서 호출)
     void InterpolateServerMonsters(float deltaTime);
@@ -477,6 +489,9 @@ public:
 
     // 네트워크 Golem 전용 AttackBehavior 갱신
     void UpdateNetworkGolemBehaviors(float deltaTime);
+
+	// 네트워크 Demon 전용 AttackBehavior 갱신
+    void UpdateNetworkDemonBehaviors(float deltaTime);
 
 private:
     std::unordered_map<uint64, float> m_mapServerMonsterMoveTime;  // idle 전환용

@@ -24,6 +24,9 @@
 #include "RockFallAttackBehavior.h"
 #include "GroundRuptureAttackBehavior.h"
 #include "SequentialCrossAttackBehavior.h"
+#include "TornadoFieldAttackBehavior.h"
+#include "GaleSlashAttackBehavior.h"
+#include "ShockwaveRingAttackBehavior.h"
 #include "Dx12App.h"
 #include "MapLoader.h"
 #include <cmath>
@@ -112,6 +115,13 @@ void NetworkManager::Shutdown()
             entry.behavior->Reset();
     }
     m_vNetworkGolemBehaviors.clear();
+
+    for (auto& entry : m_vNetworkDemonBehaviors)
+    {
+        if (entry.behavior)
+            entry.behavior->Reset();
+    }
+    m_vNetworkDemonBehaviors.clear();
 
     if (!m_bConnected && !m_pService)
         return;
@@ -1335,7 +1345,7 @@ static MonsterPreset GetMonsterPresetByType(uint32 monsterType)
     case 9: // Demon
         return { "Assets/Enemies/demon/Demon.bin",
                  "Assets/Enemies/demon/Demon_Anim.bin",
-                 3.5f, "Idle1", "Run", "",
+                 8.0f, "Idle1", "Run", "",
                  "attack1", "Death1" };
     case 10: // BlueDragon (EnemySpawner: idle="Idle", chase="Walk")
         return { "Assets/Enemies/Dragon_blue/Blue.bin",
@@ -1853,12 +1863,61 @@ static NetIndicatorParams GetIndicatorParamsForAttack(uint32 monsterType, uint32
         }
         break;
 
-    case 9: // Demon — Circle r=10, RushFront 는 인디케이터 억제 (보스 위치가 아닌 돌진 라인이라)
+    case 9: // Demon
         switch (attackType)
         {
-        case 1:  p.type = NetworkManager::NetIndicatorType::Circle; p.radius = 10.0f; break;  // Melee
-        case 4:  p.type = NetworkManager::NetIndicatorType::None;   break;                    // RushFront
-        default: p.type = NetworkManager::NetIndicatorType::Circle; p.radius = 10.0f; break;
+        case 1:  // Melee
+            p.type = NetworkManager::NetIndicatorType::Circle;
+            p.radius = 10.0f;
+            break;
+
+        case 4:  // 기존 RushFront
+            p.type = NetworkManager::NetIndicatorType::None;
+            break;
+
+        case 27: // DemonSpinDash
+            p.type = NetworkManager::NetIndicatorType::ForwardBox;
+            p.radius = 7.0f;
+            p.length = 20.0f;
+            break;
+
+        case 28: // DemonShortRush
+            p.type = NetworkManager::NetIndicatorType::ForwardBox;
+            p.radius = 5.0f;
+            p.length = 34.0f;
+            break;
+
+        case 29: // DemonLongRush
+            p.type = NetworkManager::NetIndicatorType::ForwardBox;
+            p.radius = 6.0f;
+            p.length = 55.0f;
+            break;
+
+        case 30: // DemonFixatedCharge
+            p.type = NetworkManager::NetIndicatorType::ForwardBox;
+            p.radius = 6.0f;
+            p.length = 120.0f;
+            break;
+
+        case 31: // DemonTornadoField
+        case 32: // DemonGaleSlash
+        case 33: // DemonShockwaveRing
+            p.type = NetworkManager::NetIndicatorType::None;
+            break;
+
+        case 34: // DemonJumpSlam
+            p.type = NetworkManager::NetIndicatorType::Circle;
+            p.radius = 16.0f;
+            break;
+
+        case 35: // DemonRageTransition
+            p.type = NetworkManager::NetIndicatorType::None;
+            break;
+
+        default:
+            p.type = NetworkManager::NetIndicatorType::Circle;
+            p.radius = 10.0f;
+            break;
         }
         break;
 
@@ -2248,11 +2307,20 @@ static const char* GetMonsterAttackClipForType(uint32 monsterType, uint32 attack
         case 26: return "Golem_battle_attack02_ge";   // GolemSequentialCross
         default: return "Golem_battle_attack01_ge";
         }
-    case 9:  // Demon — Anim: attack1 / Run (RushFront 는 Run 클립으로 돌진)
+    case 9:  // Demon
         switch (attackType)
         {
-        case 4:  return "Run";        // RushFront
-        case 1:  return "attack1";    // Melee
+        case 1:  return "attack1";
+        case 4:  return "Run";
+        case 27: return "attack3"; // SpinDash
+        case 28: return "Run";     // ShortRush
+        case 29: return "Run";     // LongRush
+        case 30: return "Run";     // FixatedCharge
+        case 31: return "attack2"; // TornadoField
+        case 32: return "attack4"; // GaleSlash
+        case 33: return "attack1"; // ShockwaveRing
+        case 34: return "attack4"; // JumpSlam
+        case 35: return "Rage";    // RageTransition
         default: return "attack1";
         }
     case 10: // BlueDragon — Anim: Fireball Shoot / Tail Attack / Run
@@ -2351,6 +2419,23 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
         case 13: // WaterBurst
             lockDur = 2.8f;
             break;
+        }
+    }
+
+    // Demon도 공격 모션별로 idle 복귀 타이밍 보정
+    if (mt == 9)
+    {
+        switch (attackType)
+        {
+        case 27: lockDur = 1.8f; break; // SpinDash
+        case 28: lockDur = 1.5f; break; // ShortRush
+        case 29: lockDur = 1.8f; break; // LongRush
+        case 30: lockDur = 3.8f; break; // FixatedCharge
+        case 31: lockDur = 2.8f; break; // TornadoField
+        case 32: lockDur = 2.3f; break; // GaleSlash
+        case 33: lockDur = 2.4f; break; // ShockwaveRing
+        case 34: lockDur = 2.5f; break; // JumpSlam
+        case 35: lockDur = 2.6f; break; // RageTransition
         }
     }
 
@@ -2725,6 +2810,18 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             if (mt == 8)
             {
                 PlayNetworkGolemAttackBehavior(pScene, pMonster, monsterId, attackType);
+                return;
+            }
+            break;
+
+        case 31:
+        case 32:
+        case 33:
+            // Demon 전용 범위 패턴은 클라 오프라인 AttackBehavior를 직접 실행한다.
+            // 데미지는 서버 권위이고, 클라는 장판/VFX/인디케이터 연출만 담당한다.
+            if (mt == 9)
+            {
+                PlayNetworkDemonAttackBehavior(pScene, pMonster, monsterId, attackType);
                 return;
             }
             break;
@@ -3993,6 +4090,131 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
         }
 
         ++it;
+    }
+}
+
+// Demon 네트워크 범위 패턴 실행
+void NetworkManager::PlayNetworkDemonAttackBehavior(
+    Scene* pScene,
+    GameObject* pMonster,
+    uint64 monsterId,
+    uint32 attackType)
+{
+    if (!pScene || !pMonster) return;
+
+    // 동시에 여러 Demon Behavior가 겹치지 않도록 방지
+    if (!m_vNetworkDemonBehaviors.empty())
+        return;
+
+    EnemyComponent* pEnemy = pMonster->GetComponent<EnemyComponent>();
+    if (!pEnemy)
+    {
+        // 서버 몬스터에 연출용 EnemyComponent가 없으면 임시 추가
+        pEnemy = pMonster->AddComponent<EnemyComponent>();
+    }
+
+    // 데미지/AI는 서버 권위, 클라는 연출만 담당
+    pEnemy->SetBoss(true);
+    pEnemy->SetAIPaused(true);
+
+    if (auto* pAnim = pMonster->GetComponent<AnimationComponent>())
+    {
+        pEnemy->SetAnimationComponent(pAnim);
+    }
+
+    if (auto* pRoom = pScene->GetCurrentRoom())
+    {
+        pEnemy->SetRoom(pRoom);
+    }
+
+    if (auto* pPlayer = pScene->GetPlayer())
+    {
+        pEnemy->SetTarget(pPlayer);
+    }
+
+    std::unique_ptr<IAttackBehavior> behavior;
+
+    switch (attackType)
+    {
+    case 31: // TornadoField
+        behavior = std::make_unique<TornadoFieldAttackBehavior>(
+            4, 18.0f, 0.45f, 5.0f,
+            12.0f, 28.0f,
+            1.8f, 4.0f, 1.0f,
+            1.0f, 0.4f
+        );
+        break;
+
+    case 32: // GaleSlash
+    {
+        // 클라 단독처럼 Cross / XDiag 랜덤
+        auto shape = (rand() % 2 == 0)
+            ? GaleSlashAttackBehavior::SlashShape::Cross
+            : GaleSlashAttackBehavior::SlashShape::XDiag;
+
+        behavior = std::make_unique<GaleSlashAttackBehavior>(
+            shape,
+            75.0f, 30.0f, 3.5f,
+            1.4f, 0.4f, 1.2f,
+            1.5f, 0.35f
+        );
+        break;
+    }
+
+    case 33: // ShockwaveRing
+        behavior = std::make_unique<ShockwaveRingAttackBehavior>(
+            85.0f, 35.0f, 4.0f,
+            1.6f, 1.0f, 1.0f,
+            2.0f, 0.5f
+        );
+        break;
+
+    default:
+        return;
+    }
+
+    if (!behavior) return;
+
+    // 실제 장판/VFX/인디케이터 생성
+    behavior->Execute(pEnemy);
+
+    NetworkDemonBehaviorEntry entry;
+    entry.behavior = std::move(behavior);
+    entry.owner = pEnemy;
+    entry.timer = 0.0f;
+
+    m_vNetworkDemonBehaviors.push_back(std::move(entry));
+}
+
+// Demon 네트워크 Behavior 업데이트
+void NetworkManager::UpdateNetworkDemonBehaviors(float deltaTime)
+{
+    for (auto it = m_vNetworkDemonBehaviors.begin(); it != m_vNetworkDemonBehaviors.end(); )
+    {
+        it->timer += deltaTime;
+
+        // 비정상 잔존 방지용 안전 타임아웃
+        if (!it->behavior || !it->owner || it->timer > 8.0f)
+        {
+            if (it->behavior)
+                it->behavior->Reset();
+
+            it = m_vNetworkDemonBehaviors.erase(it);
+            continue;
+        }
+
+        it->behavior->Update(deltaTime, it->owner);
+
+        // 완료된 Behavior는 Reset 후 제거
+        if (it->behavior->IsFinished())
+        {
+            it->behavior->Reset();
+            it = m_vNetworkDemonBehaviors.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
     }
 }
 

@@ -548,6 +548,7 @@ void Dx12App::FrameAdvance()
     if (m_pNetworkManager && m_pNetworkManager->IsConnected())
     {
         m_pNetworkManager->UpdateNetworkGolemBehaviors(m_GameTimer.GetTimeElapsed());
+        m_pNetworkManager->UpdateNetworkDemonBehaviors(m_GameTimer.GetTimeElapsed());
     }
 
     // Update scene first (calculates light matrices)
