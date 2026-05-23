@@ -1825,7 +1825,18 @@ static NetIndicatorParams GetIndicatorParamsForAttack(uint32 monsterType, uint32
             break;
 
         case 21:
+            // GolemJumpShock
+            // JumpSlamAttackBehavior 기반이라 원형 영역이 필요함
+            p.type = NetworkManager::NetIndicatorType::Circle;
+            p.radius = 55.0f;
+            break;
+
         case 22:
+            // GolemWideSlam
+            // JumpSlamAttackBehavior 기반이라 원형 영역이 필요함
+            p.type = NetworkManager::NetIndicatorType::Circle;
+            p.radius = 75.0f;
+            break;
         case 23:
         case 24:
         case 25:
@@ -2094,7 +2105,7 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                 if (auto* pT = ind.circleBorder->GetTransform())
                 {
                     pT->SetPosition(ind.anchorX, indY + 0.05f, ind.anchorZ);
-                    float borderR = fullR * 1.12f;
+                    float borderR = fullR;
                     pT->SetScale(borderR, 1.0f, borderR);
                     MATERIAL mat;
                     mat.m_cAmbient  = XMFLOAT4(0.6f, 0.02f, 0.02f, 1.0f);
@@ -2111,7 +2122,12 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                 if (auto* pT = ind.circleFill->GetTransform())
                 {
                     pT->SetPosition(ind.anchorX, indY, ind.anchorZ);
-                    pT->SetScale(fullR, 1.0f, fullR);
+
+                    float fillR = fullR * fillProgress;
+                    if (fillR < 0.01f) fillR = 0.01f;
+
+                    pT->SetScale(fillR, 1.0f, fillR);
+
                     MATERIAL mat;
                     mat.m_cAmbient  = XMFLOAT4(0.3f, 0.02f, 0.0f, 1.0f);
                     mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.2f + 0.6f * fillProgress, 0.05f, 1.0f);
@@ -2288,6 +2304,56 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
     // 공격 애니 지속 시간 등록 — 이 기간 Move 왔을 때 walk 로 덮지 않음
     //  서버 windupSec(예고) + 추정 재생시간. 짧은 windup 공격도 최소 ATTACK_ANIM_LOCK 은 유지
     float lockDur = fmaxf(windupSec + 0.4f, ATTACK_ANIM_LOCK);
+
+    // Golem은 공격 모션이 길어서 서버 windupSec 기준으로 idle 복귀하면 모션이 중간에 끊김
+    if (mt == 8)
+    {
+        switch (attackType)
+        {
+        case 21: // GolemJumpShock
+            lockDur = 2.8f;
+            break;
+
+        case 22: // GolemWideSlam
+            lockDur = 4.8f;
+            break;
+
+        case 23: // GolemRockBarrage
+        case 24: // GolemRockFall
+        case 25: // GolemGroundRupture
+        case 26: // GolemSequentialCross
+            lockDur = 4.2f;
+            break;
+        }
+    }
+
+    // Kraken도 일부 공격 모션이 길어서 idle 복귀가 빠르면 중간에 끊김
+    if (mt == 7)
+    {
+        switch (attackType)
+        {
+        case 5:  // Breath / 잉크 발사
+            lockDur = 2.2f;
+            break;
+
+        case 8:  // TailSweep
+            lockDur = 2.0f;
+            break;
+
+        case 11: // KrakenCombo
+            lockDur = 3.5f;
+            break;
+
+        case 12: // SideSmash
+            lockDur = 2.5f;
+            break;
+
+        case 13: // WaterBurst
+            lockDur = 2.8f;
+            break;
+        }
+    }
+
     m_mapServerMonsterAttackTimer[monsterId] = lockDur;
     // 공격 중엔 idle 전환 억제
     m_mapServerMonsterMoveTime.erase(monsterId);
@@ -3029,24 +3095,34 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
     switch (attackType)
     {
     case 21:
-        // GolemJumpShock
+        // GolemJumpShock - 작은 원형 충격파
         behavior = std::make_unique<JumpSlamAttackBehavior>(
-            140.0f, 6.5f, 1.8f, 85.0f,
-            1.3f, 0.7f,
+            140.0f,
+            6.5f,
+            1.8f,
+            55.0f, // 원형 데미지 반경
+            1.3f,
+            0.7f,
             false,
-            3.6f, 0.7f,
+            3.6f,
+            0.7f,
             "Golem_jump_ge",
             0.5f
         );
         break;
 
     case 22:
-        // GolemWideSlam
+        // GolemWideSlam - 큰 원형 광역 내려찍기
         behavior = std::make_unique<JumpSlamAttackBehavior>(
-            150.0f, 0.0f, 0.3f, 120.0f,
-            3.6f, 1.8f,
+            150.0f,
+            0.0f,
+            0.3f,
+            75.0f, // 원형 데미지 반경
+            3.6f,
+            1.8f,
             false,
-            3.4f, 0.65f,
+            3.4f,
+            0.65f,
             "Golem_battle_attack01_ge"
         );
         break;
@@ -3077,8 +3153,8 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
             10,
             90.0f,
             14.0f,
-            12.0f,
-            45.0f,
+            20.0f,
+            75.0f,
             2.6f,
             1.2f,
             4.0f,
@@ -3088,11 +3164,17 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
         break;
 
     case 25:
+    {
         // GolemGroundRupture
+        // 클라 단독 프리셋처럼 + / X 대각선 균열을 랜덤으로 선택
+        auto shape = (rand() % 2 == 0)
+            ? GroundRuptureAttackBehavior::RuptureShape::Cross
+            : GroundRuptureAttackBehavior::RuptureShape::XDiag;
+
         behavior = std::make_unique<GroundRuptureAttackBehavior>(
-            GroundRuptureAttackBehavior::RuptureShape::Cross,
+            shape,
             100.0f,
-            65.0f, // 서버 기준 더 작게
+            80.0f, // 서버 기준 더 작게
             6.0f,
             2.2f,
             0.4f,
@@ -3101,18 +3183,20 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
             0.5f
         );
         break;
+    }
 
     case 26:
         // GolemSequentialCross
         behavior = std::make_unique<SequentialCrossAttackBehavior>(
             55.0f,
-            55.0f, // 기존 100.0f → 반길이 55, 전체 110
-            10.0f, // 서버 기준 폭도 축소
-            2.2f,
-            0.45f, // 순차 간격 증가
-            1.2f,
-            2.8f,
-            0.6f
+            80.0f,
+            12.0f,
+            2.5f,
+            0.65f,
+            0.35f,
+            1.4f,
+            2.4f,
+            0.45f
         );
         break;
 
