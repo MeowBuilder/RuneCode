@@ -1171,6 +1171,94 @@ void EnemySpawner::SetupEnemyComponents(GameObject* pEnemy, const EnemySpawnData
     if (m_pVFXManager)
         pEnemyComp->SetVFXManager(m_pVFXManager);
 
+    // 타입 식별 메쉬 마커 (마법진) — 사용자 요청으로 일시 비활성화. 코드 보존.
+    if (false)
+    {
+        const std::string& atk = data.m_strAttackTypeId;
+        if (!atk.empty() && atk != "Melee" && m_pRingMesh && m_pDiscMesh)
+        {
+            // 외곽링 material (강한 emissive)
+            MATERIAL outerMat;
+            outerMat.m_cAmbient  = XMFLOAT4(0.10f, 0.05f, 0.20f, 1.0f);
+            outerMat.m_cDiffuse  = XMFLOAT4(0.30f, 0.20f, 0.50f, 1.0f);
+            outerMat.m_cSpecular = XMFLOAT4(0.0f,  0.0f,  0.0f,  1.0f);
+
+            // 다크판타지 톤: 보라 베이스, 자폭만 적색 위험, 저격은 금색
+            XMFLOAT4 outerEmis = { 1.20f, 0.50f, 2.20f, 1.0f };
+            XMFLOAT4 innerEmis = { 2.20f, 1.50f, 2.80f, 1.0f };   // 내부는 더 밝게 (코어 광원)
+            float    footScale = 5.0f;  // 기본값 — 적 본체 스케일(5.5x) 대비 큼
+            if      (atk == "SuicideExplode") {
+                outerEmis = { 2.50f, 0.30f, 0.10f, 1.0f };
+                innerEmis = { 3.20f, 0.80f, 0.20f, 1.0f };
+                footScale = 9.0f;   // 위험 — 매우 큼
+            }
+            else if (atk == "ChargedShot") {
+                outerEmis = { 2.00f, 1.60f, 0.35f, 1.0f };
+                innerEmis = { 2.80f, 2.40f, 0.80f, 1.0f };
+                footScale = 6.0f;
+            }
+            else if (atk == "RushAoE") {
+                outerEmis = { 1.40f, 0.55f, 2.20f, 1.0f };
+                innerEmis = { 2.40f, 1.60f, 2.80f, 1.0f };
+                footScale = 10.0f;  // 광역 — 매우 큼
+            }
+            else if (atk == "RushFront") {
+                outerEmis = { 1.40f, 0.55f, 2.20f, 1.0f };
+                innerEmis = { 2.40f, 1.60f, 2.80f, 1.0f };
+                footScale = 6.5f;
+            }
+            else if (atk == "GrenadeThrow") {
+                outerEmis = { 1.60f, 0.75f, 2.10f, 1.0f };
+                innerEmis = { 2.60f, 1.80f, 2.70f, 1.0f };
+                footScale = 7.5f;
+            }
+            else if (atk == "QuickJab") {
+                outerEmis = { 1.10f, 0.45f, 2.00f, 1.0f };
+                innerEmis = { 2.20f, 1.40f, 2.60f, 1.0f };
+                footScale = 4.0f;   // 가장 작음
+            }
+            else if (atk == "Ranged") {
+                outerEmis = { 1.20f, 0.50f, 2.00f, 1.0f };
+                innerEmis = { 2.20f, 1.50f, 2.60f, 1.0f };
+                footScale = 5.5f;
+            }
+
+            // 중간보스 — 마커 크기 1.6배 + 외곽 청록 발광(보스 식별색)
+            if (data.m_bIsMiniBoss)
+            {
+                footScale *= 1.6f;
+                outerEmis = { 0.30f, 2.40f, 2.60f, 1.0f };  // 청록 외곽
+                innerEmis = { 1.50f, 3.20f, 3.20f, 1.0f };  // 밝은 청록 코어
+            }
+            outerMat.m_cEmissive = outerEmis;
+
+            MATERIAL innerMat = outerMat;
+            innerMat.m_cEmissive = innerEmis;
+
+            auto applyMat = [](GameObject* pGO, const MATERIAL& m) {
+                if (!pGO) return;
+                pGO->SetMaterial(m);
+                if (pGO->GetTransform()) pGO->GetTransform()->Update(0.0f);
+                pGO->Update(0.0f);
+            };
+
+            // 발밑 이중 동심원만 사용 (헤드 마커 제거)
+            GameObject* pFoot      = CreateIndicatorObject(pRoom, m_pRingMesh);
+            GameObject* pFootInner = CreateIndicatorObject(pRoom, m_pRingMesh);
+            applyMat(pFoot,      outerMat);
+            applyMat(pFootInner, innerMat);
+
+            pEnemyComp->SetFootMarker(pFoot);
+            pEnemyComp->SetFootMarkerInner(pFootInner);
+
+            pEnemyComp->SetMarkerScales(
+                footScale,            // foot outer
+                footScale * 0.55f,    // foot inner
+                0.f,                  // head 사용 안 함
+                0.f);
+        }
+    }
+
     // Set death callback to notify room
     pEnemyComp->SetOnDeathCallback([pRoom](EnemyComponent* pDeadEnemy) {
         if (pRoom)

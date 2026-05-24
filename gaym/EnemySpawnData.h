@@ -59,6 +59,16 @@ struct EnemySpawnData
     // Boss phase config factory (for multi-phase bosses)
     std::function<std::unique_ptr<BossPhaseConfig>()> m_fnCreateBossPhaseConfig;
 
+    // Type marker VFX (적 타입 식별용 상시 표시). 빈 문자열이면 마커 없음.
+    std::string m_strHeadMarkerEffect;
+    std::string m_strFootMarkerEffect;
+
+    // 메쉬 기반 타입 마커용 attackType ID. EnemySpawner 에서 색/크기 매핑에 사용.
+    std::string m_strAttackTypeId;
+
+    // 중간보스 플래그 — true 면 마커 크기·색 강조 (방 중앙 단독 배치되는 강한 적)
+    bool m_bIsMiniBoss = false;
+
     // Constructor with defaults for test enemy
     EnemySpawnData()
     {

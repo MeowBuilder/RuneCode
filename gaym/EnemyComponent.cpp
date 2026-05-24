@@ -407,6 +407,112 @@ void EnemyComponent::TrackStatusVFX()
     if (m_vfxFractureId >= 0) m_pStatusVFXMgr->TrackEffect(m_vfxFractureId, pos, dir);
 }
 
+void EnemyComponent::SpawnMarkerVFX(const char* effectId, int& outId, float yOffset)
+{
+    if (outId >= 0) return;
+    if (!effectId || !*effectId) return;
+    if (!m_pStatusVFXMgr) {
+        char buf[160]; sprintf_s(buf, "[Marker] SKIP (no VFXMgr): %s\n", effectId);
+        OutputDebugStringA(buf);
+        return;
+    }
+    if (!EffectRegistry::Get().HasEffect(effectId)) {
+        char buf[160]; sprintf_s(buf, "[Marker] SKIP (effect not registered): %s\n", effectId);
+        OutputDebugStringA(buf);
+        return;
+    }
+
+    XMFLOAT3 pos = {};
+    if (m_pOwner && m_pOwner->GetTransform())
+    {
+        pos = m_pOwner->GetTransform()->GetPosition();
+        pos.y += yOffset;
+    }
+    EffectDef def = EffectRegistry::Get().GetEffect(effectId);
+    outId = m_pStatusVFXMgr->SpawnEffectDef(pos, { 0, 1, 0 }, def, false);
+
+    char buf[200];
+    sprintf_s(buf, "[Marker] Spawned %s at (%.2f,%.2f,%.2f) id=%d\n",
+              effectId, pos.x, pos.y, pos.z, outId);
+    OutputDebugStringA(buf);
+}
+
+void EnemyComponent::TrackMarkerVFX()
+{
+    if (!m_pStatusVFXMgr || !m_pOwner || !m_pOwner->GetTransform()) return;
+    if (m_vfxHeadMarkerId < 0 && m_vfxFootMarkerId < 0) return;
+
+    XMFLOAT3 base = m_pOwner->GetTransform()->GetPosition();
+    XMFLOAT3 dir  = { 0.f, 1.f, 0.f };
+
+    if (m_vfxHeadMarkerId >= 0) {
+        XMFLOAT3 head = { base.x, base.y + HEAD_MARKER_Y_OFFSET, base.z };
+        m_pStatusVFXMgr->TrackEffect(m_vfxHeadMarkerId, head, dir);
+    }
+    if (m_vfxFootMarkerId >= 0) {
+        XMFLOAT3 foot = { base.x, base.y + FOOT_MARKER_Y_OFFSET, base.z };
+        m_pStatusVFXMgr->TrackEffect(m_vfxFootMarkerId, foot, dir);
+    }
+}
+
+void EnemyComponent::SpawnTypeMarkers()
+{
+    if (!m_strHeadMarkerEffect.empty())
+        SpawnMarkerVFX(m_strHeadMarkerEffect.c_str(), m_vfxHeadMarkerId, HEAD_MARKER_Y_OFFSET);
+    if (!m_strFootMarkerEffect.empty())
+        SpawnMarkerVFX(m_strFootMarkerEffect.c_str(), m_vfxFootMarkerId, FOOT_MARKER_Y_OFFSET);
+}
+
+void EnemyComponent::StopTypeMarkers()
+{
+    StopStatusVFX(m_vfxHeadMarkerId);
+    StopStatusVFX(m_vfxFootMarkerId);
+}
+
+void EnemyComponent::TrackTypeMarkers(float dt)
+{
+    if (!m_pOwner || !m_pOwner->GetTransform()) return;
+    if (!m_pHeadMarker && !m_pFootMarker && !m_pHeadMarkerInner && !m_pFootMarkerInner) return;
+
+    XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+
+    // 외곽 70 deg/s · 내부 -110 deg/s (대조 회전으로 마법진 살아있는 느낌)
+    m_fMarkerRotation += dt * 70.f;
+    if (m_fMarkerRotation > 360.f) m_fMarkerRotation -= 360.f;
+    else if (m_fMarkerRotation < 0.f) m_fMarkerRotation += 360.f;
+
+    // 펄스 (0.0 ~ 1.0 사이 sin) — 스케일 미세 변동으로 빛나는 마법진 느낌
+    m_fMarkerPulse += dt * 3.5f;  // 약 0.5초 주기
+    const float pulse = 1.0f + 0.08f * sinf(m_fMarkerPulse);
+
+    auto place = [&](GameObject* pGO, float yOff, float rotDeg, float baseScale) {
+        if (!pGO || !pGO->GetTransform()) return;
+        auto* pT = pGO->GetTransform();
+        pT->SetPosition(pos.x, pos.y + yOff, pos.z);
+        pT->SetRotation(0.f, rotDeg, 0.f);
+        const float s = baseScale * pulse;
+        pT->SetScale(s, 1.0f, s);
+    };
+
+    // 외곽/내부 반대 방향 회전, 내부는 약간 더 위(헤드)/위(발)에 띄워 겹침 방지
+    place(m_pFootMarker,      FOOT_MARKER_Y_OFFSET,        -m_fMarkerRotation,         m_fFootMarkerScale);
+    place(m_pFootMarkerInner, FOOT_MARKER_Y_OFFSET + 0.05f, m_fMarkerRotation * 1.6f,  m_fFootMarkerInnerScale);
+    place(m_pHeadMarker,      HEAD_MARKER_Y_OFFSET,         m_fMarkerRotation,         m_fHeadMarkerScale);
+    place(m_pHeadMarkerInner, HEAD_MARKER_Y_OFFSET + 0.10f,-m_fMarkerRotation * 1.6f,  m_fHeadMarkerInnerScale);
+}
+
+void EnemyComponent::HideTypeMarkers()
+{
+    auto hide = [](GameObject* pGO) {
+        if (pGO && pGO->GetTransform())
+            pGO->GetTransform()->SetPosition(0.f, -1000.f, 0.f);
+    };
+    hide(m_pHeadMarker);
+    hide(m_pHeadMarkerInner);
+    hide(m_pFootMarker);
+    hide(m_pFootMarkerInner);
+}
+
 void EnemyComponent::RefreshStatusOutline()
 {
     if (!m_pOwner) return;
@@ -445,6 +551,8 @@ void EnemyComponent::RefreshStatusOutline()
 void EnemyComponent::UpdateStatusEffects(float dt)
 {
     TrackStatusVFX();
+    TrackMarkerVFX();
+    TrackTypeMarkers(dt);
 
     // ── 완전 빙결 ─────────────────────────────────────────────────────────────
     if (m_bFrozen)
@@ -1414,6 +1522,10 @@ void EnemyComponent::Die()
     m_pRushLineIndicator     = nullptr;
     m_pHitZoneIndicator      = nullptr;
     m_pHitZoneFillIndicator  = nullptr;
+
+    // 타입 식별 마커 정리 (상태이상 VFX는 UpdateStatusEffects 흐름이 별도 정리)
+    StopTypeMarkers();
+    HideTypeMarkers();
 
     // Notify room/callback
     if (m_OnDeathCallback)

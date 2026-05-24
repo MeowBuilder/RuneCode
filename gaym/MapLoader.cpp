@@ -409,6 +409,55 @@ ObjResult LoadObjMesh(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommand
 static constexpr float MAP_SCALE = 5.0f;
 // ─────────────────────────────────────────────────────────────────────────────
 
+namespace {
+
+// Win32 파일 존재 확인 (working directory 기준 상대 경로).
+bool MapLoader_FileExists(const std::string& path)
+{
+    DWORD attrs = ::GetFileAttributesA(path.c_str());
+    return attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+std::string MapLoader_ReplaceAll(std::string s, const std::string& from, const std::string& to)
+{
+    if (from.empty()) return s;
+    size_t pos = 0;
+    while ((pos = s.find(from, pos)) != std::string::npos) {
+        s.replace(pos, from.size(), to);
+        pos += to.size();
+    }
+    return s;
+}
+
+// JSON 의 _Rd 접미사를 stage 색으로 치환. 파일 존재 fallback.
+// mesh + animation path 를 함께 동기화 치환 (같은 색이어야 짝이 맞음).
+// 변환된 색이 적용되지 않으면 원본 유지.
+void MapLoader_RemapColorByTheme(std::string& meshPath, std::string& animPath, StageTheme theme)
+{
+    if (meshPath.empty()) return;
+
+    int n = 0;
+    const char* const* candidates = StageThemeColorCandidates(theme, n);
+    for (int i = 0; i < n; ++i)
+    {
+        const std::string repl = std::string("_") + candidates[i];
+        std::string newMesh = MapLoader_ReplaceAll(meshPath, "_Rd", repl);
+        std::string newAnim = animPath.empty() ? std::string() : MapLoader_ReplaceAll(animPath, "_Rd", repl);
+        if (newMesh == meshPath && newAnim == animPath) {
+            // 원본이 이미 그 색이거나 _Rd 가 없음 — 그대로 OK
+            return;
+        }
+        if (MapLoader_FileExists(newMesh) && (newAnim.empty() || MapLoader_FileExists(newAnim))) {
+            meshPath = std::move(newMesh);
+            animPath = std::move(newAnim);
+            return;
+        }
+    }
+    // 모든 후보 실패 — 원본 유지
+}
+
+} // namespace
+
 bool MapLoader::LoadIntoScene(
     const char*                 jsonPath,
     Scene*                      pScene,
@@ -703,9 +752,14 @@ bool MapLoader::LoadIntoScene(
     const JsonVal& enemySpawns = root["enemySpawns"];
     RoomSpawnConfig spawnConfig;
 
+    // stage 색 (preset 이름에 부착 — stage 별 캐시 분리)
+    int themeN = 0;
+    const char* const* themeCands = StageThemeColorCandidates(pScene->GetCurrentTheme(), themeN);
+    const std::string themeColorSuffix = std::string("_") + ((themeN > 0) ? themeCands[0] : "Rd");
+
     for (size_t i = 0; i < enemySpawns.size(); i++) {
         const JsonVal& es = enemySpawns[i];
-        std::string presetName = es["presetName"].str;
+        std::string presetName = es["presetName"].str + themeColorSuffix;
         int count = es.has("count") ? es["count"].i() : 1;
         const JsonVal& pos = es["position"];
         XMFLOAT3 spawnPos(pos[0].f()*MAP_SCALE, pos[1].f()*MAP_SCALE, -pos[2].f()*MAP_SCALE);
@@ -762,6 +816,9 @@ bool MapLoader::LoadIntoScene(
                 };
             }
 
+            // 타입 식별 마커. attackType 문자열을 그대로 보존 (EnemySpawner 에서 메쉬 마커 색/크기 매핑).
+            data.m_strAttackTypeId = attackType;
+
             // Attack indicator
             if (es.has("indicator")) {
                 const JsonVal& ind = es["indicator"];
@@ -796,10 +853,14 @@ bool MapLoader::LoadIntoScene(
                 const JsonVal& vis = es["visual"];
                 data.m_strMeshPath      = vis["meshPath"].str;
                 data.m_strAnimationPath = vis["animationPath"].str;
+                // 스테이지 테마에 맞춰 적 메쉬 색 자동 치환 (예: Water → _Bl)
+                MapLoader_RemapColorByTheme(data.m_strMeshPath, data.m_strAnimationPath, pScene->GetCurrentTheme());
                 const JsonVal& scl = vis["scale"];
                 data.m_xmf3Scale = XMFLOAT3(scl[0].f(), scl[1].f(), scl[2].f());
-                const JsonVal& col = vis["color"];
-                data.m_xmf4Color = XMFLOAT4(col[0].f()/255.f, col[1].f()/255.f, col[2].f()/255.f, col[3].f()/255.f);
+                // 디버그용 적 색상 구분(_Bomber/_Jabber 등)은 비활성화 — 원본 메쉬 색 그대로 사용
+                //   JSON 의 color 필드는 무시. 마커 시스템이 타입 식별을 담당.
+                (void)vis;
+                data.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
             }
 
             pScene->GetEnemySpawner()->RegisterEnemyPreset(presetName, data);
@@ -881,6 +942,100 @@ bool MapLoader::LoadIntoScene(
             spawnConfig.m_vWaves.push_back(std::move(w));
         }
         // m_vEnemySpawns 는 그대로 두지만 HasMultiWave()==true 라 무시됨
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // 중간보스 자동 추가 — 일반 방(enemySpawns 비어있지 않은 경우)에 한 마리.
+    //   방 로딩 시 5종 메쉬 풀에서 랜덤 선택. 메쉬별로 별도 preset 등록·캐싱.
+    //   방 중앙에 단독 wave 로 배치, 일반 적 전멸 후 등장 (AfterPrevCleared).
+    // ──────────────────────────────────────────────────────────────────
+    const bool bHasEnemies = !spawnConfig.m_vEnemySpawns.empty() || !spawnConfig.m_vWaves.empty();
+    if (bHasEnemies)
+    {
+        struct MiniBossMesh {
+            const char* key;       // preset 접미사
+            const char* meshPath;
+            const char* animPath;
+            float       scale;     // 메쉬별 시각 균형 조정용
+        };
+        static const MiniBossMesh kPool[] = {
+            { "FireGolem",       "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd.bin",             "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd_Anim.bin",             11.0f },
+            { "ChaosElemental",  "Assets/Enemies/Elementals/ChaosElemental_Rd/ChaosElemental_Rd.bin",   "Assets/Enemies/Elementals/ChaosElemental_Rd/ChaosElemental_Rd_Anim.bin",   11.0f },
+            { "LavaMan",         "Assets/Enemies/Elementals/LavaMan_Rd/LavaMan_Rd.bin",                 "Assets/Enemies/Elementals/LavaMan_Rd/LavaMan_Rd_Anim.bin",                 11.0f },
+            { "MoltenElemental", "Assets/Enemies/Elementals/MoltenElemental_Rd/MoltenElemental_Rd.bin", "Assets/Enemies/Elementals/MoltenElemental_Rd/MoltenElemental_Rd_Anim.bin", 11.0f },
+            { "MagmaElemental",  "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd.bin",   "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd_Anim.bin",   11.0f },
+        };
+        constexpr int kPoolSize = sizeof(kPool) / sizeof(kPool[0]);
+
+        static std::mt19937 s_miniBossRng(std::random_device{}());
+        const int idx = static_cast<int>(s_miniBossRng() % kPoolSize);
+        const MiniBossMesh& sel = kPool[idx];
+
+        // 스테이지 테마에 맞춘 색 치환 — preset 캐시는 (key + 실제 색)으로 분리
+        std::string meshPath = sel.meshPath;
+        std::string animPath = sel.animPath;
+        const StageTheme themeForBoss = pScene->GetCurrentTheme();
+        MapLoader_RemapColorByTheme(meshPath, animPath, themeForBoss);
+
+        // preset 이름에 stage 색 포함 — stage 전환 시에도 올바른 색 적용 보장
+        int themeN = 0;
+        const char* const* themeCands = StageThemeColorCandidates(themeForBoss, themeN);
+        const std::string themeColor = (themeN > 0) ? themeCands[0] : "Rd";
+        const std::string miniBossName = std::string("MiniBoss_") + sel.key + "_" + themeColor;
+        if (!pScene->GetEnemySpawner()->HasPreset(miniBossName))
+        {
+            EnemySpawnData mb;
+            mb.m_strMeshPath      = meshPath;
+            mb.m_strAnimationPath = animPath;
+            mb.m_xmf3Scale        = XMFLOAT3(sel.scale, sel.scale, sel.scale);
+            mb.m_xmf4Color        = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+            mb.m_Stats.m_fMaxHP          = 600.0f;
+            mb.m_Stats.m_fCurrentHP      = 600.0f;
+            mb.m_Stats.m_fMoveSpeed      = 5.0f;
+            mb.m_Stats.m_fAttackRange    = 10.0f;
+            mb.m_Stats.m_fAttackCooldown = 3.5f;
+            mb.m_Stats.m_fDetectionRange = 60.0f;
+            mb.m_fnCreateAttack = []() -> std::unique_ptr<IAttackBehavior> {
+                return std::make_unique<RushAoEAttackBehavior>();
+            };
+            mb.m_IndicatorConfig.m_eType         = IndicatorType::Circle;
+            mb.m_IndicatorConfig.m_fHitRadius    = 10.0f;
+            mb.m_IndicatorConfig.m_fRushDistance = 0.0f;
+            mb.m_IndicatorConfig.m_fConeAngle    = 0.0f;
+            mb.m_AnimConfig.m_strIdleClip    = "idle";
+            mb.m_AnimConfig.m_strChaseClip   = "Run_Forward";
+            mb.m_AnimConfig.m_strAttackClip  = "Combat_Unarmed_Attack";
+            mb.m_AnimConfig.m_strStaggerClip = "Combat_Stun";
+            mb.m_AnimConfig.m_strDeathClip   = "Death";
+            mb.m_strAttackTypeId = "RushAoE";
+            mb.m_bIsMiniBoss     = true;
+            pScene->GetEnemySpawner()->RegisterEnemyPreset(miniBossName, mb);
+        }
+
+        // 방 중앙 좌표 (rooms[0].center)
+        XMFLOAT3 mbPos(0.f, 0.f, 0.f);
+        if (root["rooms"].size() > 0)
+        {
+            const JsonVal& center = root["rooms"][0]["center"];
+            mbPos.x = center[0].f() * MAP_SCALE;
+            mbPos.y = 0.f;
+            mbPos.z = -center[2].f() * MAP_SCALE;
+        }
+
+        // 일반 적이 m_vEnemySpawns 만 차있고 wave 분할 안 됐다면 wave 시스템으로 전환
+        if (!spawnConfig.HasMultiWave() && !spawnConfig.m_vEnemySpawns.empty())
+        {
+            EnemyWave firstWave;
+            firstWave.trigger = EnemyWave::TriggerType::Immediate;
+            firstWave.spawns  = spawnConfig.m_vEnemySpawns;
+            spawnConfig.m_vWaves.push_back(std::move(firstWave));
+        }
+
+        // 중간보스 wave — 직전 wave 전멸 후 등장
+        EnemyWave bossWave;
+        bossWave.trigger = EnemyWave::TriggerType::AfterPrevCleared;
+        bossWave.spawns.push_back({ miniBossName, mbPos });
+        spawnConfig.m_vWaves.push_back(std::move(bossWave));
     }
 
     // Assign spawn config to current room

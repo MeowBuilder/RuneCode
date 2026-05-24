@@ -2458,6 +2458,107 @@ void EffectRegistry::Initialize()
         def.layers.push_back(std::move(layer));
         Register(std::move(def));
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Enemy Markers — 적 타입 식별용 상시 표시 마커 (헤드 + 발밑)
+    //   다크판타지 톤: 보라/회 베이스 + 자폭만 적색 위험 신호 + 저격은 금색
+    //   색이 아닌 "형태/반경/회전속도"로 적 타입 식별. duration=-1 무한 루프.
+    //   EnemyComponent::TrackMarkerVFX 가 매 프레임 위치 갱신.
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        // 다크판타지 톤 유지하되 밝은 환경(용암/화염)에서도 가시성 확보를 위해 코어는 거의 백색에 가까운 라벤더
+        const XMFLOAT4 kPurpleCore = { 0.95f, 0.85f, 1.00f, 1.00f };
+        const XMFLOAT4 kPurpleEdge = { 0.55f, 0.30f, 0.85f, 0.85f };
+        const XMFLOAT4 kDangerCore = { 1.00f, 0.40f, 0.35f, 1.00f };
+        const XMFLOAT4 kDangerEdge = { 0.70f, 0.05f, 0.05f, 0.90f };
+        const XMFLOAT4 kGoldCore   = { 1.00f, 0.95f, 0.55f, 1.00f };
+        const XMFLOAT4 kGoldEdge   = { 0.65f, 0.40f, 0.05f, 0.85f };
+
+        // 헤드: Sphere shell (껍데기만, speed=0, 매우 짧은 lifetime + 매우 높은 emitRate)
+        //   → 매 프레임 같은 위치에 재생성 → 잔상 없이 적과 단단히 따라다니는 정적 마크
+        auto makeHeadSphere = [this](const char* name,
+                                     float radius,
+                                     XMFLOAT4 core, XMFLOAT4 edge,
+                                     int particleCount, float sizeScale)
+        {
+            EffectLayer layer;
+            layer.type           = EmitterType::Sphere;
+            layer.element        = ElementType::Wind;
+            layer.overrideColors = true;
+            layer.coreColor      = core;
+            layer.edgeColor      = edge;
+            layer.particleCount  = particleCount;
+            layer.sizeScale      = sizeScale;
+            layer.speedMin       = 0.f;
+            layer.speedMax       = 0.f;
+            layer.lifetimeMin    = 0.18f;
+            layer.lifetimeMax    = 0.22f;
+            layer.duration       = -1.f;
+            layer.emitRate       = particleCount / 0.20f;  // 동시 활성 ≈ particleCount, 매 0.2초 회전
+            layer.sphere.radius        = radius;
+            layer.sphere.shellFraction = 1.0f;            // 껍데기만 → 윤곽선 원
+            layer.sphere.inward        = false;
+            layer.sphere.rotationSpeed = 0.f;
+            EffectDef def;
+            def.name    = name;
+            def.element = ElementType::Wind;
+            def.layers.push_back(std::move(layer));
+            Register(std::move(def));
+        };
+
+        // 발밑: Ring (정적, speed=0, 매우 짧은 lifetime + 높은 emitRate)
+        //   → 지면 위에 박힌 윤곽선 원. 회전 없음, 적과 함께 평행 이동만.
+        auto makeFootRing = [this](const char* name,
+                                   float radius, float width,
+                                   XMFLOAT4 core, XMFLOAT4 edge,
+                                   int particleCount, float sizeScale)
+        {
+            EffectLayer layer;
+            layer.type           = EmitterType::Ring;
+            layer.element        = ElementType::Wind;
+            layer.overrideColors = true;
+            layer.coreColor      = core;
+            layer.edgeColor      = edge;
+            layer.particleCount  = particleCount;
+            layer.sizeScale      = sizeScale;
+            layer.speedMin       = 0.f;
+            layer.speedMax       = 0.f;
+            layer.lifetimeMin    = 0.18f;
+            layer.lifetimeMax    = 0.22f;
+            layer.duration       = -1.f;
+            layer.emitRate       = particleCount / 0.20f;
+            layer.ring.radius         = radius;
+            layer.ring.width          = width;
+            layer.ring.expandSpeed    = 0.f;
+            layer.ring.tiltX          = 0.f;
+            layer.ring.rotateSpeed    = 0.f;
+            layer.ring.normalSpeedMin = 0.f;
+            layer.ring.normalSpeedMax = 0.f;
+            EffectDef def;
+            def.name    = name;
+            def.element = ElementType::Wind;
+            def.layers.push_back(std::move(layer));
+            Register(std::move(def));
+        };
+
+        // ─── 헤드 마커 (Sphere shell — radius 크기로 차별화) ──
+        makeHeadSphere("marker_head_rushfront",   1.3f, kPurpleCore, kPurpleEdge, 80,  4.0f);
+        makeHeadSphere("marker_head_rushaoe",     1.8f, kPurpleCore, kPurpleEdge, 110, 4.0f);
+        makeHeadSphere("marker_head_quickjab",    1.0f, kPurpleCore, kPurpleEdge, 60,  3.5f);
+        makeHeadSphere("marker_head_suicide",     1.5f, kDangerCore, kDangerEdge, 100, 5.0f);
+        makeHeadSphere("marker_head_ranged",      1.3f, kPurpleCore, kPurpleEdge, 80,  3.5f);
+        makeHeadSphere("marker_head_chargedshot", 1.0f, kGoldCore,   kGoldEdge,   70,  4.0f);
+        makeHeadSphere("marker_head_grenade",     1.8f, kPurpleCore, kPurpleEdge, 100, 4.0f);
+
+        // ─── 발밑 데칼 (Ring — radius/width로 차별화) ──
+        makeFootRing("marker_foot_rushfront",   1.6f, 0.40f, kPurpleCore, kPurpleEdge, 130, 4.0f);
+        makeFootRing("marker_foot_rushaoe",     2.2f, 0.35f, kPurpleCore, kPurpleEdge, 160, 4.0f);
+        makeFootRing("marker_foot_quickjab",    1.3f, 0.25f, kPurpleCore, kPurpleEdge, 110, 3.5f);
+        makeFootRing("marker_foot_suicide",     2.0f, 0.50f, kDangerCore, kDangerEdge, 170, 5.0f);
+        makeFootRing("marker_foot_ranged",      1.7f, 0.20f, kPurpleCore, kPurpleEdge, 110, 3.5f);
+        makeFootRing("marker_foot_chargedshot", 1.9f, 0.20f, kGoldCore,   kGoldEdge,   120, 4.0f);
+        makeFootRing("marker_foot_grenade",     2.2f, 0.25f, kPurpleCore, kPurpleEdge, 140, 4.0f);
+    }
 }
 
 void EffectRegistry::Register(EffectDef def) {

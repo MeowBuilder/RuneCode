@@ -352,6 +352,54 @@ private:
     void StopStatusVFX(int& id);
     void TrackStatusVFX();
 
+    // 타입 식별 마커 VFX (헤드/발밑 상시 표시) — 더 이상 사용 안 함 (메쉬 마커로 대체)
+    int         m_vfxHeadMarkerId = -1;
+    int         m_vfxFootMarkerId = -1;
+    std::string m_strHeadMarkerEffect;
+    std::string m_strFootMarkerEffect;
+    static constexpr float HEAD_MARKER_Y_OFFSET = 4.5f;
+    static constexpr float FOOT_MARKER_Y_OFFSET = 0.1f;
+
+    // 메쉬 기반 타입 마커 (다층 마법진)
+    //   - Head: 외곽 링 + 내부 디스크 (작은 광원)
+    //   - Foot: 외곽 큰 링 + 내부 작은 링 (이중 동심원)
+    //   회전 + 펄스로 살아있는 마법진 느낌
+    class GameObject* m_pHeadMarker      = nullptr;
+    class GameObject* m_pHeadMarkerInner = nullptr;
+    class GameObject* m_pFootMarker      = nullptr;
+    class GameObject* m_pFootMarkerInner = nullptr;
+    float m_fMarkerRotation = 0.f;
+    float m_fMarkerPulse    = 0.f;
+    float m_fFootMarkerScale      = 2.0f;   // 외곽 발 마커 기준 스케일
+    float m_fFootMarkerInnerScale = 1.0f;
+    float m_fHeadMarkerScale      = 1.4f;
+    float m_fHeadMarkerInnerScale = 0.6f;
+
+public:
+    void SetHeadMarkerEffect(const std::string& id) { m_strHeadMarkerEffect = id; }
+    void SetFootMarkerEffect(const std::string& id) { m_strFootMarkerEffect = id; }
+    void SpawnTypeMarkers();           // (legacy) 파티클 마커 — 호출 안 함
+    void StopTypeMarkers();            // (legacy)
+
+    void SetHeadMarker(class GameObject* pMarker)      { m_pHeadMarker      = pMarker; }
+    void SetHeadMarkerInner(class GameObject* pMarker) { m_pHeadMarkerInner = pMarker; }
+    void SetFootMarker(class GameObject* pMarker)      { m_pFootMarker      = pMarker; }
+    void SetFootMarkerInner(class GameObject* pMarker) { m_pFootMarkerInner = pMarker; }
+    void SetMarkerScales(float footOuter, float footInner, float headOuter, float headInner)
+    {
+        m_fFootMarkerScale      = footOuter;
+        m_fFootMarkerInnerScale = footInner;
+        m_fHeadMarkerScale      = headOuter;
+        m_fHeadMarkerInnerScale = headInner;
+    }
+    GameObject* GetHeadMarker() const { return m_pHeadMarker; }
+    GameObject* GetFootMarker() const { return m_pFootMarker; }
+private:
+    void SpawnMarkerVFX(const char* effectId, int& outId, float yOffset);
+    void TrackMarkerVFX();
+    void TrackTypeMarkers(float dt);   // 메쉬 마커 위치/회전 갱신
+    void HideTypeMarkers();            // 사망 시 Y=-1000 으로 숨김
+
     static constexpr float BURN_TICK_INTERVAL    = 1.0f;
     static constexpr float CHILL_SLOW_PER_STACK  = 0.15f;  // 중첩당 이동속도 -15%
     static constexpr float FRACTURE_DEF_PER_STACK = 0.08f; // 중첩당 방어력 -8%

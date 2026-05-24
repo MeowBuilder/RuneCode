@@ -36,6 +36,23 @@ enum class StageTheme
     Grass   // Wind/forest theme
 };
 
+// StageTheme → 적 메쉬 색 접미사 후보 (우선순위순). 첫 번째 존재 파일을 사용.
+inline const char* const* StageThemeColorCandidates(StageTheme theme, int& outCount)
+{
+    static const char* kFire [] = { "Rd", "Or", "Ye" };
+    static const char* kWater[] = { "Bl", "Cn" };
+    static const char* kEarth[] = { "Pe", "Gr", "Br", "Bk" };
+    static const char* kGrass[] = { "Gn", "Ye" };
+    switch (theme)
+    {
+    case StageTheme::Water: outCount = 2; return kWater;
+    case StageTheme::Earth: outCount = 4; return kEarth;
+    case StageTheme::Grass: outCount = 2; return kGrass;
+    case StageTheme::Fire:
+    default:                outCount = 3; return kFire;
+    }
+}
+
 // Drop interaction state machine
 enum class DropInteractionState
 {
@@ -137,6 +154,7 @@ public:
     FluidSkillVFXManager* GetEnemyFluidVFXManager() { return m_pVFXManager ? m_pVFXManager->GetEnemyVFX()  : nullptr; }
     TorchSystem* GetTorchSystem() { return m_pTorchSystem.get(); }
     GameObject* GetPlayer() const { return m_pPlayerGameObject; }
+    StageTheme  GetCurrentTheme() const { return m_eCurrentTheme; }
     std::vector<GameObject*> GetAllPlayers() const;  // 로컬 + 원격 플레이어 목록 반환
     void RegisterPlayersToEnemy(class EnemyComponent* pEnemy);  // 적에게 플레이어 등록
     Shader* GetDefaultShader() const { return m_vShaders.empty() ? nullptr : m_vShaders[0].get(); }
