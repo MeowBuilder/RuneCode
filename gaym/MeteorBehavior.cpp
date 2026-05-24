@@ -40,23 +40,53 @@ MeteorBehavior::MeteorBehavior(const SkillData& customData)
 {
 }
 
-void MeteorBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
+void MeteorBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
 {
-    // 채널 중 커서 위치에 소형 메테오 즉시 낙하 — 위치를 바꿔가며 쏘는 것이 일반 스킬과의 차이
-    if (!m_pScene || !m_pVFXManager) return;
-    CRoom* pRoom = m_pScene->GetCurrentRoom();
-    if (!pRoom) return;
+    m_bChannelMode   = true;
+    m_bIsFinished    = false;
+    m_pCaster        = caster;
+    m_damageMult     = 1.f;
+    m_elapsed        = 0.f;
+    m_meteorsSpawned = 0;
+    m_bFinalSpawned  = false;
+    m_bFinalImpacted = false;
+    m_smallMeteors.clear();
 
-    if (EffectRegistry::Get().HasEffect("R_MeteorSmallImpact"))
+    m_elementType = ElementType::Fire;
+    if (caster) {
+        if (auto* pPC = caster->GetComponent<PlayerComponent>())
+            m_elementType = pPC->GetElementType();
+    }
+}
+
+void MeteorBehavior::SpawnSmallMeteorAt(const XMFLOAT3& targetPos)
+{
+    if (!m_pVFXManager) return;
+
+    SmallMeteorData sm;
+    sm.targetPos   = { targetPos.x, 0.f, targetPos.z };
+    sm.spawnPos    = { targetPos.x, SMALL_SPAWN_HEIGHT, targetPos.z };
+    sm.fallDuration = SMALL_SPAWN_HEIGHT / SMALL_FALL_SPEED;
+    sm.elapsed     = 0.f;
+    sm.impacted    = false;
+
+    XMFLOAT3 upDir = { 0.f, 1.f, 0.f };
+    if (EffectRegistry::Get().HasEffect("R_MeteorSmallTrail"))
     {
-        XMFLOAT3 impPos = { target.x, 0.f, target.z };
-        XMFLOAT3 up = { 0.f, 1.f, 0.f };
-        m_pVFXManager->SpawnEffectDef(impPos, up,
-            EffectRegistry::Get().GetEffect("R_MeteorSmallImpact"), false);
+        EffectDef trailDef = EffectRegistry::Get().GetEffect("R_MeteorSmallTrail");
+        ApplyElementColors(trailDef, m_elementType);
+        if (!trailDef.layers.empty())
+            sm.trailVfxId = m_pVFXManager->SpawnEffectLayer(
+                sm.spawnPos, upDir, trailDef.name, trailDef.layers[0], true);
     }
 
-    float damage = m_SkillData.damage * SMALL_DAMAGE_RATIO * tickMult;
-    ApplyExplosionDamage(damage, SMALL_EXPLODE_RADIUS, { target.x, 0.f, target.z }, false);
+    m_smallMeteors.push_back(sm);
+}
+
+void MeteorBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
+{
+    m_pCaster = caster;
+    SpawnSmallMeteorAt(target);
 }
 
 void MeteorBehavior::OnChargeBegin(GameObject* caster)
@@ -103,6 +133,9 @@ void MeteorBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOA
 // ─── Execute: 메테오 샤워 시작 ─────────────────────────────────────────────────
 void MeteorBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
+    // 채널 모드: Execute는 아무것도 하지 않음 (OnChannelTick이 낙하 메테오를 생성)
+    if (m_bChannelMode) return;
+
     if (m_pVFXManager && m_chargeVFXId >= 0) { m_pVFXManager->StopEffect(m_chargeVFXId); m_chargeVFXId = -1; }
     if (!m_pVFXManager)
     {
@@ -201,16 +234,19 @@ void MeteorBehavior::Update(float deltaTime)
     m_elapsed += deltaTime;
     XMFLOAT3 upDir = { 0.f, 1.f, 0.f };
 
-    // 소형 메테오 추가 스폰
-    while (m_meteorsSpawned < SHOWER_COUNT)
+    // 소형 메테오 추가 스폰 (일반 샤워 모드만 — 채널/후처리 모드에서는 스킵)
+    if (!m_bChannelMode && !m_bPostChannel)
     {
-        float spawnTime = m_meteorsSpawned * SHOWER_INTERVAL;
-        if (m_elapsed < spawnTime) break;
-        SpawnSmallMeteor();
-        ++m_meteorsSpawned;
+        while (m_meteorsSpawned < SHOWER_COUNT)
+        {
+            float spawnTime = m_meteorsSpawned * SHOWER_INTERVAL;
+            if (m_elapsed < spawnTime) break;
+            SpawnSmallMeteor();
+            ++m_meteorsSpawned;
+        }
     }
 
-    // 소형 메테오 낙하 추적 + 착지 판정
+    // 소형 메테오 낙하 추적 + 착지 판정 (채널/일반 공용)
     for (auto& sm : m_smallMeteors)
     {
         if (sm.impacted) continue;
@@ -228,12 +264,26 @@ void MeteorBehavior::Update(float deltaTime)
             OnSmallImpact(sm);
     }
 
-    // 최종 메테오 스폰 타이밍 — 마지막 소형 스폰 후 FINAL_DELAY 경과 시
-    if (!m_bFinalSpawned)
+    // 최종 메테오 스폰 — 일반 샤워 모드만 (채널은 OnChannelComplete 에서 처리)
+    if (!m_bChannelMode && !m_bPostChannel && !m_bFinalSpawned)
     {
         float lastSmallTime = (SHOWER_COUNT - 1) * SHOWER_INTERVAL;
         if (m_elapsed >= lastSmallTime + FINAL_DELAY)
             SpawnFinalMeteor();
+    }
+
+    // 후처리 모드: 소형 + 대형 메테오가 모두 착지하면 완료
+    if (m_bPostChannel)
+    {
+        bool allSmallDone = true;
+        for (const auto& sm : m_smallMeteors)
+            if (!sm.impacted) { allSmallDone = false; break; }
+        bool finalDone = !m_bFinalSpawned || m_bFinalImpacted;
+        if (allSmallDone && finalDone)
+        {
+            m_bPostChannel = false;
+            m_bIsFinished  = true;
+        }
     }
 
     // 최종 메테오 낙하 추적 + 착지 판정
@@ -307,7 +357,8 @@ void MeteorBehavior::SpawnFinalMeteor()
 void MeteorBehavior::OnFinalImpact()
 {
     m_bFinalImpacted = true;
-    m_bIsFinished    = true;
+    if (!m_bPostChannel)
+        m_bIsFinished = true;  // 후처리 모드면 Update() 의 allDone 체크에서 처리
 
     if (m_pVFXManager)
     {
@@ -338,6 +389,40 @@ void MeteorBehavior::OnFinalImpact()
 
 bool MeteorBehavior::IsFinished() const { return m_bIsFinished; }
 
+// ─── 채널 완료: 하늘에서 낙하하는 대형 메테오 ────────────────────────────────
+void MeteorBehavior::OnChannelComplete(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    if (!m_bChannelMode) return;
+    m_pCaster   = caster;
+    m_targetPos = targetPosition;
+    SpawnFinalMeteor();  // 실제 낙하 애니메이션 → OnFinalImpact 에서 폭발
+    OutputDebugStringA("[Meteor] Channel complete: final meteor launched from sky!\n");
+}
+
+// ─── 채널 종료 (중단 or 완료 후 정리) ───────────────────────────────────────
+void MeteorBehavior::OnChannelEnd(GameObject* caster)
+{
+    if (!m_bChannelMode) return;
+    m_bChannelMode = false;
+
+    // 낙하 중 소형 메테오 or 대형 메테오가 있으면 후처리 모드로 전환
+    bool anyFalling = false;
+    for (const auto& sm : m_smallMeteors)
+        if (!sm.impacted) { anyFalling = true; break; }
+
+    bool finalPending = m_bFinalSpawned && !m_bFinalImpacted;
+
+    if (anyFalling || finalPending)
+    {
+        m_bPostChannel = true;
+        // m_bIsFinished는 false 유지 → SkillComponent가 Update() 계속 호출
+    }
+    else
+    {
+        m_bIsFinished = true;
+    }
+}
+
 void MeteorBehavior::Reset()
 {
     if (m_pVFXManager)
@@ -351,6 +436,8 @@ void MeteorBehavior::Reset()
     }
 
     m_bIsFinished    = true;
+    m_bChannelMode   = false;
+    m_bPostChannel   = false;
     m_chargeVFXId    = -1;
     m_enhanceAuraId  = -1;
     m_elapsed        = 0.f;

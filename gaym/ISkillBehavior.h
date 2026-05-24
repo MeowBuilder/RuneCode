@@ -51,11 +51,16 @@ public:
     virtual void OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult) {}
     // [채널] 채널 종료 (키 해제 or 최대 지속 만료)
     virtual void OnChannelEnd(GameObject* caster) {}
+    // [채널] 키를 끝까지 눌러 채널이 완전히 완료됐을 때만 호출 (중단 시엔 호출 안 됨)
+    virtual void OnChannelComplete(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) {}
 
     // [증강] 강화 버프가 플레이어에게 걸리는 순간
     virtual void OnEnhanceActivate(GameObject* caster) {}
     // [증강] 강화 버프를 소모해 스킬이 발동되는 순간
     virtual void OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) {}
+
+    // 채널 종료 후 Update()를 계속 실행해야 하면 true 반환 (예: 낙하 중 메테오)
+    virtual bool HasPostChannelWork() const { return false; }
 
     // Optional per-frame geometry render (override in behaviors that need a mesh)
     virtual void Render(ID3D12GraphicsCommandList* pCmdList) {}

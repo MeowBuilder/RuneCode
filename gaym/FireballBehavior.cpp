@@ -85,11 +85,11 @@ void FireballBehavior::ExecuteInstant(GameObject* caster, const DirectX::XMFLOAT
     }
     else if (damageMultiplier < 0.5f)
     {
-        // Channel tick - small fast fireballs
+        // 채널 틱: 소형 빠른 파이어볼 (단발)
         speed = PROJECTILE_SPEED * 1.5f;
-        collisionRadius = 0.3f;
-        explosionRadius = 0.0f;  // No AoE for channel ticks
-        scale = 0.5f;
+        collisionRadius = 0.25f;
+        explosionRadius = 0.0f;
+        scale = 0.4f;
     }
 
     wchar_t buffer[256];

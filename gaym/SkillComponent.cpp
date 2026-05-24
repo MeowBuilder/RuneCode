@@ -181,10 +181,19 @@ void SkillComponent::Update(float deltaTime)
             size_t index = static_cast<size_t>(m_ActiveSkillSlot);
             if (index < m_Skills.size() && m_Skills[index])
             {
+                m_Skills[index]->OnChannelComplete(m_pOwner, m_ChannelTargetPosition);
                 m_Skills[index]->OnChannelEnd(m_pOwner);
                 m_CooldownTimers[index] = GetEffectiveCooldown(index);
-                m_SkillStates[index] = SkillState::Cooldown;
-                m_Skills[index]->Reset();
+                bool keepCasting = !m_Skills[index]->IsFinished() && m_Skills[index]->HasPostChannelWork();
+                if (keepCasting)
+                {
+                    m_SkillStates[index] = SkillState::Casting;
+                }
+                else
+                {
+                    m_SkillStates[index] = SkillState::Cooldown;
+                    m_Skills[index]->Reset();
+                }
             }
             m_ActiveSkillSlot = SkillSlot::Count;
         }
@@ -327,8 +336,16 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
             {
                 m_Skills[index]->OnChannelEnd(m_pOwner);
                 m_CooldownTimers[index] = GetEffectiveCooldown(index) * 0.5f;
-                m_SkillStates[index] = SkillState::Cooldown;
-                m_Skills[index]->Reset();
+                bool keepCasting = !m_Skills[index]->IsFinished() && m_Skills[index]->HasPostChannelWork();
+                if (keepCasting)
+                {
+                    m_SkillStates[index] = SkillState::Casting;
+                }
+                else
+                {
+                    m_SkillStates[index] = SkillState::Cooldown;
+                    m_Skills[index]->Reset();
+                }
             }
             m_ActiveSkillSlot = SkillSlot::Count;
         }

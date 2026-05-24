@@ -68,6 +68,9 @@ void WaveSlashBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::XMF
 
 void WaveSlashBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
 {
+    m_bChannelActive = true;
+    m_hitHalfW       = CHANNEL_WAVE_HALF_W;
+
     if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
     if (!EffectRegistry::Get().HasEffect("sub_fire")) return;
     XMFLOAT3 pos = caster->GetTransform()->GetPosition();
@@ -78,32 +81,54 @@ void WaveSlashBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOA
 
 void WaveSlashBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
 {
-    if (!m_pScene || !caster || !caster->GetTransform()) return;
-    CRoom* pRoom = m_pScene->GetCurrentRoom();
-    if (!pRoom) return;
+    if (!caster || !caster->GetTransform()) return;
 
     XMFLOAT3 origin = caster->GetTransform()->GetPosition();
-    origin.y = 0.f;
+    origin.y += 5.0f;
     XMVECTOR oV = XMLoadFloat3(&origin);
     XMVECTOR dV = XMVector3Normalize(XMVectorSetY(XMVectorSubtract(XMLoadFloat3(&target), oV), 0.f));
     if (XMVectorGetX(XMVector3LengthSq(dV)) < 0.001f)
         dV = XMVector3Normalize(XMVectorSetY(caster->GetTransform()->GetLook(), 0.f));
     XMFLOAT3 dir; XMStoreFloat3(&dir, dV);
 
-    if (m_pVFXManager && EffectRegistry::Get().HasEffect("sub_fire"))
+    // 채널 파도: 이전 파도를 죽이지 않고 새 파도를 추가 스폰 (isPlayer=true 필수 — SSF 렌더)
+    // 각 파도는 WAVE_DURATION(2s) 동안 자체 물리(SPH waveMode)로 앞으로 진행
+    // OnChannelEnd/Reset에서 일괄 StopEffect
+    if (m_pVFXManager && EffectRegistry::Get().HasEffect("Q_WaveSlash"))
     {
-        XMFLOAT3 spawnPos = { origin.x, origin.y + 0.5f, origin.z };
-        m_pVFXManager->SpawnEffectDef(spawnPos, dir,
-            EffectRegistry::Get().GetEffect("sub_fire"), false);
+        uint32_t runeFlags = GetRuneFlags(caster);
+        EffectDef def = EffectRegistry::Get().GetEffect("Q_WaveSlash", runeFlags);
+        ElementType elem = ElementType::Fire;
+        if (auto* pPC = caster->GetComponent<PlayerComponent>()) elem = pPC->GetElementType();
+        FluidElementColor ec = FluidElementColors::Get(elem);
+        def.element = elem;
+        for (auto& l : def.layers) { l.element = elem; l.coreColor = ec.coreColor; l.edgeColor = ec.edgeColor; }
+
+        VFXModifier mod;
+        mod.sizeScaleMult    = 0.4f;
+        mod.particleCountMult = 0.45f;
+        mod.strengthMult     = 0.6f;
+        mod.speedMult        = 1.25f;
+        ApplyVFXModifier(def, mod);
+        int waveId = m_pVFXManager->SpawnEffectDef(origin, dir, def, true);
+        if (waveId >= 0) m_channelWaveVfxIds.push_back(waveId);
     }
 
-    if (m_pVFXManager && m_channelAmbientId >= 0 && caster->GetTransform())
+    // 앰비언트 VFX 위치 갱신
+    if (m_pVFXManager && m_channelAmbientId >= 0)
     {
         XMFLOAT3 cpos = caster->GetTransform()->GetPosition();
         XMFLOAT3 up = { 0.f, 1.f, 0.f };
         m_pVFXManager->TrackEffect(m_channelAmbientId, cpos, up);
     }
 
+    // 좁은 파도 피해 판정
+    if (!m_pScene) return;
+    CRoom* pRoom = m_pScene->GetCurrentRoom();
+    if (!pRoom) return;
+
+    XMFLOAT3 groundOrigin = { origin.x, 0.f, origin.z };
+    XMVECTOR gV = XMLoadFloat3(&groundOrigin);
     float damage = m_SkillData.damage * tickMult;
     for (const auto& obj : pRoom->GetGameObjects())
     {
@@ -113,11 +138,11 @@ void WaveSlashBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT
         auto* pT = obj->GetTransform();
         if (!pT) continue;
         XMFLOAT3 ePos = pT->GetPosition();
-        XMVECTOR toE = XMVectorSetY(XMVectorSubtract(XMLoadFloat3(&ePos), oV), 0.f);
+        XMVECTOR toE = XMVectorSetY(XMVectorSubtract(XMLoadFloat3(&ePos), gV), 0.f);
         float fwd = XMVectorGetX(XMVector3Dot(toE, dV));
         if (fwd < 0.f || fwd > CHANNEL_RANGE) continue;
         XMVECTOR latV = XMVectorSubtract(toE, XMVectorScale(dV, fwd));
-        if (XMVectorGetX(XMVector3Length(latV)) > WAVE_HALF_W) continue;
+        if (XMVectorGetX(XMVector3Length(latV)) > CHANNEL_WAVE_HALF_W) continue;
         pEnemy->TakeDamage(damage, false);
     }
 }
@@ -129,11 +154,23 @@ void WaveSlashBehavior::OnChannelEnd(GameObject* caster)
         m_pVFXManager->StopEffect(m_channelAmbientId);
         m_channelAmbientId = -1;
     }
+    // 진행 중인 파도는 StopEffect하지 않음 — WAVE_DURATION 동안 자연 소멸 대기
+    if (!m_channelWaveVfxIds.empty())
+    {
+        m_bPostChannelWaves = true;
+        m_channelPostTimer  = 0.f;
+    }
+    m_bChannelActive   = false;
+    m_hitHalfW         = WAVE_HALF_W;
 }
 
 void WaveSlashBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
     if (m_pVFXManager && m_chargeVFXId >= 0) { m_pVFXManager->StopEffect(m_chargeVFXId); m_chargeVFXId = -1; }
+
+    // 채널 모드: Execute 스킵 — OnChannelTick 이 틱마다 개별 파도를 스폰함
+    if (m_bChannelActive) return;
+
     m_bIsFinished = false;
     m_bWaveActive = false;
     m_pCaster     = caster;
@@ -215,7 +252,19 @@ void WaveSlashBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& tar
             activationMod = pSC->GetCurrentActivationVFXMod();
         VFXModifier finalMod = MergeVFXModifiers(stats.vfxMod, activationMod);
         ApplyVFXModifier(def, finalMod);
-        // 파동 폭(waveHalfW)은 이미 ApplyVFXModifier 내에서 isWave 레이어에 적용됨
+
+        // 채널 모드: 파도 폭 좁힘 (40%)
+        if (m_bChannelActive)
+        {
+            VFXModifier channelMod;
+            channelMod.sizeScaleMult    = 0.4f;
+            channelMod.particleCountMult = 0.45f;
+            channelMod.strengthMult     = 0.6f;
+            channelMod.speedMult        = 1.2f;
+            ApplyVFXModifier(def, channelMod);
+            m_hitHalfW = CHANNEL_WAVE_HALF_W;
+        }
+
         m_damageMult = damageMultiplier > 0.f ? damageMultiplier : 1.f;
     }
 
@@ -284,11 +333,23 @@ void WaveSlashBehavior::Update(float deltaTime)
         if (m_trailDropTimer >= TRAIL_DROP_INTERVAL)
         {
             m_trailDropTimer = 0.f;
-            DropFireTrail();
+            if (!m_bChannelActive)  // 채널 모드에서는 파이어 자국 없음
+                DropFireTrail();
         }
 
         if (m_waveElapsed >= WAVE_DURATION)
             m_bWaveActive = false;
+    }
+
+    // 채널 종료 후 파도 자연 소멸 대기
+    if (m_bPostChannelWaves)
+    {
+        m_channelPostTimer += deltaTime;
+        if (m_channelPostTimer >= WAVE_DURATION)
+        {
+            m_bPostChannelWaves = false;
+            m_channelWaveVfxIds.clear();  // VFX는 이미 waveMaxDist 도달로 자연 소멸
+        }
     }
 
     // 파도가 끝난 뒤에도 trail이 남아있는 동안 DoT 계속 적용
@@ -337,7 +398,7 @@ void WaveSlashBehavior::HitEnemiesInWave(float damage)
         // 수평 측면 거리 (적 반경만큼 관대하게)
         XMVECTOR lateralV = XMVectorSubtract(toEnemy, XMVectorScale(dirV, fwdProj));
         lateralV = XMVectorSetY(lateralV, 0.f);
-        if (XMVectorGetX(XMVector3Length(lateralV)) > WAVE_HALF_W + eRadius) continue;
+        if (XMVectorGetX(XMVector3Length(lateralV)) > m_hitHalfW + eRadius) continue;
 
         // 수직 범위 (적 키만큼 관대하게)
         float yTolerance = max(0.f, eScale.y * 0.6f);
@@ -450,7 +511,7 @@ void WaveSlashBehavior::UpdateFireTrail(float deltaTime)
 
 bool WaveSlashBehavior::IsFinished() const
 {
-    return !m_bWaveActive && m_fireTrail.empty();
+    return !m_bWaveActive && m_fireTrail.empty() && !m_bPostChannelWaves;
 }
 
 void WaveSlashBehavior::Reset()
@@ -464,15 +525,22 @@ void WaveSlashBehavior::Reset()
     }
     if (m_pVFXManager)
     {
-        if (m_channelAmbientId >= 0) m_pVFXManager->StopEffect(m_channelAmbientId);
-        if (m_chargeVFXId      >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
-        if (m_enhanceAuraId    >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
+        if (m_channelAmbientId  >= 0) m_pVFXManager->StopEffect(m_channelAmbientId);
+        for (int id : m_channelWaveVfxIds)  // 아직 소멸 전 파도 강제 정리
+            if (id >= 0) m_pVFXManager->StopEffect(id);
+        if (m_chargeVFXId       >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
+        if (m_enhanceAuraId     >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
     }
-    m_bIsFinished      = true;
-    m_bWaveActive      = false;
-    m_vfxId            = -1;
-    m_channelAmbientId = -1;
-    m_chargeVFXId      = -1;
+    m_bIsFinished       = true;
+    m_bWaveActive       = false;
+    m_bChannelActive    = false;
+    m_bPostChannelWaves = false;
+    m_channelPostTimer  = 0.f;
+    m_hitHalfW          = WAVE_HALF_W;
+    m_vfxId             = -1;
+    m_channelAmbientId  = -1;
+    m_channelWaveVfxIds.clear();
+    m_chargeVFXId       = -1;
     m_enhanceAuraId    = -1;
     m_extraVFXIds.clear();
     m_hitEnemies.clear();

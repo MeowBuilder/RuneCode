@@ -37,15 +37,20 @@ public:
     virtual void OnChargeUpdate(GameObject* caster, float chargeRatio) override;
     virtual void OnEnhanceActivate(GameObject* caster) override;
     virtual void OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
+    virtual void OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
     virtual void OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult) override;
+    virtual void OnChannelComplete(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
+    virtual void OnChannelEnd(GameObject* caster) override;
     virtual void Update(float deltaTime) override;
     virtual bool IsFinished() const override;
     virtual void Reset() override;
     virtual void Render(ID3D12GraphicsCommandList* pCmdList) override {}
     virtual const SkillData& GetSkillData() const override { return m_SkillData; }
+    virtual bool HasPostChannelWork() const override { return m_bPostChannel; }
 
 private:
     void SpawnSmallMeteor();
+    void SpawnSmallMeteorAt(const DirectX::XMFLOAT3& targetPos);
     void OnSmallImpact(SmallMeteorData& meteor);
     void SpawnFinalMeteor();
     void OnFinalImpact();
@@ -58,6 +63,9 @@ private:
     DecalManager*         m_pDecalManager  = nullptr;
     GameObject*           m_pCaster        = nullptr;
     ElementType           m_elementType = ElementType::Fire;
+
+    bool m_bChannelMode  = false;  // 채널 룬 발동 중 (샤워 스킵, 틱마다 낙하 메테오)
+    bool m_bPostChannel  = false;  // 채널 종료 후 낙하 중 메테오 마무리 처리 중
 
     int m_chargeVFXId   = -1;
     int m_enhanceAuraId = -1;

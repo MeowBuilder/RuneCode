@@ -36,6 +36,7 @@ public:
     virtual bool IsFinished() const override;
     virtual void Reset() override;
     virtual const SkillData& GetSkillData() const override { return m_SkillData; }
+    virtual bool HasPostChannelWork() const override { return m_bPostChannelWaves; }
 
 private:
     uint32_t GetRuneFlags(GameObject* caster) const;
@@ -72,6 +73,12 @@ private:
     float      m_waveElapsed       = 0.f;
     float      m_trailDropTimer    = 0.f;
 
+    bool  m_bChannelActive     = false;       // 채널 룬 발동 중
+    float m_hitHalfW           = WAVE_HALF_W; // 히트 판정 반폭 (채널 시 좁아짐)
+    bool  m_bPostChannelWaves  = false;       // 채널 종료 후 파도 자연 소멸 대기 중
+    float m_channelPostTimer   = 0.f;         // 채널 종료 후 경과 시간
+    std::vector<int> m_channelWaveVfxIds;     // 채널 중 발사된 파도 VFX 슬롯 목록
+
     std::unordered_set<EnemyComponent*> m_hitEnemies;  // 파도 본체에 이미 히트된 적
     std::vector<FireZone>               m_fireTrail;   // 활성 불꽃 자국 존
     std::vector<int>                    m_extraVFXIds; // 다중 원소 추가 VFX 슬롯
@@ -79,7 +86,8 @@ private:
     // 파도 본체 히트 판정
     // WAVE_PARTICLE_SPEED: Q_WaveSlash sph.maxParticleSpeed(20)에 맞춰 실제 파티클 선두 속도 사용
     // waveSpeed(10)는 타이머 전용 — 파티클은 push force로 훨씬 빠르게 이동
-    static constexpr float CHANNEL_RANGE        = 10.0f;  // 채널 미니 슬래시 사거리
+    static constexpr float CHANNEL_RANGE        = 10.0f;  // 채널 파도 사거리
+    static constexpr float CHANNEL_WAVE_HALF_W  = 2.0f;   // 채널 파도 좁은 폭 반경 (m)
     static constexpr float WAVE_DURATION        = 2.0f;   // waveMaxDist(20) / waveSpeed(10)
     static constexpr float WAVE_PARTICLE_SPEED  = 20.0f;  // 히트 슬랩 선두 속도 (m/s) ← 조정 가능
     static constexpr float WAVE_HIT_DEPTH       = 6.0f;   // 히트 슬랩 두께 (m)
