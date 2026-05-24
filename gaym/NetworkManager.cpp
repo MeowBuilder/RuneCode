@@ -27,6 +27,9 @@
 #include "TornadoFieldAttackBehavior.h"
 #include "GaleSlashAttackBehavior.h"
 #include "ShockwaveRingAttackBehavior.h"
+#include "SpinDashAttackBehavior.h"
+#include "RushFrontAttackBehavior.h"
+#include "FixatedChargeAttackBehavior.h"
 #include "Dx12App.h"
 #include "MapLoader.h"
 #include "CharacterData.h"
@@ -2110,6 +2113,7 @@ struct NetIndicatorParams
     NetworkManager::NetIndicatorType type = NetworkManager::NetIndicatorType::None;
     float radius = 0.0f;
     float length = 0.0f;   // ForwardBox 전방 길이
+    XMFLOAT3 tint = XMFLOAT3(1.0f, 0.1f, 0.1f); // 기본 빨강
 };
 
 static NetIndicatorParams GetIndicatorParamsForAttack(uint32 monsterType, uint32 attackType)
@@ -2217,24 +2221,28 @@ static NetIndicatorParams GetIndicatorParamsForAttack(uint32 monsterType, uint32
             p.type = NetworkManager::NetIndicatorType::ForwardBox;
             p.radius = 7.0f;
             p.length = 20.0f;
+            p.tint = XMFLOAT3(1.0f, 0.55f, 0.10f); // 노랑/주황
             break;
 
         case 28: // DemonShortRush
             p.type = NetworkManager::NetIndicatorType::ForwardBox;
             p.radius = 5.0f;
             p.length = 34.0f;
+            p.tint = XMFLOAT3(1.0f, 0.1f, 0.1f); // 빨강
             break;
 
         case 29: // DemonLongRush
             p.type = NetworkManager::NetIndicatorType::ForwardBox;
             p.radius = 6.0f;
             p.length = 55.0f;
+            p.tint = XMFLOAT3(1.0f, 0.1f, 0.1f); // 빨강
             break;
 
         case 30: // DemonFixatedCharge
             p.type = NetworkManager::NetIndicatorType::ForwardBox;
             p.radius = 6.0f;
             p.length = 120.0f;
+            p.tint = XMFLOAT3(0.7f, 0.10f, 1.2f); // 보라
             break;
 
         case 31: // DemonTornadoField
@@ -2558,10 +2566,25 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                     // 외곽 1.06 → 1.12 (두께 ↑)
                     pT->SetScale(fHalfW * 2.0f * 1.12f, 1.0f, fLen * 1.12f);
                     MATERIAL mat;
-                    mat.m_cAmbient  = XMFLOAT4(0.6f, 0.02f, 0.02f, 1.0f);
-                    mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.15f, 0.1f,  1.0f);
-                    mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f,  0.0f,  1.0f);
-                    mat.m_cEmissive = XMFLOAT4(3.5f, 0.4f, 0.15f, 1.0f);
+                    float emitMul = 0.8f + 1.8f * fillProgress;
+
+                    if (ind.attackType == 28 || ind.attackType == 29)
+                    {
+                        // Demon ShortRush / LongRush: 빨간 외곽 + 노란 fill
+                        mat.m_cAmbient = XMFLOAT4(0.35f, 0.28f, 0.03f, 1.0f);
+                        mat.m_cDiffuse = XMFLOAT4(1.0f, 0.75f, 0.05f, 1.0f);
+                        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                        mat.m_cEmissive = XMFLOAT4(emitMul * 1.0f, emitMul * 0.75f, emitMul * 0.05f, 1.0f);
+                    }
+
+                    else
+                    {
+                        // 나머지 ForwardBox는 공격 타입 색상 그대로 fill
+                        mat.m_cAmbient = XMFLOAT4(0.25f * ind.tint.x, 0.25f * ind.tint.y, 0.25f * ind.tint.z, 1.0f);
+                        mat.m_cDiffuse = XMFLOAT4(ind.tint.x, ind.tint.y, ind.tint.z, 1.0f);
+                        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                        mat.m_cEmissive = XMFLOAT4(emitMul * ind.tint.x, emitMul * ind.tint.y, emitMul * ind.tint.z, 1.0f);
+                    }
                     ind.boxBorder->SetMaterial(mat);
                 }
             }
@@ -2574,13 +2597,11 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                     pT->SetRotation(0.0f, ind.yawDeg, 0.0f);
                     pT->SetScale(fHalfW * 2.0f, 1.0f, fLen);
                     MATERIAL mat;
-                    mat.m_cAmbient  = XMFLOAT4(0.3f, 0.02f, 0.0f, 1.0f);
-                    mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.2f + 0.6f * fillProgress, 0.05f, 1.0f);
+                    float emitMul = 0.8f + 1.8f * fillProgress;
+                    mat.m_cAmbient = XMFLOAT4(0.25f * ind.tint.x, 0.25f * ind.tint.y, 0.25f * ind.tint.z, 1.0f);
+                    mat.m_cDiffuse = XMFLOAT4(ind.tint.x, ind.tint.y, ind.tint.z, 1.0f);
                     mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-                    mat.m_cEmissive = XMFLOAT4(
-                        0.5f + 2.0f * fillProgress,
-                        0.1f + 1.4f * fillProgress,
-                        0.05f, 1.0f);
+                    mat.m_cEmissive = XMFLOAT4(emitMul * ind.tint.x, emitMul * ind.tint.y, emitMul * ind.tint.z, 1.0f);
                     ind.boxFill->SetMaterial(mat);
                 }
             }
@@ -2795,6 +2816,8 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             ind.windupTimer = 0.0f;
             ind.hitRadius   = params.radius;
             ind.hitLength   = params.length;
+            ind.tint        = params.tint;
+            ind.attackType  = attackType;
             ind.anchorX = atkX; ind.anchorY = atkY; ind.anchorZ = atkZ;
             // ForwardBox: 보스의 현재 yaw 사용 (transform 에서 직접 읽기)
             if (ind.activeType == NetIndicatorType::ForwardBox)
@@ -3151,7 +3174,11 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
                 return;
             }
             break;
-
+        
+        case 27:
+        case 28:
+        case 29:
+        case 30:
         case 31:
         case 32:
         case 33:
@@ -4474,6 +4501,44 @@ void NetworkManager::PlayNetworkDemonAttackBehavior(
 
     switch (attackType)
     {
+    case 27: // DemonSpinDash
+        behavior = std::make_unique<SpinDashAttackBehavior>(
+            18.0f, 0.22f,
+            18.0f, 1.1f,
+            0.25f, 0.55f,
+            7.0f
+        );
+        break;
+
+    case 28: // DemonShortRush
+        behavior = std::make_unique<RushFrontAttackBehavior>(
+            55.0f,
+            28.0f, 0.85f,
+            0.25f, 0.15f, 1.0f,
+            8.5f, 75.0f
+        );
+        break;
+
+    case 29: // DemonLongRush
+        behavior = std::make_unique<RushFrontAttackBehavior>(
+            70.0f,
+            34.0f, 1.2f,
+            0.30f, 0.20f, 1.2f,
+            10.5f, 95.0f
+        );
+        break;
+
+    case 30: // DemonFixatedCharge
+        behavior = std::make_unique<FixatedChargeAttackBehavior>(
+            85.0f,
+            3.0f, 0.2f,
+            58.0f, 110.0f,
+            6.5f, 8.0f,
+            6.0f,
+            4.5f, 0.9f
+        );
+        break;
+
     case 31: // TornadoField
         behavior = std::make_unique<TornadoFieldAttackBehavior>(
             4, 18.0f, 0.45f, 5.0f,

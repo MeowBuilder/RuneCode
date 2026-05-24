@@ -4014,6 +4014,20 @@ void Scene::TransitionToGrassBossRoom()
         const BoundingBox& demonBB = m_pCurrentRoom->GetBoundingBox();
         XMFLOAT3 demonPos = XMFLOAT3(demonBB.Center.x, 0.0f, demonBB.Center.z);
 
+        // Grass Boss Room BoundingBox 디버그 로그
+        {
+            char logBuf[256];
+            float minExt = (std::min)(demonBB.Extents.x, demonBB.Extents.z);
+
+            sprintf_s(logBuf,
+                "[CLIENT][GrassBossBB] centerX=%.2f centerZ=%.2f minExt=%.2f",
+                demonBB.Center.x,
+                demonBB.Center.z,
+                minExt);
+
+            WriteNetworkLog(logBuf);
+        }
+
         GameObject* pDemon = nullptr;
 
         if (bOnline)

@@ -414,9 +414,11 @@ private:
 
         NetIndicatorType activeType = NetIndicatorType::None;
         float windupTotal = 0.0f;
-        float windupTimer = 0.0f;     // 0..windupTotal, 만료 시 hide
+        float windupTimer = 0.0f;      // 0..windupTotal, 만료 시 hide
         float hitRadius = 0.0f;        // Circle: r, ForwardBox: half-width
         float hitLength = 0.0f;        // ForwardBox: 전방 길이
+        DirectX::XMFLOAT3 tint = DirectX::XMFLOAT3(1.0f, 0.1f, 0.1f); // 인디케이터 색상
+        uint32 attackType = 0;         // 현재 인디케이터 공격 타입
         float anchorX = 0.0f;
         float anchorY = 0.0f;
         float anchorZ = 0.0f;
