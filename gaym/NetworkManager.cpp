@@ -1573,7 +1573,6 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
         if (!pProjManager) break;
 
         float speed = 30.0f, radius = 0.5f, explosionRadius = 3.0f, scale = 1.0f;
-        bool piercing = true;  // 클라 hit 판정 무력화
 
         switch (remoteElement)
         {
@@ -1590,13 +1589,19 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
             projOrigin.y,
             projOrigin.z + horizontalDir.z * 50.0f);
 
+        // Wind RC (WindShot) 만 관통 — WindShotBehavior.cpp:53 과 일치.
+        // 나머지 (Fire/Water/Earth RC) 는 첫 충돌에 폭발 (오프라인과 동일).
+        bool isPiercing = (remoteElement == ElementType::Wind);
+
         pProjManager->SpawnProjectile(
             projOrigin, projTarget,
-            0.0f,                  // damage=0 — 서버 권위
+            0.0f,                       // damage=0 — 서버 권위 (실제 데미지는 S_MONSTER_DAMAGE 로 적용)
             speed, radius, explosionRadius,
             remoteElement, pRemotePlayer,
-            piercing, scale,
-            RuneCombo{}, 0.0f
+            /*isPlayerProjectile*/true, scale,
+            RuneCombo{}, 0.0f,
+            /*maxDistance*/100.0f,
+            /*isPiercing*/isPiercing
         );
         break;
     }
@@ -3716,14 +3721,44 @@ void NetworkManager::ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float
     m_mapServerMonsterHitFlashTimer[monsterId] = SERVER_MONSTER_HIT_FLASH_DURATION;
     pMonster->SetHitFlashAll(1.0f);
 
-    // 우클릭 (Fireball) 피격 시 폭발 VFX — 네트워크 몬스터는 EnemyComponent 가 없어서 로컬 투사체가 충돌
-    // 감지를 못 하고 그냥 통과, 폭발 이펙트가 안 뜨기 때문에 서버 피격 통지 시점에 몬스터 위치에서 수동 생성.
-    if (skillType == 4 /* SKILL_TYPE_MOUSE_RIGHT */)
+    // 투사체 기반 스킬 폭발 VFX — 서버 권위 데미지 적용 시점에 트리거되어 VFX 와 데미지 표시가 동기화.
+    //   skillType == 4 (RC): Fireball / WaterOrb / EarthShard. Wind RC (WindShot) 는 관통이라 폭발 없음.
+    //   skillType == 2 (E): Earth 만 — RockThrow.
+    // 공격자 원소 lookup: 로컬 자신 → PlayerComponent, 원격 → m_mapRemotePlayerElement.
+    ElementType attackerElement = ElementType::None;
+    if (attackerPlayerId == GetLocalPlayerId())
+    {
+        if (auto* pLocalPlayer = pScene->GetPlayer())
+        {
+            if (auto* pPC = pLocalPlayer->GetComponent<PlayerComponent>())
+                attackerElement = pPC->GetElementType();
+        }
+    }
+    else
+    {
+        auto eIt = m_mapRemotePlayerElement.find(attackerPlayerId);
+        if (eIt != m_mapRemotePlayerElement.end())
+            attackerElement = eIt->second;
+    }
+
+    bool shouldExplode = false;
+    if (skillType == 4 /* SKILL_TYPE_MOUSE_RIGHT */ &&
+        attackerElement != ElementType::Wind &&
+        attackerElement != ElementType::None)
+    {
+        shouldExplode = true;     // Fireball / WaterOrb / EarthShard
+    }
+    else if (skillType == 2 /* SKILL_TYPE_E */ && attackerElement == ElementType::Earth)
+    {
+        shouldExplode = true;     // RockThrow
+    }
+
+    if (shouldExplode)
     {
         ProjectileManager* pProj = pScene->GetProjectileManager();
         if (pProj && pMonster->GetTransform())
         {
-            pProj->SpawnExplosionParticles(pMonster->GetTransform()->GetPosition(), ElementType::Fire);
+            pProj->SpawnExplosionParticles(pMonster->GetTransform()->GetPosition(), attackerElement);
         }
     }
 

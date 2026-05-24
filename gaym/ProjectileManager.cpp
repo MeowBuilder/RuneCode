@@ -531,10 +531,11 @@ void ProjectileManager::CheckProjectileCollisions(Projectile& projectile)
         }
 
         // 네트워크 모드: 서버 몬스터 (EnemyComponent 없음, 로컬 Room 밖에 존재) 도 충돌 체크.
-        // 데미지는 서버 권위이므로 여기선 폭발 VFX 트리거 + projectile 비활성화만 처리.
-        // wasHit=true 면 Update 루프가 FluidVFXManager::ExplodeEffect 를 불러줘서 폭발 이펙트가 자연 생성됨.
+        // 데미지는 서버 권위 — 여기선 폭발 VFX 트리거 + projectile 비활성화만.
+        // wasHit=true 면 Update 루프가 pVFX->Explode 를 불러 큰 폭발 VFX 가 자연 생성됨.
+        // 관통은 collision 검사 자체 스킵 — visual 도 통과 (Wind RC).
         NetworkManager* pNetMgr = NetworkManager::GetInstance();
-        if (pNetMgr && pNetMgr->IsConnected() && projectile.isActive)
+        if (pNetMgr && pNetMgr->IsConnected() && projectile.isActive && !projectile.isPiercing)
         {
             for (const auto& kv : pNetMgr->GetServerMonsters())
             {
@@ -555,7 +556,7 @@ void ProjectileManager::CheckProjectileCollisions(Projectile& projectile)
                 {
                     projectile.wasHit = true;
                     projectile.isActive = false;
-                    return;  // 관통 없음 — 첫 서버 몬스터 충돌 시 폭발
+                    return;  // 비관통 — 첫 서버 몬스터 충돌 시 폭발
                 }
             }
         }
