@@ -1510,6 +1510,25 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     //   사이클: Idle(6s) → Warning(2s, 경고링) → Active(6s, 토네이도+트랩) → Cooldown(1.5s)
     if (m_pVFXManager && m_pCurrentRoom && m_eCurrentTheme == StageTheme::Grass)
     {
+        // 강풍 burst — 풀 군집 위치에서 주기적으로 꽃가루 터짐. 셰이더 gust 와 손맞춤은 X
+        //   (CPU/GPU 동기 비용 큼 → 그냥 비슷한 주기로 자연스럽게 보임).
+        //   1.8 ~ 3.2s 사이 랜덤 인터벌 → 풀숲 곳곳에서 불규칙 터짐.
+        m_fGustBurstTimer += deltaTime;
+        if (m_fGustBurstTimer >= 2.5f && !m_vGrassClumpObjects.empty())
+        {
+            int idx = rand() % static_cast<int>(m_vGrassClumpObjects.size());
+            GameObject* pClump = m_vGrassClumpObjects[idx];
+            if (pClump)
+            {
+                XMFLOAT3 cp = pClump->GetTransform()->GetPosition();
+                cp.y = 1.5f;  // 풀 중간 높이에서 터짐
+                m_pVFXManager->Spawn("Wind_GustBurst", cp,
+                                     XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
+            }
+            // 다음 인터벌 랜덤화 — timer 를 음수로 살짝 밀어주면 다음 burst 까지 1.8~3.2 사이
+            m_fGustBurstTimer = -((rand() % 1400) / 1000.0f);  // -1.4 ~ 0
+        }
+
         m_fPeriodicTornadoTimer += deltaTime;
 
         // Active 페이즈: 모든 플레이어에 데미지/석션/트랩 적용
@@ -2456,6 +2475,22 @@ void Scene::TransitionToNextRoom()
         return;
     }
 
+    // ── 6b. 사막 스테이지 데코 산포 — 방 이동 후에도 새 방에 prop 배치 유지
+    if (m_eCurrentTheme == StageTheme::Earth)
+    {
+        MapLoader::ScatterPropsOnFloorTiles(
+            m_strCurrentMap.c_str(),
+            "Assets/MapData/desert_props.json",
+            this, pDevice, pCommandList, m_vShaders[0].get());
+    }
+
+    // ── 6c. 풀 스테이지 wind ambient 재설정 — 다음 방에서도 풀/토네이도/잎 보이게.
+    //        (CleanupWindAmbient 는 이미 앞에서 호출됨)
+    if (m_eCurrentTheme == StageTheme::Grass && m_pCurrentRoom)
+    {
+        SetupWindAmbient(m_pCurrentRoom->GetBoundingBox());
+    }
+
     // ── 7. 맵 정적 오브젝트 상수 버퍼 초기화 (Inactive 상태에서는 Update가 스킵되므로)
     if (m_pCurrentRoom)
     {
@@ -2552,6 +2587,15 @@ void Scene::TransitionToRoomByIndex(int index)
     {
         OutputDebugString(L"[Scene] TransitionToRoomByIndex: map load failed\n");
         return;
+    }
+
+    // 사막 스테이지 데코 산포 — dev nav 로 점프해도 prop 배치 유지
+    if (m_eCurrentTheme == StageTheme::Earth)
+    {
+        MapLoader::ScatterPropsOnFloorTiles(
+            m_strCurrentMap.c_str(),
+            "Assets/MapData/desert_props.json",
+            this, pDevice, pCommandList, m_vShaders[0].get());
     }
 
     if (m_pCurrentRoom)
@@ -3714,6 +3758,14 @@ void Scene::TransitionToEarthStage(int roomIndex)
         m_strCurrentMap.c_str(), this, pDevice, pCommandList, m_vShaders[0].get());
     if (!bLoaded) { OutputDebugString(L"[Scene] Earth stage map load failed!\n"); return; }
 
+    // 사막 스테이지 전용 데코 프롭(.bin 메쉬)을 walkable floor tile 위에 자동 산포.
+    // 방마다 floor tile 위치가 달라도 그 위에서만 샘플링하므로 항상 plyer 이동 가능 영역에 배치됨.
+    // scatter config 는 공유 (desert_props.json) — 방별로 다른 layout 은 RNG seed 가 맵 경로 해시여서 자동으로.
+    MapLoader::ScatterPropsOnFloorTiles(
+        m_strCurrentMap.c_str(),
+        "Assets/MapData/desert_props.json",
+        this, pDevice, pCommandList, m_vShaders[0].get());
+
     if (m_pCurrentRoom) {
         for (const auto& pGO : m_pCurrentRoom->GetGameObjects()) pGO->Update(0.0f);
         // Earth 전용 기믹 활성화
@@ -4230,8 +4282,44 @@ void Scene::SetupWindAmbient(const BoundingBox& roomBB)
         if (id >= 0) m_vAmbientWindIds.push_back(id);
     }
 
+    // ── 공중 dust motes (10 인스턴스): 다양한 높이, 약한 swirl, 느린 드리프트 ──
+    //    "공기 자체가 흐른다" 느낌 — 잎보다 가볍고 작음.
+    struct DustCfg { XMFLOAT3 pos; XMFLOAT3 dir; };
+    DustCfg dusts[10] = {
+        { { center.x - ex * 1.2f, 1.5f,  center.z + ez * 0.3f }, { 1.0f, 0.02f, 0.10f } },
+        { { center.x - ex * 1.0f, 4.0f,  center.z - ez * 0.6f }, { 0.95f, 0.05f, 0.30f } },
+        { { center.x - ex * 1.1f, 7.5f,  center.z + ez * 0.7f }, { 1.0f, 0.0f, -0.20f } },
+        { { center.x - ex * 0.9f, 12.0f, center.z + ez * 0.0f }, { 0.92f, 0.05f, 0.40f } },
+        { { center.x + ex * 0.3f, 2.5f,  center.z - ez * 1.2f }, { -0.10f, 0.05f, 0.99f } },
+        { { center.x - ex * 0.4f, 6.0f,  center.z - ez * 1.3f }, { 0.30f, 0.0f, 0.95f } },
+        { { center.x + ex * 1.1f, 5.0f,  center.z + ez * 1.0f }, { -0.7071f, 0.05f, -0.7071f } },
+        { { center.x + ex * 1.0f, 9.0f,  center.z - ez * 0.5f }, { -0.85f, 0.0f, 0.53f } },
+        { { center.x + ex * 0.6f, 3.5f,  center.z + ez * 1.1f }, { -0.50f, 0.05f, -0.87f } },
+        { { center.x - ex * 0.2f, 10.0f, center.z + ez * 0.8f }, { 0.60f, 0.0f, -0.80f } },
+    };
+    for (auto& d : dusts)
+    {
+        int id = m_pVFXManager->Spawn("Wind_DustMotes", d.pos, d.dir, 0u, false);
+        if (id >= 0) m_vAmbientWindIds.push_back(id);
+    }
+
+    // ── 꽃잎 흩날림 (4 인스턴스): 살짝 큰 옅은 핑크 파티클 — 시즈널 풀밭 분위기 ──
+    struct PetalCfg { XMFLOAT3 pos; XMFLOAT3 dir; };
+    PetalCfg petals[4] = {
+        { { center.x - ex * 1.1f, 4.5f,  center.z - ez * 0.2f }, { 1.0f,  0.03f,  0.20f } },
+        { { center.x + ex * 0.4f, 6.0f,  center.z - ez * 1.2f }, { 0.0f,  0.03f,  0.99f } },
+        { { center.x + ex * 1.1f, 7.5f,  center.z + ez * 0.6f }, { -0.7f, 0.03f, -0.71f } },
+        { { center.x - ex * 0.6f, 5.5f,  center.z + ez * 1.0f }, { 0.5f,  0.03f, -0.87f } },
+    };
+    for (auto& d : petals)
+    {
+        int id = m_pVFXManager->Spawn("Wind_Petals", d.pos, d.dir, 0u, false);
+        if (id >= 0) m_vAmbientWindIds.push_back(id);
+    }
+
     m_fPeriodicTornadoTimer = 0.0f;
     m_nPeriodicTornadoId = -1;
+    m_fGustBurstTimer = 0.0f;
 
     // ── 절차적 풀(grass) 군집: 6~8개, BoundingBox 안에 분산 배치 ──
     // 텍스처 없음(셰이더에서 vertex 그라데이션). 알파 컷아웃 X (taper 형상으로 충분).
@@ -4241,49 +4329,100 @@ void Scene::SetupWindAmbient(const BoundingBox& roomBB)
         if (pDev && pCmd && !m_vShaders.empty())
         {
             // 갈대밭 컨셉: 큰 영역에 dense 군집 + 듬성듬성 보조 군집 → 자연스럽게 펼쳐진 풀밭
-            const int kClumpCount = 18;
-            struct ClumpCfg { float fx; float fz; int nBlades; float fRadius; };
+            // ── 풀 클럼프 배치 전략 ────────────────────────────────────────────
+            //   tile 그룹: floor tile 위 (walkable, 플레이어가 지나갈 수 있는 영역)
+            //   ring 그룹: 방 바깥 ring (시각 fill — 맵 경계 너머 허전함 해소)
+            const int kTileClumpCount = 14;
+            const int kRingClumpCount = 10;
+            const int kClumpCount = kTileClumpCount + kRingClumpCount;
+            struct ClumpCfg { int nBlades; float fRadius; };
             ClumpCfg cfgs[kClumpCount] = {
-                // dense 메인 군집들 (radius 큼, 갈대 많음)
-                { -0.65f, -0.55f,150, 6.0f },
-                { +0.60f, -0.50f,160, 6.5f },
-                { -0.45f, +0.55f,140, 5.5f },
-                { +0.50f, +0.60f,150, 6.0f },
-                {  0.00f, -0.10f,180, 7.0f },
-                { -0.05f, +0.30f,120, 5.0f },
-                // 보조 군집들 (작고 듬성)
-                { -0.85f, -0.05f, 60, 3.5f },
-                { +0.80f, -0.10f, 65, 3.5f },
-                { -0.30f, -0.85f, 70, 3.8f },
-                { +0.30f, +0.85f, 70, 3.8f },
-                { -0.75f,  0.55f, 55, 3.2f },
-                { +0.70f, +0.55f, 60, 3.2f },
-                { -0.10f, -0.45f, 80, 4.0f },
-                { +0.15f, +0.10f, 90, 4.5f },
-                { -0.55f,  0.00f, 85, 4.0f },
-                { +0.55f, -0.05f, 90, 4.2f },
-                { -0.20f, +0.65f, 65, 3.8f },
-                { +0.25f, -0.65f, 70, 4.0f },
+                // === Tile 그룹 (14개) — walkable 영역, 밀도 있게 ===
+                { 55, 6.0f }, { 60, 6.2f }, { 50, 5.8f }, { 55, 6.0f },
+                { 48, 5.5f }, { 52, 5.8f }, { 45, 5.2f }, { 50, 5.5f },
+                { 30, 4.0f }, { 32, 4.0f }, { 28, 3.8f }, { 30, 3.8f },
+                { 26, 3.5f }, { 28, 3.5f },
+                // === Ring 그룹 (10개) — 맵 바깥 시각 fill, 더 크게 ===
+                { 80, 8.0f }, { 85, 8.5f }, { 75, 7.5f }, { 80, 8.0f }, { 70, 7.0f },
+                { 75, 7.5f }, { 80, 8.0f }, { 70, 7.0f }, { 75, 7.5f }, { 80, 8.0f },
             };
+
+            // ── (1) Tile 그룹 좌표 수집: 맵 JSON 의 floor tile 만, 스폰 근처 제외 ──
+            std::vector<XMFLOAT3> tiles = MapLoader::GetFloorTilePositions(m_strCurrentMap.c_str());
+
+            XMFLOAT3 spawnPos(0.0f, 0.0f, 0.0f);
+            if (m_pPlayerGameObject)
+                spawnPos = m_pPlayerGameObject->GetTransform()->GetPosition();
+            std::vector<XMFLOAT3> tileAvail;
+            tileAvail.reserve(tiles.size());
+            const float kSpawnExc = 8.0f;
+            for (const auto& t : tiles) {
+                float dx = t.x - spawnPos.x;
+                float dz = t.z - spawnPos.z;
+                if (dx*dx + dz*dz >= kSpawnExc * kSpawnExc) tileAvail.push_back(t);
+            }
+            if (tileAvail.empty()) tileAvail = tiles;
+
+            unsigned int placeSeed = 2166136261u;
+            for (char c : m_strCurrentMap) {
+                placeSeed ^= (unsigned int)(unsigned char)c;
+                placeSeed *= 16777619u;
+            }
+            std::mt19937 placeRng(placeSeed);
+            std::shuffle(tileAvail.begin(), tileAvail.end(), placeRng);
+
+            // ── (2) Ring 좌표 생성: tile bbox 바깥 + roomBB 바깥 ring 에 균등 분포 ──
+            //     tile 들의 XZ bbox 계산 → ring 반지름 = max half-extent × 1.45
+            float tileMinX = +1e9f, tileMaxX = -1e9f;
+            float tileMinZ = +1e9f, tileMaxZ = -1e9f;
+            for (const auto& t : tiles) {
+                if (t.x < tileMinX) tileMinX = t.x;
+                if (t.x > tileMaxX) tileMaxX = t.x;
+                if (t.z < tileMinZ) tileMinZ = t.z;
+                if (t.z > tileMaxZ) tileMaxZ = t.z;
+            }
+            float tileCx = (tileMinX + tileMaxX) * 0.5f;
+            float tileCz = (tileMinZ + tileMaxZ) * 0.5f;
+            float tileHalfX = (tileMaxX - tileMinX) * 0.5f;
+            float tileHalfZ = (tileMaxZ - tileMinZ) * 0.5f;
+            float ringHalfX = tileHalfX * 1.45f;
+            float ringHalfZ = tileHalfZ * 1.45f;
+            std::uniform_real_distribution<float> distAngleJit(-0.20f, 0.20f);   // ring 각도 jitter (rad)
+            std::uniform_real_distribution<float> distRJit(0.90f, 1.30f);        // ring 반지름 jitter
+
+            // ── (3) 배치 ── tile 그룹 + ring 그룹 합쳐서 진행
+            int tileTotal = (tileAvail.size() < (size_t)kTileClumpCount) ? (int)tileAvail.size() : kTileClumpCount;
 
             for (int i = 0; i < kClumpCount; ++i)
             {
-                float cx = roomBB.Center.x + cfgs[i].fx * roomBB.Extents.x;
-                float cz = roomBB.Center.z + cfgs[i].fz * roomBB.Extents.z;
-                XMFLOAT3 clumpPos(cx, 0.0f, cz);
+                XMFLOAT3 clumpPos(0.0f, 0.0f, 0.0f);
+                bool useTile = (i < kTileClumpCount) && (i < tileTotal);
+                if (useTile) {
+                    clumpPos = tileAvail[i];
+                } else {
+                    // Ring 분포: 균등 각도 + jitter, 타원형 경로 따라.
+                    int ringIdx = i - kTileClumpCount;
+                    float baseAngle = (float)ringIdx / (float)kRingClumpCount * 6.2831853f;
+                    float ang = baseAngle + distAngleJit(placeRng);
+                    float rJit = distRJit(placeRng);
+                    clumpPos.x = tileCx + std::cos(ang) * ringHalfX * rJit;
+                    clumpPos.z = tileCz + std::sin(ang) * ringHalfZ * rJit;
+                }
+                clumpPos.y = 0.0f;
 
                 // 군집별 결정적 seed — 매번 같은 모양 (방 재진입해도 일관성)
                 unsigned int seed = 0xA5F00Du + static_cast<unsigned int>(i) * 0x9E3779B9u;
 
-                // 갈대: 길고 얇은 taper, 밀도 ↑ — 바람에 흔들리는 갈대밭
+                // Stylized 풀잎: 베이스 넓고 끝 뾰족. 이번엔 전체적으로 키워서 존재감 ↑.
+                //   높이 4.5 → 6.5, 너비 0.75 → 1.05.
                 GrassClumpMesh* pMesh = new GrassClumpMesh(
                     pDev, pCmd,
                     cfgs[i].nBlades,
                     cfgs[i].fRadius,
-                    /*fBladeHeight*/ 6.0f,    // 키 큰 갈대
-                    /*fBladeWidth*/  0.22f,   // 얇음
+                    /*fBladeHeight*/ 6.5f,    // 키 더 크게
+                    /*fBladeWidth*/  1.05f,   // 잎 더 넓게
                     seed,
-                    /*bTaper*/ true);         // 테이퍼 ON — 자연 갈대 형태
+                    /*bTaper*/ true);
 
                 GameObject* pClump = CreateGameObject(pDev, pCmd);
                 if (!pClump)

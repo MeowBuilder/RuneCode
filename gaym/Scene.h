@@ -271,6 +271,7 @@ private:
     int   m_nTornadoWarningVFXId = -1;           // Warning 페이즈 경고 VFX 슬롯
     float m_fPeriodicTornadoTimer = 0.0f;        // 현재 페이즈 경과 시간
     float m_fTornadoDamageTickTimer = 0.0f;      // Active 중 데미지 tick
+    float m_fGustBurstTimer = 0.0f;              // gust 꽃가루 burst — 풀숲에서 주기적 emit
     StageTheme m_eLastAppliedTheme = StageTheme::Fire;  // sky color 변경 감지용
     StageTheme m_eCurrentTheme = StageTheme::Fire; // 현재 스테이지 테마
     bool m_bToonEnabled = true;  // F7로 토글: 원신풍 셀 셰이딩 (기본 ON)

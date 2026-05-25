@@ -69,4 +69,19 @@ public:
         const char*                     path,
         ID3D12Device*                   pDevice,
         ID3D12GraphicsCommandList*      pCommandList);
+
+    // 맵 JSON의 floor tile (LavaMaze_GridTile_01) 위치만 골라 그 위에 랜덤 산포로 .bin 프롭 배치.
+    // scatterConfigPath: { "scatter": [{ meshFile, count, yOffset?, scaleMin?, scaleMax? }, ...] }
+    // seed 는 map JSON 경로 해시 → 같은 방에서는 항상 같은 배치.
+    static void ScatterPropsOnFloorTiles(
+        const char*                     mapJsonPath,
+        const char*                     scatterConfigPath,
+        Scene*                          pScene,
+        ID3D12Device*                   pDevice,
+        ID3D12GraphicsCommandList*      pCommandList,
+        Shader*                         pShader);
+
+    // 맵 JSON 에서 floor tile (LavaMaze_GridTile_01) 의 월드 좌표만 추출.
+    //   풀 클럼프·산발적 데코 등 "walkable 위에만 두고 싶다" 는 다른 시스템에서 공유 사용.
+    static std::vector<DirectX::XMFLOAT3> GetFloorTilePositions(const char* mapJsonPath);
 };

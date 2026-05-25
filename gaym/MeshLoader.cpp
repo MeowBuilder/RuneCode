@@ -253,6 +253,13 @@ GameObject* MeshLoader::LoadFrameHierarchyFromFile(Scene* pScene, ID3D12Device* 
                         pMesh = new MeshFromFile(pd3dDevice, pd3dCommandList, pMeshInfo);
                     }
 
+                    // AABB 전파 — ColliderComponent 가 collider extents 로 활용
+                    if (pMesh)
+                    {
+                        pMesh->m_xmf3AABBCenter  = pMeshInfo->m_xmf3AABBCenter;
+                        pMesh->m_xmf3AABBExtents = pMeshInfo->m_xmf3AABBExtents;
+                    }
+
                     // 캐시 등록 (첫 로드 시) — 캐시 보유 ref 유지 위해 AddRef
                     if (pMesh && !t_currentLoadPath.empty())
                     {

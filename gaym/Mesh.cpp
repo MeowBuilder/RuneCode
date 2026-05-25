@@ -766,10 +766,10 @@ GrassClumpMesh::GrassClumpMesh(ID3D12Device* pDevice, ID3D12GraphicsCommandList*
     using namespace DirectX;
     if (nBladeCount <= 0) nBladeCount = 1;
 
-    // Cross = 2 quad. 각 quad는 3 행(base/mid/top) × 2 열 = 6 verts, 4 tris.
-    // → 한 blade(cross): 12 verts, 8 tris(24 idx). 중간 행 덕분에 sway가 직선 pivot 아닌 곡선 휨.
-    const int kVertsPerBlade = 12;
-    const int kIndicesPerBlade = 24;
+    // 3-blade 클러스터 = 3 quad (60° 간격). 위에서 봐도 + 안 보이고 뭉친 둥근 tuft.
+    // 각 quad는 3 행(base/mid/top) × 2 열 = 6 verts, 4 tris. → 한 blade(3 quad): 18 verts, 12 tris(36 idx).
+    const int kVertsPerBlade = 18;
+    const int kIndicesPerBlade = 36;
 
     UINT nTotalVerts = static_cast<UINT>(nBladeCount) * kVertsPerBlade;
     UINT nTotalIndices = static_cast<UINT>(nBladeCount) * kIndicesPerBlade;
@@ -787,11 +787,13 @@ GrassClumpMesh::GrassClumpMesh(ID3D12Device* pDevice, ID3D12GraphicsCommandList*
     std::uniform_real_distribution<float> distR(0.0f, 1.0f);          // disc 분포용 (sqrt 적용)
     std::uniform_real_distribution<float> distYaw(0.0f, XM_2PI);
     std::uniform_real_distribution<float> distH(0.6f, 1.4f);          // ±40% 높이 변동 (짧은~긴 갈대 mix)
-    std::uniform_real_distribution<float> distW(0.7f, 1.3f);          // ±30% 폭 변동
-    std::uniform_real_distribution<float> distLean(-0.30f, 0.30f);    // 기울기 (배율 of h, world-space)
+    std::uniform_real_distribution<float> distW(0.9f, 1.4f);          // 폭 변동 (이전 0.7~1.3 → 살짝 굵게)
+    std::uniform_real_distribution<float> distLeanMag(0.6f, 1.4f);    // 방사형 lean 강도 변동 (랜덤 폭 넓힘)
+    std::uniform_real_distribution<float> distTangent(-0.5f, 0.5f);   // 접선 방향 흔들림 (radial 일변도 깨기)
 
-    // Taper: 위쪽 두 정점은 X축 방향 0.4배 좁게 (텍스처 사용 시 bTaper=false → 1.0배 유지)
-    const float kTipNarrow = bTaper ? 0.40f : 1.0f;
+    // Taper: tip 을 거의 점으로 좁힘 (sword-leaf 모양 — 베이스 넓고 끝 뾰족).
+    //   이전 0.40 → 0.10 으로 강화. 텍스처 사용 시 bTaper=false → 1.0배 유지.
+    const float kTipNarrow = bTaper ? 0.10f : 1.0f;
 
     UINT vCursor = 0;
     UINT iCursor = 0;
@@ -805,17 +807,40 @@ GrassClumpMesh::GrassClumpMesh(ID3D12Device* pDevice, ID3D12GraphicsCommandList*
         float ox = std::cos(a) * r;
         float oz = std::sin(a) * r;
 
-        float yaw = distYaw(rng);
-        float h = fBladeHeight * distH(rng);
+        // 중심 더 높고 가장자리 짧게 → 풀더미 dome 실루엣 (자연 grass clump).
+        float dCenter = std::sqrt(ox * ox + oz * oz);
+        float edgeF = (fAreaRadius > 0.0f) ? (dCenter / fAreaRadius) : 0.0f;
+        if (edgeF > 1.0f) edgeF = 1.0f;
+        float domeFactor = 1.0f - 0.30f * edgeF;        // 중심 1.0, 가장자리 0.7
+        float h = fBladeHeight * distH(rng) * domeFactor;
         float halfW = fBladeWidth * 0.5f * distW(rng);
-        // 정지 상태 기울기 (world-space) — 갈대마다 다른 방향으로 살짝 휘어 있음
-        float leanWX = distLean(rng) * h;
-        float leanWZ = distLean(rng) * h;
 
-        // 십자 = 2 quad: yaw, yaw + 90°
-        float yaws[2] = { yaw, yaw + XM_PIDIV2 };
+        float yaw = distYaw(rng);
 
-        for (int q = 0; q < 2; ++q)
+        // Lean: 방사형 outward 빼고 완전 랜덤 방향 + 약한 outward 바이어스 (가장자리만).
+        //   이전 radial 일변도 → 폭발 형태. 이제 random 방향에 살짝 outward 섞어서 균형.
+        float aLean = distAngle(rng);                   // 완전 랜덤 방향
+        float randDirX = std::cos(aLean);
+        float randDirZ = std::sin(aLean);
+        // 약한 outward bias — 가장자리 블레이드일수록 약간 밖으로 기울이는 경향
+        float biasX = 0.0f, biasZ = 0.0f;
+        if (dCenter > 0.1f) {
+            biasX = (ox / dCenter) * 0.30f * edgeF;     // edge일 때만 30% 정도 outward 가산
+            biasZ = (oz / dCenter) * 0.30f * edgeF;
+        }
+        float dirX = randDirX + biasX;
+        float dirZ = randDirZ + biasZ;
+        float dirLen = std::sqrt(dirX*dirX + dirZ*dirZ);
+        if (dirLen > 0.0001f) { dirX /= dirLen; dirZ /= dirLen; }
+
+        float leanMagF = 0.08f * distLeanMag(rng);      // 균등 마일드 lean (이전: 0.04+0.12*edge)
+        float leanWX = dirX * leanMagF * h;
+        float leanWZ = dirZ * leanMagF * h;
+
+        // 3 quad: yaw, yaw + 60°, yaw + 120° (총 180° 회전 — 양면 가시 가정 시 360° 전부 커버)
+        float yaws[3] = { yaw, yaw + XM_PI / 3.0f, yaw + 2.0f * XM_PI / 3.0f };
+
+        for (int q = 0; q < 3; ++q)
         {
             float cy = std::cos(yaws[q]);
             float sy = std::sin(yaws[q]);
@@ -835,9 +860,10 @@ GrassClumpMesh::GrassClumpMesh(ID3D12Device* pDevice, ID3D12GraphicsCommandList*
             float ly[6] = { 0.0f, 0.0f, h*0.5f, h*0.5f, h,    h    };
             float u_uv[6] = { 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f };
             float v_uv[6] = { 0.0f, 0.0f, 0.5f, 0.5f, 1.0f, 1.0f };
-            // world-space lean — mid는 절반, top은 전체 적용 (정지 시 곡선 휨 X, sway가 곡선 만듦)
-            float topLeanX[6] = { 0.0f, 0.0f, leanWX*0.5f, leanWX*0.5f, leanWX, leanWX };
-            float topLeanZ[6] = { 0.0f, 0.0f, leanWZ*0.5f, leanWZ*0.5f, leanWZ, leanWZ };
+            // 호 휨 (arc curve): mid 행은 선형(0.5)이 아닌 0.30 배만 → 뿌리 거의 직선,
+            //   위쪽으로 갈수록 빠르게 휘는 자연 droop. 정지 시도 곡선 실루엣 보임.
+            float topLeanX[6] = { 0.0f, 0.0f, leanWX*0.30f, leanWX*0.30f, leanWX, leanWX };
+            float topLeanZ[6] = { 0.0f, 0.0f, leanWZ*0.30f, leanWZ*0.30f, leanWZ, leanWZ };
 
             // face normal: yaw=0이면 (0,0,1). 회전 후: (-sin(yaw), 0, cos(yaw))
             XMFLOAT3 faceN(-sy, 0.0f, cy);

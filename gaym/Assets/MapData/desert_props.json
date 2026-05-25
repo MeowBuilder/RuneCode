@@ -1,0 +1,26 @@
+{
+  "_comment": "사막 스테이지 데코 프롭 스캐터 설정. 각 항목은 floor tile 위에 count 개수만큼 랜덤 배치. scale 은 Min~Max 균일 분포로 인스턴스마다 다르게. 충돌박스는 메쉬 AABB 기반으로 자동 생성 (Wall 레이어 → 플레이어 가로막음).",
+  "scatter": [
+    {
+      "meshFile": "meshes/CrossPlains_Plant_10.bin",
+      "count": 7,
+      "yOffset": 0.5,
+      "scaleMin": 0.6,
+      "scaleMax": 1.4
+    },
+    {
+      "meshFile": "meshes/CrossPlains_Skull_01.bin",
+      "count": 3,
+      "yOffset": 0.5,
+      "scaleMin": 0.75,
+      "scaleMax": 1.2
+    },
+    {
+      "meshFile": "meshes/CrossPlains_Ribs_01.bin",
+      "count": 2,
+      "yOffset": 0.0,
+      "scaleMin": 0.85,
+      "scaleMax": 1.3
+    }
+  ]
+}

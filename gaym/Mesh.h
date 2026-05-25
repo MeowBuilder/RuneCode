@@ -19,6 +19,11 @@ private:
 	int								m_nReferences = 0;
 
 public:
+	// 로컬 공간 AABB — MeshLoader 가 .bin <Bounds>: 섹션에서 채워줌 (Unity-export 메쉬용).
+	// ColliderComponent 가 월드 변환 시 사용. OBJ 메쉬는 0 (MapLoader 에서 별도 계산).
+	XMFLOAT3 m_xmf3AABBCenter  = { 0.0f, 0.0f, 0.0f };
+	XMFLOAT3 m_xmf3AABBExtents = { 0.0f, 0.0f, 0.0f };
+
 	void AddRef() { m_nReferences++; }
 	void Release() { if (--m_nReferences <= 0) delete this; }
 

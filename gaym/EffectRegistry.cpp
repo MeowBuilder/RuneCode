@@ -961,6 +961,98 @@ void EffectRegistry::Initialize()
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // Wind_DustMotes — 공기 중 떠 있는 작은 입자 (햇살 받는 dust). 느린 드리프트.
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Wind_DustMotes";
+        def.element = ElementType::Wind;
+
+        EffectLayer dust;
+        dust.type           = EmitterType::Linear;
+        dust.element        = ElementType::Wind;
+        dust.particleCount  = 220;
+        dust.overrideColors = true;
+        dust.coreColor      = { 1.00f, 0.98f, 0.85f, 0.85f };   // 따뜻한 white-cream
+        dust.edgeColor      = { 0.85f, 0.82f, 0.65f, 0.30f };
+        dust.sizeScale      = 0.40f;                            // 작게 (drift 1.1 보다 훨씬)
+        dust.speedMin       = 1.0f;
+        dust.speedMax       = 2.2f;                             // 느림 (잎 2.5~5.0 보다)
+        dust.lifetimeMin    = 12.0f;
+        dust.lifetimeMax    = 20.0f;
+        dust.duration       = -1.f;
+        dust.linear.length      = 180.0f;
+        dust.linear.width       = 35.0f;                        // 잎 width(50) 보다 좁은 빔
+        dust.linear.recycleRate = 1.0f;
+        dust.linear.swirlSpeed  = 0.4f;                         // 미세 swirl
+        def.layers.push_back(dust);
+
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Wind_Petals — 꽃잎/씨앗 흩날림. 옅은 핑크-화이트 톤, drift 보다 가볍게.
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Wind_Petals";
+        def.element = ElementType::Wind;
+
+        EffectLayer pet;
+        pet.type           = EmitterType::Linear;
+        pet.element        = ElementType::Wind;
+        pet.particleCount  = 120;
+        pet.overrideColors = true;
+        pet.coreColor      = { 1.00f, 0.85f, 0.92f, 0.95f };    // 옅은 핑크-화이트
+        pet.edgeColor      = { 0.92f, 0.65f, 0.78f, 0.50f };
+        pet.sizeScale      = 0.85f;
+        pet.speedMin       = 2.0f;
+        pet.speedMax       = 4.5f;
+        pet.lifetimeMin    = 9.0f;
+        pet.lifetimeMax    = 16.0f;
+        pet.duration       = -1.f;
+        pet.linear.length      = 150.0f;
+        pet.linear.width       = 45.0f;
+        pet.linear.recycleRate = 1.0f;
+        pet.linear.swirlSpeed  = 2.2f;                          // 잎보다 더 빙글빙글
+        def.layers.push_back(pet);
+
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Wind_GustBurst — 강풍 peak 에 풀숲에서 터지는 짧은 꽃가루 burst.
+    //                  Sphere 1.4s, 따뜻한 노랑-화이트, 위로 살짝 퍼지면서 사라짐.
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Wind_GustBurst";
+        def.element = ElementType::Wind;
+
+        EffectLayer burst;
+        burst.type           = EmitterType::Sphere;
+        burst.element        = ElementType::Wind;
+        burst.overrideColors = true;
+        burst.coreColor      = { 1.00f, 0.94f, 0.65f, 1.00f };  // 꽃가루 노랑
+        burst.edgeColor      = { 0.85f, 0.75f, 0.45f, 0.40f };
+        burst.particleCount  = 80;
+        burst.sizeScale      = 0.55f;
+        burst.speedMin       = 1.5f;
+        burst.speedMax       = 3.8f;
+        burst.lifetimeMin    = 0.8f;
+        burst.lifetimeMax    = 1.6f;
+        burst.duration       = 0.6f;                            // 짧은 emission
+        burst.emitRate       = 130.f;
+
+        burst.sphere.radius        = 1.8f;
+        burst.sphere.shellFraction = 0.4f;
+        burst.sphere.inward        = false;
+
+        def.layers.push_back(std::move(burst));
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // Wind_TornadoWarning — 큰 토네이도 등장 직전 바닥 경고 링 (2s 펄스)
     // ──────────────────────────────────────────────────────────────────────────
     {

@@ -21,6 +21,7 @@
 #include "SuicideExplodeAttackBehavior.h"
 #include "Dx12App.h"
 #include "TorchSystem.h"
+#include "MeshLoader.h"
 
 #include <fstream>
 #include <algorithm>
@@ -527,6 +528,47 @@ bool MapLoader::LoadIntoScene(
         const JsonVal& mo = mapObjs[i];
         std::string meshRelPath = mo["meshFile"].str;
         std::string meshPath = jsonDir + meshRelPath;
+
+        // ── .bin extension routing ────────────────────────────────────────────
+        // Unity-exported .bin meshes (e.g. CrossPlains_Skull_01.bin) go through
+        // MeshLoader, which reads the embedded <AlbedoMap> reference and loads
+        // the texture from a Textures/ subfolder automatically.
+        {
+            size_t dotPos = meshRelPath.find_last_of('.');
+            std::string ext = (dotPos != std::string::npos) ? meshRelPath.substr(dotPos) : "";
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            if (ext == ".bin") {
+                GameObject* pBinGO = MeshLoader::LoadGeometryFromFile(
+                    pScene, pDevice, pCommandList, nullptr, meshPath.c_str());
+                if (!pBinGO) continue;
+
+                const JsonVal& posB = mo["position"];
+                const JsonVal& rotB = mo["rotation"];
+                const JsonVal& sclB = mo["scale"];
+                float sxB = sclB[0].f()*MAP_SCALE, syB = sclB[1].f()*MAP_SCALE, szB = sclB[2].f()*MAP_SCALE;
+                pBinGO->GetTransform()->SetPosition(
+                    posB[0].f()*MAP_SCALE + positionOffset.x,
+                    posB[1].f()*MAP_SCALE + positionOffset.y,
+                    -posB[2].f()*MAP_SCALE + positionOffset.z);
+                pBinGO->GetTransform()->SetRotation(
+                    XMFLOAT4(rotB[0].f(), rotB[1].f(), -rotB[2].f(), rotB[3].f()));
+                pBinGO->GetTransform()->SetScale(sxB, syB, szB);
+
+                std::function<void(GameObject*)> addRC = [&](GameObject* go) {
+                    if (!go) return;
+                    if (go->GetMesh()) {
+                        auto* rc = go->AddComponent<RenderComponent>();
+                        rc->SetMesh(go->GetMesh());
+                        rc->SetCastsShadow(true);
+                        pShader->AddRenderComponent(rc);
+                    }
+                    if (go->m_pChild)   addRC(go->m_pChild);
+                    if (go->m_pSibling) addRC(go->m_pSibling);
+                };
+                addRC(pBinGO);
+                continue;
+            }
+        }
 
         ObjResult objRes = LoadObjMesh(pDevice, pCommandList, meshPath);
         if (!objRes.valid || !objRes.pMesh) continue;
@@ -1064,4 +1106,181 @@ Mesh* MapLoader::LoadMesh(const char* path, ID3D12Device* pDevice, ID3D12Graphic
 {
     ObjResult res = LoadObjMesh(pDevice, pCommandList, path);
     return res.valid ? res.pMesh : nullptr;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  GetFloorTilePositions — 맵 JSON 에서 LavaMaze_GridTile_01 메쉬 사용한 mapObject 의
+//  월드 좌표만 추출해서 반환. 풀/데코 등을 walkable 영역 위에만 배치하기 위한 공용 헬퍼.
+// ─────────────────────────────────────────────────────────────────────────────
+std::vector<XMFLOAT3> MapLoader::GetFloorTilePositions(const char* mapJsonPath)
+{
+    std::vector<XMFLOAT3> tiles;
+    if (!mapJsonPath) return tiles;
+
+    auto jit = s_jsonCache.find(mapJsonPath);
+    if (jit == s_jsonCache.end()) {
+        JsonVal v = JsonVal::parseFile(mapJsonPath);
+        if (v.isNull()) return tiles;
+        s_jsonCache[mapJsonPath] = std::move(v);
+        jit = s_jsonCache.find(mapJsonPath);
+    }
+    const JsonVal& root = jit->second;
+
+    const JsonVal& mapObjs = root["mapObjects"];
+    for (size_t i = 0; i < mapObjs.size(); i++) {
+        const JsonVal& mo = mapObjs[i];
+        if (!mo.has("meshFile")) continue;
+        const std::string& mf = mo["meshFile"].str;
+        if (mf.find("LavaMaze_GridTile_01") == std::string::npos) continue;
+        const JsonVal& p = mo["position"];
+        tiles.push_back(XMFLOAT3(
+            p[0].f() * MAP_SCALE,
+            p[1].f() * MAP_SCALE,
+            -p[2].f() * MAP_SCALE));
+    }
+    return tiles;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ScatterPropsOnFloorTiles
+//   1. 맵 JSON 의 mapObjects 중 floor tile (LavaMaze_GridTile_01) 위치만 추출
+//   2. playerSpawn 근처 타일은 제외 (가시거리 5 world units)
+//   3. 맵 경로 해시로 RNG 시드 → 같은 방은 항상 같은 배치 (재실행 시 변동 X)
+//   4. scatter config 의 항목별로 count 만큼 타일 위에 .bin 프롭 배치
+// ─────────────────────────────────────────────────────────────────────────────
+void MapLoader::ScatterPropsOnFloorTiles(
+    const char* mapJsonPath, const char* scatterConfigPath,
+    Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList,
+    Shader* pShader)
+{
+    if (!mapJsonPath || !scatterConfigPath || !pScene || !pShader) return;
+
+    // 메인 맵 JSON 캐시에서 가져오기 (없으면 새로 파싱)
+    auto jit = s_jsonCache.find(mapJsonPath);
+    if (jit == s_jsonCache.end()) {
+        JsonVal v = JsonVal::parseFile(mapJsonPath);
+        if (v.isNull()) return;
+        s_jsonCache[mapJsonPath] = std::move(v);
+        jit = s_jsonCache.find(mapJsonPath);
+    }
+    const JsonVal& root = jit->second;
+
+    // 1. 바닥 타일 위치 수집
+    std::vector<XMFLOAT3> tiles;
+    const JsonVal& mapObjs = root["mapObjects"];
+    for (size_t i = 0; i < mapObjs.size(); i++) {
+        const JsonVal& mo = mapObjs[i];
+        if (!mo.has("meshFile")) continue;
+        const std::string& mf = mo["meshFile"].str;
+        if (mf.find("LavaMaze_GridTile_01") == std::string::npos) continue;
+        const JsonVal& p = mo["position"];
+        tiles.push_back(XMFLOAT3(
+            p[0].f() * MAP_SCALE,
+            p[1].f() * MAP_SCALE,
+            -p[2].f() * MAP_SCALE));
+    }
+    if (tiles.empty()) return;
+
+    // 2. 스폰 근처 타일 제외 — 플레이어 발 밑에 모뉴먼트 안 박히게
+    XMFLOAT3 spawn(0.0f, 0.0f, 0.0f);
+    if (root.has("playerSpawn") && root["playerSpawn"].has("position")) {
+        const JsonVal& sp = root["playerSpawn"]["position"];
+        spawn = XMFLOAT3(sp[0].f() * MAP_SCALE, sp[1].f() * MAP_SCALE, -sp[2].f() * MAP_SCALE);
+    }
+    constexpr float kSpawnExclusion = 6.0f;  // world units
+    std::vector<XMFLOAT3> avail;
+    avail.reserve(tiles.size());
+    for (const auto& t : tiles) {
+        float dx = t.x - spawn.x;
+        float dz = t.z - spawn.z;
+        if (dx*dx + dz*dz >= kSpawnExclusion * kSpawnExclusion) avail.push_back(t);
+    }
+    if (avail.empty()) return;
+
+    // 3. 스캐터 config 로드
+    JsonVal cfg = JsonVal::parseFile(scatterConfigPath);
+    if (cfg.isNull() || !cfg.has("scatter")) return;
+    const JsonVal& sc = cfg["scatter"];
+
+    // config 가 있는 폴더 — meshFile 경로 해석 베이스
+    std::string cfgDir = scatterConfigPath;
+    size_t lastS = cfgDir.find_last_of("/\\");
+    cfgDir = (lastS != std::string::npos) ? cfgDir.substr(0, lastS + 1) : "";
+
+    // 4. 결정론적 RNG 시드 — 맵 경로 해시
+    unsigned int seed = 2166136261u;  // FNV offset
+    for (const char* p = mapJsonPath; *p; ++p) {
+        seed ^= (unsigned int)(unsigned char)(*p);
+        seed *= 16777619u;
+    }
+    std::mt19937 rng(seed);
+
+    // 가용 타일 셔플 — 같은 항목의 N 개가 한 구석에 몰리지 않게
+    std::shuffle(avail.begin(), avail.end(), rng);
+
+    size_t cursor = 0;
+    for (size_t i = 0; i < sc.size(); i++) {
+        const JsonVal& e = sc[i];
+        if (!e.has("meshFile")) continue;
+        std::string meshFile = e["meshFile"].str;
+        int   count   = e.has("count")    ? e["count"].i()    : 1;
+        float yOff    = e.has("yOffset")  ? e["yOffset"].f()  : 0.0f;
+        float sMin    = e.has("scaleMin") ? e["scaleMin"].f() : 1.0f;
+        float sMax    = e.has("scaleMax") ? e["scaleMax"].f() : 1.0f;
+        if (sMax < sMin) sMax = sMin;
+
+        std::string meshPath = cfgDir + meshFile;
+        std::uniform_real_distribution<float> distS(sMin, sMax);
+        std::uniform_real_distribution<float> distR(0.0f, 6.2831853f);
+
+        for (int k = 0; k < count && cursor < avail.size(); k++, cursor++) {
+            const XMFLOAT3& tp = avail[cursor];
+            GameObject* pGO = MeshLoader::LoadGeometryFromFile(
+                pScene, pDevice, pCommandList, nullptr, meshPath.c_str());
+            if (!pGO) continue;
+
+            float sUnit = distS(rng) * MAP_SCALE;
+            float yaw   = distR(rng);
+
+            pGO->GetTransform()->SetPosition(tp.x, tp.y + yOff * MAP_SCALE, tp.z);
+            pGO->GetTransform()->SetRotation(
+                XMFLOAT4(0.0f, sinf(yaw * 0.5f), 0.0f, cosf(yaw * 0.5f)));
+            pGO->GetTransform()->SetScale(sUnit, sUnit, sUnit);
+
+            std::function<void(GameObject*)> addRC = [&](GameObject* go) {
+                if (!go) return;
+                if (go->GetMesh()) {
+                    auto* rc = go->AddComponent<RenderComponent>();
+                    rc->SetMesh(go->GetMesh());
+                    rc->SetCastsShadow(true);
+                    pShader->AddRenderComponent(rc);
+                }
+                if (go->m_pChild)   addRC(go->m_pChild);
+                if (go->m_pSibling) addRC(go->m_pSibling);
+            };
+            addRC(pGO);
+
+            // ── 충돌박스: 메쉬의 로컬 AABB → ColliderComponent (Wall 레이어).
+            //   ColliderComponent::Update 가 월드 변환 적용. XZ 만 약간 (0.7) 줄여
+            //   비주얼은 꽉 차게 보이되 플레이어가 살짝 비비고 지나갈 여유 확보.
+            if (Mesh* pMesh = pGO->GetMesh())
+            {
+                XMFLOAT3 ext = pMesh->m_xmf3AABBExtents;
+                XMFLOAT3 cen = pMesh->m_xmf3AABBCenter;
+                if (ext.x > 0.0f && ext.y > 0.0f && ext.z > 0.0f)
+                {
+                    auto* pCol = pGO->AddComponent<ColliderComponent>();
+                    pCol->SetExtents(ext.x * 0.7f, ext.y, ext.z * 0.7f);
+                    pCol->SetCenter(cen.x, cen.y, cen.z);
+                    pCol->SetLayer(CollisionLayer::Wall);
+                    pCol->SetCollisionMask(CollisionMask::Wall);
+                }
+            }
+        }
+    }
+
+    char dbg[256];
+    sprintf_s(dbg, "[MapLoader] Scattered props on %zu walkable tiles (of %zu) for %s\n",
+              avail.size(), tiles.size(), mapJsonPath);
+    OutputDebugStringA(dbg);
 }
