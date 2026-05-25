@@ -40,11 +40,18 @@ void TidalWaveBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT
         dV = XMVector3Normalize(XMVectorSetY(caster->GetTransform()->GetLook(), 0.f));
     XMFLOAT3 dir; XMStoreFloat3(&dir, dV);
 
-    if (m_pVFXManager && EffectRegistry::Get().HasEffect("sub_water"))
+    if (m_pVFXManager && EffectRegistry::Get().HasEffect("Q_WaterWave"))
     {
-        XMFLOAT3 spawnPos = { origin.x, origin.y + 0.5f, origin.z };
-        m_pVFXManager->SpawnEffectDef(spawnPos, dir,
-            EffectRegistry::Get().GetEffect("sub_water"), false);
+        XMFLOAT3 spawnPos = { origin.x, origin.y + 5.f, origin.z };
+        EffectDef waveDef = EffectRegistry::Get().GetEffect("Q_WaterWave");
+        VFXModifier mod;
+        mod.sizeScaleMult     = 0.45f;
+        mod.particleCountMult = 0.35f;
+        mod.speedMult         = 1.2f;
+        mod.strengthMult      = 0.7f;
+        ApplyVFXModifier(waveDef, mod);
+        int waveId = m_pVFXManager->SpawnEffectDef(spawnPos, dir, waveDef, true);
+        if (waveId >= 0) m_channelWaveVfxIds.push_back(waveId);
     }
 
     if (m_pVFXManager && m_channelAmbientId >= 0)
@@ -300,7 +307,8 @@ void TidalWaveBehavior::Reset()
         if (m_channelAmbientId >= 0) m_pVFXManager->StopEffect(m_channelAmbientId);
         if (m_chargeVFXId      >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
         if (m_enhanceAuraId    >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
-        for (int id : m_extraVFXIds) if (id >= 0) m_pVFXManager->StopEffect(id);
+        for (int id : m_extraVFXIds)       if (id >= 0) m_pVFXManager->StopEffect(id);
+        for (int id : m_channelWaveVfxIds) if (id >= 0) m_pVFXManager->StopEffect(id);
     }
     m_bActive          = false;
     m_vfxId            = -1;
@@ -308,5 +316,6 @@ void TidalWaveBehavior::Reset()
     m_chargeVFXId      = -1;
     m_enhanceAuraId    = -1;
     m_extraVFXIds.clear();
+    m_channelWaveVfxIds.clear();
     m_hitEnemies.clear();
 }

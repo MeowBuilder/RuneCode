@@ -57,6 +57,9 @@ void WaterPuddleBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::X
 
 void WaterPuddleBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
 {
+    m_pCaster    = caster;
+    m_damageMult = 1.0f;
+
     if (!m_pVFXManager) return;
     if (!EffectRegistry::Get().HasEffect("Q_WaterFall")) return;
     XMFLOAT3 pos  = { targetPosition.x, targetPosition.y + 6.f, targetPosition.z };
@@ -67,26 +70,56 @@ void WaterPuddleBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFL
 
 void WaterPuddleBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult)
 {
-    // 채널 중 웅덩이가 커서를 실시간 추적 — Update()의 TickPuddle이 m_center 기준으로 피해/슬로우 처리
-    m_center = { targetPosition.x, 0.f, targetPosition.z };
-
-    if (m_pVFXManager)
+    // 채널 빗줄기 이동 추적
+    if (m_pVFXManager && m_channelRainId >= 0)
     {
-        XMFLOAT3 down = { 0.f, -1.f, 0.f };
-        if (m_vfxId >= 0)
+        XMFLOAT3 rainPos = { targetPosition.x, targetPosition.y + 6.f, targetPosition.z };
+        XMFLOAT3 down    = { 0.f, -1.f, 0.f };
+        m_pVFXManager->TrackEffect(m_channelRainId, rainPos, down);
+    }
+
+    if (!m_pVFXManager) return;
+
+    SkillStats stats;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count)
+            stats = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+    }
+
+    XMFLOAT3 down = { 0.f, -1.f, 0.f };
+
+    // 낙하 이펙트: 비반복(false) — 자동 종료
+    if (EffectRegistry::Get().HasEffect("Q_WaterFall"))
+    {
+        XMFLOAT3 fallPos = { targetPosition.x, targetPosition.y + 5.5f, targetPosition.z };
+        EffectDef fallDef = EffectRegistry::Get().GetEffect("Q_WaterFall");
+        if (!stats.elementSet.empty()) ApplyElementToEffectDef(fallDef, stats.elementSet[0]);
+        VFXModifier mod;
+        mod.sizeScaleMult     = 0.5f;
+        mod.particleCountMult = 0.45f;
+        ApplyVFXModifier(fallDef, mod);
+        m_pVFXManager->SpawnEffectDef(fallPos, down, fallDef, false);
+    }
+
+    // 웅덩이 이펙트: 반복(true) — 수명 직접 관리
+    if (EffectRegistry::Get().HasEffect("Q_WaterPuddle"))
+    {
+        XMFLOAT3 puddlePos = { targetPosition.x, 2.5f, targetPosition.z };
+        EffectDef puddleDef = EffectRegistry::Get().GetEffect("Q_WaterPuddle");
+        if (!stats.elementSet.empty()) ApplyElementToEffectDef(puddleDef, stats.elementSet[0]);
+        VFXModifier mod;
+        mod.sizeScaleMult     = 0.5f;
+        mod.particleCountMult = 0.45f;
+        ApplyVFXModifier(puddleDef, mod);
+        int id = m_pVFXManager->SpawnEffectDef(puddlePos, down, puddleDef, true);
+        if (id >= 0)
         {
-            XMFLOAT3 puddlePos = { targetPosition.x, 2.5f, targetPosition.z };
-            m_pVFXManager->TrackEffect(m_vfxId, puddlePos, down);
-        }
-        if (m_fallVfxId >= 0)
-        {
-            XMFLOAT3 fallPos = { targetPosition.x, targetPosition.y + 5.5f, targetPosition.z };
-            m_pVFXManager->TrackEffect(m_fallVfxId, fallPos, down);
-        }
-        if (m_channelRainId >= 0)
-        {
-            XMFLOAT3 rainPos = { targetPosition.x, targetPosition.y + 6.f, targetPosition.z };
-            m_pVFXManager->TrackEffect(m_channelRainId, rainPos, down);
+            ChannelPuddle cp;
+            cp.center      = { targetPosition.x, 0.f, targetPosition.z };
+            cp.puddleVfxId = id;
+            cp.elapsed     = 0.f;
+            m_channelPuddles.push_back(cp);
         }
     }
 }
@@ -98,6 +131,9 @@ void WaterPuddleBehavior::OnChannelEnd(GameObject* caster)
         m_pVFXManager->StopEffect(m_channelRainId);
         m_channelRainId = -1;
     }
+
+    if (!m_channelPuddles.empty())
+        m_bPostChannelPuddles = true;
 }
 
 void WaterPuddleBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
@@ -105,19 +141,30 @@ void WaterPuddleBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& t
     Reset();
     m_pCaster = caster;
 
-    if (!m_pVFXManager) { return; }
+    if (!m_pVFXManager) return;
 
-    SkillStats stats;
     bool bChannelMode = false;
     if (caster) {
         auto* pSC = caster->GetComponent<SkillComponent>();
-        if (pSC && m_slot != SkillSlot::Count) {
-            stats = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+        if (pSC && m_slot != SkillSlot::Count)
             bChannelMode = pSC->GetRuneCombo(m_slot).hasChannel;
-        }
     }
 
-    // ① 낙하 이펙트 — 타겟 위 5.5 유닛에서 아래 방향으로 스폰
+    // 채널 모드: OnChannelBegin/Tick이 웅덩이 생성 담당
+    if (bChannelMode)
+    {
+        m_damageMult = damageMultiplier > 0.f ? damageMultiplier : 1.f;
+        return;
+    }
+
+    SkillStats stats;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count)
+            stats = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+    }
+
+    // ① 낙하 이펙트
     {
         XMFLOAT3 fallOrigin = { targetPosition.x, targetPosition.y + 5.5f, targetPosition.z };
         XMFLOAT3 fallDir    = { 0.f, -1.f, 0.f };
@@ -127,8 +174,7 @@ void WaterPuddleBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& t
         m_fallVfxId = m_pVFXManager->SpawnEffectDef(fallOrigin, fallDir, fallDef, true);
     }
 
-    // ② 웅덩이 이펙트 — 채널 모드에서는 스폰하지 않음 (커서 이동 시 이전 위치에 잔상이 남아 타격점이 헷갈림)
-    if (!bChannelMode)
+    // ② 웅덩이 이펙트
     {
         XMFLOAT3 puddleOrigin = { targetPosition.x, 2.5f, targetPosition.z };
         XMFLOAT3 puddleDir    = { 0.f, -1.f, 0.f };
@@ -151,26 +197,134 @@ void WaterPuddleBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& t
 
 void WaterPuddleBehavior::Update(float deltaTime)
 {
-    if (!m_bActive) return;
-
-    m_elapsed += deltaTime;
-
-    // 낙하 이펙트 — FALL_DURATION 후 종료
-    if (m_fallVfxId >= 0 && m_elapsed >= FALL_DURATION)
+    // 일반 단일 웅덩이
+    if (m_bActive)
     {
-        m_pVFXManager->StopEffect(m_fallVfxId);
-        m_fallVfxId = -1;
+        m_elapsed += deltaTime;
+
+        if (m_fallVfxId >= 0 && m_elapsed >= FALL_DURATION)
+        {
+            m_pVFXManager->StopEffect(m_fallVfxId);
+            m_fallVfxId = -1;
+        }
+
+        TickPuddle(deltaTime);
+
+        if (m_elapsed >= DURATION)
+        {
+            RemoveSlowFromAll();
+            if (m_pVFXManager && m_vfxId >= 0)
+                m_pVFXManager->StopEffect(m_vfxId);
+            m_bActive = false;
+            m_vfxId   = -1;
+        }
     }
 
-    TickPuddle(deltaTime);
-
-    if (m_elapsed >= DURATION)
+    // 채널 누적 웅덩이 (채널 중 + 채널 종료 후)
+    if (!m_channelPuddles.empty())
     {
-        RemoveSlowFromAll();
-        if (m_pVFXManager && m_vfxId >= 0)
-            m_pVFXManager->StopEffect(m_vfxId);
-        m_bActive = false;
-        m_vfxId   = -1;
+        TickChannelPuddles(deltaTime);
+
+        // 만료된 웅덩이 제거
+        for (int i = (int)m_channelPuddles.size() - 1; i >= 0; --i)
+            if (m_channelPuddles[i].puddleVfxId < 0)
+                m_channelPuddles.erase(m_channelPuddles.begin() + i);
+
+        if (m_bPostChannelPuddles && m_channelPuddles.empty())
+        {
+            RemoveSlowFromAll();
+            m_bPostChannelPuddles = false;
+        }
+    }
+}
+
+void WaterPuddleBehavior::TickChannelPuddles(float deltaTime)
+{
+    if (!m_pScene) return;
+    CRoom* pRoom = m_pScene->GetCurrentRoom();
+    if (!pRoom) return;
+
+    // 각 웅덩이 수명 진행 + 만료 처리
+    for (auto& cp : m_channelPuddles)
+    {
+        if (cp.puddleVfxId < 0) continue;
+        cp.elapsed += deltaTime;
+        if (cp.elapsed >= CHANNEL_PUDDLE_DURATION)
+        {
+            if (m_pVFXManager) m_pVFXManager->StopEffect(cp.puddleVfxId);
+            cp.puddleVfxId = -1;
+        }
+    }
+
+    m_puddleTickTimer += deltaTime;
+    bool bDoTick = (m_puddleTickTimer >= TICK_INTERVAL);
+    if (bDoTick) m_puddleTickTimer = 0.f;
+
+    float dotDmg   = m_SkillData.damage * m_damageMult * DMG_PER_TICK;
+    float chRadius = PUDDLE_RADIUS * CHANNEL_PUDDLE_RADIUS_MULT;
+
+    std::unordered_set<EnemyComponent*> inAnyPuddle;
+
+    for (const auto& obj : pRoom->GetGameObjects())
+    {
+        if (!obj) continue;
+        auto* pEnemy = obj->GetComponent<EnemyComponent>();
+        if (!pEnemy || pEnemy->IsDead()) continue;
+        auto* pT = obj->GetTransform();
+        if (!pT) continue;
+        XMFLOAT3 ep = pT->GetPosition();
+
+        for (const auto& cp : m_channelPuddles)
+        {
+            if (cp.puddleVfxId < 0) continue;
+            float dx = ep.x - cp.center.x, dz = ep.z - cp.center.z;
+            if (dx * dx + dz * dz > chRadius * chRadius) continue;
+
+            inAnyPuddle.insert(pEnemy);
+
+            if (m_slowedEnemies.find(pEnemy) == m_slowedEnemies.end())
+            {
+                pEnemy->SetSpeedMultiplier(SLOW_FACTOR);
+                m_slowedEnemies.insert(pEnemy);
+            }
+
+            if (bDoTick)
+            {
+                pEnemy->TakeDamage(dotDmg, false);
+                if (m_pCaster) {
+                    auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+                    if (pSC && m_slot != SkillSlot::Count) {
+                        SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+                        if (!sts.onHitHooks.empty()) {
+                            SkillContext ctx;
+                            ctx.caster             = m_pCaster;
+                            ctx.baseDamage         = dotDmg;
+                            ctx.damageDealt        = dotDmg;
+                            ctx.hitEnemy           = pEnemy;
+                            ctx.hitEnemyPos        = ep;
+                            ctx.scene              = m_pScene;
+                            ctx.statusChanceMult   = sts.statusChanceMult;
+                            ctx.statusDurationMult = sts.statusDurationMult;
+                            for (auto& hook : sts.onHitHooks) hook(ctx);
+                        }
+                    }
+                }
+            }
+            break;  // 중복 피해/슬로우 방지
+        }
+    }
+
+    // 범위를 벗어난 적 슬로우 해제
+    for (auto it = m_slowedEnemies.begin(); it != m_slowedEnemies.end(); )
+    {
+        if (inAnyPuddle.find(*it) == inAnyPuddle.end())
+        {
+            if (!(*it)->IsDead())
+                (*it)->SetSpeedMultiplier(1.0f);
+            it = m_slowedEnemies.erase(it);
+        }
+        else
+            ++it;
     }
 }
 
@@ -202,7 +356,6 @@ void WaterPuddleBehavior::TickPuddle(float deltaTime)
 
         inRange.insert(pEnemy);
 
-        // 슬로우 진입
         if (m_slowedEnemies.find(pEnemy) == m_slowedEnemies.end())
         {
             pEnemy->SetSpeedMultiplier(SLOW_FACTOR);
@@ -233,7 +386,6 @@ void WaterPuddleBehavior::TickPuddle(float deltaTime)
         }
     }
 
-    // 범위를 벗어난 적의 슬로우 해제
     for (auto it = m_slowedEnemies.begin(); it != m_slowedEnemies.end(); )
     {
         if (inRange.find(*it) == inRange.end())
@@ -257,7 +409,7 @@ void WaterPuddleBehavior::RemoveSlowFromAll()
 
 bool WaterPuddleBehavior::IsFinished() const
 {
-    return !m_bActive;
+    return !m_bActive && !m_bPostChannelPuddles;
 }
 
 void WaterPuddleBehavior::Reset()
@@ -268,9 +420,14 @@ void WaterPuddleBehavior::Reset()
         if (m_vfxId         >= 0) m_pVFXManager->StopEffect(m_vfxId);
         if (m_fallVfxId     >= 0) m_pVFXManager->StopEffect(m_fallVfxId);
         if (m_channelRainId >= 0) m_pVFXManager->StopEffect(m_channelRainId);
+        for (auto& cp : m_channelPuddles)
+            if (cp.puddleVfxId >= 0) m_pVFXManager->StopEffect(cp.puddleVfxId);
     }
-    m_bActive       = false;
-    m_vfxId         = -1;
-    m_fallVfxId     = -1;
-    m_channelRainId = -1;
+    m_bActive              = false;
+    m_bPostChannelPuddles  = false;
+    m_vfxId                = -1;
+    m_fallVfxId            = -1;
+    m_channelRainId        = -1;
+    m_puddleTickTimer      = 0.f;
+    m_channelPuddles.clear();
 }

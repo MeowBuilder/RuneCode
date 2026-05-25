@@ -1,6 +1,7 @@
 #pragma once
 #include "ISkillBehavior.h"
 #include "SkillData.h"
+#include <vector>
 #include <unordered_set>
 
 class FluidSkillVFXManager;
@@ -30,9 +31,17 @@ public:
     virtual bool IsFinished() const override;
     virtual void Reset() override;
     virtual const SkillData& GetSkillData() const override { return m_SkillData; }
+    virtual bool HasPostChannelWork() const override { return m_bActive || m_bPostChannelPuddles; }
 
 private:
+    struct ChannelPuddle {
+        DirectX::XMFLOAT3 center      = {};
+        int               puddleVfxId = -1;
+        float             elapsed     = 0.f;
+    };
+
     void TickPuddle(float deltaTime);
+    void TickChannelPuddles(float deltaTime);
     void RemoveSlowFromAll();
 
     SkillData             m_SkillData;
@@ -45,18 +54,23 @@ private:
     int                   m_chargeVFXId    = -1;
     int                   m_enhanceAuraId  = -1;
 
-    bool                  m_bActive     = false;
-    float                 m_elapsed     = 0.f;
-    float                 m_tickTimer   = 0.f;
-    float                 m_damageMult  = 1.f;
-    DirectX::XMFLOAT3     m_center      = {};
+    bool                  m_bActive              = false;
+    bool                  m_bPostChannelPuddles  = false;
+    float                 m_elapsed              = 0.f;
+    float                 m_tickTimer            = 0.f;
+    float                 m_puddleTickTimer      = 0.f;
+    float                 m_damageMult           = 1.f;
+    DirectX::XMFLOAT3     m_center               = {};
 
-    std::unordered_set<EnemyComponent*> m_slowedEnemies;
+    std::vector<ChannelPuddle>            m_channelPuddles;
+    std::unordered_set<EnemyComponent*>   m_slowedEnemies;
 
-    static constexpr float DURATION      = 6.0f;
-    static constexpr float FALL_DURATION = 1.5f;   // 낙하 이펙트 지속 시간
-    static constexpr float PUDDLE_RADIUS = 7.0f;
-    static constexpr float TICK_INTERVAL = 0.5f;
-    static constexpr float DMG_PER_TICK  = 0.12f;
-    static constexpr float SLOW_FACTOR   = 0.4f;
+    static constexpr float DURATION                  = 6.0f;
+    static constexpr float FALL_DURATION             = 1.5f;
+    static constexpr float PUDDLE_RADIUS             = 7.0f;
+    static constexpr float TICK_INTERVAL             = 0.5f;
+    static constexpr float DMG_PER_TICK              = 0.12f;
+    static constexpr float SLOW_FACTOR               = 0.4f;
+    static constexpr float CHANNEL_PUDDLE_DURATION   = 6.0f;
+    static constexpr float CHANNEL_PUDDLE_RADIUS_MULT = 0.6f;
 };

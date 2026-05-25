@@ -22,11 +22,14 @@ public:
     virtual void OnChargeUpdate(GameObject* caster, float chargeRatio) override;
     virtual void OnEnhanceActivate(GameObject* caster) override;
     virtual void OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
+    virtual void OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
     virtual void OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult) override;
+    virtual void OnChannelEnd(GameObject* caster) override;
     virtual void Update(float deltaTime) override;
     virtual bool IsFinished() const override;
     virtual void Reset() override;
     virtual const SkillData& GetSkillData() const override { return m_SkillData; }
+    virtual bool HasPostChannelWork() const override { return m_bActive || m_bPostChannelVortexes; }
 
 private:
     void PullAndDamageEnemies(float deltaTime);
@@ -39,16 +42,21 @@ private:
     int                   m_chargeVFXId   = -1;
     int                   m_enhanceAuraId = -1;
     std::vector<int>      m_extraVFXIds;
+    std::vector<int>      m_channelVortexIds;
 
-    bool  m_bActive    = false;
-    float m_damageMult = 1.f;
-    float m_elapsed    = 0.f;
-    float m_tickTimer  = 0.f;
-    DirectX::XMFLOAT3 m_center = {};
+    bool  m_bActive              = false;
+    bool  m_bChannelActive       = false;
+    bool  m_bPostChannelVortexes = false;
+    float m_damageMult           = 1.f;
+    float m_elapsed              = 0.f;
+    float m_tickTimer            = 0.f;
+    float m_vortexPostTimer      = 0.f;
+    DirectX::XMFLOAT3 m_center   = {};
 
-    static constexpr float DURATION      = 4.0f;
-    static constexpr float PULL_RADIUS   = 9.0f;
-    static constexpr float PULL_FORCE    = 10.0f;   // 단위/초, 중심 방향
-    static constexpr float TICK_INTERVAL = 0.4f;
-    static constexpr float DMG_PER_TICK  = 0.15f;   // 스킬 데미지 대비 비율
+    static constexpr float DURATION               = 4.0f;
+    static constexpr float CHANNEL_VORTEX_DURATION = 2.0f;  // 채널 소용돌이 후처리 유지 시간
+    static constexpr float PULL_RADIUS            = 9.0f;
+    static constexpr float PULL_FORCE             = 10.0f;   // 단위/초, 중심 방향
+    static constexpr float TICK_INTERVAL          = 0.4f;
+    static constexpr float DMG_PER_TICK           = 0.15f;   // 스킬 데미지 대비 비율
 };

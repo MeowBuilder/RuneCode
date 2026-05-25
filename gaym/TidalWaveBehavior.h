@@ -32,6 +32,7 @@ public:
     virtual bool IsFinished() const override;
     virtual void Reset() override;
     virtual const SkillData& GetSkillData() const override { return m_SkillData; }
+    virtual bool HasPostChannelWork() const override { return m_bActive; }
 
 private:
     void HitEnemiesInWave(float damage);
@@ -46,6 +47,7 @@ private:
     int                   m_chargeVFXId      = -1;
     int                   m_enhanceAuraId    = -1;
     std::vector<int>      m_extraVFXIds;
+    std::vector<int>      m_channelWaveVfxIds;
 
     bool  m_bActive     = false;
     float m_damageMult  = 1.f;
