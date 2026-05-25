@@ -43,7 +43,8 @@ private:
     int                   m_chargeVFXId      = -1;
     int                   m_enhanceAuraId    = -1;
 
-    bool  m_bActive    = false;
+    bool  m_bActive      = false;
+    bool  m_bChannelMode = false;
     float m_damageMult = 1.f;
     float m_elapsed    = 0.f;
     DirectX::XMFLOAT3 m_origin    = {};

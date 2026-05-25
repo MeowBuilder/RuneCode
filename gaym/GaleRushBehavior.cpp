@@ -15,36 +15,99 @@ GaleRushBehavior::GaleRushBehavior()
 {
 }
 
+void GaleRushBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    m_bChannelMode = true;
+    m_pCaster      = caster;
+    m_hitEnemies.clear();
+    m_trailTimer = 0.f;
+}
+
 void GaleRushBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
 {
-    // 채널 중 커서 위치에 바람 강타 — 돌진 없이 원거리 공격으로 패턴이 달라짐
-    if (!m_pScene || !m_pVFXManager) return;
+    // 채널 메커니즘: 매 틱 커서 방향으로 단거리 돌진 + 주변 적 타격
+    if (!m_pScene || !caster || !caster->GetTransform()) return;
     CRoom* pRoom = m_pScene->GetCurrentRoom();
     if (!pRoom) return;
 
-    if (EffectRegistry::Get().HasEffect("E_GaleRush_Burst"))
-    {
-        XMFLOAT3 impPos = { target.x, 0.f, target.z };
-        XMFLOAT3 up = { 0.f, 1.f, 0.f };
-        m_pVFXManager->SpawnEffectDef(impPos, up,
-            EffectRegistry::Get().GetEffect("E_GaleRush_Burst"), false);
-    }
+    // 커서 방향 계산 (VFX보다 먼저 — 대쉬는 VFX 의존 없이 발동해야 함)
+    XMFLOAT3 casterPos = caster->GetTransform()->GetPosition();
+    XMVECTOR oV = XMVectorSetY(XMLoadFloat3(&casterPos), 0.f);
+    XMVECTOR dV = XMVector3Normalize(XMVectorSetY(
+        XMVectorSubtract(XMLoadFloat3(&target), oV), 0.f));
+    if (XMVectorGetX(XMVector3LengthSq(dV)) < 0.001f)
+        dV = XMVector3Normalize(XMVectorSetY(caster->GetTransform()->GetLook(), 0.f));
+    XMStoreFloat3(&m_direction, dV);
 
+    // 매 틱 커서 방향으로 단거리 돌진 — 기존 대쉬와 동일한 느낌, 거리만 줄임
+    auto* pPC = caster->GetComponent<PlayerComponent>();
+    if (pPC) pPC->StartSkillDash(m_direction, DASH_SPEED, 0.18f);
+
+    // 틱마다 히트셋 초기화 (매 틱 독립 피해)
+    m_hitEnemies.clear();
     float damage = m_SkillData.damage * tickMult;
-    float r2 = HIT_RADIUS * HIT_RADIUS;
-    XMVECTOR tV = XMVectorSetY(XMLoadFloat3(&target), 0.f);
-    for (const auto& obj : pRoom->GetGameObjects())
+    HitEnemiesNearCaster(damage);
+
+    // VFX — m_pVFXManager가 있을 때만
+    if (m_pVFXManager)
     {
-        if (!obj) continue;
-        auto* pEnemy = obj->GetComponent<EnemyComponent>();
-        if (!pEnemy || pEnemy->IsDead()) continue;
-        auto* pT = obj->GetTransform();
-        if (!pT) continue;
-        XMFLOAT3 ep = pT->GetPosition();
-        XMVECTOR toE = XMVectorSetY(XMVectorSubtract(XMLoadFloat3(&ep), tV), 0.f);
-        if (XMVectorGetX(XMVector3LengthSq(toE)) <= r2)
-            pEnemy->TakeDamage(damage, false);
+        XMFLOAT3 up = { 0.f, 1.f, 0.f };
+
+        // 시전자 위치 돌진 폭발 (기존 대쉬 VFX 재활용)
+        if (EffectRegistry::Get().HasEffect("E_GaleRush_Burst"))
+        {
+            XMFLOAT3 burstPos = casterPos;
+            burstPos.y += 2.0f;
+            m_pVFXManager->SpawnEffectDef(burstPos, m_direction,
+                EffectRegistry::Get().GetEffect("E_GaleRush_Burst"), false);
+        }
+
+        // 배기 트레일 (진행 반대 방향)
+        if (EffectRegistry::Get().HasEffect("E_GaleRush_Trail"))
+        {
+            XMFLOAT3 trailPos = casterPos;
+            trailPos.y += 2.0f;
+            XMFLOAT3 backDir = { -m_direction.x, 0.f, -m_direction.z };
+            int id = m_pVFXManager->SpawnEffectDef(trailPos, backDir,
+                EffectRegistry::Get().GetEffect("E_GaleRush_Trail"), false);
+            if (id >= 0) m_trailVfxIds.push_back(id);
+        }
+
+        // 칼날 VFX: 돌진 방향 ±20° 좌우로 Q_WindCutter 크레센트 소형 2장
+        if (EffectRegistry::Get().HasEffect("Q_WindCutter"))
+        {
+            auto spawnBlade = [&](float angleDeg)
+            {
+                float rad = angleDeg * (XM_PI / 180.f);
+                float cs = cosf(rad), sn = sinf(rad);
+                XMFLOAT3 bladeDir = {
+                    m_direction.x * cs - m_direction.z * sn,
+                    0.f,
+                    m_direction.x * sn + m_direction.z * cs
+                };
+                XMFLOAT3 bladePos = casterPos;
+                bladePos.y += 3.0f;
+
+                EffectDef bladeDef = EffectRegistry::Get().GetEffect("Q_WindCutter");
+                for (auto& l : bladeDef.layers)
+                {
+                    l.particleCount       = (std::max)(60, l.particleCount / 4);
+                    l.sizeScale          *= 0.45f;
+                    l.crescent.radius    *= 0.45f;
+                    l.crescent.thickness *= 0.45f;
+                }
+                m_pVFXManager->SpawnEffectDef(bladePos, bladeDir, bladeDef, true);
+            };
+
+            spawnBlade(-20.f);
+            spawnBlade( 20.f);
+        }
     }
+}
+
+void GaleRushBehavior::OnChannelEnd(GameObject* caster)
+{
+    m_bChannelMode = false;
 }
 
 void GaleRushBehavior::OnChargeBegin(GameObject* caster)
@@ -90,6 +153,14 @@ void GaleRushBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::XMFL
 
 void GaleRushBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
+    // 채널 룬: 진입 시 Execute가 호출되지만 대쉬는 스킵
+    // OnChannelTick이 매 틱 단거리 돌진을 처리
+    if (m_bChannelMode)
+    {
+        if (m_pVFXManager && m_chargeVFXId >= 0) { m_pVFXManager->StopEffect(m_chargeVFXId); m_chargeVFXId = -1; }
+        return;
+    }
+
     m_bActive  = false;
     m_pCaster  = nullptr;
     m_hitEnemies.clear();
@@ -247,19 +318,22 @@ void GaleRushBehavior::Reset()
 {
     if (m_pVFXManager)
     {
-        if (m_vfxId         >= 0) m_pVFXManager->StopEffect(m_vfxId);
-        if (m_ringVfxId     >= 0) m_pVFXManager->StopEffect(m_ringVfxId);
-        if (m_chargeVFXId   >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
-        if (m_enhanceAuraId >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
+        if (m_vfxId              >= 0) m_pVFXManager->StopEffect(m_vfxId);
+        if (m_ringVfxId          >= 0) m_pVFXManager->StopEffect(m_ringVfxId);
+        if (m_chargeVFXId        >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
+        if (m_enhanceAuraId      >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
+        if (m_channelGatherVfxId >= 0) m_pVFXManager->StopEffect(m_channelGatherVfxId);
         for (int id : m_trailVfxIds)
             if (id >= 0) m_pVFXManager->StopEffect(id);
     }
-    m_bActive       = false;
-    m_vfxId         = -1;
-    m_ringVfxId     = -1;
-    m_chargeVFXId   = -1;
-    m_enhanceAuraId = -1;
-    m_pCaster       = nullptr;
+    m_bActive            = false;
+    m_bChannelMode       = false;
+    m_vfxId              = -1;
+    m_ringVfxId          = -1;
+    m_chargeVFXId        = -1;
+    m_enhanceAuraId      = -1;
+    m_channelGatherVfxId = -1;
+    m_pCaster            = nullptr;
     m_hitEnemies.clear();
     m_trailVfxIds.clear();
     m_trailTimer = 0.f;

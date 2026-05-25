@@ -23,7 +23,9 @@ public:
     virtual void OnChargeUpdate(GameObject* caster, float chargeRatio) override;
     virtual void OnEnhanceActivate(GameObject* caster) override;
     virtual void OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
+    virtual void OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
     virtual void OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult) override;
+    virtual void OnChannelEnd(GameObject* caster) override;
     virtual void Update(float deltaTime) override;
     virtual bool IsFinished() const override;
     virtual void Reset() override;
@@ -41,14 +43,16 @@ private:
     int                   m_chargeVFXId   = -1;
     int                   m_enhanceAuraId = -1;
 
-    bool  m_bActive    = false;
+    bool  m_bActive      = false;
+    bool  m_bChannelMode = false;
     float m_damageMult = 1.f;
     float m_elapsed    = 0.f;
     float m_tickTimer  = 0.f;
     float m_dirTimer   = 0.f;
 
-    DirectX::XMFLOAT3 m_pos    = {};
-    DirectX::XMFLOAT3 m_moveDir = { 1.f, 0.f, 0.f };
+    DirectX::XMFLOAT3 m_pos             = {};
+    DirectX::XMFLOAT3 m_moveDir         = { 1.f, 0.f, 0.f };
+    DirectX::XMFLOAT3 m_channelTargetPos = {};  // 채널 중 lerp 목표 (커서 위치)
 
     std::mt19937 m_rng;
 
@@ -56,6 +60,7 @@ private:
     static constexpr float DMG_RADIUS    = 4.0f;
     static constexpr float TICK_INTERVAL = 0.5f;
     static constexpr float DMG_PER_TICK  = 0.12f;
-    static constexpr float MOVE_SPEED    = 2.5f;
-    static constexpr float DIR_INTERVAL  = 1.8f;
+    static constexpr float MOVE_SPEED         = 2.5f;
+    static constexpr float DIR_INTERVAL       = 1.8f;
+    static constexpr float CHANNEL_LERP_SPEED = 12.f;  // 채널 중 커서 추적 속도 (수명 0.7s 기준 꼬리 8.4u → 형태 유지)
 };

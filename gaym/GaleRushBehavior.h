@@ -24,7 +24,9 @@ public:
     virtual void OnChargeUpdate(GameObject* caster, float chargeRatio) override;
     virtual void OnEnhanceActivate(GameObject* caster) override;
     virtual void OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
+    virtual void OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
     virtual void OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult) override;
+    virtual void OnChannelEnd(GameObject* caster) override;
     virtual void Update(float deltaTime) override;
     virtual bool IsFinished() const override;
     virtual void Reset() override;
@@ -52,6 +54,8 @@ private:
     std::vector<int> m_trailVfxIds;                    // 트레일 VFX ID 목록 (Reset 시 정리)
     float m_trailTimer = 0.f;                          // 다음 트레일 스폰까지 남은 시간
     ElementType m_cachedElem = ElementType::None;      // Execute 시 결정된 원소 (Update trail에도 적용)
+    int  m_channelGatherVfxId = -1;                    // 채널 중 시전자 gathering 이펙트
+    bool m_bChannelMode       = false;
 
     // 돌진 대쉬 파라미터
     static constexpr float DURATION        = 0.45f;

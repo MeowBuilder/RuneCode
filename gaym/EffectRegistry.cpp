@@ -1685,12 +1685,12 @@ void EffectRegistry::Initialize()
             outer.edgeColor      = { 0.30f, 0.60f, 0.38f, 0.30f };
             outer.sizeScale      = 1.8f;
             outer.speedMin       = 5.f;  outer.speedMax  = 10.f;
-            outer.lifetimeMin    = 2.2f; outer.lifetimeMax = 3.8f;
+            outer.lifetimeMin    = 0.4f; outer.lifetimeMax = 0.7f;
             outer.duration       = -1.f;
             outer.linear.length      = 18.0f;
             outer.linear.width       = 4.5f;
             outer.linear.recycleRate = 1.0f;
-            outer.linear.swirlSpeed  = 6.0f;
+            outer.linear.swirlSpeed  = 20.0f;
             def.layers.push_back(outer);
         }
         // [Inner] 좁고 빠른 코어
@@ -1704,12 +1704,12 @@ void EffectRegistry::Initialize()
             inner.edgeColor      = { 0.55f, 0.88f, 0.62f, 0.55f };
             inner.sizeScale      = 1.0f;
             inner.speedMin       = 8.f;  inner.speedMax  = 14.f;
-            inner.lifetimeMin    = 1.3f; inner.lifetimeMax = 2.2f;
+            inner.lifetimeMin    = 0.25f; inner.lifetimeMax = 0.45f;
             inner.duration       = -1.f;
             inner.linear.length      = 20.0f;
             inner.linear.width       = 1.8f;
             inner.linear.recycleRate = 1.0f;
-            inner.linear.swirlSpeed  = 11.0f;
+            inner.linear.swirlSpeed  = 32.0f;
             def.layers.push_back(inner);
         }
         Register(std::move(def));

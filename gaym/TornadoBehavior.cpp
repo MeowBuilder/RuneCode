@@ -15,16 +15,25 @@ TornadoBehavior::TornadoBehavior()
 {
 }
 
+void TornadoBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    m_bChannelMode   = true;
+    m_dirTimer       = 0.f;
+    // 현재 토네이도 위치를 lerp 출발점으로, 커서를 최초 목표로 설정
+    m_channelTargetPos = { targetPosition.x, 0.f, targetPosition.z };
+}
+
 void TornadoBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
 {
-    // 채널 중 토네이도가 커서 위치를 실시간 추적 — 일반 발동은 랜덤 이동
+    // 매 채널 틱마다 lerp 목표를 갱신 — m_pos는 UpdateMovement에서 부드럽게 추적
     if (!m_bActive) return;
-    m_pos = { target.x, target.y, target.z };
-    if (m_pVFXManager && m_vfxId >= 0)
-    {
-        XMFLOAT3 up = { 0.f, 1.f, 0.f };
-        m_pVFXManager->TrackEffect(m_vfxId, m_pos, up);
-    }
+    m_channelTargetPos = { target.x, 0.f, target.z };
+}
+
+void TornadoBehavior::OnChannelEnd(GameObject* caster)
+{
+    m_bChannelMode = false;
+    m_dirTimer     = DIR_INTERVAL;  // 채널 종료 후 즉시 새 방향 선택
 }
 
 void TornadoBehavior::OnChargeBegin(GameObject* caster)
@@ -128,6 +137,30 @@ void TornadoBehavior::Update(float deltaTime)
 
 void TornadoBehavior::UpdateMovement(float dt)
 {
+    if (m_bChannelMode)
+    {
+        // 채널 중: 커서 위치(m_channelTargetPos)를 향해 매 프레임 lerp
+        // TrackEffect를 0.2s 간격이 아닌 매 프레임 호출 → attractor 점프 없이 부드럽게 이동
+        XMVECTOR cur = XMVectorSet(m_pos.x, 0.f, m_pos.z, 0.f);
+        XMVECTOR tgt = XMVectorSet(m_channelTargetPos.x, 0.f, m_channelTargetPos.z, 0.f);
+        XMVECTOR delta = XMVectorSubtract(tgt, cur);
+        float dist = XMVectorGetX(XMVector3Length(delta));
+        if (dist > 0.001f)
+        {
+            float step = (std::min)(dist, CHANNEL_LERP_SPEED * dt);
+            XMVECTOR newPos = XMVectorAdd(cur, XMVectorScale(XMVector3Normalize(delta), step));
+            XMStoreFloat3(&m_pos, newPos);
+            m_pos.y = 0.f;
+        }
+        if (m_pVFXManager && m_vfxId >= 0)
+        {
+            XMFLOAT3 vfxPos = { m_pos.x, 0.f, m_pos.z };
+            XMFLOAT3 up = { 0.f, 1.f, 0.f };
+            m_pVFXManager->TrackEffect(m_vfxId, vfxPos, up);
+        }
+        return;
+    }
+
     m_dirTimer += dt;
     if (m_dirTimer >= DIR_INTERVAL)
     {
@@ -144,12 +177,10 @@ void TornadoBehavior::UpdateMovement(float dt)
     m_pos.x += m_moveDir.x * MOVE_SPEED * dt;
     m_pos.z += m_moveDir.z * MOVE_SPEED * dt;
 
-    // VFX 위치 갱신
     if (m_pVFXManager && m_vfxId >= 0)
     {
-        XMFLOAT3 vfxPos = m_pos;
-        vfxPos.y = 0.f;
-        XMFLOAT3 up = { 0.f, 1.f, 0.f };
+        XMFLOAT3 vfxPos = { m_pos.x, 0.f, m_pos.z };
+        XMFLOAT3 up     = { 0.f, 1.f, 0.f };
         m_pVFXManager->TrackEffect(m_vfxId, vfxPos, up);
     }
 }
@@ -213,6 +244,7 @@ void TornadoBehavior::Reset()
         if (m_enhanceAuraId >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
     }
     m_bActive       = false;
+    m_bChannelMode  = false;
     m_vfxId         = -1;
     m_chargeVFXId   = -1;
     m_enhanceAuraId = -1;
