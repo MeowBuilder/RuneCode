@@ -291,6 +291,41 @@ float LavaTileMask(float2 worldP)
     return saturate(mask) * (0.75f + 0.30f * h2);
 }
 
+// Procedural sand-ripple pattern. 노이즈 기반 도메인 워프 + ridge noise.
+// sin 워프는 평행 wave 곡선이 그대로 휘어 "물결" 패턴이 됨 → ridge noise로
+// 끊기고 갈라지는 dune crest 형태를 만든다. 바람 방향 압축으로 약한 줄무늬
+// 성향만 남김. Output ~[0,1] ridge intensity for shading.
+float SandRipple(float2 worldP, float t)
+{
+    // 노이즈 도메인 워프 — 곡선이 각자 다른 방향으로 휘어 organic.
+    float2 p = worldP * 0.18f;
+    float2 warp = float2(
+        _vnoise(p * 0.6f + 1.7f),
+        _vnoise(p * 0.6f + 7.3f)) * 2.0f - 1.0f;
+    p += warp * 1.4f;
+
+    // 바람 방향(살짝 기운 +X). perp(직교) 압축으로 줄무늬 성향만 약하게.
+    float2 windDir = normalize(float2(1.0f, 0.25f));
+    float2 perpDir = float2(-windDir.y, windDir.x);
+    float along = dot(p, windDir);
+    float perp  = dot(p, perpDir);
+
+    // 1차: 큰 dune ridge — perp 강압축으로 줄무늬 성향, 그러나 ridge noise는
+    //      마루가 끊기고 갈라져 평행 wave가 아닌 crest 형태.
+    float n1 = _vnoise(float2(along * 0.45f, perp * 1.4f));
+    float ridge1 = 1.0f - abs(n1 * 2.0f - 1.0f);
+
+    // 2차: 중간 ripple
+    float n2 = _vnoise(float2(along * 1.1f + 13.0f, perp * 3.2f));
+    float ridge2 = 1.0f - abs(n2 * 2.0f - 1.0f);
+
+    // 3차: 자잘한 grain — 모든 방향 균등
+    float n3 = _vnoise(p * 2.6f + 27.0f);
+
+    float ripple = ridge1 * 0.55f + ridge2 * 0.30f + n3 * 0.15f;
+    return pow(saturate(ripple), 1.6f);
+}
+
 // (2) Procedural crack lines — domain-warped ridge noise FBM. 메안더링 곡선,
 //     얇은 라인, 가지 치는 형태. 모든 위치에서 작동.
 float LavaCrackLines(float2 worldP, float t)
@@ -954,12 +989,12 @@ float4 PS(PS_INPUT input) : SV_TARGET
         if (g_StageTheme == 1)
         {
             float camDist_w = distance(g_CameraPosition, input.worldPosition);
-            float fog_w = saturate((camDist_w - 16.0f) / 70.0f);
-            float3 fogColor_w = float3(0.30f, 0.55f, 0.72f);
-            finalColor.rgb = lerp(finalColor.rgb, fogColor_w, fog_w * 0.65f);
-            float3 tinted_w = finalColor.rgb * float3(0.95f, 1.05f, 1.18f);
-            finalColor.rgb = lerp(finalColor.rgb, tinted_w, 0.85f);
-            finalColor.rgb *= 1.08f;
+            float fog_w = saturate((camDist_w - 10.0f) / 55.0f);
+            float3 fogColor_w = float3(0.22f, 0.48f, 0.66f);
+            finalColor.rgb = lerp(finalColor.rgb, fogColor_w, fog_w * 0.75f);
+            float3 tinted_w = finalColor.rgb * float3(0.92f, 1.07f, 1.22f);
+            finalColor.rgb = lerp(finalColor.rgb, tinted_w, 0.90f);
+            finalColor.rgb *= 1.06f;
         }
 
         return float4(finalColor.rgb, waterAlpha);
@@ -969,48 +1004,84 @@ float4 PS(PS_INPUT input) : SV_TARGET
     // bIsWater 분기는 위에서 return 했으므로 여기 도달하는 픽셀은 일반 지오메트리.
     if (g_StageTheme == 1)
     {
-        // Caustics — 위를 향한 면(바닥/지형)에만, 햇빛이 닿는 영역에만.
-        // peak 색을 1.0 위로 밀어서 bloom 패스가 살짝 글린트로 잡아내게.
-        // 캐릭터(skinned)에는 적용 X — 머리·어깨 위에 패턴 투영 방지.
+        // Caustics — 캐릭터·벽면에도 약하게 들어가게 (강도 차등). 물속 잠수 느낌 ↑
+        //   바닥(upFacing≈1): 1.0배, 벽면(upFacing≈0): 0.35배, 캐릭터: 0.22배.
         float upFacing = saturate(normal.y);
-        if (upFacing > 0.05f && !bIsSkinned)
-        {
-            float caust = WaterCaustics(input.worldPosition.xz, g_Time);
-            // 살짝 흔들리는 강도 (큰 파도 위 햇빛 흔들림 모사)
-            float shimmer = 0.85f + 0.30f * sin(g_Time * 0.9f + input.worldPosition.x * 0.07f);
-            float3 causticColor = float3(0.65f, 1.05f, 1.45f);  // peak가 1.0 초과 → bloom 통과
-            finalColor.rgb += causticColor * caust * upFacing * shadowFactor * 0.85f * shimmer;
-        }
+        float caust = WaterCaustics(input.worldPosition.xz, g_Time);
+        float shimmer = 0.85f + 0.30f * sin(g_Time * 0.9f + input.worldPosition.x * 0.07f);
+        float3 causticColor = float3(0.65f, 1.05f, 1.45f);  // peak > 1.0 → bloom 통과
 
-        // 거리 기반 청록 안개 — 시작은 빠르게, 두께는 가볍게.
+        float caustWeight;
+        if (bIsSkinned)
+            caustWeight = 0.22f;
+        else
+            caustWeight = lerp(0.35f, 1.0f, smoothstep(0.0f, 0.6f, upFacing));
+
+        finalColor.rgb += causticColor * caust * caustWeight * shadowFactor * 0.85f * shimmer;
+
+        // 거리 기반 청록 안개 — 시작 거리 단축(16→10) + 농도 ↑(0.65→0.75)로 수중 가시거리 감각.
         float camDist = distance(g_CameraPosition, input.worldPosition);
-        float fog = saturate((camDist - 16.0f) / 70.0f);
-        float3 fogColor = float3(0.30f, 0.55f, 0.72f);  // 더 밝은 청록 (어둡게 가라앉지 않게)
-        finalColor.rgb = lerp(finalColor.rgb, fogColor, fog * 0.65f);
+        float fog = saturate((camDist - 10.0f) / 55.0f);
+        float3 fogColor = float3(0.22f, 0.48f, 0.66f);  // 약간 더 진한 청록
+        finalColor.rgb = lerp(finalColor.rgb, fogColor, fog * 0.75f);
+
+        // 거리 기반 채도 감소 — 멀수록 청록으로 묻힘. 깊이감/뿌연 수중 시야.
+        float lum_w = dot(finalColor.rgb, float3(0.299f, 0.587f, 0.114f));
+        float desat = saturate((camDist - 12.0f) / 50.0f) * 0.35f;
+        finalColor.rgb = lerp(finalColor.rgb,
+                              float3(lum_w * 0.85f, lum_w * 1.00f, lum_w * 1.10f),
+                              desat);
 
         // 청량 톤 시프트 + 전체 밝기 살짝 lift — "햇빛 잘 드는 얕은 물" 느낌.
-        float3 tinted = finalColor.rgb * float3(0.95f, 1.05f, 1.18f);
-        finalColor.rgb = lerp(finalColor.rgb, tinted, 0.85f);
-        finalColor.rgb *= 1.08f;  // overall lift
+        float3 tinted = finalColor.rgb * float3(0.92f, 1.07f, 1.22f);
+        finalColor.rgb = lerp(finalColor.rgb, tinted, 0.90f);
+        finalColor.rgb *= 1.06f;
     }
 
-    // ── Stage-themed environment: Earth (cave dimming + dusty fog) ──
-    // 균열 무늬 제거 — 바위/타일 텍스처가 이미 충분한 디테일을 가짐.
-    if (g_StageTheme == 2 && !bIsSkinned)
+    // ── Stage-themed environment: Earth (rocky-desert: sun-baked + sand ripple + heat haze) ──
+    if (g_StageTheme == 2)
     {
         float upFacing = saturate(normal.y);
-        if (upFacing > 0.20f)
+        float camDistE = distance(g_CameraPosition, input.worldPosition);
+
+        // 지면 셰이딩(워밍·ripple·heat haze)은 환경 지오메트리에만.
+        // 캐릭터에는 fog/tint만 입혀서 분위기에 녹게 한다.
+        if (!bIsSkinned)
         {
-            float slopeMul = smoothstep(0.20f, 0.65f, upFacing);
-            // 동굴 음영만 — 위쪽 표면을 살짝 어둡게 깔아 차가운 느낌
-            finalColor.rgb *= lerp(1.0f, 0.88f, slopeMul);
+            // (a) 위쪽 면에 강한 햇빛 워밍 — sun-baked sandstone.
+            if (upFacing > 0.15f)
+            {
+                float slopeMul = smoothstep(0.15f, 0.70f, upFacing);
+                finalColor.rgb += float3(0.080f, 0.045f, 0.008f) * slopeMul;
+
+                // 절차적 모래 리플 — 골에 부드러운 음영 (wind-blown sand)
+                float ripple = SandRipple(input.worldPosition.xz, g_Time);
+                finalColor.rgb *= lerp(1.0f, 0.82f, ripple * slopeMul * 0.55f);
+            }
+
+            // (b) Heat haze — 멀리 픽셀 밝기를 sin파로 미세 진동 → 아지랑이.
+            //     픽셀 단위 brightness wobble. 풀스크린 distortion은 아니지만
+            //     멀리 표면이 출렁이는 신호로는 충분.
+            float hazeRange = saturate((camDistE - 14.0f) / 30.0f);
+            float hazeWobble = sin(input.worldPosition.y * 2.5f
+                                 + g_Time * 3.4f
+                                 + input.worldPosition.x * 0.30f) * 0.5f + 0.5f;
+            finalColor.rgb *= 1.0f + (hazeWobble - 0.5f) * 0.10f * hazeRange;
         }
 
-        // 거리 기반 흙먼지 안개 — 갈색 톤, 옅게 깔림
-        float camDistE = distance(g_CameraPosition, input.worldPosition);
-        float fogE = saturate((camDistE - 18.0f) / 80.0f);
-        float3 fogColorE = float3(0.45f, 0.40f, 0.35f);
-        finalColor.rgb = lerp(finalColor.rgb, fogColorE, fogE * 0.55f);
+        // (c) 거리 fog 2단 — 근거리 모래색 dust + 원거리 푸른 distance haze.
+        //     캐릭터에도 동일 적용 → 환경과의 시각 일관성.
+        float fogNear = saturate((camDistE - 14.0f) / 35.0f);
+        float3 fogColorNear = float3(0.85f, 0.70f, 0.48f);
+        finalColor.rgb = lerp(finalColor.rgb, fogColorNear, fogNear * 0.40f);
+
+        float fogFar = saturate((camDistE - 45.0f) / 50.0f);
+        float3 fogColorFar = float3(0.55f, 0.65f, 0.78f);
+        finalColor.rgb = lerp(finalColor.rgb, fogColorFar, fogFar * 0.55f);
+
+        // (d) 따뜻한 톤 시프트 — sun-baked 분위기 (R↑, B↓)
+        float3 tinted_e = finalColor.rgb * float3(1.10f, 1.02f, 0.92f);
+        finalColor.rgb = lerp(finalColor.rgb, tinted_e, 0.65f);
     }
 
     // ── Stage-themed environment: Fire (lava-crack glow on upward surfaces) ──

@@ -533,10 +533,13 @@ bool MapLoader::LoadIntoScene(
 
         GameObject* pGO = pScene->CreateGameObject(pDevice, pCommandList);
 
-        // Check if this is a lava object (by mesh name)
+        // Check if this is a lava object (by mesh name).
+        // Fire 스테이지에서만 — 다른 스테이지(물/땅/풀)에서는 같은 맵 데이터에
+        // lava 메시가 끼어 있어도 일반 타일처럼 렌더되도록 SetLava 자체를 막는다.
         std::string meshNameLower = meshRelPath;
         std::transform(meshNameLower.begin(), meshNameLower.end(), meshNameLower.begin(), ::tolower);
-        if (meshNameLower.find("lava") != std::string::npos) {
+        if (meshNameLower.find("lava") != std::string::npos &&
+            pScene->GetCurrentTheme() == StageTheme::Fire) {
             pGO->SetLava(true);
         }
 
@@ -655,9 +658,12 @@ bool MapLoader::LoadIntoScene(
             // Single-material path
             applyMat(pGO, mo);
 
-            // Floor tile variety: ~20% of grid floor tiles get a lava decoration variant
+            // Floor tile variety: ~20% of grid floor tiles get a lava decoration variant.
+            // Fire 스테이지에서만 활성화 — 사막/물/풀 스테이지에서는 lava decal 텍스처가
+            // 컨셉과 충돌하므로 일반 grid 텍스처(아래 applyTex 경로)를 그대로 사용.
             bool usedLavaVariant = false;
-            if (meshRelPath.find("LavaMaze_GridTile_01") != std::string::npos) {
+            if (meshRelPath.find("LavaMaze_GridTile_01") != std::string::npos &&
+                pScene->GetCurrentTheme() == StageTheme::Fire) {
                 const JsonVal& tpos = mo["position"];
                 // Convert to grid indices (tile spacing = 2 units) to avoid alignment bias
                 int gx = (int)roundf(tpos[0].f() * 0.5f);
