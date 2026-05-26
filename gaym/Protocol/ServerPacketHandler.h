@@ -34,6 +34,7 @@ enum : uint16
 	PKT_C_DEBUG_KILL_ALL = 1023,
 	PKT_S_BOSS_EVENT = 1024,
 	PKT_C_BOSS_CUTSCENE_END = 1025,
+	PKT_S_MONSTER_STAGGER = 1026,
 };
 
 // Custom Handlers
@@ -54,6 +55,7 @@ bool Handle_S_PLAYER_DAMAGE(PacketSessionRef& session, Protocol::S_PLAYER_DAMAGE
 bool Handle_S_MONSTER_DAMAGE(PacketSessionRef& session, Protocol::S_MONSTER_DAMAGE& pkt);
 bool Handle_S_ROOM_CLEARED(PacketSessionRef& session, Protocol::S_ROOM_CLEARED& pkt);
 bool Handle_S_BOSS_EVENT(PacketSessionRef& session, Protocol::S_BOSS_EVENT& pkt);
+bool Handle_S_MONSTER_STAGGER(PacketSessionRef& session, Protocol::S_MONSTER_STAGGER& pkt);
 
 class ServerPacketHandler
 {
@@ -78,6 +80,7 @@ public:
 		GPacketHandler[PKT_S_MONSTER_DAMAGE] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_MONSTER_DAMAGE>(Handle_S_MONSTER_DAMAGE, session, buffer, len); };
 		GPacketHandler[PKT_S_ROOM_CLEARED] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_ROOM_CLEARED>(Handle_S_ROOM_CLEARED, session, buffer, len); };
 		GPacketHandler[PKT_S_BOSS_EVENT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) {return HandlePacket<Protocol::S_BOSS_EVENT>(Handle_S_BOSS_EVENT, session, buffer, len); };
+		GPacketHandler[PKT_S_MONSTER_STAGGER] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_MONSTER_STAGGER>(Handle_S_MONSTER_STAGGER, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)

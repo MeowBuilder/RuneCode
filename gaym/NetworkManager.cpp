@@ -338,6 +338,10 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
                                  cmd.attackerPlayerId, cmd.skillType);
             break;
 
+        case NetworkCommand::MonsterStagger:
+            ProcessMonsterStagger(cmd.monsterId, cmd.duration);
+            break;
+
         case NetworkCommand::RoomCleared:
             ProcessRoomCleared(pScene, cmd.stageIndex, cmd.roomIndex);
             break;
@@ -618,6 +622,19 @@ void NetworkManager::QueuePlayerDamage(uint64 playerId, float damage, float curr
     cmd.currentHp = currentHp;
     cmd.isDead = isDead;
     cmd.attackerMonsterId = attackerMonsterId;
+    m_vCommandQueue.push_back(cmd);
+}
+
+// 몬스터 기절/그로기 큐 등록
+void NetworkManager::QueueMonsterStagger(uint64 monsterId, float duration)
+{
+    std::lock_guard<std::mutex> lock(m_queueMutex);
+
+    NetworkCommandData cmd{};
+    cmd.type = NetworkCommand::MonsterStagger;
+    cmd.monsterId = monsterId;
+    cmd.duration = duration;
+
     m_vCommandQueue.push_back(cmd);
 }
 
@@ -2372,8 +2389,13 @@ void NetworkManager::UpdatePendingMonsterVFX(Scene* pScene, float deltaTime)
             if (it->kind == PendingVFXKind::CameraShake)
             {
                 if (CCamera* pCam = pScene ? pScene->GetCamera() : nullptr)
+                {
+                    // FixatedCharge Dash 시작 시점에는 카메라 줌아웃 해제 후 shake
+                    pCam->SetExtraOrbitDistanceTarget(0.0f);
                     pCam->StartShake(it->shakeIntensity, it->shakeDuration);
+                }
             }
+
             // SPHBeam — 오프라인 SpawnFireWave 와 동일 EffectDef + SPH_Beam emitter
             else if (it->kind == PendingVFXKind::SPHBeam)
             {
@@ -2568,45 +2590,65 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                 {
                     pT->SetPosition(centerX, indY + 0.02f, centerZ);
                     pT->SetRotation(0.0f, ind.yawDeg, 0.0f);
-                    // 외곽 1.06 → 1.12 (두께 ↑)
+
+                    // 외곽은 항상 full 길이/너비로 표시한다.
                     pT->SetScale(fHalfW * 2.0f * 1.12f, 1.0f, fLen * 1.12f);
+
+                    MATERIAL mat;
+
+                    // boxBorder는 항상 공격 타입 색상 사용
+                    // 28/29는 GetIndicatorParamsForAttack()에서 tint가 빨강이므로 빨간 외곽이 된다.
+                    mat.m_cAmbient = XMFLOAT4(0.4f * ind.tint.x, 0.4f * ind.tint.y, 0.4f * ind.tint.z, 1.0f);
+                    mat.m_cDiffuse = XMFLOAT4(ind.tint.x, ind.tint.y, ind.tint.z, 1.0f);
+                    mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                    mat.m_cEmissive = XMFLOAT4(3.0f * ind.tint.x, 3.0f * ind.tint.y, 3.0f * ind.tint.z, 1.0f);
+
+                    ind.boxBorder->SetMaterial(mat);
+                }
+            }
+
+            // fill — 28/29는 빨간 사각형 안에 노란색이 전방으로 차오르게 표시
+            if (ind.boxFill)
+            {
+                if (auto* pT = ind.boxFill->GetTransform())
+                {
+                    float fillLen = fLen;
+
+                    if (ind.attackType == 28 || ind.attackType == 29)
+                    {
+                        fillLen = fLen * fillProgress;
+                        if (fillLen < 0.01f)
+                            fillLen = 0.01f;
+                    }
+
+                    float fillCenterX = ind.anchorX + sinf(yawRad) * (fillLen * 0.5f);
+                    float fillCenterZ = ind.anchorZ + cosf(yawRad) * (fillLen * 0.5f);
+
+                    // fill은 border보다 살짝 낮게 해서 빨간 외곽이 덮이지 않게 한다.
+                    pT->SetPosition(fillCenterX, indY - 0.02f, fillCenterZ);
+                    pT->SetRotation(0.0f, ind.yawDeg, 0.0f);
+                    pT->SetScale(fHalfW * 1.75f, 1.0f, fillLen);
+
                     MATERIAL mat;
                     float emitMul = 0.8f + 1.8f * fillProgress;
 
                     if (ind.attackType == 28 || ind.attackType == 29)
                     {
-                        // Demon ShortRush / LongRush: 빨간 외곽 + 노란 fill
+                        // Demon ShortRush / LongRush: 노란색 fill
                         mat.m_cAmbient = XMFLOAT4(0.35f, 0.28f, 0.03f, 1.0f);
                         mat.m_cDiffuse = XMFLOAT4(1.0f, 0.75f, 0.05f, 1.0f);
                         mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
                         mat.m_cEmissive = XMFLOAT4(emitMul * 1.0f, emitMul * 0.75f, emitMul * 0.05f, 1.0f);
                     }
-
                     else
                     {
-                        // 나머지 ForwardBox는 공격 타입 색상 그대로 fill
+                        // 나머지는 기존처럼 공격 타입 색상 fill
                         mat.m_cAmbient = XMFLOAT4(0.25f * ind.tint.x, 0.25f * ind.tint.y, 0.25f * ind.tint.z, 1.0f);
                         mat.m_cDiffuse = XMFLOAT4(ind.tint.x, ind.tint.y, ind.tint.z, 1.0f);
                         mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
                         mat.m_cEmissive = XMFLOAT4(emitMul * ind.tint.x, emitMul * ind.tint.y, emitMul * ind.tint.z, 1.0f);
                     }
-                    ind.boxBorder->SetMaterial(mat);
-                }
-            }
-            // fill — 박스도 항상 full 길이/너비 표시, emissive 만 진행도 반영
-            if (ind.boxFill)
-            {
-                if (auto* pT = ind.boxFill->GetTransform())
-                {
-                    pT->SetPosition(centerX, indY, centerZ);
-                    pT->SetRotation(0.0f, ind.yawDeg, 0.0f);
-                    pT->SetScale(fHalfW * 2.0f, 1.0f, fLen);
-                    MATERIAL mat;
-                    float emitMul = 0.8f + 1.8f * fillProgress;
-                    mat.m_cAmbient = XMFLOAT4(0.25f * ind.tint.x, 0.25f * ind.tint.y, 0.25f * ind.tint.z, 1.0f);
-                    mat.m_cDiffuse = XMFLOAT4(ind.tint.x, ind.tint.y, ind.tint.z, 1.0f);
-                    mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-                    mat.m_cEmissive = XMFLOAT4(emitMul * ind.tint.x, emitMul * ind.tint.y, emitMul * ind.tint.z, 1.0f);
+
                     ind.boxFill->SetMaterial(mat);
                 }
             }
@@ -2801,6 +2843,26 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
         case 34: lockDur = 2.5f; break; // JumpSlam
         case 35: lockDur = 2.6f; break; // RageTransition
         }
+    }
+
+    if (mt == 9 && attackType == 30)
+    {
+        if (pScene && pScene->GetCamera())
+        {
+            pScene->GetCamera()->SetExtraOrbitDistanceTarget(28.0f);
+        }
+    }
+
+    // Demon FixatedCharge Dash 시작 시점 — 카메라 pull-back 해제 + 출발 shake 예약
+    if (mt == 9 && attackType == 30)
+    {
+        PendingMonsterVFX p;
+        p.kind = PendingVFXKind::CameraShake;
+        p.delay = windupSec + 0.2f;
+        p.shakeIntensity = 0.6f;
+        p.shakeDuration = 0.25f;
+
+        m_vPendingMonsterVFX.push_back(p);
     }
 
     m_mapServerMonsterAttackTimer[monsterId] = lockDur;
@@ -3181,8 +3243,6 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             break;
         
         case 27:
-        case 28:
-        case 29:
         case 30:
         case 31:
         case 32:
@@ -3506,6 +3566,48 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
     char buf[192];
     sprintf_s(buf, "[Network] BossEvent processed: monsterId=%llu type=%u phase=%u clip=%s",
               monsterId, eventType, phaseIndex, roarClip ? roarClip : "(none)");
+    WriteNetworkLog(buf);
+}
+
+// 몬스터 기절/그로기 처리
+void NetworkManager::ProcessMonsterStagger(uint64 monsterId, float duration)
+{
+    // 1. 서버 몬스터 조회
+    auto it = m_mapServerMonsters.find(monsterId);
+    if (it == m_mapServerMonsters.end() || it->second == nullptr)
+        return;
+
+    GameObject* pMonster = it->second;
+
+    // 2. Demon FixatedCharge 기둥 충돌 그로기 애니메이션 재생
+    if (auto* pAnim = pMonster->GetComponent<AnimationComponent>())
+    {
+        pAnim->CrossFade("gethit3", 0.15f, true, true);
+    }
+
+    // 3. 기절 시간 동안 이동/공격 애니메이션이 바로 덮지 못하도록 락 타이머 설정
+    m_mapServerMonsterAttackTimer[monsterId] = duration;
+    m_mapServerMonsterMoveTime.erase(monsterId);
+
+    // 4. 카메라 pull-back 해제 + 기둥 충돌 임팩트 shake
+    if (auto* pApp = Dx12App::GetInstance())
+    {
+        if (auto* pScene = pApp->GetScene())
+        {
+            if (auto* pCam = pScene->GetCamera())
+            {
+                pCam->SetExtraOrbitDistanceTarget(0.0f);
+                pCam->StartShake(1.6f, 0.55f);
+            }
+        }
+    }
+
+    // 5. 디버그 로그 출력
+    char buf[160];
+    sprintf_s(buf,
+        "[Network] MonsterStagger applied: monsterId=%llu duration=%.2f",
+        monsterId,
+        duration);
     WriteNetworkLog(buf);
 }
 
@@ -4545,23 +4647,23 @@ void NetworkManager::PlayNetworkDemonAttackBehavior(
         );
         break;
 
-    case 28: // DemonShortRush
-        behavior = std::make_unique<RushFrontAttackBehavior>(
-            55.0f,
-            28.0f, 0.85f,
-            0.25f, 0.15f, 1.0f,
-            8.5f, 75.0f
-        );
-        break;
+    //case 28: // DemonShortRush
+    //    behavior = std::make_unique<RushFrontAttackBehavior>(
+    //        55.0f,
+    //        28.0f, 0.85f,
+    //        0.25f, 0.15f, 1.0f,
+    //        8.5f, 75.0f
+    //    );
+    //    break;
 
-    case 29: // DemonLongRush
-        behavior = std::make_unique<RushFrontAttackBehavior>(
-            70.0f,
-            34.0f, 1.2f,
-            0.30f, 0.20f, 1.2f,
-            10.5f, 95.0f
-        );
-        break;
+    //case 29: // DemonLongRush
+    //    behavior = std::make_unique<RushFrontAttackBehavior>(
+    //        70.0f,
+    //        34.0f, 1.2f,
+    //        0.30f, 0.20f, 1.2f,
+    //        10.5f, 95.0f
+    //    );
+    //    break;
 
     case 30: // DemonFixatedCharge
         behavior = std::make_unique<FixatedChargeAttackBehavior>(

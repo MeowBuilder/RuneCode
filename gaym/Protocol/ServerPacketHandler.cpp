@@ -402,3 +402,25 @@ bool Handle_S_BOSS_EVENT(PacketSessionRef& session, Protocol::S_BOSS_EVENT& pkt)
 
     return true;
 }
+
+// 몬스터 기절/그로기 처리
+bool Handle_S_MONSTER_STAGGER(PacketSessionRef& session, Protocol::S_MONSTER_STAGGER& pkt)
+{
+    uint64 monsterId = pkt.monsterid();
+    float duration = pkt.duration();
+
+    char buf[160];
+    sprintf_s(buf,
+        "[Network] S_MONSTER_STAGGER received: monsterId=%llu duration=%.2f",
+        monsterId,
+        duration);
+    WriteNetworkLog(buf);
+
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr)
+    {
+        pNetMgr->QueueMonsterStagger(monsterId, duration);
+    }
+
+    return true;
+}

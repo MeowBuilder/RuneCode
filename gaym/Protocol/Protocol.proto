@@ -202,3 +202,9 @@ message C_BOSS_CUTSCENE_END // 클라 -> 서버 보스 컷신 종료 알림 패�
 	BossEventType eventType = 2; // 어떤 보스 이벤트 컷신이 끝났는지
 	uint32 phaseIndex = 3;       // 페이즈 번호
 }
+
+message S_MONSTER_STAGGER // 서버 -> 클라 몬스터 기절/그로기 알림 패킷
+{
+	uint64 monsterId = 1; // 기절한 몬스터 ID
+	float duration = 2;   // 기절 지속 시간(초)
+}

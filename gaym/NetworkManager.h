@@ -46,7 +46,8 @@ enum class NetworkCommand
     PlayerDamage,
     MonsterDamage,
     RoomCleared,
-    BossEvent
+    BossEvent,
+    MonsterStagger
 };
 
 // 네트워크 명령 구조체
@@ -76,6 +77,7 @@ struct NetworkCommandData
     // Combat fields
     uint32 attackType;
     float windupSec;
+    float duration;          // 기절/그로기 지속 시간
     uint64 targetPlayerId;
     float damage;
     float currentHp;
@@ -201,6 +203,9 @@ public:
     // 보스 이벤트 (인트로/페이즈 전환/사망 컷씬)
     void QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 phaseIndex);
 
+	// 몬스터 스태거 큐잉 — 피격 시 잠시 멈추는 효과
+    void QueueMonsterStagger(uint64 monsterId, float duration);
+    
     // 서버 몬스터 조회
     GameObject* GetServerMonster(uint64 monsterId);
     bool HasServerMonsters() const { return !m_mapServerMonsters.empty(); }
@@ -259,6 +264,7 @@ private:
                               uint64 attackerPlayerId, int skillType);
     void ProcessRoomCleared(Scene* pScene, uint32 stageIndex, uint32 roomIndex);
     void ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 eventType, uint32 phaseIndex);
+    void ProcessMonsterStagger(uint64 monsterId, float duration);
 
 	// 몬스터 공격 애니메이션 재생 (ProcessMonsterAttack에서 호출)
     void PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType);

@@ -48,7 +48,7 @@ struct TableStruct_Protocol_2eproto {
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::AuxiliaryParseTableField aux[]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
-  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[26]
+  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[27]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::FieldMetadata field_metadata[];
   static const ::PROTOBUF_NAMESPACE_ID::internal::SerializationTable serialization_table[];
@@ -116,6 +116,9 @@ extern S_MONSTER_MOVEDefaultTypeInternal _S_MONSTER_MOVE_default_instance_;
 class S_MONSTER_SPAWN;
 struct S_MONSTER_SPAWNDefaultTypeInternal;
 extern S_MONSTER_SPAWNDefaultTypeInternal _S_MONSTER_SPAWN_default_instance_;
+class S_MONSTER_STAGGER;
+struct S_MONSTER_STAGGERDefaultTypeInternal;
+extern S_MONSTER_STAGGERDefaultTypeInternal _S_MONSTER_STAGGER_default_instance_;
 class S_MOVE;
 struct S_MOVEDefaultTypeInternal;
 extern S_MOVEDefaultTypeInternal _S_MOVE_default_instance_;
@@ -156,6 +159,7 @@ template<> ::Protocol::S_MONSTER_DAMAGE* Arena::CreateMaybeMessage<::Protocol::S
 template<> ::Protocol::S_MONSTER_DESPAWN* Arena::CreateMaybeMessage<::Protocol::S_MONSTER_DESPAWN>(Arena*);
 template<> ::Protocol::S_MONSTER_MOVE* Arena::CreateMaybeMessage<::Protocol::S_MONSTER_MOVE>(Arena*);
 template<> ::Protocol::S_MONSTER_SPAWN* Arena::CreateMaybeMessage<::Protocol::S_MONSTER_SPAWN>(Arena*);
+template<> ::Protocol::S_MONSTER_STAGGER* Arena::CreateMaybeMessage<::Protocol::S_MONSTER_STAGGER>(Arena*);
 template<> ::Protocol::S_MOVE* Arena::CreateMaybeMessage<::Protocol::S_MOVE>(Arena*);
 template<> ::Protocol::S_PLAYER_DAMAGE* Arena::CreateMaybeMessage<::Protocol::S_PLAYER_DAMAGE>(Arena*);
 template<> ::Protocol::S_ROOM_CLEARED* Arena::CreateMaybeMessage<::Protocol::S_ROOM_CLEARED>(Arena*);
@@ -4392,6 +4396,149 @@ class C_BOSS_CUTSCENE_END final :
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
+// -------------------------------------------------------------------
+
+class S_MONSTER_STAGGER final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_MONSTER_STAGGER) */ {
+ public:
+  inline S_MONSTER_STAGGER() : S_MONSTER_STAGGER(nullptr) {}
+  ~S_MONSTER_STAGGER() override;
+  explicit constexpr S_MONSTER_STAGGER(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_MONSTER_STAGGER(const S_MONSTER_STAGGER& from);
+  S_MONSTER_STAGGER(S_MONSTER_STAGGER&& from) noexcept
+    : S_MONSTER_STAGGER() {
+    *this = ::std::move(from);
+  }
+
+  inline S_MONSTER_STAGGER& operator=(const S_MONSTER_STAGGER& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_MONSTER_STAGGER& operator=(S_MONSTER_STAGGER&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_MONSTER_STAGGER& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_MONSTER_STAGGER* internal_default_instance() {
+    return reinterpret_cast<const S_MONSTER_STAGGER*>(
+               &_S_MONSTER_STAGGER_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    26;
+
+  friend void swap(S_MONSTER_STAGGER& a, S_MONSTER_STAGGER& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_MONSTER_STAGGER* other) {
+    if (other == this) return;
+    if (GetOwningArena() == other->GetOwningArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_MONSTER_STAGGER* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline S_MONSTER_STAGGER* New() const final {
+    return new S_MONSTER_STAGGER();
+  }
+
+  S_MONSTER_STAGGER* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<S_MONSTER_STAGGER>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const S_MONSTER_STAGGER& from);
+  void MergeFrom(const S_MONSTER_STAGGER& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_MONSTER_STAGGER* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_MONSTER_STAGGER";
+  }
+  protected:
+  explicit S_MONSTER_STAGGER(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kMonsterIdFieldNumber = 1,
+    kDurationFieldNumber = 2,
+  };
+  // uint64 monsterId = 1;
+  void clear_monsterid();
+  ::PROTOBUF_NAMESPACE_ID::uint64 monsterid() const;
+  void set_monsterid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_monsterid() const;
+  void _internal_set_monsterid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
+  // float duration = 2;
+  void clear_duration();
+  float duration() const;
+  void set_duration(float value);
+  private:
+  float _internal_duration() const;
+  void _internal_set_duration(float value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_MONSTER_STAGGER)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 monsterid_;
+  float duration_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_Protocol_2eproto;
+};
 // ===================================================================
 
 
@@ -6616,9 +6763,55 @@ inline void C_BOSS_CUTSCENE_END::set_phaseindex(::PROTOBUF_NAMESPACE_ID::uint32 
   // @@protoc_insertion_point(field_set:Protocol.C_BOSS_CUTSCENE_END.phaseIndex)
 }
 
+// -------------------------------------------------------------------
+
+// S_MONSTER_STAGGER
+
+// uint64 monsterId = 1;
+inline void S_MONSTER_STAGGER::clear_monsterid() {
+  monsterid_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_MONSTER_STAGGER::_internal_monsterid() const {
+  return monsterid_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_MONSTER_STAGGER::monsterid() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_MONSTER_STAGGER.monsterId)
+  return _internal_monsterid();
+}
+inline void S_MONSTER_STAGGER::_internal_set_monsterid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  monsterid_ = value;
+}
+inline void S_MONSTER_STAGGER::set_monsterid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_monsterid(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_MONSTER_STAGGER.monsterId)
+}
+
+// float duration = 2;
+inline void S_MONSTER_STAGGER::clear_duration() {
+  duration_ = 0;
+}
+inline float S_MONSTER_STAGGER::_internal_duration() const {
+  return duration_;
+}
+inline float S_MONSTER_STAGGER::duration() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_MONSTER_STAGGER.duration)
+  return _internal_duration();
+}
+inline void S_MONSTER_STAGGER::_internal_set_duration(float value) {
+  
+  duration_ = value;
+}
+inline void S_MONSTER_STAGGER::set_duration(float value) {
+  _internal_set_duration(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_MONSTER_STAGGER.duration)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
