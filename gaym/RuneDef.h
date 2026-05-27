@@ -38,16 +38,17 @@ struct SkillContext
 struct SkillStats
 {
     // Stat multipliers (all start at 1.0)
-    float damageMult         = 1.f;
-    float cooldownMult       = 1.f;
-    float rangeMult          = 1.f;
-    float radiusMult         = 1.f;
-    float castTimeMult       = 1.f;
-    float durationMult       = 1.f;
-    float manaCostMult       = 1.f;
-    float statusDurationMult = 1.f;
-    float statusChanceMult   = 1.f;
-    float knockbackMult      = 1.f;
+    float damageMult            = 1.f;
+    float cooldownMult          = 1.f;
+    float rangeMult             = 1.f;
+    float radiusMult            = 1.f;
+    float castTimeMult          = 1.f;
+    float durationMult          = 1.f;
+    float channelDurationMult   = 1.f;
+    float manaCostMult          = 1.f;
+    float statusDurationMult    = 1.f;
+    float statusChanceMult      = 1.f;
+    float knockbackMult         = 1.f;
 
     // Final activation type (skill default unless overridden by a rune)
     ActivationType activationType = ActivationType::Instant;
@@ -129,16 +130,17 @@ struct RuneDef
 
     // Stat multipliers (base values for 1 stack)
     // Stack formula: effective = 1 + (baseMult - 1) * stackCount
-    float damageMult         = 1.f;
-    float cooldownMult       = 1.f;
-    float rangeMult          = 1.f;
-    float radiusMult         = 1.f;
-    float castTimeMult       = 1.f;
-    float durationMult       = 1.f;
-    float manaCostMult       = 1.f;
-    float statusDurationMult = 1.f;
-    float statusChanceMult   = 1.f;
-    float knockbackMult      = 1.f;
+    float damageMult          = 1.f;
+    float cooldownMult        = 1.f;
+    float rangeMult           = 1.f;
+    float radiusMult          = 1.f;
+    float castTimeMult        = 1.f;
+    float durationMult        = 1.f;
+    float channelDurationMult = 1.f;
+    float manaCostMult        = 1.f;
+    float statusDurationMult  = 1.f;
+    float statusChanceMult    = 1.f;
+    float knockbackMult       = 1.f;
 
     // Activation type override (overrides the skill's default activation)
     std::optional<ActivationType> activationOverride;

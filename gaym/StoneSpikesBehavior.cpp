@@ -14,6 +14,30 @@ StoneSpikesBehavior::StoneSpikesBehavior()
 {
 }
 
+void StoneSpikesBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    m_bChannelMode = true;
+    // Execute에서 원소를 캐시하지 않으므로 여기서 미리 캐시
+    m_cachedElem = ElementType::None;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count) {
+            SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            if (!sts.elementSet.empty()) m_cachedElem = sts.elementSet[0];
+        }
+    }
+}
+
+void StoneSpikesBehavior::OnChannelEnd(GameObject* caster)
+{
+    m_bChannelMode = false;
+    if (m_pVFXManager && m_channelAmbientId >= 0)
+    {
+        m_pVFXManager->StopEffect(m_channelAmbientId);
+        m_channelAmbientId = -1;
+    }
+}
+
 void StoneSpikesBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
 {
     // 채널 중 커서 위치에 기둥 1개 즉시 생성 — 방향을 바꿔가며 박을 수 있어 일반 스킬과 차별화
@@ -26,7 +50,7 @@ void StoneSpikesBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLO
         EffectDef def = EffectRegistry::Get().GetEffect("Q_StoneSpike");
         if (m_cachedElem != ElementType::None)
             ApplyElementToEffectDef(def, m_cachedElem);
-        m_pVFXManager->SpawnEffectDef(spawnPos, up, def, false);
+        m_pVFXManager->SpawnEffectDef(spawnPos, up, def, true);
     }
 
     float damage = m_SkillData.damage * tickMult;
@@ -76,6 +100,13 @@ void StoneSpikesBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::X
 
 void StoneSpikesBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
 {
+    // 채널 모드: 직선 4기둥 스킵 — OnChannelTick에서 커서 위치 자유배치로 대체
+    if (m_bChannelMode)
+    {
+        if (m_pVFXManager && m_chargeVFXId >= 0) { m_pVFXManager->StopEffect(m_chargeVFXId); m_chargeVFXId = -1; }
+        return;
+    }
+
     m_bActive = false;
     m_pCaster = caster;
     m_spikes.clear();
@@ -206,13 +237,16 @@ void StoneSpikesBehavior::Reset()
 {
     if (m_pVFXManager)
     {
-        if (m_chargeVFXId  >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
-        if (m_enhanceAuraId >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
+        if (m_chargeVFXId      >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
+        if (m_enhanceAuraId    >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
+        if (m_channelAmbientId >= 0) m_pVFXManager->StopEffect(m_channelAmbientId);
         for (auto& s : m_spikes)
             if (s.triggered && s.vfxId >= 0) m_pVFXManager->StopEffect(s.vfxId);
     }
-    m_bActive       = false;
-    m_chargeVFXId   = -1;
-    m_enhanceAuraId = -1;
+    m_bActive          = false;
+    m_bChannelMode     = false;
+    m_chargeVFXId      = -1;
+    m_enhanceAuraId    = -1;
+    m_channelAmbientId = -1;
     m_spikes.clear();
 }

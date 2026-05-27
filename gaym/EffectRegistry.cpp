@@ -2008,6 +2008,38 @@ void EffectRegistry::Initialize()
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // E_EarthArmor_Shield — 대지의 갑옷 보호막 오라: 황금빛 흙먼지 파티클이 캐릭터 주위를 회전
+    //   status_fracture 패턴과 동일한 Sphere emitter — 보호막 지속 중에만 재생
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Sphere;
+        layer.element        = ElementType::Earth;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f, 0.85f, 0.30f, 1.0f };   // 밝은 황금빛
+        layer.edgeColor      = { 0.75f, 0.50f, 0.10f, 1.0f };   // 따뜻한 갈색 가장자리
+        layer.particleCount  = 80;
+        layer.sizeScale      = 4.0f;
+        layer.speedMin       = 1.0f;
+        layer.speedMax       = 2.5f;
+        layer.lifetimeMin    = 1.2f;
+        layer.lifetimeMax    = 2.0f;
+        layer.duration       = -1.f;
+        layer.emitRate       = 30.f;
+
+        layer.sphere.radius        = 2.8f;
+        layer.sphere.shellFraction = 0.55f;
+        layer.sphere.inward        = false;
+        layer.sphere.rotationSpeed = 2.0f;
+
+        EffectDef def;
+        def.name    = "E_EarthArmor_Shield";
+        def.element = ElementType::Earth;
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // Portal_Suction — 외곽에서 중심으로 빨려들어가는 흡입 입자 (차원문 인력 연출)
     // ──────────────────────────────────────────────────────────────────────────
     {

@@ -23,9 +23,11 @@ public:
     virtual void Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier = 1.0f) override;
     virtual void OnChargeBegin(GameObject* caster) override;
     virtual void OnChargeUpdate(GameObject* caster, float chargeRatio) override;
+    virtual void OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
+    virtual void OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult) override;
+    virtual void OnChannelEnd(GameObject* caster) override;
     virtual void OnEnhanceActivate(GameObject* caster) override;
     virtual void OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
-    virtual void OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult) override;
     virtual void Update(float deltaTime) override;
     virtual bool IsFinished() const override;
     virtual void Reset() override;
@@ -49,9 +51,11 @@ private:
     Scene*                m_pScene      = nullptr;
     int                   m_burstVfxId  = -1;
 
-    int   m_chargeVFXId   = -1;
-    int   m_enhanceAuraId = -1;
-    bool  m_bActive    = false;
+    int   m_chargeVFXId      = -1;
+    int   m_enhanceAuraId    = -1;
+    int   m_channelAmbientId = -1;
+    bool  m_bChannelMode     = false;
+    bool  m_bActive          = false;
     float m_damageMult = 1.f;
     float m_elapsed    = 0.f;
     DirectX::XMFLOAT3 m_epicenter = {};
