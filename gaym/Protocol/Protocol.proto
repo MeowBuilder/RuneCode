@@ -148,6 +148,8 @@ message S_MONSTER_ATTACK // 서버 -> 클라 몬스터 공격 알림 패킷
 	float z = 6;               // 공격 시작 시 몬스터 위치 Z
 	float yaw = 7;             // 공격 시작 시 몬스터가 바라보는 회전값
 	float windupSec = 8;       // 공격 준비 시간(초), 없으면 0
+	repeated AttackEffectPosition effectPositions = 9; // 공격 이펙트 생성 위치 목록
+	uint32 effectOption = 10; // 공격 이펙트 옵션값
 }
 
 message S_PLAYER_DAMAGE // 서버 -> 클라 플레이어 피격/데미지 알림 패킷
@@ -207,4 +209,14 @@ message S_MONSTER_STAGGER // 서버 -> 클라 몬스터 기절/그로기 알림 
 {
 	uint64 monsterId = 1; // 기절한 몬스터 ID
 	float duration = 2;   // 기절 지속 시간(초)
+}
+
+message S_MAP_TORNADO_EVENT // 서버 -> 클라 맵 토네이도 이벤트 알림 패킷
+{
+	uint32 eventType = 1; // 토네이도 이벤트 타입, 1=Warning 시작
+	float x = 2;          // 토네이도 생성 위치 X
+	float y = 3;          // 토네이도 생성 위치 Y
+	float z = 4;          // 토네이도 생성 위치 Z
+	float warningSec = 5; // 경고 시간(초)
+	float activeSec = 6;  // 토네이도 지속 시간(초)
 }

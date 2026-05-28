@@ -1583,7 +1583,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         switch (m_eTornadoPhase)
         {
         case TornadoEventPhase::Idle:
-            if (m_fPeriodicTornadoTimer >= 6.0f)
+            if (!m_bUseNetworkTornadoEvent && m_fPeriodicTornadoTimer >= 6.0f)
             {
                 // 새 위치 선택
                 const BoundingBox& rb = m_pCurrentRoom->GetBoundingBox();
@@ -4518,6 +4518,48 @@ void Scene::CleanupWindAmbient()
         if (pP)
             if (auto* pPC = pP->GetComponent<PlayerComponent>())
                 pPC->ExitTornadoTrap();
+    }
+}
+
+// 네트워크 맵 토네이도 이벤트 시작
+void Scene::StartNetworkMapTornadoEvent(const DirectX::XMFLOAT3& pos, float warningSec, float activeSec)
+{
+    // 서버 좌표 저장
+    m_xmf3TornadoEventPos = pos;
+    m_fNetworkTornadoWarningSec = warningSec;
+    m_fNetworkTornadoActiveSec = activeSec;
+    m_bUseNetworkTornadoEvent = true;
+
+    // 기존 진행 중인 토네이도 정리
+    if (m_nPeriodicTornadoId >= 0 && m_pVFXManager)
+    {
+        m_pVFXManager->Stop(m_nPeriodicTornadoId);
+        m_nPeriodicTornadoId = -1;
+    }
+
+    if (m_nTornadoWarningVFXId >= 0 && m_pVFXManager)
+    {
+        m_pVFXManager->Stop(m_nTornadoWarningVFXId);
+        m_nTornadoWarningVFXId = -1;
+    }
+
+    // Warning 페이즈부터 시작
+    m_eTornadoPhase = TornadoEventPhase::Warning;
+    m_fPeriodicTornadoTimer = 0.0f;
+    m_fTornadoDamageTickTimer = 0.0f;
+
+    if (m_pVFXManager)
+    {
+        XMFLOAT3 warnPos = m_xmf3TornadoEventPos;
+        warnPos.y = 0.1f;
+
+        m_nTornadoWarningVFXId = m_pVFXManager->Spawn(
+            "Wind_TornadoWarning",
+            warnPos,
+            XMFLOAT3(0.0f, 1.0f, 0.0f),
+            0u,
+            false
+        );
     }
 }
 

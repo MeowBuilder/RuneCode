@@ -325,8 +325,7 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             break;
 
         case NetworkCommand::MonsterAttack:
-            ProcessMonsterAttack(pScene, cmd.monsterId, cmd.attackType, cmd.windupSec,
-                                 cmd.targetPlayerId, cmd.x, cmd.y, cmd.z);
+            ProcessMonsterAttack(pScene, cmd.monsterId, cmd.attackType, cmd.windupSec,cmd.targetPlayerId, cmd.x, cmd.y, cmd.z, cmd.effectPositions, cmd.effectOption);
             break;
 
         case NetworkCommand::PlayerDamage:
@@ -334,13 +333,31 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             break;
 
         case NetworkCommand::MonsterDamage:
-            ProcessMonsterDamage(pScene, cmd.monsterId, cmd.damage, cmd.currentHp, cmd.isDead,
-                                 cmd.attackerPlayerId, cmd.skillType);
+            ProcessMonsterDamage(pScene, cmd.monsterId, cmd.damage, cmd.currentHp, cmd.isDead,cmd.attackerPlayerId, cmd.skillType);
             break;
 
         case NetworkCommand::MonsterStagger:
             ProcessMonsterStagger(cmd.monsterId, cmd.duration);
             break;
+
+        case NetworkCommand::MapTornadoEvent:
+        {
+            if (pScene)
+            {
+                // Grass Boss Room 맵 토네이도 이벤트
+                // 서버가 정한 좌표를 Scene에 전달해서 모든 클라가 같은 위치에 경고 링 / 토네이도를 생성한다.
+                pScene->StartNetworkMapTornadoEvent(
+                    DirectX::XMFLOAT3(
+                        cmd.mapTornadoX,
+                        cmd.mapTornadoY,
+                        cmd.mapTornadoZ
+                    ),
+                    cmd.mapTornadoWarningSec,
+                    cmd.mapTornadoActiveSec
+                );
+            }
+            break;
+        }
 
         case NetworkCommand::RoomCleared:
             ProcessRoomCleared(pScene, cmd.stageIndex, cmd.roomIndex);
@@ -596,8 +613,7 @@ void NetworkManager::QueueMonsterDespawn(uint64 monsterId)
     m_vCommandQueue.push_back(cmd);
 }
 
-void NetworkManager::QueueMonsterAttack(uint64 monsterId, uint64 targetPlayerId, uint32 attackType,
-                                        float x, float y, float z, float yaw, float windupSec)
+void NetworkManager::QueueMonsterAttack(uint64 monsterId, uint64 targetPlayerId, uint32 attackType, float x, float y, float z, float yaw, float windupSec, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption)
 {
     std::lock_guard<std::mutex> lock(m_queueMutex);
     NetworkCommandData cmd{};
@@ -608,6 +624,8 @@ void NetworkManager::QueueMonsterAttack(uint64 monsterId, uint64 targetPlayerId,
     cmd.x = x; cmd.y = y; cmd.z = z;
     cmd.monsterYaw = yaw;
     cmd.windupSec = windupSec;
+    cmd.effectPositions = effectPositions;
+    cmd.effectOption = effectOption;
     m_vCommandQueue.push_back(cmd);
 }
 
@@ -634,6 +652,22 @@ void NetworkManager::QueueMonsterStagger(uint64 monsterId, float duration)
     cmd.type = NetworkCommand::MonsterStagger;
     cmd.monsterId = monsterId;
     cmd.duration = duration;
+
+    m_vCommandQueue.push_back(cmd);
+}
+
+// 맵 토네이도 이벤트 큐 등록
+void NetworkManager::QueueMapTornadoEvent(float x, float y, float z, float warningSec, float activeSec)
+{
+    std::lock_guard<std::mutex> lock(m_queueMutex);
+
+    NetworkCommandData cmd{};
+    cmd.type = NetworkCommand::MapTornadoEvent;
+    cmd.mapTornadoX = x;
+    cmd.mapTornadoY = y;
+    cmd.mapTornadoZ = z;
+    cmd.mapTornadoWarningSec = warningSec;
+    cmd.mapTornadoActiveSec = activeSec;
 
     m_vCommandQueue.push_back(cmd);
 }
@@ -2744,8 +2778,7 @@ static const char* GetMonsterAttackClipForType(uint32 monsterType, uint32 attack
     }
 }
 
-void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint32 attackType, float windupSec,
-                                          uint64 targetPlayerId, float atkX, float atkY, float atkZ)
+void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint32 attackType, float windupSec, uint64 targetPlayerId, float atkX, float atkY, float atkZ, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption)
 {
     auto it = m_mapServerMonsters.find(monsterId);
     if (it == m_mapServerMonsters.end())
@@ -3251,7 +3284,7 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             // 데미지는 서버 권위이고, 클라는 장판/VFX/인디케이터 연출만 담당한다.
             if (mt == 9)
             {
-                PlayNetworkDemonAttackBehavior(pScene, pMonster, monsterId, attackType);
+                PlayNetworkDemonAttackBehavior(pScene, pMonster, monsterId, attackType, effectPositions, effectOption);
                 return;
             }
             break;
@@ -4596,11 +4629,7 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
 }
 
 // Demon 네트워크 범위 패턴 실행
-void NetworkManager::PlayNetworkDemonAttackBehavior(
-    Scene* pScene,
-    GameObject* pMonster,
-    uint64 monsterId,
-    uint32 attackType)
+void NetworkManager::PlayNetworkDemonAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption)
 {
     if (!pScene || !pMonster) return;
 
@@ -4665,7 +4694,7 @@ void NetworkManager::PlayNetworkDemonAttackBehavior(
     //    );
     //    break;
 
-    case 30: // DemonFixatedCharge
+    case 30: // DemonFixatedCharge 
         behavior = std::make_unique<FixatedChargeAttackBehavior>(
             85.0f,
             3.0f, 0.2f,
@@ -4677,18 +4706,28 @@ void NetworkManager::PlayNetworkDemonAttackBehavior(
         break;
 
     case 31: // TornadoField
-        behavior = std::make_unique<TornadoFieldAttackBehavior>(
+    {
+        // Demon 토네이도 장판
+        // 서버가 보내준 effectPositions가 있으면 해당 좌표를 사용해서
+        // 모든 클라가 같은 위치에 토네이도를 생성한다.
+        auto tornadoBehavior = std::make_unique<TornadoFieldAttackBehavior>(
             4, 18.0f, 0.45f, 5.0f,
             12.0f, 28.0f,
             1.8f, 4.0f, 1.0f,
             1.0f, 0.4f
         );
+
+        tornadoBehavior->SetServerPositions(effectPositions);
+
+        behavior = std::move(tornadoBehavior);
         break;
+    }
 
     case 32: // GaleSlash
     {
-        // 클라 단독처럼 Cross / XDiag 랜덤
-        auto shape = (rand() % 2 == 0)
+        // Demon 돌풍 베기 모양 동기화
+        // 서버가 정한 effectOption을 사용해서 모든 클라가 같은 모양으로 생성한다.
+        auto shape = (effectOption == 0)
             ? GaleSlashAttackBehavior::SlashShape::Cross
             : GaleSlashAttackBehavior::SlashShape::XDiag;
 
@@ -4794,11 +4833,25 @@ void NetworkManager::InterpolateServerMonsters(float deltaTime)
 
         // 위치 보간
         XMFLOAT3 cur = pT->GetPosition();
-        XMFLOAT3 next;
-        next.x = cur.x + (tgt.px - cur.x) * posAlpha;
-        next.y = cur.y + (tgt.py - cur.y) * posAlpha;
-        next.z = cur.z + (tgt.pz - cur.z) * posAlpha;
-        pT->SetPosition(next);
+
+        float dx = tgt.px - cur.x;
+        float dy = tgt.py - cur.y;
+        float dz = tgt.pz - cur.z;
+        float distSq = dx * dx + dy * dy + dz * dz;
+
+        // 서버 목표 위치와 거의 가까우면 보간하지 말고 바로 스냅한다.
+        if (distSq <= 0.25f) // 0.5m 이내
+        {
+            pT->SetPosition(tgt.px, tgt.py, tgt.pz);
+        }
+        else
+        {
+            XMFLOAT3 next;
+            next.x = cur.x + dx * posAlpha;
+            next.y = cur.y + dy * posAlpha;
+            next.z = cur.z + dz * posAlpha;
+            pT->SetPosition(next);
+        }
 
         // yaw 보간 — 360 경계 넘어갈 때 최단 경로 선택
         XMFLOAT3 rot = pT->GetRotation();

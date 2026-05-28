@@ -47,7 +47,7 @@ struct TableStruct_Struct_2eproto {
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::AuxiliaryParseTableField aux[]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
-  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[1]
+  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[2]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::FieldMetadata field_metadata[];
   static const ::PROTOBUF_NAMESPACE_ID::internal::SerializationTable serialization_table[];
@@ -55,11 +55,15 @@ struct TableStruct_Struct_2eproto {
 };
 extern const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_Struct_2eproto;
 namespace Protocol {
+class AttackEffectPosition;
+struct AttackEffectPositionDefaultTypeInternal;
+extern AttackEffectPositionDefaultTypeInternal _AttackEffectPosition_default_instance_;
 class Player;
 struct PlayerDefaultTypeInternal;
 extern PlayerDefaultTypeInternal _Player_default_instance_;
 }  // namespace Protocol
 PROTOBUF_NAMESPACE_OPEN
+template<> ::Protocol::AttackEffectPosition* Arena::CreateMaybeMessage<::Protocol::AttackEffectPosition>(Arena*);
 template<> ::Protocol::Player* Arena::CreateMaybeMessage<::Protocol::Player>(Arena*);
 PROTOBUF_NAMESPACE_CLOSE
 namespace Protocol {
@@ -256,6 +260,160 @@ class Player final :
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Struct_2eproto;
 };
+// -------------------------------------------------------------------
+
+class AttackEffectPosition final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.AttackEffectPosition) */ {
+ public:
+  inline AttackEffectPosition() : AttackEffectPosition(nullptr) {}
+  ~AttackEffectPosition() override;
+  explicit constexpr AttackEffectPosition(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  AttackEffectPosition(const AttackEffectPosition& from);
+  AttackEffectPosition(AttackEffectPosition&& from) noexcept
+    : AttackEffectPosition() {
+    *this = ::std::move(from);
+  }
+
+  inline AttackEffectPosition& operator=(const AttackEffectPosition& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline AttackEffectPosition& operator=(AttackEffectPosition&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const AttackEffectPosition& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const AttackEffectPosition* internal_default_instance() {
+    return reinterpret_cast<const AttackEffectPosition*>(
+               &_AttackEffectPosition_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    1;
+
+  friend void swap(AttackEffectPosition& a, AttackEffectPosition& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(AttackEffectPosition* other) {
+    if (other == this) return;
+    if (GetOwningArena() == other->GetOwningArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(AttackEffectPosition* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline AttackEffectPosition* New() const final {
+    return new AttackEffectPosition();
+  }
+
+  AttackEffectPosition* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<AttackEffectPosition>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const AttackEffectPosition& from);
+  void MergeFrom(const AttackEffectPosition& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(AttackEffectPosition* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.AttackEffectPosition";
+  }
+  protected:
+  explicit AttackEffectPosition(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kXFieldNumber = 1,
+    kYFieldNumber = 2,
+    kZFieldNumber = 3,
+  };
+  // float x = 1;
+  void clear_x();
+  float x() const;
+  void set_x(float value);
+  private:
+  float _internal_x() const;
+  void _internal_set_x(float value);
+  public:
+
+  // float y = 2;
+  void clear_y();
+  float y() const;
+  void set_y(float value);
+  private:
+  float _internal_y() const;
+  void _internal_set_y(float value);
+  public:
+
+  // float z = 3;
+  void clear_z();
+  float z() const;
+  void set_z(float value);
+  private:
+  float _internal_z() const;
+  void _internal_set_z(float value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.AttackEffectPosition)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  float x_;
+  float y_;
+  float z_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_Struct_2eproto;
+};
 // ===================================================================
 
 
@@ -412,9 +570,75 @@ inline void Player::set_z(float value) {
   // @@protoc_insertion_point(field_set:Protocol.Player.z)
 }
 
+// -------------------------------------------------------------------
+
+// AttackEffectPosition
+
+// float x = 1;
+inline void AttackEffectPosition::clear_x() {
+  x_ = 0;
+}
+inline float AttackEffectPosition::_internal_x() const {
+  return x_;
+}
+inline float AttackEffectPosition::x() const {
+  // @@protoc_insertion_point(field_get:Protocol.AttackEffectPosition.x)
+  return _internal_x();
+}
+inline void AttackEffectPosition::_internal_set_x(float value) {
+  
+  x_ = value;
+}
+inline void AttackEffectPosition::set_x(float value) {
+  _internal_set_x(value);
+  // @@protoc_insertion_point(field_set:Protocol.AttackEffectPosition.x)
+}
+
+// float y = 2;
+inline void AttackEffectPosition::clear_y() {
+  y_ = 0;
+}
+inline float AttackEffectPosition::_internal_y() const {
+  return y_;
+}
+inline float AttackEffectPosition::y() const {
+  // @@protoc_insertion_point(field_get:Protocol.AttackEffectPosition.y)
+  return _internal_y();
+}
+inline void AttackEffectPosition::_internal_set_y(float value) {
+  
+  y_ = value;
+}
+inline void AttackEffectPosition::set_y(float value) {
+  _internal_set_y(value);
+  // @@protoc_insertion_point(field_set:Protocol.AttackEffectPosition.y)
+}
+
+// float z = 3;
+inline void AttackEffectPosition::clear_z() {
+  z_ = 0;
+}
+inline float AttackEffectPosition::_internal_z() const {
+  return z_;
+}
+inline float AttackEffectPosition::z() const {
+  // @@protoc_insertion_point(field_get:Protocol.AttackEffectPosition.z)
+  return _internal_z();
+}
+inline void AttackEffectPosition::_internal_set_z(float value) {
+  
+  z_ = value;
+}
+inline void AttackEffectPosition::set_z(float value) {
+  _internal_set_z(value);
+  // @@protoc_insertion_point(field_set:Protocol.AttackEffectPosition.z)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 
 // @@protoc_insertion_point(namespace_scope)
 

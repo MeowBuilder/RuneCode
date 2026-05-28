@@ -3,6 +3,8 @@
 #include "../NetworkManager.h"
 #include <fstream>
 #include <string>
+#include <vector>
+#include <DirectXMath.h>
 
 // 파일 로그 함수
 void WriteNetworkLog(const std::string& msg)
@@ -300,17 +302,28 @@ bool Handle_S_MONSTER_ATTACK(PacketSessionRef& session, Protocol::S_MONSTER_ATTA
     float z = pkt.z();
     float yaw = pkt.yaw();
     float windupSec = pkt.windupsec();
+    uint32 effectOption = pkt.effectoption();
+
+    // 공격 이펙트 위치 목록
+    std::vector<DirectX::XMFLOAT3> effectPositions;
+
+    for (int i = 0; i < pkt.effectpositions_size(); ++i)
+    {
+        const Protocol::AttackEffectPosition& p = pkt.effectpositions(i);
+        effectPositions.push_back(DirectX::XMFLOAT3(p.x(), p.y(), p.z()));
+    }
 
     char buf[256];
-    sprintf_s(buf, "[Network] S_MONSTER_ATTACK received: monsterId=%llu targetPlayerId=%llu attackType=%u pos=(%.2f, %.2f, %.2f) yaw=%.2f windupSec=%.2f",
-        monsterId, targetPlayerId, attackType, x, y, z, yaw, windupSec);
+    sprintf_s(buf, "[Network] S_MONSTER_ATTACK received: monsterId=%llu targetPlayerId=%llu attackType=%u pos=(%.2f, %.2f, %.2f) yaw=%.2f windupSec=%.2f effectPosCount=%d effectOption=%u",
+        monsterId, targetPlayerId, attackType, x, y, z, yaw, windupSec, (int)effectPositions.size(), effectOption);
     WriteNetworkLog(buf);
 
-    // 메인 스레드에서 공격 애니 재생 (Process 경로)
+    // 메인 스레드에서 공격 애니 / 장판 / VFX 재생
+    // effectPositions가 있으면 ProcessMonsterAttack까지 전달해서 모든 클라가 같은 위치에 이펙트를 생성한다.
     NetworkManager* pNetMgr = NetworkManager::GetInstance();
     if (pNetMgr)
     {
-        pNetMgr->QueueMonsterAttack(monsterId, targetPlayerId, attackType, x, y, z, yaw, windupSec);
+        pNetMgr->QueueMonsterAttack(monsterId, targetPlayerId, attackType, x, y, z, yaw, windupSec, effectPositions, effectOption);
     }
     return true;
 }
@@ -420,6 +433,32 @@ bool Handle_S_MONSTER_STAGGER(PacketSessionRef& session, Protocol::S_MONSTER_STA
     if (pNetMgr)
     {
         pNetMgr->QueueMonsterStagger(monsterId, duration);
+    }
+
+    return true;
+}
+
+// Grass Boss Room 맵 토네이도 이벤트 처리
+// 서버가 정한 좌표를 받아서 NetworkManager 큐로 넘긴다.
+bool Handle_S_MAP_TORNADO_EVENT(PacketSessionRef& session, Protocol::S_MAP_TORNADO_EVENT& pkt)
+{
+    uint32 eventType = pkt.eventtype();
+    float x = pkt.x();
+    float y = pkt.y();
+    float z = pkt.z();
+    float warningSec = pkt.warningsec();
+    float activeSec = pkt.activesec();
+
+    char buf[256];
+    sprintf_s(buf,
+        "[Network] S_MAP_TORNADO_EVENT received: eventType=%u pos=(%.2f, %.2f, %.2f) warningSec=%.2f activeSec=%.2f",
+        eventType, x, y, z, warningSec, activeSec);
+    WriteNetworkLog(buf);
+
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr)
+    {
+        pNetMgr->QueueMapTornadoEvent(x, y, z, warningSec, activeSec);
     }
 
     return true;

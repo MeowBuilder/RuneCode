@@ -41,6 +41,9 @@ public:
     virtual bool  ShouldShowHitZone() const override { return false; }
     virtual bool  ShouldLoopAnim() const override { return false; }
 
+    // 서버 토네이도 위치 설정
+    void SetServerPositions(const std::vector<XMFLOAT3>& positions) { m_vServerPositions = positions; }
+
 private:
     struct TornadoInstance
     {
@@ -78,6 +81,7 @@ private:
     bool  m_bAnimReturnedToIdle = false;
 
     std::vector<TornadoInstance> m_vTornadoes;
+    std::vector<XMFLOAT3> m_vServerPositions;
     Scene* m_pScene = nullptr;
     CRoom* m_pRoom  = nullptr;
 };

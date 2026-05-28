@@ -71,24 +71,44 @@ void TornadoFieldAttackBehavior::Execute(EnemyComponent* pEnemy)
     if (!pOwner) return;
     XMFLOAT3 bossPos = pOwner->GetTransform()->GetPosition();
 
-    // 토네이도 위치 결정 — 보스 주변 균등 각도 + 무작위 반경
+    // 토네이도 위치 결정
+// 온라인 모드에서 서버 좌표가 들어온 경우 모든 클라가 같은 위치를 사용한다.
+// 서버 좌표가 없으면 오프라인/테스트용으로 기존 로컬 랜덤 위치를 사용한다.
     m_vTornadoes.clear();
-    m_vTornadoes.reserve(m_nTornadoCount);
-    float angleOffset = ((float)rand() / RAND_MAX) * XM_2PI;
-    float radiusRange = m_fSpawnMaxRadius - m_fSpawnMinRadius;
 
-    for (int i = 0; i < m_nTornadoCount; ++i)
+    if (!m_vServerPositions.empty())
     {
-        float a = angleOffset + (XM_2PI / m_nTornadoCount) * i
-                + ((float)rand() / RAND_MAX - 0.5f) * 0.4f;  // ±0.2 rad jitter
-        float t = (float)rand() / RAND_MAX;
-        float r = m_fSpawnMinRadius + sqrtf(t) * radiusRange;
+        m_vTornadoes.reserve(m_vServerPositions.size());
 
-        TornadoInstance t0;
-        t0.pos.x = bossPos.x + cosf(a) * r;
-        t0.pos.y = 0.0f;
-        t0.pos.z = bossPos.z + sinf(a) * r;
-        m_vTornadoes.push_back(t0);
+        for (const XMFLOAT3& serverPos : m_vServerPositions)
+        {
+            TornadoInstance t0;
+            t0.pos = serverPos;
+            t0.pos.y = 0.0f;
+            m_vTornadoes.push_back(t0);
+        }
+    }
+    else
+    {
+        m_vTornadoes.reserve(m_nTornadoCount);
+
+        float angleOffset = ((float)rand() / RAND_MAX) * XM_2PI;
+        float radiusRange = m_fSpawnMaxRadius - m_fSpawnMinRadius;
+
+        for (int i = 0; i < m_nTornadoCount; ++i)
+        {
+            float a = angleOffset + (XM_2PI / m_nTornadoCount) * i
+                + ((float)rand() / RAND_MAX - 0.5f) * 0.4f;  // ±0.2 rad jitter
+
+            float t = (float)rand() / RAND_MAX;
+            float r = m_fSpawnMinRadius + sqrtf(t) * radiusRange;
+
+            TornadoInstance t0;
+            t0.pos.x = bossPos.x + cosf(a) * r;
+            t0.pos.y = 0.0f;
+            t0.pos.z = bossPos.z + sinf(a) * r;
+            m_vTornadoes.push_back(t0);
+        }
     }
 
     SpawnIndicators(pEnemy);

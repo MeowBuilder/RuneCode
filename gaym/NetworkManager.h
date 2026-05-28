@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
+#include <vector>
 #include <DirectXMath.h>
 #include "SkillTypes.h"   // ElementType (PendingMonsterVFX)
 #include "IAttackBehavior.h" // 네트워크 Golem AttackBehavior 보관용
@@ -47,7 +48,8 @@ enum class NetworkCommand
     MonsterDamage,
     RoomCleared,
     BossEvent,
-    MonsterStagger
+    MonsterStagger,
+	MapTornadoEvent
 };
 
 // 네트워크 명령 구조체
@@ -85,9 +87,22 @@ struct NetworkCommandData
     uint64 attackerMonsterId;
     uint64 attackerPlayerId;
 
+    // 공격 이펙트 위치 목록
+    std::vector<DirectX::XMFLOAT3> effectPositions;
+
+    // 공격 이펙트 옵션값 
+    uint32 effectOption = 0;
+
     // Boss event fields (S_BOSS_EVENT)
     uint32 bossEventType;   // Protocol::BossEventType (1=Intro, 2=PhaseChange, 3=Death)
     uint32 phaseIndex;
+
+    // 맵 토네이도 이벤트 필드
+    float mapTornadoX = 0.0f;
+    float mapTornadoY = 0.0f;
+    float mapTornadoZ = 0.0f;
+    float mapTornadoWarningSec = 0.0f;
+    float mapTornadoActiveSec = 0.0f;
 };
 
 // =============================================================================
@@ -191,8 +206,7 @@ public:
     void QueueMonsterDespawn(uint64 monsterId);
 
     // 전투 큐잉 (S_MONSTER_ATTACK / S_PLAYER_DAMAGE)
-    void QueueMonsterAttack(uint64 monsterId, uint64 targetPlayerId, uint32 attackType,
-                            float x, float y, float z, float yaw, float windupSec);
+    void QueueMonsterAttack(uint64 monsterId, uint64 targetPlayerId, uint32 attackType, float x, float y, float z, float yaw, float windupSec, const std::vector<DirectX::XMFLOAT3>& effectPositions = {}, uint32 effectOption = 0);
     void QueuePlayerDamage(uint64 playerId, float damage, float currentHp, bool isDead, uint64 attackerMonsterId);
 
     // 몬스터 피격 / 방 클리어 큐잉 (네트워크 스레드 → 메인 스레드)
@@ -206,6 +220,9 @@ public:
 	// 몬스터 스태거 큐잉 — 피격 시 잠시 멈추는 효과
     void QueueMonsterStagger(uint64 monsterId, float duration);
     
+    // 맵 토네이도 이벤트 큐잉
+    void QueueMapTornadoEvent(float x, float y, float z, float warningSec, float activeSec);
+
     // 서버 몬스터 조회
     GameObject* GetServerMonster(uint64 monsterId);
     bool HasServerMonsters() const { return !m_mapServerMonsters.empty(); }
@@ -257,8 +274,7 @@ private:
     void ProcessMonsterDespawn(Scene* pScene, uint64 monsterId);
 
     // 전투 처리 (메인 스레드)
-    void ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint32 attackType, float windupSec,
-                              uint64 targetPlayerId, float atkX, float atkY, float atkZ);
+    void ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint32 attackType, float windupSec, uint64 targetPlayerId, float atkX, float atkY, float atkZ, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption);
     void ProcessPlayerDamage(Scene* pScene, uint64 playerId, float damage, float currentHp, bool isDead, uint64 attackerMonsterId);
     void ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float damage, float currentHp, bool isDead,
                               uint64 attackerPlayerId, int skillType);
@@ -488,7 +504,7 @@ private:
 
     std::vector<NetworkDemonBehaviorEntry> m_vNetworkDemonBehaviors;
 
-    void PlayNetworkDemonAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType);
+    void PlayNetworkDemonAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption);
 
 public:
     // 매 프레임 타겟을 향해 몬스터 transform 보간 (Dx12App 메인 루프에서 호출)

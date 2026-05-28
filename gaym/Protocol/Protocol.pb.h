@@ -48,7 +48,7 @@ struct TableStruct_Protocol_2eproto {
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::AuxiliaryParseTableField aux[]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
-  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[27]
+  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[28]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::FieldMetadata field_metadata[];
   static const ::PROTOBUF_NAMESPACE_ID::internal::SerializationTable serialization_table[];
@@ -101,6 +101,9 @@ extern S_ENTER_GAMEDefaultTypeInternal _S_ENTER_GAME_default_instance_;
 class S_LOGIN;
 struct S_LOGINDefaultTypeInternal;
 extern S_LOGINDefaultTypeInternal _S_LOGIN_default_instance_;
+class S_MAP_TORNADO_EVENT;
+struct S_MAP_TORNADO_EVENTDefaultTypeInternal;
+extern S_MAP_TORNADO_EVENTDefaultTypeInternal _S_MAP_TORNADO_EVENT_default_instance_;
 class S_MONSTER_ATTACK;
 struct S_MONSTER_ATTACKDefaultTypeInternal;
 extern S_MONSTER_ATTACKDefaultTypeInternal _S_MONSTER_ATTACK_default_instance_;
@@ -154,6 +157,7 @@ template<> ::Protocol::S_CHAT* Arena::CreateMaybeMessage<::Protocol::S_CHAT>(Are
 template<> ::Protocol::S_DESPAWN* Arena::CreateMaybeMessage<::Protocol::S_DESPAWN>(Arena*);
 template<> ::Protocol::S_ENTER_GAME* Arena::CreateMaybeMessage<::Protocol::S_ENTER_GAME>(Arena*);
 template<> ::Protocol::S_LOGIN* Arena::CreateMaybeMessage<::Protocol::S_LOGIN>(Arena*);
+template<> ::Protocol::S_MAP_TORNADO_EVENT* Arena::CreateMaybeMessage<::Protocol::S_MAP_TORNADO_EVENT>(Arena*);
 template<> ::Protocol::S_MONSTER_ATTACK* Arena::CreateMaybeMessage<::Protocol::S_MONSTER_ATTACK>(Arena*);
 template<> ::Protocol::S_MONSTER_DAMAGE* Arena::CreateMaybeMessage<::Protocol::S_MONSTER_DAMAGE>(Arena*);
 template<> ::Protocol::S_MONSTER_DESPAWN* Arena::CreateMaybeMessage<::Protocol::S_MONSTER_DESPAWN>(Arena*);
@@ -3252,6 +3256,7 @@ class S_MONSTER_ATTACK final :
   // accessors -------------------------------------------------------
 
   enum : int {
+    kEffectPositionsFieldNumber = 9,
     kMonsterIdFieldNumber = 1,
     kTargetPlayerIdFieldNumber = 2,
     kAttackTypeFieldNumber = 3,
@@ -3260,7 +3265,26 @@ class S_MONSTER_ATTACK final :
     kZFieldNumber = 6,
     kYawFieldNumber = 7,
     kWindupSecFieldNumber = 8,
+    kEffectOptionFieldNumber = 10,
   };
+  // repeated .Protocol.AttackEffectPosition effectPositions = 9;
+  int effectpositions_size() const;
+  private:
+  int _internal_effectpositions_size() const;
+  public:
+  void clear_effectpositions();
+  ::Protocol::AttackEffectPosition* mutable_effectpositions(int index);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::AttackEffectPosition >*
+      mutable_effectpositions();
+  private:
+  const ::Protocol::AttackEffectPosition& _internal_effectpositions(int index) const;
+  ::Protocol::AttackEffectPosition* _internal_add_effectpositions();
+  public:
+  const ::Protocol::AttackEffectPosition& effectpositions(int index) const;
+  ::Protocol::AttackEffectPosition* add_effectpositions();
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::AttackEffectPosition >&
+      effectpositions() const;
+
   // uint64 monsterId = 1;
   void clear_monsterid();
   ::PROTOBUF_NAMESPACE_ID::uint64 monsterid() const;
@@ -3333,6 +3357,15 @@ class S_MONSTER_ATTACK final :
   void _internal_set_windupsec(float value);
   public:
 
+  // uint32 effectOption = 10;
+  void clear_effectoption();
+  ::PROTOBUF_NAMESPACE_ID::uint32 effectoption() const;
+  void set_effectoption(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_effectoption() const;
+  void _internal_set_effectoption(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.S_MONSTER_ATTACK)
  private:
   class _Internal;
@@ -3340,6 +3373,7 @@ class S_MONSTER_ATTACK final :
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::AttackEffectPosition > effectpositions_;
   ::PROTOBUF_NAMESPACE_ID::uint64 monsterid_;
   ::PROTOBUF_NAMESPACE_ID::uint64 targetplayerid_;
   ::PROTOBUF_NAMESPACE_ID::uint32 attacktype_;
@@ -3348,6 +3382,7 @@ class S_MONSTER_ATTACK final :
   float z_;
   float yaw_;
   float windupsec_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 effectoption_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -4536,6 +4571,193 @@ class S_MONSTER_STAGGER final :
   typedef void DestructorSkippable_;
   ::PROTOBUF_NAMESPACE_ID::uint64 monsterid_;
   float duration_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_Protocol_2eproto;
+};
+// -------------------------------------------------------------------
+
+class S_MAP_TORNADO_EVENT final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_MAP_TORNADO_EVENT) */ {
+ public:
+  inline S_MAP_TORNADO_EVENT() : S_MAP_TORNADO_EVENT(nullptr) {}
+  ~S_MAP_TORNADO_EVENT() override;
+  explicit constexpr S_MAP_TORNADO_EVENT(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_MAP_TORNADO_EVENT(const S_MAP_TORNADO_EVENT& from);
+  S_MAP_TORNADO_EVENT(S_MAP_TORNADO_EVENT&& from) noexcept
+    : S_MAP_TORNADO_EVENT() {
+    *this = ::std::move(from);
+  }
+
+  inline S_MAP_TORNADO_EVENT& operator=(const S_MAP_TORNADO_EVENT& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_MAP_TORNADO_EVENT& operator=(S_MAP_TORNADO_EVENT&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_MAP_TORNADO_EVENT& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_MAP_TORNADO_EVENT* internal_default_instance() {
+    return reinterpret_cast<const S_MAP_TORNADO_EVENT*>(
+               &_S_MAP_TORNADO_EVENT_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    27;
+
+  friend void swap(S_MAP_TORNADO_EVENT& a, S_MAP_TORNADO_EVENT& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_MAP_TORNADO_EVENT* other) {
+    if (other == this) return;
+    if (GetOwningArena() == other->GetOwningArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_MAP_TORNADO_EVENT* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline S_MAP_TORNADO_EVENT* New() const final {
+    return new S_MAP_TORNADO_EVENT();
+  }
+
+  S_MAP_TORNADO_EVENT* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<S_MAP_TORNADO_EVENT>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const S_MAP_TORNADO_EVENT& from);
+  void MergeFrom(const S_MAP_TORNADO_EVENT& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_MAP_TORNADO_EVENT* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_MAP_TORNADO_EVENT";
+  }
+  protected:
+  explicit S_MAP_TORNADO_EVENT(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kEventTypeFieldNumber = 1,
+    kXFieldNumber = 2,
+    kYFieldNumber = 3,
+    kZFieldNumber = 4,
+    kWarningSecFieldNumber = 5,
+    kActiveSecFieldNumber = 6,
+  };
+  // uint32 eventType = 1;
+  void clear_eventtype();
+  ::PROTOBUF_NAMESPACE_ID::uint32 eventtype() const;
+  void set_eventtype(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_eventtype() const;
+  void _internal_set_eventtype(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
+  // float x = 2;
+  void clear_x();
+  float x() const;
+  void set_x(float value);
+  private:
+  float _internal_x() const;
+  void _internal_set_x(float value);
+  public:
+
+  // float y = 3;
+  void clear_y();
+  float y() const;
+  void set_y(float value);
+  private:
+  float _internal_y() const;
+  void _internal_set_y(float value);
+  public:
+
+  // float z = 4;
+  void clear_z();
+  float z() const;
+  void set_z(float value);
+  private:
+  float _internal_z() const;
+  void _internal_set_z(float value);
+  public:
+
+  // float warningSec = 5;
+  void clear_warningsec();
+  float warningsec() const;
+  void set_warningsec(float value);
+  private:
+  float _internal_warningsec() const;
+  void _internal_set_warningsec(float value);
+  public:
+
+  // float activeSec = 6;
+  void clear_activesec();
+  float activesec() const;
+  void set_activesec(float value);
+  private:
+  float _internal_activesec() const;
+  void _internal_set_activesec(float value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_MAP_TORNADO_EVENT)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 eventtype_;
+  float x_;
+  float y_;
+  float z_;
+  float warningsec_;
+  float activesec_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -6159,6 +6381,62 @@ inline void S_MONSTER_ATTACK::set_windupsec(float value) {
   // @@protoc_insertion_point(field_set:Protocol.S_MONSTER_ATTACK.windupSec)
 }
 
+// repeated .Protocol.AttackEffectPosition effectPositions = 9;
+inline int S_MONSTER_ATTACK::_internal_effectpositions_size() const {
+  return effectpositions_.size();
+}
+inline int S_MONSTER_ATTACK::effectpositions_size() const {
+  return _internal_effectpositions_size();
+}
+inline ::Protocol::AttackEffectPosition* S_MONSTER_ATTACK::mutable_effectpositions(int index) {
+  // @@protoc_insertion_point(field_mutable:Protocol.S_MONSTER_ATTACK.effectPositions)
+  return effectpositions_.Mutable(index);
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::AttackEffectPosition >*
+S_MONSTER_ATTACK::mutable_effectpositions() {
+  // @@protoc_insertion_point(field_mutable_list:Protocol.S_MONSTER_ATTACK.effectPositions)
+  return &effectpositions_;
+}
+inline const ::Protocol::AttackEffectPosition& S_MONSTER_ATTACK::_internal_effectpositions(int index) const {
+  return effectpositions_.Get(index);
+}
+inline const ::Protocol::AttackEffectPosition& S_MONSTER_ATTACK::effectpositions(int index) const {
+  // @@protoc_insertion_point(field_get:Protocol.S_MONSTER_ATTACK.effectPositions)
+  return _internal_effectpositions(index);
+}
+inline ::Protocol::AttackEffectPosition* S_MONSTER_ATTACK::_internal_add_effectpositions() {
+  return effectpositions_.Add();
+}
+inline ::Protocol::AttackEffectPosition* S_MONSTER_ATTACK::add_effectpositions() {
+  // @@protoc_insertion_point(field_add:Protocol.S_MONSTER_ATTACK.effectPositions)
+  return _internal_add_effectpositions();
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::AttackEffectPosition >&
+S_MONSTER_ATTACK::effectpositions() const {
+  // @@protoc_insertion_point(field_list:Protocol.S_MONSTER_ATTACK.effectPositions)
+  return effectpositions_;
+}
+
+// uint32 effectOption = 10;
+inline void S_MONSTER_ATTACK::clear_effectoption() {
+  effectoption_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_MONSTER_ATTACK::_internal_effectoption() const {
+  return effectoption_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_MONSTER_ATTACK::effectoption() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_MONSTER_ATTACK.effectOption)
+  return _internal_effectoption();
+}
+inline void S_MONSTER_ATTACK::_internal_set_effectoption(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  effectoption_ = value;
+}
+inline void S_MONSTER_ATTACK::set_effectoption(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_effectoption(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_MONSTER_ATTACK.effectOption)
+}
+
 // -------------------------------------------------------------------
 
 // S_PLAYER_DAMAGE
@@ -6807,9 +7085,135 @@ inline void S_MONSTER_STAGGER::set_duration(float value) {
   // @@protoc_insertion_point(field_set:Protocol.S_MONSTER_STAGGER.duration)
 }
 
+// -------------------------------------------------------------------
+
+// S_MAP_TORNADO_EVENT
+
+// uint32 eventType = 1;
+inline void S_MAP_TORNADO_EVENT::clear_eventtype() {
+  eventtype_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_MAP_TORNADO_EVENT::_internal_eventtype() const {
+  return eventtype_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_MAP_TORNADO_EVENT::eventtype() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_MAP_TORNADO_EVENT.eventType)
+  return _internal_eventtype();
+}
+inline void S_MAP_TORNADO_EVENT::_internal_set_eventtype(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  eventtype_ = value;
+}
+inline void S_MAP_TORNADO_EVENT::set_eventtype(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_eventtype(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_MAP_TORNADO_EVENT.eventType)
+}
+
+// float x = 2;
+inline void S_MAP_TORNADO_EVENT::clear_x() {
+  x_ = 0;
+}
+inline float S_MAP_TORNADO_EVENT::_internal_x() const {
+  return x_;
+}
+inline float S_MAP_TORNADO_EVENT::x() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_MAP_TORNADO_EVENT.x)
+  return _internal_x();
+}
+inline void S_MAP_TORNADO_EVENT::_internal_set_x(float value) {
+  
+  x_ = value;
+}
+inline void S_MAP_TORNADO_EVENT::set_x(float value) {
+  _internal_set_x(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_MAP_TORNADO_EVENT.x)
+}
+
+// float y = 3;
+inline void S_MAP_TORNADO_EVENT::clear_y() {
+  y_ = 0;
+}
+inline float S_MAP_TORNADO_EVENT::_internal_y() const {
+  return y_;
+}
+inline float S_MAP_TORNADO_EVENT::y() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_MAP_TORNADO_EVENT.y)
+  return _internal_y();
+}
+inline void S_MAP_TORNADO_EVENT::_internal_set_y(float value) {
+  
+  y_ = value;
+}
+inline void S_MAP_TORNADO_EVENT::set_y(float value) {
+  _internal_set_y(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_MAP_TORNADO_EVENT.y)
+}
+
+// float z = 4;
+inline void S_MAP_TORNADO_EVENT::clear_z() {
+  z_ = 0;
+}
+inline float S_MAP_TORNADO_EVENT::_internal_z() const {
+  return z_;
+}
+inline float S_MAP_TORNADO_EVENT::z() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_MAP_TORNADO_EVENT.z)
+  return _internal_z();
+}
+inline void S_MAP_TORNADO_EVENT::_internal_set_z(float value) {
+  
+  z_ = value;
+}
+inline void S_MAP_TORNADO_EVENT::set_z(float value) {
+  _internal_set_z(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_MAP_TORNADO_EVENT.z)
+}
+
+// float warningSec = 5;
+inline void S_MAP_TORNADO_EVENT::clear_warningsec() {
+  warningsec_ = 0;
+}
+inline float S_MAP_TORNADO_EVENT::_internal_warningsec() const {
+  return warningsec_;
+}
+inline float S_MAP_TORNADO_EVENT::warningsec() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_MAP_TORNADO_EVENT.warningSec)
+  return _internal_warningsec();
+}
+inline void S_MAP_TORNADO_EVENT::_internal_set_warningsec(float value) {
+  
+  warningsec_ = value;
+}
+inline void S_MAP_TORNADO_EVENT::set_warningsec(float value) {
+  _internal_set_warningsec(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_MAP_TORNADO_EVENT.warningSec)
+}
+
+// float activeSec = 6;
+inline void S_MAP_TORNADO_EVENT::clear_activesec() {
+  activesec_ = 0;
+}
+inline float S_MAP_TORNADO_EVENT::_internal_activesec() const {
+  return activesec_;
+}
+inline float S_MAP_TORNADO_EVENT::activesec() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_MAP_TORNADO_EVENT.activeSec)
+  return _internal_activesec();
+}
+inline void S_MAP_TORNADO_EVENT::_internal_set_activesec(float value) {
+  
+  activesec_ = value;
+}
+inline void S_MAP_TORNADO_EVENT::set_activesec(float value) {
+  _internal_set_activesec(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_MAP_TORNADO_EVENT.activeSec)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

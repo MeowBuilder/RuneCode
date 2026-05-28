@@ -35,6 +35,8 @@ enum : uint16
 	PKT_S_BOSS_EVENT = 1024,
 	PKT_C_BOSS_CUTSCENE_END = 1025,
 	PKT_S_MONSTER_STAGGER = 1026,
+	PKT_S_MAP_TORNADO_EVENT = 1027,
+
 };
 
 // Custom Handlers
@@ -56,6 +58,7 @@ bool Handle_S_MONSTER_DAMAGE(PacketSessionRef& session, Protocol::S_MONSTER_DAMA
 bool Handle_S_ROOM_CLEARED(PacketSessionRef& session, Protocol::S_ROOM_CLEARED& pkt);
 bool Handle_S_BOSS_EVENT(PacketSessionRef& session, Protocol::S_BOSS_EVENT& pkt);
 bool Handle_S_MONSTER_STAGGER(PacketSessionRef& session, Protocol::S_MONSTER_STAGGER& pkt);
+bool Handle_S_MAP_TORNADO_EVENT(PacketSessionRef& session, Protocol::S_MAP_TORNADO_EVENT& pkt);
 
 class ServerPacketHandler
 {
@@ -63,7 +66,7 @@ public:
 	static void Init()
 	{
 		for (int32 i = 0; i < UINT16_MAX; i++)
-		GPacketHandler[i] = Handle_INVALID;
+			GPacketHandler[i] = Handle_INVALID;
 		GPacketHandler[PKT_S_LOGIN] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_LOGIN>(Handle_S_LOGIN, session, buffer, len); };
 		GPacketHandler[PKT_S_ENTER_GAME] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_ENTER_GAME>(Handle_S_ENTER_GAME, session, buffer, len); };
 		GPacketHandler[PKT_S_CHAT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_CHAT>(Handle_S_CHAT, session, buffer, len); };
@@ -81,6 +84,7 @@ public:
 		GPacketHandler[PKT_S_ROOM_CLEARED] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_ROOM_CLEARED>(Handle_S_ROOM_CLEARED, session, buffer, len); };
 		GPacketHandler[PKT_S_BOSS_EVENT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) {return HandlePacket<Protocol::S_BOSS_EVENT>(Handle_S_BOSS_EVENT, session, buffer, len); };
 		GPacketHandler[PKT_S_MONSTER_STAGGER] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_MONSTER_STAGGER>(Handle_S_MONSTER_STAGGER, session, buffer, len); };
+		GPacketHandler[PKT_S_MAP_TORNADO_EVENT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) {return HandlePacket<Protocol::S_MAP_TORNADO_EVENT>(Handle_S_MAP_TORNADO_EVENT, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)

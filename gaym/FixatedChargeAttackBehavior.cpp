@@ -10,6 +10,7 @@
 #include "Scene.h"
 #include "Camera.h"
 #include "VFXManager.h"
+#include "NetworkManager.h"
 #include <algorithm>
 
 namespace {
@@ -108,7 +109,16 @@ void FixatedChargeAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
         XMFLOAT3 pos = pT->GetPosition();
         pos.x += m_xmf3DashDir.x * moveAmt;
         pos.z += m_xmf3DashDir.z * moveAmt;
-        pT->SetPosition(pos);
+
+        // 온라인 모드에서는 서버 S_MONSTER_MOVE가 보스 위치를 갱신한다.
+        NetworkManager* pNet = NetworkManager::GetInstance();
+        bool bOnline = (pNet && pNet->IsConnected());
+
+        if (!bOnline)
+        {
+            pT->SetPosition(pos);
+        }
+
         m_fDashTraveled += moveAmt;
 
         // 좌/우 트레일 위치 갱신 (보스 따라 ± perpOffset)

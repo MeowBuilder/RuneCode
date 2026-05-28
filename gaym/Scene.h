@@ -180,6 +180,8 @@ public:
     // 4스테이지 바람 ambient — 모든 grass 방에 공통 spawn (배경 토네이도/업드래프트/잎 드리프트)
     void SetupWindAmbient(const DirectX::BoundingBox& roomBB);
     void CleanupWindAmbient();
+    // 네트워크 맵 토네이도 이벤트 시작
+    void StartNetworkMapTornadoEvent(const DirectX::XMFLOAT3& pos, float warningSec, float activeSec);
     // 스테이지 테마별 sky/clear color 적용 (Dx12App 의 m_fClearColor 갱신)
     void ApplyThemeSkyColor();
 
@@ -272,6 +274,9 @@ private:
     float m_fPeriodicTornadoTimer = 0.0f;        // 현재 페이즈 경과 시간
     float m_fTornadoDamageTickTimer = 0.0f;      // Active 중 데미지 tick
     float m_fGustBurstTimer = 0.0f;              // gust 꽃가루 burst — 풀숲에서 주기적 emit
+	float m_fNetworkTornadoWarningSec = 2.0f;    // 네트워크 맵 토네이도 이벤트 시간 (경고 지속 시간)
+	float m_fNetworkTornadoActiveSec = 6.0f;     // 네트워크 맵 토네이도 이벤트 시간 (활성 지속 시간)
+	bool m_bUseNetworkTornadoEvent = false;      // 네트워크 맵 토네이도 이벤트 사용 여부 
     StageTheme m_eLastAppliedTheme = StageTheme::Fire;  // sky color 변경 감지용
     StageTheme m_eCurrentTheme = StageTheme::Fire; // 현재 스테이지 테마
     bool m_bToonEnabled = true;  // F7로 토글: 원신풍 셀 셰이딩 (기본 ON)
