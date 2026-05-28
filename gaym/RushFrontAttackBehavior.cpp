@@ -159,11 +159,20 @@ void RushFrontAttackBehavior::UpdateRush(float dt, EnemyComponent* pEnemy)
     TransformComponent* pTransform = pOwner->GetTransform();
     if (!pTransform) return;
 
-    XMFLOAT3 pos = pTransform->GetPosition();
-    float moveAmount = m_fRushSpeed * dt;
-    pos.x += m_xmf3RushDirection.x * moveAmount;
-    pos.z += m_xmf3RushDirection.z * moveAmount;
-    pTransform->SetPosition(pos);
+    // 네트워크 연출 전용 모드에서는 서버 MOVE 패킷이 위치를 갱신하므로
+    // 클라에서 직접 SetPosition 하지 않는다.
+    if (!m_bNetworkVisualOnly)
+    {
+        XMFLOAT3 pos = pTransform->GetPosition();
+        float moveAmount = m_fRushSpeed * dt;
+        pos.x += m_xmf3RushDirection.x * moveAmount;
+        pos.z += m_xmf3RushDirection.z * moveAmount;
+        pTransform->SetPosition(pos);
+    }
+
+    // 네트워크 연출 전용 모드에서는 돌진 중 충돌 데미지도 서버가 처리한다.
+    if (m_bNetworkVisualOnly)
+        return;
 
     // Check collision with player during rush
     if (!m_bRushHitDealt)
@@ -187,6 +196,10 @@ void RushFrontAttackBehavior::UpdateRush(float dt, EnemyComponent* pEnemy)
 
 void RushFrontAttackBehavior::DealConeDamage(EnemyComponent* pEnemy)
 {
+    // 네트워크 연출 전용 모드에서는 데미지는 서버가 처리한다.
+    if (m_bNetworkVisualOnly)
+        return;
+
     if (!pEnemy) return;
 
     GameObject* pTarget = pEnemy->GetTarget();

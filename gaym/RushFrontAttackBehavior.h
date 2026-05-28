@@ -13,6 +13,10 @@ public:
                             float fTelegraphTime = 0.45f);
     virtual ~RushFrontAttackBehavior() = default;
 
+    // 네트워크 연출 전용 모드
+// 서버 권위 일반 몬스터는 클라에서 직접 위치 이동/데미지 처리를 하지 않는다.
+    void SetNetworkVisualOnly(bool bEnable) { m_bNetworkVisualOnly = bEnable; }
+
     virtual void Execute(EnemyComponent* pEnemy) override;
     virtual void Update(float dt, EnemyComponent* pEnemy) override;
     virtual bool IsFinished() const override;
@@ -57,4 +61,7 @@ private:
     XMFLOAT3 m_xmf3RushDirection = { 0.0f, 0.0f, 0.0f };
 
     static constexpr float RUSH_HIT_RADIUS = 2.5f;  // Collision radius during rush
+    
+    // 네트워크 연출 전용 모드
+    bool m_bNetworkVisualOnly = false;
 };

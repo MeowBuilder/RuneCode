@@ -148,7 +148,7 @@ public:
     bool IsConnected() const { return m_bConnected && m_pSession != nullptr && m_nLocalPlayerId.load() != 0; }
 
     // 프레임마다 호출 (큐에 쌓인 명령 처리)
-    void Update(Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList);
+    void Update(Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList, float deltaTime);
 
     // 캐릭터 선택 확정 시 호출 — playerIndex 는 ElementType(0=Fire,1=Water,2=Wind,3=Earth)
     void SendEnterGame(int playerIndex);
@@ -284,6 +284,9 @@ private:
 
 	// 몬스터 공격 애니메이션 재생 (ProcessMonsterAttack에서 호출)
     void PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType, uint64 targetPlayerId, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption);
+
+    // 서버 권위 일반 몬스터 공격 연출 실행
+    void PlayNetworkNormalMonsterAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 monsterType, uint32 attackType, uint64 targetPlayerId);
 
     // 서버 몬스터 관리 (메인 스레드에서만 접근)
     std::unordered_map<uint64, GameObject*> m_mapServerMonsters;
@@ -484,6 +487,15 @@ private:
     };
     std::vector<PendingMonsterVFX> m_vPendingMonsterVFX;
 
+    // 네트워크 일반 몬스터 공격 연출 Entry
+    struct NetworkNormalMonsterBehaviorEntry
+    {
+        std::unique_ptr<IAttackBehavior> behavior;
+        EnemyComponent* owner = nullptr;
+    };
+
+    std::vector<NetworkNormalMonsterBehaviorEntry> m_vNetworkNormalMonsterBehaviors;
+
     // 네트워크 Golem 전용 AttackBehavior 보관
     struct NetworkGolemBehaviorEntry
     {
@@ -516,6 +528,9 @@ public:
 
     // 지연 VFX 큐 tick — windup 후/동안 스폰. 매 프레임 호출.
     void UpdatePendingMonsterVFX(Scene* pScene, float deltaTime);
+
+    // 네트워크 일반 몬스터 공격 연출 업데이트
+    void UpdateNetworkNormalMonsterBehaviors(float deltaTime);
 
     // 네트워크 Golem 전용 AttackBehavior 갱신
     void UpdateNetworkGolemBehaviors(float deltaTime);

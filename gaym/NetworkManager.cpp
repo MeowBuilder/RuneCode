@@ -28,6 +28,7 @@
 #include "GaleSlashAttackBehavior.h"
 #include "ShockwaveRingAttackBehavior.h"
 #include "SpinDashAttackBehavior.h"
+#include "RushAoEAttackBehavior.h"
 #include "RushFrontAttackBehavior.h"
 #include "FixatedChargeAttackBehavior.h"
 #include "Dx12App.h"
@@ -115,6 +116,15 @@ bool NetworkManager::Initialize()
 
 void NetworkManager::Shutdown()
 {
+    // 방 전환 전에 네트워크 일반 몬스터 연출 정리
+    // 이전 방의 EnemyComponent를 물고 있으면 방 정리 후 dangling pointer 가능
+    for (auto& entry : m_vNetworkNormalMonsterBehaviors)
+    {
+        if (entry.behavior)
+            entry.behavior->Reset();
+    }
+    m_vNetworkNormalMonsterBehaviors.clear();
+
     for (auto& entry : m_vNetworkGolemBehaviors)
     {
         if (entry.behavior)
@@ -225,7 +235,7 @@ void NetworkManager::Disconnect()
     OutputDebugString(L"[Network] Disconnected\n");
 }
 
-void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
+void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList, float deltaTime)
 {
     if (!pScene || !pDevice || !pCommandList)
         return;
@@ -682,6 +692,15 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
 {
     if (!pScene)
         return;
+
+    // 방 전환 전에 네트워크 일반 몬스터 연출 정리
+    // 이전 방의 EnemyComponent를 물고 있으면 방 정리 후 dangling pointer 가능
+    for (auto& entry : m_vNetworkNormalMonsterBehaviors)
+    {
+        if (entry.behavior)
+            entry.behavior->Reset();
+    }
+    m_vNetworkNormalMonsterBehaviors.clear();
 
     // 방 전환 전에 네트워크 Golem 연출 정리
     // 이전 방의 EnemyComponent / Rock / Indicator를 물고 있으면 방 정리 후 크래시 가능
@@ -1896,18 +1915,19 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
         m_mapServerMonsterClips[monsterId] = clips;
     }
 
-    // 보스 인디케이터 4개 사전 할당 (Circle border/fill, Box border/fill) — 모두 hidden.
-    //   ProcessMonsterAttack 에서 (monsterType, attackType) 로 타입/크기 결정해서 위치/스케일 갱신.
+    // 네트워크 보스 몬스터 영역 표시
     if (isBoss)
     {
         if (EnemySpawner* pSpawner = pScene ? pScene->GetEnemySpawner() : nullptr)
         {
             auto set = pSpawner->CreateNetBossIndicators();
+
             ServerMonsterIndicators ind;
             ind.circleBorder = set.circleBorder;
-            ind.circleFill   = set.circleFill;
-            ind.boxBorder    = set.boxBorder;
-            ind.boxFill      = set.boxFill;
+            ind.circleFill = set.circleFill;
+            ind.boxBorder = set.boxBorder;
+            ind.boxFill = set.boxFill;
+
             HideMonsterIndicators(ind);
             m_mapServerMonsterIndicators[monsterId] = ind;
         }
@@ -2501,6 +2521,32 @@ void NetworkManager::UpdatePendingMonsterVFX(Scene* pScene, float deltaTime)
     }
 }
 
+void NetworkManager::UpdateNetworkNormalMonsterBehaviors(float deltaTime)
+{
+    // 네트워크 일반 몬스터 공격 연출 Behavior 업데이트
+    // 서버가 이동/데미지를 처리하므로 클라는 visual-only Behavior만 일정 시간 갱신한다.
+    for (auto it = m_vNetworkNormalMonsterBehaviors.begin();
+        it != m_vNetworkNormalMonsterBehaviors.end(); )
+    {
+        if (!it->behavior || !it->owner)
+        {
+            it = m_vNetworkNormalMonsterBehaviors.erase(it);
+            continue;
+        }
+
+        it->behavior->Update(deltaTime, it->owner);
+
+        if (it->behavior->IsFinished())
+        {
+            it = m_vNetworkNormalMonsterBehaviors.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
 void NetworkManager::UpdateNetworkGolemBehaviors(float deltaTime)
 {
     for (auto it = m_vNetworkGolemBehaviors.begin(); it != m_vNetworkGolemBehaviors.end(); )
@@ -3035,6 +3081,24 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
                 p.speed = 18.0f; p.radius = 0.5f; p.scale = 1.0f; p.maxDist = 80.0f;
                 p.element = elem;
                 m_vPendingMonsterVFX.push_back(p);
+            }
+            break;
+
+        case 3:
+        case 4:
+            // 일반 몬스터 Rush 계열은 클라 오프라인 AttackBehavior를 연출 전용으로 실행한다.
+            // 실제 이동/데미지는 서버 권위이며, 클라는 telegraph/애니메이션만 담당한다.
+            if (mt == 4 || mt == 5)
+            {
+                PlayNetworkNormalMonsterAttackBehavior(
+                    pScene,
+                    pMonster,
+                    monsterId,
+                    mt,
+                    attackType,
+                    targetPlayerId
+                );
+                return;
             }
             break;
 
@@ -3867,6 +3931,142 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
     sprintf_s(buf,
         "[Network] PlayNetworkGolemAttackBehavior monsterId=%llu attackType=%u",
         monsterId,
+        attackType);
+    WriteNetworkLog(buf);
+}
+
+void NetworkManager::PlayNetworkNormalMonsterAttackBehavior(
+    Scene* pScene,
+    GameObject* pMonster,
+    uint64 monsterId,
+    uint32 monsterType,
+    uint32 attackType,
+    uint64 targetPlayerId)
+{
+    if (pScene == nullptr || pMonster == nullptr)
+        return;
+
+    // 일반 몬스터는 여러 마리가 동시에 공격할 수 있으므로
+    // Golem처럼 전체 vector가 비어있을 때만 허용하는 전역 가드는 걸지 않는다.
+
+    // 1. 네트워크 일반 몬스터에 연출용 EnemyComponent가 없으면 추가
+    //    데미지/이동 판정은 서버 권위이므로 클라에서는 AI를 멈춘 연출용으로만 사용한다.
+    EnemyComponent* pEnemy = pMonster->GetComponent<EnemyComponent>();
+    if (pEnemy == nullptr)
+    {
+        pEnemy = pMonster->AddComponent<EnemyComponent>();
+        pEnemy->SetBoss(false);
+        pEnemy->SetAIPaused(true);
+
+        if (auto* pAnim = pMonster->GetComponent<AnimationComponent>())
+            pEnemy->SetAnimationComponent(pAnim);
+
+        if (CRoom* pRoom = pScene->GetCurrentRoom())
+            pEnemy->SetRoom(pRoom);
+    }
+    else
+    {
+        // 2. 이미 EnemyComponent가 있어도 네트워크 몬스터는 서버 권위 유지
+        pEnemy->SetBoss(false);
+        pEnemy->SetAIPaused(true);
+
+        if (auto* pAnim = pMonster->GetComponent<AnimationComponent>())
+            pEnemy->SetAnimationComponent(pAnim);
+
+        if (CRoom* pRoom = pScene->GetCurrentRoom())
+            pEnemy->SetRoom(pRoom);
+    }
+
+    // 3. 서버가 지정한 targetPlayerId에 해당하는 클라 GameObject를 타겟으로 설정
+    GameObject* pTargetObj = nullptr;
+
+    if (targetPlayerId == GetLocalPlayerId())
+    {
+        pTargetObj = pScene->GetPlayer();
+    }
+    else
+    {
+        auto rIt = m_mapRemotePlayers.find(targetPlayerId);
+        if (rIt != m_mapRemotePlayers.end())
+            pTargetObj = rIt->second;
+    }
+
+    if (pTargetObj)
+        pEnemy->SetTarget(pTargetObj);
+    else if (GameObject* pPlayer = pScene->GetPlayer())
+        pEnemy->SetTarget(pPlayer);
+
+    // 4. 일반 몬스터 attackType에 맞는 클라 오프라인 Behavior 생성
+    std::unique_ptr<IAttackBehavior> behavior;
+
+    switch (attackType)
+    {
+    case 3:
+    {
+        // RushAoEEnemy
+        // 클라 RushAoEAttackBehavior preset과 동일 수치
+        auto rushAoE = std::make_unique<RushAoEAttackBehavior>(
+            15.0f,  // damage
+            15.0f,  // rushSpeed
+            1.2f,   // rushDuration
+            0.3f,   // windupTime
+            0.2f,   // hitTime
+            0.3f,   // recoveryTime
+            5.0f,   // aoeRadius
+            0.45f   // telegraphTime
+        );
+
+        // 서버 권위 모드: 클라 직접 이동/데미지 금지
+        rushAoE->SetNetworkVisualOnly(true);
+
+        behavior = std::move(rushAoE);
+        break;
+    }
+
+    case 4:
+    {
+        // RushFrontEnemy
+        // 클라 RushFrontAttackBehavior preset과 동일 수치
+        auto rushFront = std::make_unique<RushFrontAttackBehavior>(
+            20.0f,  // damage
+            18.0f,  // rushSpeed
+            1.0f,   // rushDuration
+            0.2f,   // windupTime
+            0.2f,   // hitTime
+            0.3f,   // recoveryTime
+            4.0f,   // hitRange
+            90.0f,  // coneAngleDeg
+            0.45f   // telegraphTime
+        );
+
+        // 서버 권위 모드: 클라 직접 이동/데미지 금지
+        rushFront->SetNetworkVisualOnly(true);
+
+        behavior = std::move(rushFront);
+        break;
+    }
+
+    default:
+        return;
+    }
+
+    if (!behavior)
+        return;
+
+    // 5. 일반 몬스터 연출 실행
+    behavior->Execute(pEnemy);
+
+    NetworkNormalMonsterBehaviorEntry entry;
+    entry.behavior = std::move(behavior);
+    entry.owner = pEnemy;
+
+    m_vNetworkNormalMonsterBehaviors.push_back(std::move(entry));
+
+    char buf[180];
+    sprintf_s(buf,
+        "[Network] PlayNetworkNormalMonsterAttackBehavior monsterId=%llu monsterType=%u attackType=%u",
+        monsterId,
+        monsterType,
         attackType);
     WriteNetworkLog(buf);
 }

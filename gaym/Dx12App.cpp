@@ -540,15 +540,15 @@ void Dx12App::FrameAdvance()
     // 네트워크 명령 처리 (메인 스레드에서 GameObject 생성/삭제)
     if (m_pNetworkManager)
     {
-        m_pNetworkManager->Update(m_pScene.get(), m_pd3dDevice.Get(), m_pd3dCommandList.Get());
+        m_pNetworkManager->Update(m_pScene.get(), m_pd3dDevice.Get(), m_pd3dCommandList.Get(), deltaTime);
     }
 
-    // 네트워크 보스 패턴 (SpawnRocks 등 GPU upload 커맨드 기록) — 반드시 cmd list Reset 이후에 호출.
-    // UpdateNetwork() 안에서 호출하면 Reset 에 의해 upload 가 폐기되어 mesh 가 안 보임.
+    // 네트워크 보스 / 일반 몬스터 공격 연출 업데이트
     if (m_pNetworkManager && m_pNetworkManager->IsConnected())
     {
-        m_pNetworkManager->UpdateNetworkGolemBehaviors(m_GameTimer.GetTimeElapsed());
-        m_pNetworkManager->UpdateNetworkDemonBehaviors(m_GameTimer.GetTimeElapsed());
+        m_pNetworkManager->UpdateNetworkGolemBehaviors(deltaTime);
+        m_pNetworkManager->UpdateNetworkDemonBehaviors(deltaTime);
+        m_pNetworkManager->UpdateNetworkNormalMonsterBehaviors(deltaTime);
     }
 
     // Update scene first (calculates light matrices)
