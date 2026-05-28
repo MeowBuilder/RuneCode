@@ -48,6 +48,15 @@ GroundRuptureAttackBehavior::GroundRuptureAttackBehavior(
 {
 }
 
+void GroundRuptureAttackBehavior::SetNetworkEffectSeed(uint32 seed)
+{
+    // 1. 서버가 보내준 seed를 저장한다.
+    m_uNetworkSeed = seed;
+
+    // 2. seed가 0이어도 기본 seed로 보정해서 네트워크 모드를 켠다.
+    m_bUseNetworkSeed = true;
+}
+
 void GroundRuptureAttackBehavior::Execute(EnemyComponent* pEnemy)
 {
     Reset();
@@ -203,9 +212,30 @@ void GroundRuptureAttackBehavior::SpawnBurstRocks(EnemyComponent* pEnemy)
     CRoom* pPrevRoom = m_pScene->GetCurrentRoom();
     m_pScene->SetCurrentRoom(m_pRoom);
 
-    auto RandRange = [](float a, float b) {
-        return a + (b - a) * ((float)rand() / RAND_MAX);
-    };
+    // 균열 돌 연출용 랜덤 함수
+    // 온라인에서는 서버 seed 기반 결정론적 난수를 사용해서 모든 클라가 같은 돌 모양/배치를 만든다.
+    // 오프라인에서는 기존 rand()를 그대로 사용한다.
+    uint32 seed = (m_uNetworkSeed != 0) ? m_uNetworkSeed : 0x9E3779B9u;
+
+    auto Rand01FromSeed = [](uint32& s) -> float
+        {
+            s ^= s << 13;
+            s ^= s >> 17;
+            s ^= s << 5;
+            return (s & 0x00FFFFFF) / static_cast<float>(0x01000000);
+        };
+
+    auto RandRange = [&](float a, float b) -> float
+        {
+            float r = 0.0f;
+
+            if (m_bUseNetworkSeed)
+                r = Rand01FromSeed(seed);
+            else
+                r = (float)rand() / RAND_MAX;
+
+            return a + (b - a) * r;
+        };
 
     for (auto& line : m_vLines)
     {

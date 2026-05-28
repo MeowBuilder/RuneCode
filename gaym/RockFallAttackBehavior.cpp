@@ -52,6 +52,18 @@ RockFallAttackBehavior::RockFallAttackBehavior(int nRockCount, float fDamagePerR
 {
 }
 
+void RockFallAttackBehavior::SetNetworkEffectData(const std::vector<DirectX::XMFLOAT3>& positions, uint32 seed)
+{
+    // 1. 서버가 계산한 낙석 착지 위치를 저장한다.
+    m_vNetworkLandingPositions = positions;
+
+    // 2. 서버가 보내준 seed를 저장한다.
+    m_uNetworkSeed = seed;
+
+    // 3. 위치 목록이 하나라도 있으면 네트워크 위치 사용 모드로 전환한다.
+    m_bUseNetworkLandingPositions = !m_vNetworkLandingPositions.empty();
+}
+
 void RockFallAttackBehavior::Execute(EnemyComponent* pEnemy)
 {
     Reset();
@@ -75,46 +87,125 @@ void RockFallAttackBehavior::Execute(EnemyComponent* pEnemy)
 
     float radiusRange = m_fSpawnMaxRadius - m_fSpawnMinRadius;
 
-    for (int i = 0; i < m_nRockCount; ++i)
+    // 착지 위치 결정
+// 온라인 모드에서 서버가 effectPositions를 보내준 경우:
+//   1. 서버 위치를 그대로 사용한다.
+//   2. 클라별 rand() 위치 생성을 하지 않는다.
+//   3. 회전/스케일/아치 높이는 서버 seed 기반으로 계산해서 모든 클라가 동일하게 보이도록 한다.
+//
+// 오프라인 또는 서버 위치가 없는 경우:
+//   기존처럼 클라에서 rand()로 위치와 연출값을 만든다.
+    m_vRocks.clear();
+
+    auto Rand01FromSeed = [](uint32& seed) -> float
+        {
+            // XorShift 기반 간단한 결정론적 난수
+            // 같은 seed와 같은 호출 순서라면 모든 클라에서 같은 값이 나온다.
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+
+            return (seed & 0x00FFFFFF) / static_cast<float>(0x01000000);
+        };
+
+    auto RandRangeFromSeed = [&](uint32& seed, float minV, float maxV) -> float
+        {
+            return minV + (maxV - minV) * Rand01FromSeed(seed);
+        };
+
+    if (m_bUseNetworkLandingPositions && !m_vNetworkLandingPositions.empty())
     {
-        // 각도: 완전 랜덤 (특정 방향 치우침 없음)
-        float angle = ((float)rand() / RAND_MAX) * XM_2PI;
+        // 1. 서버가 보내준 낙석 위치 사용
+        m_vRocks.reserve(m_vNetworkLandingPositions.size());
 
-        // 반경: sqrt(t) 분포 → 균등 면적 분포 (외곽일수록 자리가 많아 더 자주 나옴)
-        float t = (float)rand() / RAND_MAX;
-        float radius = m_fSpawnMinRadius + sqrtf(t) * radiusRange;
+        // 2. seed가 0이면 XorShift가 계속 0이 될 수 있으므로 기본 seed를 사용한다.
+        uint32 seed = (m_uNetworkSeed != 0) ? m_uNetworkSeed : 0x9E3779B9u;
 
-        RockInstance rock;
-        rock.landingPos.x = bossPos.x + cosf(angle) * radius;
-        rock.landingPos.y = 0.0f;
-        rock.landingPos.z = bossPos.z + sinf(angle) * radius;
-        // 시작 위치 = 착지 지점 바로 위
-        rock.skyStartPos.x = rock.landingPos.x;
-        rock.skyStartPos.y = rock.landingPos.y + 18.0f;
-        rock.skyStartPos.z = rock.landingPos.z;
+        for (const auto& serverPos : m_vNetworkLandingPositions)
+        {
+            RockInstance rock;
 
-        // 개별 랜덤 — 바위마다 다른 모습 & 움직임
-        auto RandRange = [](float minV, float maxV) {
-            return minV + (maxV - minV) * ((float)rand() / RAND_MAX);
-        };
-        // 초기 자세 — 모든 축 0~360° 랜덤
-        rock.initialRotation = {
-            RandRange(0.0f, 360.0f),
-            RandRange(0.0f, 360.0f),
-            RandRange(0.0f, 360.0f)
-        };
-        // 회전 속도 — 축마다 다른 속도/방향 (deg/s)
-        rock.rotationSpeed = {
-            RandRange(-280.0f, 280.0f),
-            RandRange(-180.0f, 180.0f),
-            RandRange(-280.0f, 280.0f)
-        };
-        // 스케일 ±20% 변동
-        rock.scaleMultiplier = RandRange(0.8f, 1.2f);
-        // 아치 높이 ±3 변동 (어떤 바위는 낮은 커브, 어떤 건 높게)
-        rock.archHeight = RandRange(5.0f, 12.0f);
+            // 3. 착지 위치는 서버 위치 그대로 사용한다.
+            rock.landingPos = serverPos;
+            rock.landingPos.y = 0.0f;
 
-        m_vRocks.push_back(rock);
+            // 4. 시작 위치는 착지 지점 바로 위로 설정한다.
+            rock.skyStartPos.x = rock.landingPos.x;
+            rock.skyStartPos.y = rock.landingPos.y + 18.0f;
+            rock.skyStartPos.z = rock.landingPos.z;
+
+            // 5. 회전/스케일/아치 높이는 seed 기반으로 생성한다.
+            //    모든 클라가 같은 seed와 같은 순서로 계산하므로 결과가 동일하다.
+            rock.initialRotation = {
+                RandRangeFromSeed(seed, 0.0f, 360.0f),
+                RandRangeFromSeed(seed, 0.0f, 360.0f),
+                RandRangeFromSeed(seed, 0.0f, 360.0f)
+            };
+
+            rock.rotationSpeed = {
+                RandRangeFromSeed(seed, -280.0f, 280.0f),
+                RandRangeFromSeed(seed, -180.0f, 180.0f),
+                RandRangeFromSeed(seed, -280.0f, 280.0f)
+            };
+
+            rock.scaleMultiplier = RandRangeFromSeed(seed, 0.8f, 1.2f);
+            rock.archHeight = RandRangeFromSeed(seed, 5.0f, 12.0f);
+
+            m_vRocks.push_back(rock);
+        }
+    }
+    else
+    {
+        // 오프라인/서버 데이터 없음
+        // 기존 방식 유지: 클라에서 rand()로 낙석 위치와 연출값을 생성한다.
+        m_vRocks.reserve(m_nRockCount);
+
+        float radiusRange = m_fSpawnMaxRadius - m_fSpawnMinRadius;
+
+        for (int i = 0; i < m_nRockCount; ++i)
+        {
+            // 1. 각도: 완전 랜덤
+            float angle = ((float)rand() / RAND_MAX) * XM_2PI;
+
+            // 2. 반경: sqrt(t) 분포
+            float t = (float)rand() / RAND_MAX;
+            float radius = m_fSpawnMinRadius + sqrtf(t) * radiusRange;
+
+            RockInstance rock;
+
+            // 3. 착지 위치
+            rock.landingPos.x = bossPos.x + cosf(angle) * radius;
+            rock.landingPos.y = 0.0f;
+            rock.landingPos.z = bossPos.z + sinf(angle) * radius;
+
+            // 4. 시작 위치
+            rock.skyStartPos.x = rock.landingPos.x;
+            rock.skyStartPos.y = rock.landingPos.y + 18.0f;
+            rock.skyStartPos.z = rock.landingPos.z;
+
+            auto RandRange = [](float minV, float maxV)
+                {
+                    return minV + (maxV - minV) * ((float)rand() / RAND_MAX);
+                };
+
+            // 5. 개별 랜덤 연출값
+            rock.initialRotation = {
+                RandRange(0.0f, 360.0f),
+                RandRange(0.0f, 360.0f),
+                RandRange(0.0f, 360.0f)
+            };
+
+            rock.rotationSpeed = {
+                RandRange(-280.0f, 280.0f),
+                RandRange(-180.0f, 180.0f),
+                RandRange(-280.0f, 280.0f)
+            };
+
+            rock.scaleMultiplier = RandRange(0.8f, 1.2f);
+            rock.archHeight = RandRange(5.0f, 12.0f);
+
+            m_vRocks.push_back(rock);
+        }
     }
 
     SpawnIndicators(pEnemy);

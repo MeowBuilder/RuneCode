@@ -30,6 +30,9 @@ public:
     );
     virtual ~SequentialCrossAttackBehavior() = default;
 
+    // 네트워크 십자 폭발 연출 seed 설정
+    void SetNetworkEffectSeed(uint32 seed);
+
     virtual void Execute(EnemyComponent* pEnemy) override;
     virtual void Update(float dt, EnemyComponent* pEnemy) override;
     virtual bool IsFinished() const override;
@@ -91,4 +94,7 @@ private:
 
     Scene* m_pScene = nullptr;
     CRoom* m_pRoom  = nullptr;
+
+    bool m_bUseNetworkSeed = false; // 네트워크 동기화용 seed
+    uint32 m_uNetworkSeed = 0;      // 서버가 보내준 seed
 };

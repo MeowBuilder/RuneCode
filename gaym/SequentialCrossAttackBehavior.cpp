@@ -48,6 +48,14 @@ SequentialCrossAttackBehavior::SequentialCrossAttackBehavior(
 {
 }
 
+void SequentialCrossAttackBehavior::SetNetworkEffectSeed(uint32 seed)
+{
+    // 서버가 보내준 seed를 저장한다.
+    // 이 seed를 사용해 모든 클라에서 같은 돌 jitter / 회전 / 스케일을 만든다.
+    m_uNetworkSeed = seed;
+    m_bUseNetworkSeed = true;
+}
+
 void SequentialCrossAttackBehavior::Execute(EnemyComponent* pEnemy)
 {
     Reset();
@@ -217,9 +225,33 @@ void SequentialCrossAttackBehavior::ExplodeCross(EnemyComponent* pEnemy, Cross& 
     CRoom* pPrevRoom = m_pScene->GetCurrentRoom();
     m_pScene->SetCurrentRoom(m_pRoom);
 
-    auto RandRange = [](float a, float b) {
-        return a + (b - a) * ((float)rand() / RAND_MAX);
-    };
+    // 십자 폭발 돌 연출용 랜덤 함수
+    // 온라인에서는 서버 seed 기반 결정론적 난수를 사용해서 모든 클라가 같은 돌 배치를 만든다.
+    // 오프라인에서는 기존 rand()를 그대로 사용한다.
+    uint32 seed = (m_uNetworkSeed != 0) ? m_uNetworkSeed : 0x9E3779B9u;
+
+    // 폭발 순서별로 seed를 조금 섞어서 1번째/2번째/3번째 십자가 서로 다른 돌 배치를 갖게 한다.
+    seed ^= static_cast<uint32>((c.order + 1) * 0x45D9F3Bu);
+
+    auto Rand01FromSeed = [](uint32& s) -> float
+        {
+            s ^= s << 13;
+            s ^= s >> 17;
+            s ^= s << 5;
+            return (s & 0x00FFFFFF) / static_cast<float>(0x01000000);
+        };
+
+    auto RandRange = [&](float a, float b) -> float
+        {
+            float r = 0.0f;
+
+            if (m_bUseNetworkSeed)
+                r = Rand01FromSeed(seed);
+            else
+                r = (float)rand() / RAND_MAX;
+
+            return a + (b - a) * r;
+        };
 
     // 두 개 막대 방향 (yaw, yaw+90)
     float yawRadV = c.yawDeg * (XM_PI / 180.0f);

@@ -283,7 +283,7 @@ private:
     void ProcessMonsterStagger(uint64 monsterId, float duration);
 
 	// 몬스터 공격 애니메이션 재생 (ProcessMonsterAttack에서 호출)
-    void PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType);
+    void PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType, uint64 targetPlayerId, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption);
 
     // 서버 몬스터 관리 (메인 스레드에서만 접근)
     std::unordered_map<uint64, GameObject*> m_mapServerMonsters;

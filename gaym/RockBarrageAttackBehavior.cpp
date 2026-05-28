@@ -39,6 +39,20 @@ RockBarrageAttackBehavior::RockBarrageAttackBehavior(
 {
 }
 
+void RockBarrageAttackBehavior::SetNetworkTarget(GameObject* pTargetPlayer)
+{
+    // 서버가 정한 targetPlayerId에 해당하는 클라 GameObject를 저장한다.
+    m_pNetworkTargetPlayer = pTargetPlayer;
+    m_bUseNetworkTarget = (m_pNetworkTargetPlayer != nullptr);
+}
+
+void RockBarrageAttackBehavior::SetNetworkEffectSeed(uint32 seed)
+{
+    // 바위 회전/스케일 같은 시각적 랜덤값 동기화용 seed
+    m_uNetworkSeed = seed;
+    m_bUseNetworkSeed = true;
+}
+
 void RockBarrageAttackBehavior::Execute(EnemyComponent* pEnemy)
 {
     Reset();
@@ -302,8 +316,20 @@ void RockBarrageAttackBehavior::AssignTargetsAndFire(EnemyComponent* pEnemy)
         auto* pT = rock.pRock->GetTransform();
         if (!pT) continue;
 
-        int idx = rand() % (int)vPlayers.size();
-        GameObject* pTarget = vPlayers[idx];
+        // 온라인에서는 서버가 정한 targetPlayerId 대상만 사용한다.
+        // 오프라인에서는 기존처럼 랜덤 플레이어를 선택한다.
+        GameObject* pTarget = nullptr;
+
+        if (m_bUseNetworkTarget && m_pNetworkTargetPlayer)
+        {
+            pTarget = m_pNetworkTargetPlayer;
+        }
+        else
+        {
+            int idx = rand() % (int)vPlayers.size();
+            pTarget = vPlayers[idx];
+        }
+
         if (!pTarget || !pTarget->GetTransform())
         {
             rock.velocity = { 0.0f, 0.0f, m_fProjectileSpeed };

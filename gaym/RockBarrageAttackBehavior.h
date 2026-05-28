@@ -37,6 +37,12 @@ public:
     );
     virtual ~RockBarrageAttackBehavior() = default;
 
+    // 네트워크 타겟/seed 설정
+    // 서버가 정한 targetPlayerId 대상에게 모든 클라가 같은 바위를 발사하도록 한다.
+    void SetNetworkTarget(GameObject* pTargetPlayer);
+    void SetNetworkEffectSeed(uint32 seed);
+
+
     virtual void Execute(EnemyComponent* pEnemy) override;
     virtual void Update(float dt, EnemyComponent* pEnemy) override;
     virtual bool IsFinished() const override;
@@ -102,4 +108,12 @@ private:
 
     Scene*  m_pScene = nullptr;
     CRoom*  m_pRoom  = nullptr;
+
+    // 네트워크 동기화용 타겟
+    bool m_bUseNetworkTarget = false;
+    GameObject* m_pNetworkTargetPlayer = nullptr;
+
+    // 네트워크 동기화용 seed
+    bool m_bUseNetworkSeed = false;
+    uint32 m_uNetworkSeed = 0;
 };

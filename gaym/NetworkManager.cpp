@@ -3270,7 +3270,7 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             // 데미지는 서버 권위이므로 클라는 연출만 담당한다.
             if (mt == 8)
             {
-                PlayNetworkGolemAttackBehavior(pScene, pMonster, monsterId, attackType);
+                PlayNetworkGolemAttackBehavior(pScene, pMonster, monsterId, attackType, targetPlayerId, effectPositions, effectOption);
                 return;
             }
             break;
@@ -3644,7 +3644,7 @@ void NetworkManager::ProcessMonsterStagger(uint64 monsterId, float duration)
     WriteNetworkLog(buf);
 }
 
-void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType)
+void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType, uint64 targetPlayerId, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption)
 {
     if (pScene == nullptr || pMonster == nullptr)
         return;
@@ -3730,8 +3730,9 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
         break;
 
     case 23:
+    {
         // GolemRockBarrage
-        behavior = std::make_unique<RockBarrageAttackBehavior>(
+        auto rockBarrage = std::make_unique<RockBarrageAttackBehavior>(
             16,
             90.0f,
             4.0f,
@@ -3745,13 +3746,37 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
             2.2f,
             0.0f,
             0.0f,
-            0.8f // 유도 추적
+            0.8f
         );
+
+        // 서버가 정한 targetPlayerId에 해당하는 플레이어 GameObject 찾기
+        GameObject* pTargetObj = nullptr;
+
+        if (targetPlayerId == GetLocalPlayerId())
+        {
+            pTargetObj = pScene ? pScene->GetPlayer() : nullptr;
+        }
+        else
+        {
+            auto rIt = m_mapRemotePlayers.find(targetPlayerId);
+            if (rIt != m_mapRemotePlayers.end())
+                pTargetObj = rIt->second;
+        }
+
+        // 모든 클라가 같은 플레이어를 추적하도록 타겟 고정
+        rockBarrage->SetNetworkTarget(pTargetObj);
+
+        // 회전/스케일 등 시각 랜덤 동기화
+        rockBarrage->SetNetworkEffectSeed(effectOption);
+
+        behavior = std::move(rockBarrage);
         break;
+    }
 
     case 24:
+    {
         // GolemRockFall
-        behavior = std::make_unique<RockFallAttackBehavior>(
+        auto rockFall = std::make_unique<RockFallAttackBehavior>(
             10,
             90.0f,
             14.0f,
@@ -3763,20 +3788,28 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
             3.0f,
             0.5f
         );
+
+        // 서버 낙석 위치가 있으면 클라 rand() 위치 생성을 막고 서버 위치를 사용한다.
+        if (!effectPositions.empty())
+        {
+            rockFall->SetNetworkEffectData(effectPositions, effectOption);
+        }
+
+        behavior = std::move(rockFall);
         break;
+    }
 
     case 25:
     {
         // GolemGroundRupture
-        // 클라 단독 프리셋처럼 + / X 대각선 균열을 랜덤으로 선택
-        auto shape = (rand() % 2 == 0)
+        auto shape = (effectOption == 0)
             ? GroundRuptureAttackBehavior::RuptureShape::Cross
             : GroundRuptureAttackBehavior::RuptureShape::XDiag;
 
-        behavior = std::make_unique<GroundRuptureAttackBehavior>(
+        auto groundRupture = std::make_unique<GroundRuptureAttackBehavior>(
             shape,
             100.0f,
-            80.0f, // 서버 기준 더 작게
+            80.0f,
             6.0f,
             2.2f,
             0.4f,
@@ -3784,12 +3817,18 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
             3.0f,
             0.5f
         );
+
+        // 서버 effectOption을 seed로 사용해서 균열에서 솟는 돌의 jitter / 회전 / 스케일을 동기화한다.
+        groundRupture->SetNetworkEffectSeed(effectOption);
+
+        behavior = std::move(groundRupture);
         break;
     }
 
     case 26:
+    {
         // GolemSequentialCross
-        behavior = std::make_unique<SequentialCrossAttackBehavior>(
+        auto sequentialCross = std::make_unique<SequentialCrossAttackBehavior>(
             55.0f,
             80.0f,
             12.0f,
@@ -3800,7 +3839,13 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
             2.4f,
             0.45f
         );
+
+        // 서버 effectOption을 seed로 사용해서 순차 십자 폭발의 돌 jitter / 회전 / 스케일을 동기화한다.
+        sequentialCross->SetNetworkEffectSeed(effectOption);
+
+        behavior = std::move(sequentialCross);
         break;
+    }
 
     default:
         return;

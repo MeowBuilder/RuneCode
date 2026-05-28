@@ -31,6 +31,9 @@ public:
         float fCameraShakeDuration  = 0.5f
     );
     virtual ~GroundRuptureAttackBehavior() = default;
+    
+    // 네트워크 균열 연출 seed 설정
+    void SetNetworkEffectSeed(uint32 seed);
 
     virtual void Execute(EnemyComponent* pEnemy) override;
     virtual void Update(float dt, EnemyComponent* pEnemy) override;
@@ -81,4 +84,7 @@ private:
 
     Scene* m_pScene = nullptr;
     CRoom* m_pRoom  = nullptr;
+
+    bool m_bUseNetworkSeed = false; // 네트워크 동기화용 seed
+    uint32 m_uNetworkSeed = 0;      // 서버가 보내준 seed
 };

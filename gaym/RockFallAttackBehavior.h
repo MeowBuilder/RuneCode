@@ -27,6 +27,9 @@ public:
         float fCameraShakeDuration  = 0.5f
     );
     virtual ~RockFallAttackBehavior() = default;
+    
+    // 네트워크 낙석 위치 동기화 데이터 설정
+    void SetNetworkEffectData(const std::vector<DirectX::XMFLOAT3>& positions, uint32 seed);
 
     virtual void Execute(EnemyComponent* pEnemy) override;
     virtual void Update(float dt, EnemyComponent* pEnemy) override;
@@ -88,4 +91,13 @@ private:
     // 참조 (Execute 시 저장)
     class Scene*  m_pScene = nullptr;
     class CRoom*  m_pRoom  = nullptr;
+
+    // 네트워크 동기화용 낙석 데이터
+    bool m_bUseNetworkLandingPositions = false;
+
+    // 서버가 보내준 낙석 착지 위치 목록
+    std::vector<DirectX::XMFLOAT3> m_vNetworkLandingPositions;
+
+    // 서버가 보내준 동기화 seed
+    uint32 m_uNetworkSeed = 0;
 };
