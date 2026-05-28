@@ -10,6 +10,8 @@
 #include "NetworkManager.h" // For skill sync
 #include "PlayerComponent.h" // 원격 동기화 시 element 별 wire 포맷 분기용
 #include "RuneRegistry.h"
+#include "FluidSkillVFXManager.h"
+#include "EffectRegistry.h"
 #include <set>
 #include <random>
 
@@ -24,11 +26,78 @@ SkillComponent::SkillComponent(GameObject* pOwner)
     // Initialize all skill states to Ready
     m_SkillStates.fill(SkillState::Ready);
 
+    m_chargeGatherVFXIds.fill(-1);
+    m_chargeScaleSteps.fill(0);
+
     // m_SkillRunes is value-initialized; EquippedRune default ctor sets runeId="" (empty)
 }
 
 SkillComponent::~SkillComponent()
 {
+}
+
+void SkillComponent::SpawnChargeGatherVFX(int step)
+{
+    if (!m_pVFXManager) return;
+    size_t slotIdx = static_cast<size_t>(m_ChargingSlot);
+
+    if (m_chargeGatherVFXIds[slotIdx] >= 0)
+    {
+        m_pVFXManager->StopEffect(m_chargeGatherVFXIds[slotIdx]);
+        m_chargeGatherVFXIds[slotIdx] = -1;
+    }
+
+    if (!EffectRegistry::Get().HasEffect("charge_gather")) return;
+
+    // 변환 룬 원소 > 플레이어 기본 원소 순으로 색상 결정
+    ElementType elem = ElementType::None;
+    if (m_pOwner)
+    {
+        if (m_ChargingSlot != SkillSlot::Count)
+        {
+            size_t chgIdx = static_cast<size_t>(m_ChargingSlot);
+            if (chgIdx < m_Skills.size() && m_Skills[chgIdx])
+            {
+                SkillStats sts = BuildSkillStats(m_ChargingSlot,
+                    m_Skills[chgIdx]->GetSkillData().activationType);
+                if (!sts.elementSet.empty()) elem = sts.elementSet[0];
+            }
+        }
+        if (elem == ElementType::None)
+            if (auto* pPC = m_pOwner->GetComponent<PlayerComponent>())
+                elem = pPC->GetElementType();
+    }
+
+    static const float kScales[] = { 0.65f, 1.0f, 1.45f, 1.9f };
+    int clampedStep = step < 0 ? 0 : (step > 3 ? 3 : step);
+    float scale = kScales[clampedStep];
+
+    EffectDef def = EffectRegistry::Get().GetEffect("charge_gather");
+    for (auto& l : def.layers)
+    {
+        l.sizeScale    *= scale;
+        l.particleCount = int(l.particleCount * scale);
+    }
+    if (elem != ElementType::None)
+        ApplyElementToEffectDef(def, elem);
+
+    DirectX::XMFLOAT3 pos = { 0.f, 0.f, 0.f };
+    DirectX::XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+    if (m_pOwner && m_pOwner->GetTransform())
+        pos = m_pOwner->GetTransform()->GetPosition();
+
+    m_chargeGatherVFXIds[slotIdx] = m_pVFXManager->SpawnEffectDef(pos, up, def, true);
+
+    // 첫 스폰 이후 단계 전환마다 펄스 발사
+    if (step > 0 && EffectRegistry::Get().HasEffect("charge_pulse"))
+    {
+        EffectDef pulseDef = EffectRegistry::Get().GetEffect("charge_pulse");
+        for (auto& l : pulseDef.layers)
+            l.sizeScale *= scale;
+        if (elem != ElementType::None)
+            ApplyElementToEffectDef(pulseDef, elem);
+        m_pVFXManager->SpawnEffectDef(pos, up, pulseDef, false);
+    }
 }
 
 void SkillComponent::Update(float deltaTime)
@@ -54,9 +123,28 @@ void SkillComponent::Update(float deltaTime)
     if (m_bIsCharging)
     {
         m_fChargeTime += deltaTime;
+        float ratio = min(1.f, m_fChargeTime / m_fMaxChargeTime);
+
         size_t chgIdx = static_cast<size_t>(m_ChargingSlot);
         if (chgIdx < m_Skills.size() && m_Skills[chgIdx])
-            m_Skills[chgIdx]->OnChargeUpdate(m_pOwner, min(1.f, m_fChargeTime / m_fMaxChargeTime));
+            m_Skills[chgIdx]->OnChargeUpdate(m_pOwner, ratio);
+
+        // 차지 결집 VFX 위치 추적
+        size_t chgSlotIdx = static_cast<size_t>(m_ChargingSlot);
+        if (m_pVFXManager && m_chargeGatherVFXIds[chgSlotIdx] >= 0 && m_pOwner && m_pOwner->GetTransform())
+        {
+            DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+            DirectX::XMFLOAT3 up  = { 0.f, 1.f, 0.f };
+            m_pVFXManager->TrackEffect(m_chargeGatherVFXIds[chgSlotIdx], pos, up);
+        }
+
+        // 차지 비율에 따라 VFX 단계 성장 (0.33 → 1단계, 0.66 → 2단계, 1.0 → 3단계)
+        int newStep = (ratio >= 1.0f) ? 3 : (ratio >= 0.66f) ? 2 : (ratio >= 0.33f) ? 1 : 0;
+        if (newStep > m_chargeScaleSteps[chgSlotIdx])
+        {
+            m_chargeScaleSteps[chgSlotIdx] = newStep;
+            SpawnChargeGatherVFX(newStep);
+        }
     }
 
     // Update channel timer
@@ -308,6 +396,13 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
                 m_CooldownTimers[index] = GetEffectiveCooldown(index);
             }
 
+            size_t relIdx = static_cast<size_t>(m_ChargingSlot);
+            if (m_pVFXManager && m_chargeGatherVFXIds[relIdx] >= 0)
+            {
+                m_pVFXManager->StopEffect(m_chargeGatherVFXIds[relIdx]);
+                m_chargeGatherVFXIds[relIdx] = -1;
+            }
+            m_chargeScaleSteps[relIdx] = 0;
             m_bIsCharging = false;
             m_fChargeTime = 0.0f;
             m_ChargingSlot = SkillSlot::Count;
@@ -851,6 +946,8 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
         m_ChargeTargetPosition = targetPosition;
         m_SkillStates[index] = SkillState::Casting;
         m_Skills[index]->OnChargeBegin(m_pOwner);
+        m_chargeScaleSteps[index] = 0;
+        SpawnChargeGatherVFX(0);
         OutputDebugString(L"[Skill] Charging started... Hold to charge, release to fire\n");
     }
     else if (combo.hasChannel || defaultType == ActivationType::Channel)

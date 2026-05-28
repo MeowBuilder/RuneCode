@@ -49,7 +49,8 @@ private:
     std::vector<int>      m_extraVFXIds;
     std::vector<int>      m_channelWaveVfxIds;
 
-    bool  m_bActive     = false;
+    bool        m_bActive    = false;
+    ElementType m_cachedElem = ElementType::None;
     float m_damageMult  = 1.f;
     float m_elapsed     = 0.f;
     float m_foamTimer   = 0.f;

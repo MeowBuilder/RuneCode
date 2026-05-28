@@ -195,12 +195,6 @@ void EarthArmorBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& ta
 // ─── 차지 ────────────────────────────────────────────────────────────────────
 void EarthArmorBehavior::OnChargeBegin(GameObject* caster)
 {
-    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
-    const char* fx = SubVFXName(m_SkillData.element);
-    if (!EffectRegistry::Get().HasEffect(fx)) return;
-    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
-    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
-    m_chargeVFXId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
 }
 
 void EarthArmorBehavior::OnChargeUpdate(GameObject* caster, float chargeRatio)

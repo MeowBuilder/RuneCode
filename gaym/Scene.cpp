@@ -247,6 +247,7 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
         if (auto* pSC = m_pPlayerGameObject->GetComponent<SkillComponent>())
         {
             FluidSkillVFXManager* pPlayerVFX = m_pVFXManager->GetPlayerVFX();
+            pSC->SetVFXManager(pPlayerVFX);
             // ISkillBehavior::SetVFXManager(default: no-op) — 각 Behavior가 override로 처리
             for (int s = 0; s < (int)SkillSlot::Count; ++s)
             {

@@ -27,12 +27,6 @@ WaveSlashBehavior::WaveSlashBehavior(const SkillData& customData)
 
 void WaveSlashBehavior::OnChargeBegin(GameObject* caster)
 {
-    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
-    const char* fx = SubVFXName(m_SkillData.element);
-    if (!EffectRegistry::Get().HasEffect(fx)) return;
-    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
-    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
-    m_chargeVFXId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
 }
 
 void WaveSlashBehavior::OnChargeUpdate(GameObject* caster, float chargeRatio)
@@ -71,6 +65,18 @@ void WaveSlashBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOA
     m_bChannelActive = true;
     m_hitHalfW       = CHANNEL_WAVE_HALF_W;
 
+    m_cachedElem = ElementType::None;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count) {
+            SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            if (!sts.elementSet.empty()) m_cachedElem = sts.elementSet[0];
+        }
+        if (m_cachedElem == ElementType::None)
+            if (auto* pPC = caster->GetComponent<PlayerComponent>())
+                m_cachedElem = pPC->GetElementType();
+    }
+
     if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
     if (!EffectRegistry::Get().HasEffect("sub_fire")) return;
     XMFLOAT3 pos = caster->GetTransform()->GetPosition();
@@ -98,8 +104,7 @@ void WaveSlashBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT
     {
         uint32_t runeFlags = GetRuneFlags(caster);
         EffectDef def = EffectRegistry::Get().GetEffect("Q_WaveSlash", runeFlags);
-        ElementType elem = ElementType::Fire;
-        if (auto* pPC = caster->GetComponent<PlayerComponent>()) elem = pPC->GetElementType();
+        ElementType elem = (m_cachedElem != ElementType::None) ? m_cachedElem : ElementType::Fire;
         FluidElementColor ec = FluidElementColors::Get(elem);
         def.element = elem;
         for (auto& l : def.layers) { l.element = elem; l.coreColor = ec.coreColor; l.edgeColor = ec.edgeColor; }
@@ -534,6 +539,7 @@ void WaveSlashBehavior::Reset()
     m_bIsFinished       = true;
     m_bWaveActive       = false;
     m_bChannelActive    = false;
+    m_cachedElem        = ElementType::None;
     m_bPostChannelWaves = false;
     m_channelPostTimer  = 0.f;
     m_hitHalfW          = WAVE_HALF_W;

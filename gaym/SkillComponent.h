@@ -10,6 +10,7 @@
 class ISkillBehavior;
 class InputSystem;
 class CCamera;
+class FluidSkillVFXManager;
 
 // Number of rune slots per skill
 constexpr int RUNES_PER_SKILL = 3;
@@ -86,6 +87,9 @@ public:
     // 가장 최근 Execute() 직전에 계산된 활성화 VFXModifier (행동 클래스가 VFX 스폰 시 참조)
     VFXModifier GetCurrentActivationVFXMod() const { return m_activationVFXMod; }
     float       GetCurrentChargeRatio()      const { return m_currentChargeRatio; }
+
+    // VFX 매니저 연결 (Scene 초기화 시 호출)
+    void SetVFXManager(FluidSkillVFXManager* mgr) { m_pVFXManager = mgr; }
 
     // Block rune input (e.g., during drop rune selection)
     void SetRuneInputBlocked(bool blocked) { m_bRuneInputBlocked = blocked; }
@@ -175,4 +179,12 @@ private:
 
     // Execute or split into multiple projectiles if Split rune is equipped
     void ExecuteOrSplit(size_t index, const DirectX::XMFLOAT3& target, float mult);
+
+    // 차지 결집 VFX 스폰/업데이트 (step 0=초기, 1~3=성장 단계)
+    void SpawnChargeGatherVFX(int step);
+
+    // 차지 VFX (슬롯별 독립)
+    FluidSkillVFXManager* m_pVFXManager = nullptr;
+    std::array<int, static_cast<size_t>(SkillSlot::Count)> m_chargeGatherVFXIds;
+    std::array<int, static_cast<size_t>(SkillSlot::Count)> m_chargeScaleSteps;
 };

@@ -21,6 +21,15 @@ void GaleRushBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT
     m_pCaster      = caster;
     m_hitEnemies.clear();
     m_trailTimer = 0.f;
+    // Execute가 채널 모드에서 early-return하므로 여기서 변환 룬 원소를 캐시
+    m_cachedElem = ElementType::None;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count) {
+            SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            if (!sts.elementSet.empty()) m_cachedElem = sts.elementSet[0];
+        }
+    }
 }
 
 void GaleRushBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
@@ -58,8 +67,10 @@ void GaleRushBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3
         {
             XMFLOAT3 burstPos = casterPos;
             burstPos.y += 2.0f;
-            m_pVFXManager->SpawnEffectDef(burstPos, m_direction,
-                EffectRegistry::Get().GetEffect("E_GaleRush_Burst"), false);
+            EffectDef burstDef = EffectRegistry::Get().GetEffect("E_GaleRush_Burst");
+            if (m_cachedElem != ElementType::None)
+                ApplyElementToEffectDef(burstDef, m_cachedElem);
+            m_pVFXManager->SpawnEffectDef(burstPos, m_direction, burstDef, false);
         }
 
         // 배기 트레일 (진행 반대 방향)
@@ -68,8 +79,10 @@ void GaleRushBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3
             XMFLOAT3 trailPos = casterPos;
             trailPos.y += 2.0f;
             XMFLOAT3 backDir = { -m_direction.x, 0.f, -m_direction.z };
-            int id = m_pVFXManager->SpawnEffectDef(trailPos, backDir,
-                EffectRegistry::Get().GetEffect("E_GaleRush_Trail"), false);
+            EffectDef trailDef = EffectRegistry::Get().GetEffect("E_GaleRush_Trail");
+            if (m_cachedElem != ElementType::None)
+                ApplyElementToEffectDef(trailDef, m_cachedElem);
+            int id = m_pVFXManager->SpawnEffectDef(trailPos, backDir, trailDef, false);
             if (id >= 0) m_trailVfxIds.push_back(id);
         }
 
@@ -112,12 +125,6 @@ void GaleRushBehavior::OnChannelEnd(GameObject* caster)
 
 void GaleRushBehavior::OnChargeBegin(GameObject* caster)
 {
-    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
-    const char* fx = SubVFXName(m_SkillData.element);
-    if (!EffectRegistry::Get().HasEffect(fx)) return;
-    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
-    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
-    m_chargeVFXId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
 }
 
 void GaleRushBehavior::OnChargeUpdate(GameObject* caster, float chargeRatio)

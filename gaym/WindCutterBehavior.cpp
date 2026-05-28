@@ -31,6 +31,14 @@ uint32_t WindCutterBehavior::GetRuneFlags(GameObject* caster) const
 void WindCutterBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
 {
     m_bChannelMode = true;
+    m_cachedElem   = ElementType::None;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count) {
+            SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            if (!sts.elementSet.empty()) m_cachedElem = sts.elementSet[0];
+        }
+    }
 }
 
 void WindCutterBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
@@ -59,7 +67,13 @@ void WindCutterBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOA
             l.sizeScale             *= 0.55f;
             l.crescent.radius       *= 0.55f;
             l.crescent.thickness    *= 0.55f;
+            // 히트판정 CHANNEL_RANGE(15) 에 맞게 파티클 비행 거리 조정
+            // 원본 speed=62, avg_lifetime=0.65s → 40u 비행; 목표 15u → scale = 15/(62*0.65) ≈ 0.37
+            l.crescent.normalSpeedMin *= 0.37f;
+            l.crescent.normalSpeedMax *= 0.37f;
         }
+        if (m_cachedElem != ElementType::None)
+            ApplyElementToEffectDef(miniDef, m_cachedElem);
         m_pVFXManager->SpawnEffectDef(spawnPos, dir, miniDef, true);
     }
 
@@ -100,12 +114,6 @@ void WindCutterBehavior::OnChannelEnd(GameObject* caster)
 
 void WindCutterBehavior::OnChargeBegin(GameObject* caster)
 {
-    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
-    const char* fx = SubVFXName(m_SkillData.element);
-    if (!EffectRegistry::Get().HasEffect(fx)) return;
-    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
-    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
-    m_chargeVFXId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
 }
 
 void WindCutterBehavior::OnChargeUpdate(GameObject* caster, float chargeRatio)

@@ -2683,6 +2683,98 @@ void EffectRegistry::Initialize()
         makeFootRing("marker_foot_chargedshot", 1.9f, 0.20f, kGoldCore,   kGoldEdge,   120, 4.0f);
         makeFootRing("marker_foot_grenade",     2.2f, 0.25f, kPurpleCore, kPurpleEdge, 140, 4.0f);
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // charge_gather — 차지 중 캐릭터 주변 에너지 결집 VFX (지속형, 단계마다 재스폰)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "charge_gather";
+        def.element = ElementType::None;
+
+        // Layer 0 — Ring: 캐릭터를 공전하는 에너지 입자
+        {
+            EffectLayer ring;
+            ring.type           = EmitterType::Ring;
+            ring.element        = ElementType::None;
+            ring.overrideColors = true;
+            ring.coreColor      = { 1.0f, 0.95f, 0.6f, 1.0f };
+            ring.edgeColor      = { 0.8f, 0.55f, 0.1f, 0.0f };
+            ring.particleCount  = 100;
+            ring.duration       = 4.0f;
+            ring.speedMin       = 1.f;
+            ring.speedMax       = 4.f;
+            ring.lifetimeMin    = 0.5f;
+            ring.lifetimeMax    = 1.0f;
+            ring.sizeScale      = 2.5f;
+
+            ring.ring.radius         = 2.5f;
+            ring.ring.width          = 1.2f;
+            ring.ring.rotateSpeed    = 3.5f;
+            ring.ring.normalSpeedMin = 1.f;
+            ring.ring.normalSpeedMax = 3.f;
+
+            def.layers.push_back(ring);
+        }
+
+        // Layer 1 — Sphere: 바깥에서 캐릭터 방향으로 수렴하는 입자
+        {
+            EffectLayer sphere;
+            sphere.type           = EmitterType::Sphere;
+            sphere.element        = ElementType::None;
+            sphere.overrideColors = true;
+            sphere.coreColor      = { 1.0f, 1.0f, 0.8f, 1.0f };
+            sphere.edgeColor      = { 0.9f, 0.65f, 0.2f, 0.0f };
+            sphere.particleCount  = 70;
+            sphere.duration       = 4.0f;
+            sphere.speedMin       = 5.f;
+            sphere.speedMax       = 14.f;
+            sphere.lifetimeMin    = 0.4f;
+            sphere.lifetimeMax    = 0.8f;
+            sphere.sizeScale      = 2.0f;
+
+            sphere.sphere.radius        = 3.5f;
+            sphere.sphere.shellFraction = 0.8f;
+            sphere.sphere.inward        = true;
+            sphere.sphere.rotationSpeed = 1.5f;
+
+            def.layers.push_back(sphere);
+        }
+
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // charge_pulse — 차지 단계 전환 시 발생하는 에너지 파동 링 (순간형)
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "charge_pulse";
+        def.element = ElementType::None;
+
+        EffectLayer ring;
+        ring.type           = EmitterType::Ring;
+        ring.element        = ElementType::None;
+        ring.overrideColors = true;
+        ring.coreColor      = { 1.0f, 0.95f, 0.7f, 1.0f };
+        ring.edgeColor      = { 0.7f, 0.4f, 0.0f, 0.0f };
+        ring.particleCount  = 180;
+        ring.duration       = 0.6f;
+        ring.speedMin       = 3.f;
+        ring.speedMax       = 8.f;
+        ring.lifetimeMin    = 0.25f;
+        ring.lifetimeMax    = 0.5f;
+        ring.sizeScale      = 3.5f;
+
+        ring.ring.radius         = 0.5f;
+        ring.ring.width          = 1.5f;
+        ring.ring.expandSpeed    = 18.f;
+        ring.ring.normalSpeedMin = 2.f;
+        ring.ring.normalSpeedMax = 6.f;
+
+        def.layers.push_back(ring);
+        Register(std::move(def));
+    }
 }
 
 void EffectRegistry::Register(EffectDef def) {

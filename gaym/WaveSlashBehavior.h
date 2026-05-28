@@ -73,7 +73,8 @@ private:
     float      m_waveElapsed       = 0.f;
     float      m_trailDropTimer    = 0.f;
 
-    bool  m_bChannelActive     = false;       // 채널 룬 발동 중
+    bool        m_bChannelActive = false;       // 채널 룬 발동 중
+    ElementType m_cachedElem    = ElementType::None;  // 채널 시작 시 캐시된 원소
     float m_hitHalfW           = WAVE_HALF_W; // 히트 판정 반폭 (채널 시 좁아짐)
     bool  m_bPostChannelWaves  = false;       // 채널 종료 후 파도 자연 소멸 대기 중
     float m_channelPostTimer   = 0.f;         // 채널 종료 후 경과 시간

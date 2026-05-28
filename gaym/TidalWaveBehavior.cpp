@@ -18,6 +18,15 @@ TidalWaveBehavior::TidalWaveBehavior()
 
 void TidalWaveBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
 {
+    m_cachedElem = ElementType::None;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count) {
+            SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            if (!sts.elementSet.empty()) m_cachedElem = sts.elementSet[0];
+        }
+    }
+
     if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
     if (!EffectRegistry::Get().HasEffect("sub_water")) return;
     XMFLOAT3 pos = caster->GetTransform()->GetPosition();
@@ -44,6 +53,8 @@ void TidalWaveBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT
     {
         XMFLOAT3 spawnPos = { origin.x, origin.y + 5.f, origin.z };
         EffectDef waveDef = EffectRegistry::Get().GetEffect("Q_WaterWave");
+        if (m_cachedElem != ElementType::None)
+            ApplyElementToEffectDef(waveDef, m_cachedElem);
         VFXModifier mod;
         mod.sizeScaleMult     = 0.45f;
         mod.particleCountMult = 0.35f;
@@ -90,12 +101,6 @@ void TidalWaveBehavior::OnChannelEnd(GameObject* caster)
 
 void TidalWaveBehavior::OnChargeBegin(GameObject* caster)
 {
-    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
-    const char* fx = SubVFXName(m_SkillData.element);
-    if (!EffectRegistry::Get().HasEffect(fx)) return;
-    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
-    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
-    m_chargeVFXId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
 }
 
 void TidalWaveBehavior::OnChargeUpdate(GameObject* caster, float chargeRatio)
