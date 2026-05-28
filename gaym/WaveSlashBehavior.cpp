@@ -315,7 +315,6 @@ void WaveSlashBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& tar
             XMFLOAT3 groundOrigin = origin;
             groundOrigin.y -= 5.0f; // origin.y가 +5 오프셋 적용됐으므로 원위치
             float rotY = atan2f(direction.x, direction.z);
-            m_pDecalManager->Spawn(DecalTexture::Scorch3, groundOrigin, 4.0f, rotY, 4.f);
         }
     }
     else

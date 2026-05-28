@@ -12,7 +12,8 @@ enum class DecalTexture : int
     Scorch2 = 1,  // 파이어볼 폭발 / 빔 끝점 / 소형 메테오
     Scorch3 = 2,  // WaveSlash 파도 진행로
     Magic2  = 3,  // 메테오 최종 착지 (광원 서클)
-    Count   = 4
+    Magic3  = 4,  // 메아리 룬(ABY_ECO) 마법진 — 회전 + 원소 색상
+    Count   = 5
 };
 
 class DecalManager
@@ -31,8 +32,16 @@ public:
                      CDescriptorHeap* pHeap, UINT& nNextIndex,
                      DecalTexture type, const wchar_t* pPath);
 
-    void Spawn(DecalTexture tex, const DirectX::XMFLOAT3& pos,
-               float size, float rotY, float lifetime);
+    // color: RGBA 틴트 (1,1,1,1 = 원본 색상 그대로)
+    // rotateSpeed: rad/s (0 = 정지)
+    // 반환값: 슬롯 인덱스 (-1 실패) — SetPosition으로 추적 가능
+    int Spawn(DecalTexture tex, const DirectX::XMFLOAT3& pos,
+              float size, float rotY, float lifetime,
+              DirectX::XMFLOAT4 color = { 1.f, 1.f, 1.f, 1.f },
+              float rotateSpeed = 0.f);
+
+    // 활성 데칼의 위치를 갱신 (캐릭터 추적 등에 사용)
+    void SetPosition(int slotIdx, const DirectX::XMFLOAT3& pos);
 
     void Update(float dt);
 
@@ -43,13 +52,15 @@ private:
     struct DecalEntry
     {
         DirectX::XMFLOAT3 pos{};
-        float  size       = 1.f;
-        float  rotY       = 0.f;
-        float  lifeMax    = 1.f;
-        float  lifeRemain = 0.f;
-        float  spawnTime  = 0.f; // 가장 오래된 슬롯 교체용
-        DecalTexture tex  = DecalTexture::Scorch1;
-        bool   active     = false;
+        float  size        = 1.f;
+        float  rotY        = 0.f;
+        float  rotateSpeed = 0.f;
+        float  lifeMax     = 1.f;
+        float  lifeRemain  = 0.f;
+        float  spawnTime   = 0.f;
+        DirectX::XMFLOAT4 color = { 1.f, 1.f, 1.f, 1.f };
+        DecalTexture tex   = DecalTexture::Scorch1;
+        bool   active      = false;
     };
 
     struct TexSlot
@@ -68,7 +79,7 @@ private:
     BYTE*                          m_pMappedCB    = nullptr;
     UINT                           m_nCBVStart    = 0;
     CDescriptorHeap*               m_pDescHeap    = nullptr;
-    TexSlot                        m_texSlots[4]{};
+    TexSlot                        m_texSlots[static_cast<int>(DecalTexture::Count)]{};
     ID3D12PipelineState*           m_pPSO         = nullptr;
     ID3D12RootSignature*           m_pRootSig     = nullptr;
 };

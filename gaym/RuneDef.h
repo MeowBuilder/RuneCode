@@ -68,6 +68,8 @@ struct SkillStats
     bool  doublecast       = false; // 쌍둥이별 (L01)
     bool  echoOnCast       = false; // 잔상 (L09)
     float cdResetChance    = 0.f;  // 무한 (L10): % chance to reset cooldown
+    float revengeBonus     = 0.f;  // 보복 (ABY_RVG): 피격 후 다음 스킬 데미지 보너스
+    float overheatBonus    = 0.f;  // 과열 (ABY_OVL): 연속 3회 후 다음 스킬 데미지 보너스
     int   orbitalCount          = 0;    // 선회/성좌: 궤도 파티클 다단히트 수
     int   spawnOnHitCount       = 0;    // 반향/폭발반향: 적중 시 생성할 추가 투사체 수
     bool  randomElementOnCast   = false; // 원소 변환(L04): 시전 시 원소 무작위 변경
@@ -157,6 +159,8 @@ struct RuneDef
     bool  doublecast       = false;
     bool  echoOnCast       = false;
     float cdResetChance    = 0.f;
+    float revengeBonus     = 0.f;
+    float overheatBonus    = 0.f;
     int   orbitalCount          = 0;    // 선회/성좌: 궤도 파티클 다단히트 수
     int   spawnOnHitCount       = 0;    // 반향/폭발반향: 적중 시 추가 투사체 수
     bool  randomElementOnCast   = false; // 원소 변환(L04): 시전 시 원소 무작위 변경

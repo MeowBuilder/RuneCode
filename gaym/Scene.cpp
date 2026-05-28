@@ -295,6 +295,8 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
         DecalTexture::Scorch3, L"Assets/Textures/VFX/scorch_03.png");
     m_pDecalManager->LoadTexture(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
         DecalTexture::Magic2,  L"Assets/Textures/VFX/magic_02.png");
+    m_pDecalManager->LoadTexture(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
+        DecalTexture::Magic3,  L"Assets/Textures/VFX/magic_03.png");
     OutputDebugString(L"[Scene] Decal system initialized\n");
 
     // [DISABLED] 데칼 스킬 연결 — 위치 보정 후 재활성화 예정
@@ -1835,7 +1837,7 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
     // 구 ParticleSystem.Render 호출은 LightEmitterSystem 통합으로 제거됨.
 
     // [DISABLED] Ground decals — 위치 보정 후 재활성화 예정
-    // if (m_pDecalManager) m_pDecalManager->Render(pCommandList, GetPassCBVAddress());
+    if (m_pDecalManager) m_pDecalManager->Render(pCommandList, GetPassCBVAddress());
 
     // ---------- Screen-Space Fluid 렌더링 (VFXManager 통합 경로) ----------
     bool bHasFluid = (m_pVFXManager != nullptr); // 매니저 있으면 SSF 시도
@@ -5043,4 +5045,31 @@ void Scene::UpdateFlightBossBullets(float deltaTime)
             ++it;
         }
     }
+}
+
+EnemyComponent* Scene::FindNearestEnemy(const DirectX::XMFLOAT3& pos) const
+{
+    EnemyComponent* nearest = nullptr;
+    float bestDistSq = FLT_MAX;
+
+    for (const auto& pRoom : m_vRooms)
+    {
+        if (!pRoom) continue;
+        for (EnemyComponent* pEnemy : pRoom->GetEnemies())
+        {
+            if (!pEnemy || pEnemy->IsDead()) continue;
+            GameObject* pObj = pEnemy->GetOwner();
+            if (!pObj || !pObj->GetTransform()) continue;
+            const XMFLOAT3& ePos = pObj->GetTransform()->GetPosition();
+            float dx = ePos.x - pos.x;
+            float dz = ePos.z - pos.z;
+            float distSq = dx * dx + dz * dz;
+            if (distSq < bestDistSq)
+            {
+                bestDistSq = distSq;
+                nearest = pEnemy;
+            }
+        }
+    }
+    return nearest;
 }

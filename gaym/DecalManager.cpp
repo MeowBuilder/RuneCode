@@ -53,7 +53,7 @@ void DecalManager::LoadTexture(ID3D12Device* pDevice, ID3D12GraphicsCommandList*
                                DecalTexture type, const wchar_t* pPath)
 {
     int idx = (int)type;
-    if (idx < 0 || idx >= 4) return;
+    if (idx < 0 || idx >= (int)DecalTexture::Count) return;
     TexSlot& slot = m_texSlots[idx];
 
     std::unique_ptr<uint8_t[]> decodedData;
@@ -91,28 +91,39 @@ void DecalManager::LoadTexture(ID3D12Device* pDevice, ID3D12GraphicsCommandList*
     slot.loaded = true;
 }
 
-void DecalManager::Spawn(DecalTexture tex, const XMFLOAT3& pos,
-                         float size, float rotY, float lifetime)
+int DecalManager::Spawn(DecalTexture tex, const XMFLOAT3& pos,
+                        float size, float rotY, float lifetime,
+                        XMFLOAT4 color, float rotateSpeed)
 {
     int target = -1;
     float oldest = FLT_MAX;
 
-    // 빈 슬롯 우선, 없으면 가장 오래된 슬롯 교체
     for (int i = 0; i < MAX_DECALS; ++i)
     {
         if (!m_pool[i].active) { target = i; break; }
         if (m_pool[i].spawnTime < oldest) { oldest = m_pool[i].spawnTime; target = i; }
     }
+    if (target < 0) return -1;
 
-    DecalEntry& d = m_pool[target];
-    d.pos       = pos;
-    d.size      = size;
-    d.rotY      = rotY;
-    d.lifeMax   = lifetime;
-    d.lifeRemain= lifetime;
-    d.spawnTime = m_totalTime;
-    d.tex       = tex;
-    d.active    = true;
+    DecalEntry& d  = m_pool[target];
+    d.pos          = pos;
+    d.size         = size;
+    d.rotY         = rotY;
+    d.rotateSpeed  = rotateSpeed;
+    d.lifeMax      = lifetime;
+    d.lifeRemain   = lifetime;
+    d.spawnTime    = m_totalTime;
+    d.color        = color;
+    d.tex          = tex;
+    d.active       = true;
+    return target;
+}
+
+void DecalManager::SetPosition(int slotIdx, const XMFLOAT3& pos)
+{
+    if (slotIdx < 0 || slotIdx >= MAX_DECALS) return;
+    if (!m_pool[slotIdx].active) return;
+    m_pool[slotIdx].pos = pos;
 }
 
 void DecalManager::Update(float dt)
@@ -122,7 +133,8 @@ void DecalManager::Update(float dt)
     {
         if (!d.active) continue;
         d.lifeRemain -= dt;
-        if (d.lifeRemain <= 0.f) d.active = false;
+        if (d.lifeRemain <= 0.f) { d.active = false; continue; }
+        d.rotY += d.rotateSpeed * dt;
     }
 }
 
@@ -141,7 +153,7 @@ void DecalManager::Render(ID3D12GraphicsCommandList* pCmdList,
         if (!d.active) continue;
 
         int texIdx = (int)d.tex;
-        if (texIdx < 0 || texIdx >= 4 || !m_texSlots[texIdx].loaded) continue;
+        if (texIdx < 0 || texIdx >= (int)DecalTexture::Count || !m_texSlots[texIdx].loaded) continue;
 
         // World matrix: Scale × RotY × Translate (decal slightly above ground)
         XMMATRIX world = XMMatrixScaling(d.size, 1.f, d.size)
@@ -150,7 +162,6 @@ void DecalManager::Render(ID3D12GraphicsCommandList* pCmdList,
 
         float fade = d.lifeRemain / d.lifeMax;
 
-        // Write to CB slot (only first 176 bytes; bone transforms already 0)
         BYTE* pSlot = m_pMappedCB + (UINT64)i * kCBStride;
         auto* pCB = reinterpret_cast<ObjectConstants*>(pSlot);
 
@@ -168,7 +179,8 @@ void DecalManager::Render(ID3D12GraphicsCommandList* pCmdList,
         pCB->m_bIsDecal              = 1;
         pCB->m_grassPad2             = 0;
         pCB->mMaterial.m_cAmbient    = { 0.f, 0.f, 0.f, 0.f };
-        pCB->mMaterial.m_cDiffuse    = { 1.f, 1.f, 1.f, fade };
+        // 원소 색상 틴트 × 라이프타임 페이드
+        pCB->mMaterial.m_cDiffuse    = { d.color.x, d.color.y, d.color.z, d.color.w * fade };
         pCB->mMaterial.m_cSpecular   = { 0.f, 0.f, 0.f, 0.f };
         pCB->mMaterial.m_cEmissive   = { 0.f, 0.f, 0.f, 0.f };
 

@@ -183,8 +183,19 @@ private:
     // 차지 결집 VFX 스폰/업데이트 (step 0=초기, 1~3=성장 단계)
     void SpawnChargeGatherVFX(int step);
 
+    // 메아리 트리거 VFX (큐에 등록될 때 발 아래 회전 마법진 연출, 슬롯 인덱스 반환)
+    int SpawnEchoTriggerVFX(ElementType element);
+
     // 차지 VFX (슬롯별 독립)
     FluidSkillVFXManager* m_pVFXManager = nullptr;
     std::array<int, static_cast<size_t>(SkillSlot::Count)> m_chargeGatherVFXIds;
     std::array<int, static_cast<size_t>(SkillSlot::Count)> m_chargeScaleSteps;
+
+    // 과열 추적 (ABY_OVL: 동일 스킬 연속 3회 → 다음 1회 +60%)
+    std::array<int,  static_cast<size_t>(SkillSlot::Count)> m_overheatConsecutive{};
+    std::array<bool, static_cast<size_t>(SkillSlot::Count)> m_overheatReady{};
+
+    // 메아리 지연 큐 (ABY_ECO: 2초 후 가장 가까운 적을 향해 50% 재발동)
+    struct DeferredEcho { size_t index; float mult; float timer; int decalSlot = -1; };
+    std::vector<DeferredEcho> m_echoQueue;
 };

@@ -391,9 +391,6 @@ void FireBeamBehavior::Reset()
                 if (sid >= 0) m_pVFXManager->StopEffect(sid);
             OutputDebugString(L"[FireBeam] Stopped\n");
         }
-        // 빔 끝점에 소각 자국 데칼 생성
-        if (m_pDecalManager)
-            m_pDecalManager->Spawn(DecalTexture::Scorch2, m_lastTargetPos, 2.0f, 0.f, 3.f);
     }
     m_bIsFinished = true;
     m_bIsActive   = false;

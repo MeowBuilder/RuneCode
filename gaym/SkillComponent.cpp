@@ -9,6 +9,10 @@
 #include "Dx12App.h" // For runtime window size
 #include "NetworkManager.h" // For skill sync
 #include "PlayerComponent.h" // 원격 동기화 시 element 별 wire 포맷 분기용
+#include "EnemyComponent.h" // 메아리 룬 지연 발동 시 적 탐색
+#include "Scene.h"          // FindNearestEnemy
+#include "DecalManager.h"   // 메아리 트리거 마법진
+#include "FluidParticle.h"  // FluidElementColors
 #include "RuneRegistry.h"
 #include "FluidSkillVFXManager.h"
 #include "EffectRegistry.h"
@@ -28,6 +32,8 @@ SkillComponent::SkillComponent(GameObject* pOwner)
 
     m_chargeGatherVFXIds.fill(-1);
     m_chargeScaleSteps.fill(0);
+    m_overheatConsecutive.fill(0);
+    m_overheatReady.fill(false);
 
     // m_SkillRunes is value-initialized; EquippedRune default ctor sets runeId="" (empty)
 }
@@ -321,6 +327,43 @@ void SkillComponent::Update(float deltaTime)
             if (m_ActiveSkillSlot == thisSlot)
                 m_ActiveSkillSlot = SkillSlot::Count;
         }
+    }
+
+    // 메아리 지연 큐 처리 (ABY_ECO: 2초 후 가장 가까운 적을 향해 재발동)
+    if (!m_echoQueue.empty())
+    {
+        Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
+        DecalManager* pDecal = pScene ? pScene->GetDecalManager() : nullptr;
+
+        for (auto& echo : m_echoQueue)
+        {
+            echo.timer -= deltaTime;
+            // 데칼이 플레이어를 따라오도록 위치 갱신
+            if (pDecal && echo.decalSlot >= 0 && m_pOwner && m_pOwner->GetTransform())
+                pDecal->SetPosition(echo.decalSlot, m_pOwner->GetTransform()->GetPosition());
+        }
+
+        m_echoQueue.erase(
+            std::remove_if(m_echoQueue.begin(), m_echoQueue.end(),
+                [&](DeferredEcho& echo) -> bool
+                {
+                    if (echo.timer > 0.f) return false;
+                    if (!pScene || !m_pOwner || !m_pOwner->GetTransform()) return true;
+
+                    EnemyComponent* pNearest = pScene->FindNearestEnemy(
+                        m_pOwner->GetTransform()->GetPosition());
+                    if (!pNearest || !pNearest->GetOwner() || !pNearest->GetOwner()->GetTransform())
+                        return true;
+
+                    XMFLOAT3 enemyPos = pNearest->GetOwner()->GetTransform()->GetPosition();
+                    m_currentChargeRatio    = 0.f;
+                    m_bCurrentIsChannelTick = false;
+                    m_bCurrentEnhanceUsed  = false;
+                    if (echo.index < m_Skills.size() && m_Skills[echo.index])
+                        m_Skills[echo.index]->Execute(m_pOwner, enemyPos, echo.mult);
+                    return true;
+                }),
+            m_echoQueue.end());
     }
 }
 
@@ -717,6 +760,7 @@ SkillStats SkillComponent::BuildSkillStats(SkillSlot skill, ActivationType defau
 
     const RuneRegistry& reg = RuneRegistry::Get();
     bool hasL03 = false;
+    bool hasABY_RES = false;
     std::set<ElementType> uniqueElements;
     for (int i = 0; i < RUNES_PER_SKILL; ++i)
     {
@@ -725,13 +769,18 @@ SkillStats SkillComponent::BuildSkillStats(SkillSlot skill, ActivationType defau
         const RuneDef* def = reg.Find(er.runeId);
         if (!def) continue;
         def->ApplyTo(stats, er.stackCount);
-        if (er.runeId == "L03") hasL03 = true;
+        if (er.runeId == "L03")     hasL03 = true;
+        if (er.runeId == "ABY_RES") hasABY_RES = true;
         if (def->element != ElementType::None) uniqueElements.insert(def->element);
     }
 
     // 원소 증폭(L03): 2개 이상 다른 원소 장착 시 +30% 데미지
     if (hasL03 && uniqueElements.size() >= 2)
         stats.damageMult *= 1.30f;
+
+    // 원소 공명(ABY_RES): 2개 이상 다른 원소 장착 시 +25% 데미지
+    if (hasABY_RES && uniqueElements.size() >= 2)
+        stats.damageMult *= 1.25f;
 
     // elementSet: VFX 색상 오버라이드용 (순서 보존)
     stats.elementSet.assign(uniqueElements.begin(), uniqueElements.end());
@@ -831,6 +880,23 @@ VFXModifier SkillComponent::BuildActivationVFXMod(SkillSlot slot, float chargeRa
     return mod;
 }
 
+int SkillComponent::SpawnEchoTriggerVFX(ElementType element)
+{
+    if (!m_pOwner || !m_pOwner->GetTransform()) return -1;
+    Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
+    if (!pScene) return -1;
+    DecalManager* pDecal = pScene->GetDecalManager();
+    if (!pDecal) return -1;
+
+    XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+
+    FluidElementColor ec = FluidElementColors::Get(element);
+    XMFLOAT4 color = ec.coreColor;
+
+    // 발 아래 마법진 — 2.5초 지속, 1.5rad/s 회전, 크기 7.0
+    return pDecal->Spawn(DecalTexture::Magic3, pos, 7.0f, 0.f, 2.5f, color, 1.5f);
+}
+
 void SkillComponent::ProcessRuneInput(InputSystem* pInputSystem)
 {
     // Rune input is now handled through the drop item UI system
@@ -857,6 +923,36 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
     // 룬 데미지 배율 적용 — Execute에 넘기는 mult에 포함시켜 모든 스킬에 일괄 적용
     mult *= stats.damageMult;
 
+    // 과열 보너스 (ABY_OVL): 동일 스킬 연속 3회 → 다음 1회 +60%
+    {
+        size_t slotIdx = static_cast<size_t>(slot);
+        if (m_overheatReady[slotIdx] && stats.overheatBonus > 0.f)
+        {
+            mult *= (1.f + stats.overheatBonus);
+            m_overheatReady[slotIdx] = false;
+        }
+        if (stats.overheatBonus > 0.f)
+        {
+            if (++m_overheatConsecutive[slotIdx] >= 3)
+            {
+                m_overheatReady[slotIdx] = true;
+                m_overheatConsecutive[slotIdx] = 0;
+            }
+        }
+        else
+        {
+            m_overheatConsecutive[slotIdx] = 0;
+        }
+    }
+
+    // 보복 보너스 (ABY_RVG): 피격 후 다음 스킬 +30%
+    if (stats.revengeBonus > 0.f && m_pOwner)
+    {
+        auto* pPlayer = m_pOwner->GetComponent<PlayerComponent>();
+        if (pPlayer && pPlayer->ConsumeVengeance())
+            mult *= (1.f + stats.revengeBonus);
+    }
+
     auto invokeOnCast = [&]() {
         if (!stats.onCastHooks.empty() && m_pOwner)
         {
@@ -873,12 +969,14 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
     {
         m_Skills[index]->Execute(m_pOwner, target, mult);
         invokeOnCast();
-        // 쌍둥이별: 같은 방향으로 즉시 한 번 더 발사 (데미지 50%)
-        if (stats.doublecast)
-            m_Skills[index]->Execute(m_pOwner, target, mult * 0.5f);
-        // 메아리: 즉시 50% 데미지로 재시전 (doublecast와 별개)
-        if (stats.echoOnCast)
-            m_Skills[index]->Execute(m_pOwner, target, mult * 0.5f);
+        // 메아리(ABY_ECO): 50% 확률로 큐에 등록, 2초 후 가장 가까운 적을 향해 50% 재발동
+        if (stats.echoOnCast && (rand() % 100) < 50)
+        {
+            ElementType elem = stats.elementOverride.value_or(
+                m_Skills[index] ? m_Skills[index]->GetSkillData().element : ElementType::None);
+            int decalSlot = SpawnEchoTriggerVFX(elem);
+            m_echoQueue.push_back({ index, mult * 0.5f, 2.0f, decalSlot });
+        }
         return;
     }
 
@@ -899,15 +997,13 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
     m_Skills[index]->Execute(m_pOwner, t1, mult);
     m_Skills[index]->Execute(m_pOwner, t2, mult);
     invokeOnCast();
-    if (stats.doublecast)
+    // 메아리(ABY_ECO) — Split 경우도 50% 확률, 2초 후 단일 발사 (가장 가까운 적 향)
+    if (stats.echoOnCast && (rand() % 100) < 50)
     {
-        m_Skills[index]->Execute(m_pOwner, t1, mult * 0.5f);
-        m_Skills[index]->Execute(m_pOwner, t2, mult * 0.5f);
-    }
-    if (stats.echoOnCast)
-    {
-        m_Skills[index]->Execute(m_pOwner, t1, mult * 0.5f);
-        m_Skills[index]->Execute(m_pOwner, t2, mult * 0.5f);
+        ElementType elem = stats.elementOverride.value_or(
+            m_Skills[index] ? m_Skills[index]->GetSkillData().element : ElementType::None);
+        int decalSlot = SpawnEchoTriggerVFX(elem);
+        m_echoQueue.push_back({ index, mult * 0.5f, 2.0f, decalSlot });
     }
 }
 

@@ -314,8 +314,6 @@ void MeteorBehavior::OnSmallImpact(SmallMeteorData& sm)
         m_pVFXManager->SpawnEffectDef(sm.targetPos, up, impDef, true);
     }
 
-    if (m_pDecalManager)
-        m_pDecalManager->Spawn(DecalTexture::Scorch2, sm.targetPos, 3.0f, 0.f, 5.f);
 
     float smallDmg = m_SkillData.damage * m_damageMult * SMALL_DAMAGE_RATIO;
     ApplyExplosionDamage(smallDmg, SMALL_EXPLODE_RADIUS, sm.targetPos, true);
@@ -368,11 +366,6 @@ void MeteorBehavior::OnFinalImpact()
         m_finalGroundId = m_pVFXManager->SpawnEffectDef(m_targetPos, up, fireDef, true);
     }
 
-    if (m_pDecalManager)
-    {
-        m_pDecalManager->Spawn(DecalTexture::Scorch1, m_targetPos, 8.0f, 0.f, 8.f);
-        m_pDecalManager->Spawn(DecalTexture::Magic2,  m_targetPos, 10.f, 0.f, 6.f);
-    }
 
     // 최종 — 범위 내 모든 적 피해 (보스 포함, 경직 없음)
     float finalDmg = m_SkillData.damage * m_damageMult;

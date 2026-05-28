@@ -208,6 +208,9 @@ public:
     EnemySpawner* GetEnemySpawner() { return m_pEnemySpawner.get(); }
     const std::vector<std::unique_ptr<CRoom>>& GetRooms() const { return m_vRooms; }
 
+    // 메아리 룬(ABY_ECO) 등 지연 발동 시 사용 — 모든 방에서 가장 가까운 살아있는 적 반환
+    EnemyComponent* FindNearestEnemy(const DirectX::XMFLOAT3& pos) const;
+
     // Network support
     void AddRenderComponentsToHierarchy(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList, GameObject* pGameObject, Shader* pShader, bool bCastsShadow = false);
 

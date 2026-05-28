@@ -40,6 +40,11 @@ public:
     float GetShield() const { return m_fShield; }
     float GetShieldRatio() const { return m_fShield / MAX_SHIELD; }
 
+    // 보복 룬 (ABY_RVG): 피격 시 활성화, 다음 스킬 시전 시 소모
+    void  TriggerVengeance(float duration = 10.f);
+    bool  ConsumeVengeance();
+    bool  IsVengeancePrimed() const { return m_bVengeancePrimed; }
+
     // 피해감소 시스템 (대지의 갑옷 E스킬)
     void  SetDamageReduction(float ratio, float duration);
     float GetDamageReductionRatio() const { return m_fDamageReductionRatio; }
@@ -100,6 +105,9 @@ private:
     float m_fDamageReductionRatio = 0.f;
     float m_fDamageReductionTimer = 0.f;
     float m_fInvincibleTimer      = 0.f;
+
+    bool  m_bVengeancePrimed = false;
+    float m_fVengeanceTimer  = 0.f;
 
     // Gravity system
     float m_fVelocityY = 0.0f;

@@ -927,7 +927,4 @@ void ProjectileManager::SpawnExplosionParticles(const XMFLOAT3& position, Elemen
     // 폭발 파티클은 플레이어 슬롯에 스폰 (적도 터질 때 visible)
     m_pVFXManager->SpawnLightLayer(position, XMFLOAT3(0, 1, 0), layer, /*isPlayer*/true);
 
-    // 불 속성 폭발 → 소각 자국 데칼 생성
-    if (element == ElementType::Fire && m_pDecalManager)
-        m_pDecalManager->Spawn(DecalTexture::Scorch2, position, 3.0f, 0.f, 4.f);
 }

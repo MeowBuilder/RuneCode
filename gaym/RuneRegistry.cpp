@@ -53,6 +53,8 @@ void RuneDef::ApplyTo(SkillStats& stats, int stackCount) const
     stats.lifestealRatio   += lifestealRatio   * static_cast<float>(stackCount);
     stats.execDamageBonus  += execDamageBonus  * static_cast<float>(stackCount);
     stats.cdResetChance    += cdResetChance    * static_cast<float>(stackCount);
+    stats.revengeBonus     += revengeBonus     * static_cast<float>(stackCount);
+    stats.overheatBonus    += overheatBonus    * static_cast<float>(stackCount);
     stats.orbitalCount          += orbitalCount     * stackCount;
     stats.spawnOnHitCount       += spawnOnHitCount  * stackCount;
     if (randomElementOnCast)     stats.randomElementOnCast = true;
@@ -494,4 +496,67 @@ RuneRegistry::RuneRegistry()
                .grade=RuneGrade::Epic,
                .damageMult=0.80f, .radiusMult=1.50f,
                .subVFXId="sub_expand_corona" });
+
+    // ─── ⚫ 심연 룬 (Legendary) ──────────────────────────────────────────────────
+
+    // ABY_TIM 시간 역행: 적중 시 해당 스킬 쿨다운 1초 감소
+    Register({ .id="ABY_TIM", .name="시간 역행", .category="심연",
+               .description="스킬 적중 시 해당 스킬 쿨다운 1초 감소",
+               .grade=RuneGrade::Legendary,
+               .onHit=[](SkillContext& ctx){
+                   if (!ctx.caster || ctx.skillSlot == SkillSlot::Count) return;
+                   auto* pSkill = ctx.caster->GetComponent<SkillComponent>();
+                   if (pSkill) pSkill->ReduceCooldown(ctx.skillSlot, 1.f);
+               }});
+
+    // ABY_EXC 처형자: HP 30% 이하 적에게 피해 +50%
+    Register({ .id="ABY_EXC", .name="처형자", .category="심연",
+               .description="HP 30% 이하 적에게 피해 +50%",
+               .grade=RuneGrade::Legendary,
+               .execDamageBonus=0.50f });
+
+    // ABY_VMP 흡혈: 피해의 15%를 HP로 회복
+    Register({ .id="ABY_VMP", .name="흡혈", .category="심연",
+               .description="스킬 피해의 15%를 HP로 회복",
+               .grade=RuneGrade::Legendary,
+               .lifestealRatio=0.15f });
+
+    // ABY_INF 무한: 10% 확률로 쿨다운 즉시 초기화
+    Register({ .id="ABY_INF", .name="무한", .category="심연",
+               .description="적중 시 10% 확률로 해당 스킬 쿨다운 즉시 초기화",
+               .grade=RuneGrade::Legendary,
+               .cdResetChance=0.10f });
+
+    // ABY_SHD 보호막: 시전 시 기본 데미지 30% 만큼 쉴드 생성
+    Register({ .id="ABY_SHD", .name="보호막", .category="심연",
+               .description="스킬 시전 시 기본 데미지의 30% 만큼 쉴드 생성",
+               .grade=RuneGrade::Legendary,
+               .onCast=[](SkillContext& ctx){
+                   if (!ctx.caster) return;
+                   auto* pPlayer = ctx.caster->GetComponent<PlayerComponent>();
+                   if (pPlayer) pPlayer->AddShield(ctx.baseDamage * 0.30f);
+               }});
+
+    // ABY_RVG 보복: 피격 후 10초 내 다음 스킬 데미지 +30%
+    Register({ .id="ABY_RVG", .name="보복", .category="심연",
+               .description="피격 시 10초 내 다음 스킬 데미지 +30%",
+               .grade=RuneGrade::Legendary,
+               .revengeBonus=0.30f });
+
+    // ABY_OVL 과열: 동일 스킬 연속 3회 사용 시 다음 1회 +60%
+    Register({ .id="ABY_OVL", .name="과열", .category="심연",
+               .description="동일 스킬 연속 3회 사용 시 다음 1회 피해 +60%",
+               .grade=RuneGrade::Legendary,
+               .overheatBonus=0.60f });
+
+    // ABY_RES 원소 공명: 다른 원소 룬 2종 이상 장착 시 피해 +25% (BuildSkillStats에서 처리)
+    Register({ .id="ABY_RES", .name="원소 공명", .category="심연",
+               .description="서로 다른 원소 룬 2종 이상 장착 시 피해 +25%",
+               .grade=RuneGrade::Legendary });
+
+    // ABY_ECO 메아리: 50% 확률로 2초 뒤 가장 가까운 적을 향해 50% 위력 재발동
+    Register({ .id="ABY_ECO", .name="메아리", .category="심연",
+               .description="스킬 시전 시 50% 확률로 2초 후 가장 가까운 적을 향해 50% 위력 재발동",
+               .grade=RuneGrade::Legendary,
+               .echoOnCast=true });
 }
