@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "EarthShardBehavior.h"
 #include "ProjectileManager.h"
+#include "FluidSkillVFXManager.h"
+#include "EffectRegistry.h"
 #include "GameObject.h"
 #include "TransformComponent.h"
 #include "SkillComponent.h"
@@ -9,6 +11,32 @@
 EarthShardBehavior::EarthShardBehavior()
     : m_SkillData(EarthSkillPresets::EarthShard())
 {
+}
+
+void EarthShardBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    m_bChannelMode = true;
+}
+
+void EarthShardBehavior::OnChannelEnd(GameObject* caster)
+{
+    m_bChannelMode = false;
+    if (m_pVFXManager && m_channelAmbientId >= 0)
+    {
+        m_pVFXManager->StopEffect(m_channelAmbientId);
+        m_channelAmbientId = -1;
+    }
+}
+
+void EarthShardBehavior::Reset()
+{
+    if (m_pVFXManager && m_channelAmbientId >= 0)
+    {
+        m_pVFXManager->StopEffect(m_channelAmbientId);
+        m_channelAmbientId = -1;
+    }
+    m_bChannelMode = false;
+    m_bIsFinished  = true;
 }
 
 void EarthShardBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)

@@ -855,9 +855,11 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
     }
     else if (combo.hasChannel || defaultType == ActivationType::Channel)
     {
+        SkillStats chStats = BuildSkillStats(slot, defaultType);
         m_bIsChanneling = true;
         m_fChannelTime = 0.0f;
         m_fChannelTickAccum = 0.0f;
+        m_fChannelDuration = 2.0f * chStats.channelDurationMult;
         m_ActiveSkillSlot = slot;
         m_ChannelTargetPosition = targetPosition;
         m_SkillStates[index] = SkillState::Casting;

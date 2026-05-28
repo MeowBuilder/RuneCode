@@ -19,16 +19,17 @@ void RuneDef::ApplyTo(SkillStats& stats, int stackCount) const
         return 1.f + (base - 1.f) * static_cast<float>(stackCount);
     };
 
-    stats.damageMult         *= scaledMult(damageMult);
-    stats.cooldownMult       *= scaledMult(cooldownMult);
-    stats.rangeMult          *= scaledMult(rangeMult);
-    stats.radiusMult         *= scaledMult(radiusMult);
-    stats.castTimeMult       *= scaledMult(castTimeMult);
-    stats.durationMult       *= scaledMult(durationMult);
-    stats.manaCostMult       *= scaledMult(manaCostMult);
-    stats.statusDurationMult *= scaledMult(statusDurationMult);
-    stats.statusChanceMult   *= scaledMult(statusChanceMult);
-    stats.knockbackMult      *= scaledMult(knockbackMult);
+    stats.damageMult          *= scaledMult(damageMult);
+    stats.cooldownMult        *= scaledMult(cooldownMult);
+    stats.rangeMult           *= scaledMult(rangeMult);
+    stats.radiusMult          *= scaledMult(radiusMult);
+    stats.castTimeMult        *= scaledMult(castTimeMult);
+    stats.durationMult        *= scaledMult(durationMult);
+    stats.channelDurationMult *= scaledMult(channelDurationMult);
+    stats.manaCostMult        *= scaledMult(manaCostMult);
+    stats.statusDurationMult  *= scaledMult(statusDurationMult);
+    stats.statusChanceMult    *= scaledMult(statusChanceMult);
+    stats.knockbackMult       *= scaledMult(knockbackMult);
 
     if (activationOverride.has_value())
         stats.activationType = activationOverride.value();
@@ -437,6 +438,20 @@ RuneRegistry::RuneRegistry()
                .grade=RuneGrade::Normal,
                .durationMult=1.25f,
                .subVFXId="sub_persist_glow" });
+
+    // CH_DUR1 집중석 (Normal): 채널링 지속시간 연장
+    Register({ .id="CH_DUR1", .name="집중석", .category="채널",
+               .description="채널링 지속시간 +50% (기본 2초 → 3초)",
+               .grade=RuneGrade::Normal,
+               .channelDurationMult=1.50f,
+               .subVFXId="sub_earth" });
+
+    // CH_DUR2 집중석+ (Rare): 채널링 지속시간 대폭 연장
+    Register({ .id="CH_DUR2", .name="집중석+", .category="채널",
+               .description="채널링 지속시간 +100% (기본 2초 → 4초)",
+               .grade=RuneGrade::Rare,
+               .channelDurationMult=2.00f,
+               .subVFXId="sub_earth" });
 
     // AMP_DMG2 파괴 (Rare): 주황/붉은 파편 폭발
     Register({ .id="AMP_DMG2", .name="파괴", .category="피해",

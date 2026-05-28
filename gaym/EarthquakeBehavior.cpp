@@ -15,6 +15,29 @@ EarthquakeBehavior::EarthquakeBehavior()
 {
 }
 
+void EarthquakeBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
+{
+    m_bChannelMode = true;
+    m_cachedElem   = ElementType::None;
+    if (caster) {
+        auto* pSC = caster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count) {
+            SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            if (!sts.elementSet.empty()) m_cachedElem = sts.elementSet[0];
+        }
+    }
+}
+
+void EarthquakeBehavior::OnChannelEnd(GameObject* caster)
+{
+    m_bChannelMode = false;
+    if (m_pVFXManager && m_channelAmbientId >= 0)
+    {
+        m_pVFXManager->StopEffect(m_channelAmbientId);
+        m_channelAmbientId = -1;
+    }
+}
+
 void EarthquakeBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& target, float tickMult)
 {
     // 채널 중 캐스터 위치에 충격파 링 1개 즉시 발동 — 틱마다 반경 내 적 전체 타격
@@ -28,8 +51,10 @@ void EarthquakeBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOA
     if (m_pVFXManager && EffectRegistry::Get().HasEffect("R_Earthquake_Ring"))
     {
         XMFLOAT3 up = { 0.f, 1.f, 0.f };
-        m_pVFXManager->SpawnEffectDef(epicenter, up,
-            EffectRegistry::Get().GetEffect("R_Earthquake_Ring"), false);
+        EffectDef def = EffectRegistry::Get().GetEffect("R_Earthquake_Ring");
+        if (m_cachedElem != ElementType::None)
+            ApplyElementToEffectDef(def, m_cachedElem);
+        m_pVFXManager->SpawnEffectDef(epicenter, up, def, true);
     }
 
     float damage   = m_SkillData.damage * tickMult;
@@ -88,7 +113,7 @@ void EarthquakeBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::XM
     XMFLOAT3 up = { 0.f, 1.f, 0.f };
     EffectDef def = EffectRegistry::Get().GetEffect(fx);
     for (auto& l : def.layers) l.particleCount *= 3;
-    m_pVFXManager->SpawnEffectDef(targetPosition, up, def, false);
+    m_pVFXManager->SpawnEffectDef(targetPosition, up, def, true);
 }
 
 void EarthquakeBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier)
@@ -241,16 +266,19 @@ void EarthquakeBehavior::Reset()
 {
     if (m_pVFXManager)
     {
-        if (m_burstVfxId  >= 0) m_pVFXManager->StopEffect(m_burstVfxId);
-        if (m_chargeVFXId  >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
-        if (m_enhanceAuraId >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
+        if (m_burstVfxId       >= 0) m_pVFXManager->StopEffect(m_burstVfxId);
+        if (m_chargeVFXId      >= 0) m_pVFXManager->StopEffect(m_chargeVFXId);
+        if (m_enhanceAuraId    >= 0) m_pVFXManager->StopEffect(m_enhanceAuraId);
+        if (m_channelAmbientId >= 0) m_pVFXManager->StopEffect(m_channelAmbientId);
         for (auto& r : m_rings)
             if (r.launched && r.vfxId >= 0) m_pVFXManager->StopEffect(r.vfxId);
     }
-    m_bActive       = false;
-    m_burstVfxId    = -1;
-    m_chargeVFXId   = -1;
-    m_enhanceAuraId = -1;
+    m_bActive          = false;
+    m_bChannelMode     = false;
+    m_burstVfxId       = -1;
+    m_chargeVFXId      = -1;
+    m_enhanceAuraId    = -1;
+    m_channelAmbientId = -1;
     m_rings.clear();
     m_hitEnemies.clear();
 }

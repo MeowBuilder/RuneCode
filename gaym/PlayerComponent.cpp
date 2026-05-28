@@ -59,6 +59,10 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
     if (m_fDamageReductionTimer > 0.f)
         m_fDamageReductionTimer = fmaxf(0.f, m_fDamageReductionTimer - deltaTime);
 
+    // 무적 타이머
+    if (m_fInvincibleTimer > 0.f)
+        m_fInvincibleTimer = fmaxf(0.f, m_fInvincibleTimer - deltaTime);
+
     // Hit flash 페이드 — 대쉬 중이 아닐 때만 (대쉬는 자기 플래시 적용)
     if (m_fHitFlashTimer > 0.0f)
     {
@@ -557,7 +561,8 @@ void PlayerComponent::EnableFallZone(const XMFLOAT3& safeCenter, const XMFLOAT3&
 void PlayerComponent::TakeDamage(float fDamage)
 {
     if (fDamage <= 0.0f || IsDead()) return;
-    if (IsDashing()) return;  // 대쉬 중 i-frame — 피격 무시
+    if (IsDashing()) return;     // 대쉬 중 i-frame
+    if (IsInvincible()) return;  // 무적 중 피격 무시
 
     // 보호막이 있으면 먼저 흡수
     if (m_fShield > 0.f)
@@ -606,6 +611,11 @@ void PlayerComponent::SetDamageReduction(float ratio, float duration)
 {
     m_fDamageReductionRatio = max(0.f, min(ratio, 1.f));
     m_fDamageReductionTimer = max(0.f, duration);
+}
+
+void PlayerComponent::SetInvincible(float duration)
+{
+    m_fInvincibleTimer = max(m_fInvincibleTimer, duration);  // 갱신 시 더 긴 쪽 유지
 }
 
 void PlayerComponent::SetCurrentHP(float fHP)

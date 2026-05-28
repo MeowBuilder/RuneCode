@@ -45,6 +45,11 @@ public:
     float GetDamageReductionRatio() const { return m_fDamageReductionRatio; }
     bool  HasDamageReduction() const { return m_fDamageReductionTimer > 0.f; }
 
+    // 무적 시스템 (대지의 갑옷 E스킬)
+    void SetInvincible(float duration);
+    void ClearInvincible() { m_fInvincibleTimer = 0.f; }
+    bool IsInvincible() const { return m_fInvincibleTimer > 0.f; }
+
     // 네트워크 권위 HP 세팅 — 서버에서 S_PLAYER_DAMAGE 받아 호출. 로컬 TakeDamage 우회.
     void SetCurrentHP(float fHP);
     // 서버 데미지 알림 — HP 갱신은 SetCurrentHP 로 별도. 이건 피격 연출만 트리거.
@@ -94,6 +99,7 @@ private:
 
     float m_fDamageReductionRatio = 0.f;
     float m_fDamageReductionTimer = 0.f;
+    float m_fInvincibleTimer      = 0.f;
 
     // Gravity system
     float m_fVelocityY = 0.0f;
