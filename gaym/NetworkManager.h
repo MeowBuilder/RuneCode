@@ -488,12 +488,7 @@ private:
     std::vector<PendingMonsterVFX> m_vPendingMonsterVFX;
 
     // 네트워크 일반 몬스터 공격 연출 Entry
-    struct NetworkNormalMonsterBehaviorEntry
-    {
-        std::unique_ptr<IAttackBehavior> behavior;
-        EnemyComponent* owner = nullptr;
-    };
-
+    struct NetworkNormalMonsterBehaviorEntry { uint64 monsterId = 0; };
     std::vector<NetworkNormalMonsterBehaviorEntry> m_vNetworkNormalMonsterBehaviors;
 
     // 네트워크 Golem 전용 AttackBehavior 보관
@@ -503,7 +498,6 @@ private:
         EnemyComponent* owner = nullptr;
         float timer = 0.0f;
     };
-
     std::vector<NetworkGolemBehaviorEntry> m_vNetworkGolemBehaviors;
 
 	// 네트워크 Demon 전용 AttackBehavior 보관 
@@ -513,7 +507,6 @@ private:
         EnemyComponent* owner = nullptr;
         float timer = 0.0f;
     };
-
     std::vector<NetworkDemonBehaviorEntry> m_vNetworkDemonBehaviors;
 
     void PlayNetworkDemonAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption);

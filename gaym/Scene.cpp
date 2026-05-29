@@ -204,6 +204,32 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
         }
 
         AddRenderComponentsToHierarchy(pDevice, pCommandList, pPlayer, pShader.get(), true);  // Player casts shadow
+
+        // 플레이어 머티리얼 — 엘리먼트별 영웅 톤. .bin 디폴트(회색) 덮어써서
+        //   회색 톤 잠식 해소 + 적 카테고리 색과 자동 분리 (outline 색도 baseColor 기반이라 같이 차별화).
+        XMFLOAT4 playerColor;
+        switch (m_eSelectedElement)
+        {
+        case ElementType::Fire:  playerColor = XMFLOAT4(1.00f, 0.55f, 0.30f, 1.0f); break; // 주황빨강
+        case ElementType::Water: playerColor = XMFLOAT4(0.35f, 0.85f, 0.95f, 1.0f); break; // 청록
+        case ElementType::Wind:  playerColor = XMFLOAT4(0.65f, 0.95f, 0.55f, 1.0f); break; // 라임
+        case ElementType::Earth: playerColor = XMFLOAT4(0.95f, 0.75f, 0.40f, 1.0f); break; // 골드
+        default:                 playerColor = XMFLOAT4(0.85f, 0.90f, 1.00f, 1.0f); break; // 화이트
+        }
+        std::function<void(GameObject*)> applyPlayerColor = [&](GameObject* go) {
+            if (!go) return;
+            MATERIAL mat;
+            mat.m_cAmbient  = XMFLOAT4(playerColor.x*0.30f, playerColor.y*0.30f, playerColor.z*0.30f, 1.0f);
+            mat.m_cDiffuse  = playerColor;
+            // specular 0 — 카툰 룩에서 highlight 가 진해지면 플라스틱처럼 빤딱이게 됨
+            mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 32.0f);
+            // emissive 제거 — ambient+diffuse+floor 누적으로 발광체처럼 보이던 문제
+            mat.m_cEmissive = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+            go->SetMaterial(mat);
+            applyPlayerColor(go->m_pChild);
+            applyPlayerColor(go->m_pSibling);
+        };
+        applyPlayerColor(pPlayer);
     }
     else
     { // Fallback
@@ -539,6 +565,14 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
         XMFLOAT3 playerSpawn = m_pPlayerGameObject->GetTransform()->GetPosition();
         m_pInteractionCube->GetTransform()->SetPosition(
             playerSpawn.x, 2.5f, playerSpawn.z);
+
+        // 포탈 진입 연출 — 플레이어를 공중에서 시작해 Levitating 자유낙하 → Landing.
+        //   착지 높이는 MapLoader 가 결정한 playerSpawn.y (포탈 베이스 표면) — 베이스 통과 방지.
+        //   standRadius: 베이스 영역 (XZ 반경). 영역 밖으로 이동하면 자유낙하 (부양 방지).
+        m_pPlayerGameObject->GetTransform()->SetPosition(playerSpawn.x, playerSpawn.y + 22.0f, playerSpawn.z);
+        if (auto* pc = m_pPlayerGameObject->GetComponent<PlayerComponent>())
+            pc->StartIntroFly(3.0f, playerSpawn.y,
+                              XMFLOAT3(playerSpawn.x, playerSpawn.y, playerSpawn.z), 5.0f);
     }
 
     // --------------------------------------------------------------------------
@@ -2526,11 +2560,15 @@ void Scene::TransitionToNextRoom()
         m_bInteractionCubeActive = false;
     }
 
-    // ── 10. 플레이어 groundY 리셋 (새 맵 바닥 높이 재캡처)
+    // ── 10. 플레이어 intro fly — 다음 방 진입 시에도 첫 방과 동일하게 베이스 안착 처리.
+    //         착지점은 MapLoader 가 정한 playerSpawn.y. standCenter+radius 도 첫 방과 동일.
     if (m_pPlayerGameObject)
     {
-        auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>();
-        if (pPC) pPC->ResetGroundY();
+        XMFLOAT3 playerSpawn = m_pPlayerGameObject->GetTransform()->GetPosition();
+        m_pPlayerGameObject->GetTransform()->SetPosition(playerSpawn.x, playerSpawn.y + 22.0f, playerSpawn.z);
+        if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
+            pPC->StartIntroFly(3.0f, playerSpawn.y,
+                               XMFLOAT3(playerSpawn.x, playerSpawn.y, playerSpawn.z), 5.0f);
     }
 
     wchar_t buffer[128];

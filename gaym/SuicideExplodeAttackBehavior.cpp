@@ -10,8 +10,8 @@
 #include "Dx12App.h"
 
 SuicideExplodeAttackBehavior::SuicideExplodeAttackBehavior(ProjectileManager* pProjectileManager,
-                                                           float fDamage, float fAoERadius,
-                                                           float fCountdownTime)
+    float fDamage, float fAoERadius,
+    float fCountdownTime)
     : m_pProjectileManager(pProjectileManager)
     , m_fDamage(fDamage)
     , m_fAoERadius(fAoERadius)
@@ -47,6 +47,7 @@ void SuicideExplodeAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
                 Explode(pEnemy);
                 m_bExploded = true;
             }
+
             m_ePhase = Phase::Done;
             m_bFinished = true;
         }
@@ -60,8 +61,8 @@ void SuicideExplodeAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
 
 void SuicideExplodeAttackBehavior::Reset()
 {
-    m_ePhase    = Phase::Countdown;
-    m_fTimer    = 0.0f;
+    m_ePhase = Phase::Countdown;
+    m_fTimer = 0.0f;
     m_bExploded = false;
     m_bFinished = false;
 }
@@ -72,12 +73,15 @@ void SuicideExplodeAttackBehavior::Explode(EnemyComponent* pEnemy)
 
     GameObject* pOwner = pEnemy->GetOwner();
     XMFLOAT3 boomPos = { 0.0f, 0.0f, 0.0f };
+
     if (pOwner && pOwner->GetTransform())
     {
         boomPos = pOwner->GetTransform()->GetPosition();
     }
 
     // 광역 데미지 — 자폭 위치 기준 거리 체크
+    // 네트워크 연출 전용 모드에서는 실제 데미지는 서버가 처리한다.
+    // 클라는 폭발 위치 계산 / VFX / 카메라 쉐이크만 재생한다.
     GameObject* pTarget = pEnemy->GetTarget();
     if (pTarget && pTarget->GetTransform())
     {
@@ -93,7 +97,14 @@ void SuicideExplodeAttackBehavior::Explode(EnemyComponent* pEnemy)
             {
                 // 가까울수록 강함 (60% ~ 100%)
                 float damageMul = 1.0f - (dist / m_fAoERadius) * 0.4f;
-                pPlayer->TakeDamage(m_fDamage * damageMul);
+                float actualDamage = m_fDamage * damageMul;
+
+                // 네트워크 연출 전용 모드에서는 클라 TakeDamage를 막는다.
+                // 서버 S_PLAYER_DAMAGE 패킷만 실제 체력 변화로 사용한다.
+                if (!m_bNetworkVisualOnly)
+                {
+                    pPlayer->TakeDamage(actualDamage);
+                }
             }
         }
     }
@@ -119,5 +130,10 @@ void SuicideExplodeAttackBehavior::Explode(EnemyComponent* pEnemy)
     }
 
     // 자기 사망 — 99999 데미지로 instakill (stagger 트리거 X)
-    pEnemy->TakeDamage(99999.0f, false);
+    // 네트워크 연출 전용 모드에서는 자기 사망도 서버 S_MONSTER_DAMAGE / S_MONSTER_DESPAWN 흐름을 따른다.
+    // 클라에서 직접 죽이면 서버 상태와 어긋날 수 있다.
+    if (!m_bNetworkVisualOnly)
+    {
+        pEnemy->TakeDamage(99999.0f, false);
+    }
 }

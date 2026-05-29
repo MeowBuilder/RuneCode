@@ -28,10 +28,7 @@ public:
     virtual float GetIndicatorRadius() const override;       // corridor 절반 너비
     virtual float GetIndicatorLength() const override;       // 돌진 거리 + 콘 사거리 (전체 위험구간)
     virtual float GetTimeToHit() const override { return m_fTelegraphTime; }
-    virtual bool  ShouldShowHitZone() const override
-    {
-        return m_ePhase == Phase::Telegraph;
-    }
+    virtual bool  ShouldShowHitZone() const override { return m_ePhase == Phase::Telegraph; }
 
 private:
     enum class Phase { Telegraph, Rush, Windup, Hit, Recovery };

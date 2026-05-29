@@ -122,9 +122,14 @@ void GrenadeThrowAttackBehavior::Explode(EnemyComponent* pEnemy)
             if (pPlayer)
             {
                 // 가까울수록 강함 (60% ~ 100%)
-                float damageMul   = 1.0f - (dist / m_fAoERadius) * 0.4f;
+                float damageMul = 1.0f - (dist / m_fAoERadius) * 0.4f;
                 float actualDamage = m_fDamage * damageMul;
-                pPlayer->TakeDamage(actualDamage);
+
+                // 네트워크 연출 전용 모드에서는 데미지는 서버가 처리한다.
+                if (!m_bNetworkVisualOnly)
+                {
+                    pPlayer->TakeDamage(actualDamage);
+                }
             }
         }
     }

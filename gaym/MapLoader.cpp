@@ -901,14 +901,27 @@ bool MapLoader::LoadIntoScene(
                 const JsonVal& vis = es["visual"];
                 data.m_strMeshPath      = vis["meshPath"].str;
                 data.m_strAnimationPath = vis["animationPath"].str;
-                // 스테이지 테마에 맞춰 적 메쉬 색 자동 치환 (예: Water → _Bl)
-                MapLoader_RemapColorByTheme(data.m_strMeshPath, data.m_strAnimationPath, pScene->GetCurrentTheme());
+                // 스테이지 테마 메쉬 치환 비활성화 — 적이 라바/물 등 배경 톤에 동화되어
+                //   카테고리 색 tint 가 묻히는 문제 해결. 적은 JSON 명시 메쉬(_Rd 기준) 고정.
+                //   시각 정체성은 카테고리 색(주황/빨강/청록/보라)이 책임짐.
+                // MapLoader_RemapColorByTheme(data.m_strMeshPath, data.m_strAnimationPath, pScene->GetCurrentTheme());
                 const JsonVal& scl = vis["scale"];
                 data.m_xmf3Scale = XMFLOAT3(scl[0].f(), scl[1].f(), scl[2].f());
-                // 디버그용 적 색상 구분(_Bomber/_Jabber 등)은 비활성화 — 원본 메쉬 색 그대로 사용
-                //   JSON 의 color 필드는 무시. 마커 시스템이 타입 식별을 담당.
-                (void)vis;
-                data.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+
+                // 공격 카테고리별 m_xmf4Color (diffuse 에 들어가 albedo 와 곱해짐) —
+                //   배경/캐릭터 채도가 똑같아 보이던 피드백 해소용.
+                //   근접(주황) / 돌진(빨강) / 원거리(청록) / 공중·탄막(보라).
+                if (attackType == "Melee" || attackType == "QuickJab") {
+                    data.m_xmf4Color = XMFLOAT4(1.00f, 0.55f, 0.20f, 1.0f); // 근접: 주황
+                } else if (attackType == "RushFront" || attackType == "RushAoE") {
+                    data.m_xmf4Color = XMFLOAT4(1.00f, 0.35f, 0.30f, 1.0f); // 돌진: 빨강
+                } else if (attackType == "Ranged" || attackType == "ChargedShot") {
+                    data.m_xmf4Color = XMFLOAT4(0.30f, 0.95f, 0.85f, 1.0f); // 원거리: 청록
+                } else if (attackType == "GrenadeThrow" || attackType == "SuicideExplode") {
+                    data.m_xmf4Color = XMFLOAT4(0.75f, 0.40f, 1.00f, 1.0f); // 공중·탄막: 보라
+                } else {
+                    data.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+                }
             }
 
             pScene->GetEnemySpawner()->RegisterEnemyPreset(presetName, data);
@@ -1019,11 +1032,12 @@ bool MapLoader::LoadIntoScene(
         const int idx = static_cast<int>(s_miniBossRng() % kPoolSize);
         const MiniBossMesh& sel = kPool[idx];
 
-        // 스테이지 테마에 맞춘 색 치환 — preset 캐시는 (key + 실제 색)으로 분리
+        // 스테이지 테마 메쉬 치환 비활성화 — 미니보스도 배경 톤 동화 방지.
+        //   카테고리 색(돌진=빨강)이 시각 정체성 담당.
         std::string meshPath = sel.meshPath;
         std::string animPath = sel.animPath;
         const StageTheme themeForBoss = pScene->GetCurrentTheme();
-        MapLoader_RemapColorByTheme(meshPath, animPath, themeForBoss);
+        // MapLoader_RemapColorByTheme(meshPath, animPath, themeForBoss);
 
         // preset 이름에 stage 색 포함 — stage 전환 시에도 올바른 색 적용 보장
         int themeN = 0;
@@ -1036,7 +1050,8 @@ bool MapLoader::LoadIntoScene(
             mb.m_strMeshPath      = meshPath;
             mb.m_strAnimationPath = animPath;
             mb.m_xmf3Scale        = XMFLOAT3(sel.scale, sel.scale, sel.scale);
-            mb.m_xmf4Color        = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+            // 미니보스는 RushAoE 공격 → [카테고리: 돌진] 빨강
+            mb.m_xmf4Color        = XMFLOAT4(1.00f, 0.35f, 0.30f, 1.0f);
             mb.m_Stats.m_fMaxHP          = 600.0f;
             mb.m_Stats.m_fCurrentHP      = 600.0f;
             mb.m_Stats.m_fMoveSpeed      = 5.0f;

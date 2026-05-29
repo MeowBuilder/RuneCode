@@ -20,6 +20,9 @@ public:
                                float fRecoveryTime = 0.6f);
     virtual ~GrenadeThrowAttackBehavior() = default;
 
+    // 네트워크 연출 전용 모드
+    void SetNetworkVisualOnly(bool bEnable) { m_bNetworkVisualOnly = bEnable; }
+
     virtual void Execute(EnemyComponent* pEnemy) override;
     virtual void Update(float dt, EnemyComponent* pEnemy) override;
     virtual bool IsFinished() const override { return m_bFinished; }
@@ -58,4 +61,7 @@ private:
     bool     m_bFinished  = false;
     // Execute 시 잠근 착지 지점 — 플레이어가 도망쳐도 표적은 같은 자리에 그대로
     XMFLOAT3 m_xmf3LandingPos = { 0.0f, 0.0f, 0.0f };
+
+    // 네트워크 연출 전용 모드
+    bool m_bNetworkVisualOnly = false;
 };

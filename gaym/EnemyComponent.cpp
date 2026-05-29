@@ -13,6 +13,9 @@
 #include "FluidSkillVFXManager.h"
 #include "EffectRegistry.h"
 #include <algorithm>
+#include <string>
+
+extern void WriteNetworkLog(const std::string& msg);
 
 EnemyComponent::EnemyComponent(GameObject* pOwner)
     : Component(pOwner)
@@ -1198,8 +1201,8 @@ void EnemyComponent::UpdateDead(float dt)
 
 void EnemyComponent::ShowIndicators()
 {
-    if (!m_pOwner || !m_pTarget) return;
-    if (m_IndicatorConfig.m_eType == IndicatorType::None) return;
+    if (!m_pOwner || !m_pTarget) { return; }
+    if (m_IndicatorConfig.m_eType == IndicatorType::None) { return; }
 
     TransformComponent* pMyTransform = m_pOwner->GetTransform();
     TransformComponent* pTargetTransform = m_pTarget->GetTransform();
@@ -1403,8 +1406,9 @@ void EnemyComponent::ShowIndicators()
             }
         }
     }
-    else if (m_IndicatorConfig.m_eType == IndicatorType::RushCircle ||
-             m_IndicatorConfig.m_eType == IndicatorType::RushCone)
+
+    else if (effectiveType == IndicatorType::RushCircle ||
+        effectiveType == IndicatorType::RushCone)
     {
         float rushDist = m_IndicatorConfig.m_fRushDistance;
 

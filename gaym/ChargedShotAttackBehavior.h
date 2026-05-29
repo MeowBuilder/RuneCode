@@ -21,6 +21,9 @@ public:
                               float fIndicatorHalfW  = 1.2f);
     virtual ~ChargedShotAttackBehavior() = default;
 
+	// 네트워크 연출 전용 모드
+    void SetNetworkVisualOnly(bool bEnable) { m_bNetworkVisualOnly = bEnable; }
+
     virtual void Execute(EnemyComponent* pEnemy) override;
     virtual void Update(float dt, EnemyComponent* pEnemy) override;
     virtual bool IsFinished() const override { return m_bFinished; }
@@ -58,4 +61,7 @@ private:
     bool     m_bFinished = false;
     // Execute 시점에 잠근 방향 — windup 중 FaceTarget 호출 안 함 (라인 회피 가능)
     XMFLOAT3 m_xmf3LockedDir = { 0.0f, 0.0f, 1.0f };
+
+    // 네트워크 연출 전용 모드
+    bool m_bNetworkVisualOnly = false;
 };
