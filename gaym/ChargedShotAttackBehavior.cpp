@@ -116,10 +116,12 @@ void ChargedShotAttackBehavior::FireProjectile(EnemyComponent* pEnemy)
         startPos.y,
         startPos.z + m_xmf3LockedDir.z * m_fIndicatorLength);
 
+    float damage = m_bNetworkVisualOnly ? 0.0f : m_fDamage;
+
     m_pProjectileManager->SpawnProjectile(
         startPos,
         targetPos,
-        m_fDamage,
+        damage,
         m_fProjectileSpeed,
         0.9f,           // 일반 ranged 보다 큰 hitbox (정조준 보상)
         0.0f,           // 폭발 X

@@ -17,6 +17,9 @@ public:
                                  float fCountdownTime  = 1.0f);
     virtual ~SuicideExplodeAttackBehavior() = default;
 
+    // 네트워크 연출 전용 모드
+    void SetNetworkVisualOnly(bool bEnable) { m_bNetworkVisualOnly = bEnable; }
+
     virtual void Execute(EnemyComponent* pEnemy) override;
     virtual void Update(float dt, EnemyComponent* pEnemy) override;
     virtual bool IsFinished() const override { return m_bFinished; }
@@ -45,4 +48,7 @@ private:
     float m_fTimer     = 0.0f;
     bool  m_bExploded  = false;
     bool  m_bFinished  = false;
+
+    // 네트워크 연출 전용 모드
+    bool m_bNetworkVisualOnly = false;
 };

@@ -100,10 +100,12 @@ void RangedAttackBehavior::ShootProjectile(EnemyComponent* pEnemy)
     XMFLOAT3 targetPos = pTargetTransform->GetPosition();
     targetPos.y += 1.0f; // Aim at player center
 
+    float damage = m_bNetworkVisualOnly ? 0.0f : m_fDamage;
+
     m_pProjectileManager->SpawnProjectile(
         startPos,
         targetPos,
-        m_fDamage,
+        damage,
         m_fProjectileSpeed,
         0.5f,           // radius
         0.0f,           // no explosion

@@ -17,6 +17,10 @@ public:
                            float fHitRange        = 3.2f);
     virtual ~QuickJabAttackBehavior() = default;
 
+    // 네트워크 연출 전용 모드
+    // 서버 권위 일반 몬스터는 클라에서 직접 데미지를 주지 않는다.
+    void SetNetworkVisualOnly(bool bEnable) { m_bNetworkVisualOnly = bEnable; }
+
     virtual void Execute(EnemyComponent* pEnemy) override;
     virtual void Update(float dt, EnemyComponent* pEnemy) override;
     virtual bool IsFinished() const override { return m_bFinished; }
@@ -45,4 +49,7 @@ private:
     float m_fTimer     = 0.0f;
     int   m_nHitsDone  = 0;
     bool  m_bFinished  = false;
+
+    // 네트워크 연출 전용 모드
+    bool m_bNetworkVisualOnly = false;
 };

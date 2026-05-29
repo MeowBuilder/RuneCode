@@ -86,6 +86,10 @@ void QuickJabAttackBehavior::Reset()
 
 void QuickJabAttackBehavior::TryDealHit(EnemyComponent* pEnemy)
 {
+    // 네트워크 연출 전용 모드에서는 데미지는 서버가 처리한다.
+    if (m_bNetworkVisualOnly)
+        return;
+
     if (!pEnemy) return;
 
     float distance = pEnemy->GetDistanceToTarget();

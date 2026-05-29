@@ -53,6 +53,9 @@ public:
     };
     NetBossIndicatorSet CreateNetBossIndicators();
 
+    // 네트워크 일반 몬스터용 인디케이터 세팅
+    void SetupNetMonsterAttackIndicators(GameObject* pEnemy, EnemyComponent* pEnemyComp, const AttackIndicatorConfig& config, CRoom* pRoom) { SetupAttackIndicators(pEnemy, pEnemyComp, config, pRoom); }
+
 private:
     // Create a cube mesh enemy for testing
     GameObject* CreateCubeEnemy(CRoom* pRoom, const XMFLOAT3& position, const XMFLOAT3& scale, const XMFLOAT4& color);
