@@ -528,9 +528,13 @@ float4 PS_Outline(VS_OUTLINE_OUTPUT input) : SV_TARGET
     float lum = dot(baseColor, float3(0.299f, 0.587f, 0.114f));
     baseColor = lerp(float3(lum, lum, lum), baseColor, 1.20f);
 
-    float3 tint = baseColor * 0.50f;
-    tint = lerp(tint, float3(0.03f, 0.03f, 0.06f), 0.15f);
-    tint = max(tint, 0.0f);
+    // 0.85f + floor: 어두운 텍스처에서 outline 이 진검정으로 떨어지는 인위적 느낌 제거.
+    //   - 곱셈 계수 ↑ → 베이스 색 보존
+    //   - 쿨톤 lerp 약화 (0.12→0.05) → 자체 색조 살아남
+    //   - floor (0.22) → 베이스가 검정이어도 outline 은 회색에 멈춤
+    float3 tint = baseColor * 0.85f;
+    tint = lerp(tint, float3(0.22f, 0.22f, 0.26f), 0.05f);
+    tint = max(tint, float3(0.22f, 0.22f, 0.24f));
 
     // Status effect: lerp outline toward element color when intensity > 0
     if (g_StatusIntensity > 0.0f)
@@ -757,6 +761,14 @@ float4 PS(PS_INPUT input) : SV_TARGET
     // Combine with material diffuse (optional: multiply)
     float4 baseColor = albedoColor * gMaterial.m_cDiffuse;
 
+    // (이전: 캐릭터 카테고리 색 추가 lerp 했었으나 m_cDiffuse 곱셈에 누적되어 채도 폭주.
+    //  m_cDiffuse 단일 곱셈만으로도 카테고리 색 전달은 충분하다고 판단해 제거.)
+
+    // 캐릭터 전체 밝기 다운 — lightTerm=1 강제로 풀 lit 이라 baseColor 그대로 노출 → 쨍한 인상.
+    //   0.62 곱: 텍스처 디테일/카테고리 색 그대로 유지하면서 밝기만 38% 다운.
+    if (bIsSkinned != 0)
+        baseColor.rgb *= 0.62f;
+
     // 지면 데칼: 텍스처 알파로 마스킹, 조명 계산 우회
     if (bIsDecal)
         return float4(baseColor.rgb, albedoColor.a * gMaterial.m_cDiffuse.a);
@@ -773,6 +785,13 @@ float4 PS(PS_INPUT input) : SV_TARGET
 
     // --- Shadow Calculation ---
     float shadowFactor = CalculateShadow(input.posLightSpace);
+
+    // 캐릭터(bIsSkinned)는 shadow map 영향 받지 않음 → self-shadow 제거.
+    //   자기 부위/다른 캐릭터의 그림자가 캐릭터 표면에 떨어지지 않음.
+    //   NdotL 셰이딩은 유지되어 빛 방향 음영은 자연스럽게 남음.
+    //   환경(바닥/벽)은 그대로 캐릭터/지형 그림자 받음.
+    if (bIsSkinned != 0)
+        shadowFactor = 1.0f;
 
     // --- Directional Light Calculation ---
     // F7 toggles between original Phong and Genshin-style cel shading.
@@ -793,11 +812,20 @@ float4 PS(PS_INPUT input) : SV_TARGET
         // Combine NdotL with shadow before quantizing — single hard boundary
         // handles self-shadow and cast-shadow uniformly.
         float lightTerm = NdotL * shadowFactor;
+
+        // 캐릭터(bIsSkinned)는 NdotL 음영도 무시 → 항상 풀 라이트.
+        //   "캐릭터 자체에는 그림자가 안 진다" 요건. shadow map + NdotL 모두 제거되어
+        //   캐릭터 표면 전역이 lit 영역으로 분류됨. specular highlight 는 그대로 작동.
+        if (bIsSkinned != 0)
+            lightTerm = 1.0f;
         // Tight cel band — both characters and world get a hard boundary.
         // Wider bands wash out so much that toon mode looks identical to Phong
         // on flat surfaces. Sharp boundary is the whole point.
-        float celBandLo = bIsSkinned ? 0.46f : 0.44f;
-        float celBandHi = bIsSkinned ? 0.54f : 0.52f;
+        // 캐릭터(bIsSkinned)는 cel boundary 를 NdotL=0.22 부근으로 내려 lit 영역을 넓힘
+        //   → 환경광 약한 라바 위에서 캐릭터 측면/하단이 검정으로 빠지지 않게.
+        //   여전히 hard boundary 라 셀 룩은 유지 (그라데이션 X).
+        float celBandLo = bIsSkinned ? 0.18f : 0.44f;
+        float celBandHi = bIsSkinned ? 0.28f : 0.52f;
         float celDiffuse = smoothstep(celBandLo, celBandHi, lightTerm);
 
         // Cool shadow tint — characters get full lilac, world gets a milder
@@ -807,8 +835,9 @@ float4 PS(PS_INPUT input) : SV_TARGET
                                        : float3(0.62f, 0.66f, 0.88f);
         // Skinned characters get a brighter shadow side so their albedo (often
         // dark cloth/skin tones) doesn't crush to near-black after the global
-        // contrast pop applied later.
-        float shadowMul   = bIsSkinned ? 0.60f : 0.45f;
+        // contrast pop applied later. 0.60→0.92: 라바 위처럼 환경광 약한 곳에서
+        // 캐릭터의 그림자 면(NdotL<celBandLo) 도 거의 lit 수준 밝기로 — 검정 잠식 방지.
+        float shadowMul   = bIsSkinned ? 0.92f : 0.45f;
         float3 litRGB    = baseColor.rgb * g_LightColor.rgb * 0.85f;
         float3 shadowRGB = baseColor.rgb * shadowTint * shadowMul;
         float3 dirDiffuseRGB = lerp(shadowRGB, litRGB, celDiffuse);
@@ -823,7 +852,9 @@ float4 PS(PS_INPUT input) : SV_TARGET
     else
     {
         // ── Original Phong path (also used for deep lava plane) ──
-        float4 dDiffuse  = NdotL * g_LightColor * baseColor;
+        // 캐릭터는 NdotL 음영 제거 → 풀 라이트. shadowFactor 도 위에서 1로 강제됨.
+        float effNdotL = (bIsSkinned != 0) ? 1.0f : NdotL;
+        float4 dDiffuse  = effNdotL * g_LightColor * baseColor;
         float4 dSpecular = specRaw * g_LightColor * gMaterial.m_cSpecular;
         directionalTotal = (dDiffuse + dSpecular) * shadowFactor;
     }
@@ -845,6 +876,7 @@ float4 PS(PS_INPUT input) : SV_TARGET
     
     // --- Ambient Light Calculation ---
     // In cel mode reduced — full ambient washes out the hard light/shadow boundary.
+    // 캐릭터는 lightTerm=1 강제로 이미 풀 lit. ambient 추가 부스트 불필요 → 환경과 동일 0.30.
     float ambientScale = (g_ToonEnabled != 0) ? 0.30f : 1.00f;
     float4 ambient = g_AmbientLight * gMaterial.m_cAmbient * albedoColor * ambientScale;
     
@@ -1000,21 +1032,16 @@ float4 PS(PS_INPUT input) : SV_TARGET
 
     // ── Stage-themed environment: Water (caustics + atmospheric tint) ──
     // bIsWater 분기는 위에서 return 했으므로 여기 도달하는 픽셀은 일반 지오메트리.
-    if (g_StageTheme == 1)
+    // 캐릭터(bIsSkinned)에는 환경 fog/tint 적용 안 함 → 카테고리 색이 물맵 청록에 묻히지 않음.
+    if (g_StageTheme == 1 && !bIsSkinned)
     {
-        // Caustics — 캐릭터·벽면에도 약하게 들어가게 (강도 차등). 물속 잠수 느낌 ↑
-        //   바닥(upFacing≈1): 1.0배, 벽면(upFacing≈0): 0.35배, 캐릭터: 0.22배.
+        // Caustics — 벽면·바닥에만 (캐릭터는 분리해 카테고리 색 보존).
         float upFacing = saturate(normal.y);
         float caust = WaterCaustics(input.worldPosition.xz, g_Time);
         float shimmer = 0.85f + 0.30f * sin(g_Time * 0.9f + input.worldPosition.x * 0.07f);
         float3 causticColor = float3(0.65f, 1.05f, 1.45f);  // peak > 1.0 → bloom 통과
 
-        float caustWeight;
-        if (bIsSkinned)
-            caustWeight = 0.22f;
-        else
-            caustWeight = lerp(0.35f, 1.0f, smoothstep(0.0f, 0.6f, upFacing));
-
+        float caustWeight = lerp(0.35f, 1.0f, smoothstep(0.0f, 0.6f, upFacing));
         finalColor.rgb += causticColor * caust * caustWeight * shadowFactor * 0.85f * shimmer;
 
         // 거리 기반 청록 안개 — 시작 거리 단축(16→10) + 농도 ↑(0.65→0.75)로 수중 가시거리 감각.
@@ -1136,17 +1163,25 @@ float4 PS(PS_INPUT input) : SV_TARGET
     // cel boundary on flat lit surfaces. A global saturation+contrast bump on
     // toon mode makes the difference visible everywhere, not just on shadow
     // boundaries.
+    // 캐릭터는 이미 카테고리 색(m_cDiffuse) 이 강해서 전역 1.35×/1.10× 까지 누적되면
+    //   채도 폭주로 빤딱이게 됨. 캐릭터는 1.0× (거의 패스), 환경만 카툰 부스트 받음.
     if (g_ToonEnabled != 0)
     {
+        float satBoost  = (bIsSkinned != 0) ? 1.05f : 1.35f;
+        float contBoost = (bIsSkinned != 0) ? 1.00f : 1.10f;
         float lum = dot(finalColor.rgb, float3(0.299f, 0.587f, 0.114f));
-        // Saturation 1.35× — cartoon-y vivid colors
-        finalColor.rgb = lerp(float3(lum, lum, lum), finalColor.rgb, 1.35f);
-        // Contrast 1.10× around 0.42 pivot — pivot lifted so dark areas
-        // (cel-shaded character body) don't crush to black.
+        finalColor.rgb = lerp(float3(lum, lum, lum), finalColor.rgb, satBoost);
         // max() (not saturate) preserves HDR > 1 so bloom still picks up
         // emissive/caustic peaks.
-        finalColor.rgb = max((finalColor.rgb - 0.42f) * 1.10f + 0.42f, 0.0f);
+        finalColor.rgb = max((finalColor.rgb - 0.42f) * contBoost + 0.42f, 0.0f);
     }
+
+    // 캐릭터 최저 밝기 floor — 환경광/라이팅이 약한 스테이지(라바 위 등)에서
+    //   캐릭터가 검정 실루엣으로 떨어지는 문제 차단. Bloom/Toon 모드 무관.
+    //   0.55→0.38→0.22: lightTerm=1 강제로 이미 풀 lit 이라 floor 는 안전망 정도면 충분.
+    //   너무 높이면 ambient/lit 위에 누적되어 발광·쨍한 인상.
+    if (bIsSkinned != 0)
+        finalColor.rgb = max(finalColor.rgb, baseColor.rgb * 0.22f);
 
     // Hit Flash: rim-based white outline flash + additive bloom pop
     //   lerp(→white)은 흰색에서 클램프되므로 림에 추가 additive로 "초과 밝기" 부여

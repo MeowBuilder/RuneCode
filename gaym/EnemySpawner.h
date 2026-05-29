@@ -69,8 +69,10 @@ private:
     // Apply color tint to all meshes in game object hierarchy
     void ApplyColorToHierarchy(GameObject* pGameObject, const XMFLOAT4& color);
 
-    // Load texture to all meshes in game object hierarchy
-    void LoadTextureToHierarchy(GameObject* pGameObject, const std::string& texturePath);
+    // Load texture to all meshes in game object hierarchy.
+    // tint != (1,1,1,1) 일 때 diffuse 에 곱해져 텍스처 위에 카테고리 색이 입혀짐.
+    void LoadTextureToHierarchy(GameObject* pGameObject, const std::string& texturePath,
+                                const XMFLOAT4& tint = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f));
 
     // Setup common enemy components
     void SetupEnemyComponents(GameObject* pEnemy, const EnemySpawnData& data, CRoom* pRoom, GameObject* pTarget);

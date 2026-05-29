@@ -87,6 +87,42 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
         }
     }
 
+    // Intro Fly — 게임 시작 후 포탈에서 낙하 시퀀스. 입력/스킬 차단, 자유 낙하 + Levitating 애니.
+    //   바닥 도달 시 Landing 짧게 → 자동 Idle 복귀.
+    if (m_fIntroFlyTimer > 0.0f || m_fLandingHoldTimer > 0.0f)
+    {
+        XMFLOAT3 pos = pTransform->GetPosition();
+        if (!m_bOnGround)
+        {
+            m_fVelocityY -= GRAVITY * deltaTime;
+            pos.y += m_fVelocityY * deltaTime;
+            if (pos.y <= m_fIntroGroundY)
+            {
+                pos.y = m_fIntroGroundY;
+                m_fVelocityY = 0.0f;
+                m_bOnGround = true;
+                if (auto* pAnim = m_pOwner->GetComponent<AnimationComponent>())
+                    pAnim->CrossFade("Landing", 0.05f, false, true);
+                m_fLandingHoldTimer = 0.50f;
+                m_fIntroFlyTimer    = 0.0f;
+            }
+            pTransform->SetPosition(pos);
+        }
+        else if (m_fLandingHoldTimer > 0.0f)
+        {
+            m_fLandingHoldTimer = fmaxf(0.0f, m_fLandingHoldTimer - deltaTime);
+            if (m_fLandingHoldTimer <= 0.0f)
+            {
+                m_eAnimState = PlayerAnimState::Idle;
+                if (auto* pAnim = m_pOwner->GetComponent<AnimationComponent>())
+                    pAnim->CrossFade("Idle", 0.15f, true);
+            }
+        }
+        if (m_fIntroFlyTimer > 0.0f)
+            m_fIntroFlyTimer -= deltaTime;
+        return;
+    }
+
     // 사망 상태: 중력/수면은 유지하되 입력·스킬·전송 모두 차단 (데스 애니만 재생 중)
     if (m_bNetworkDead)
     {
@@ -112,6 +148,40 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
     // Fall zone: safe AABB 바깥 = 낙하 허용, 안쪽 = 수면에 뜸(차오르는 물 따라 상승)
     bool bOutsideSafe = false;
     float effectiveGroundY = GROUND_Y;  // 기본 바닥(타일 Y=0)
+
+    // 포탈 베이스 — XZ 영역 안이면 베이스 표면이 effectiveGroundY. 가장자리에서 안쪽으로 ramp 처리:
+    //   가장자리(distXZ=radius)        = 평지 높이 (스냅 X)
+    //   안쪽 50%(distXZ ≤ radius*0.5) = 풀 베이스 표면
+    //   사이                            = 선형 ramp (경사로 느낌, 텔레포트 X)
+    bool bInsideStand = false;
+    if (m_fStandRadius > 0.0f)
+    {
+        float dx = pos.x - m_xmf3StandCenter.x;
+        float dz = pos.z - m_xmf3StandCenter.z;
+        float distXZ = sqrtf(dx * dx + dz * dz);
+        bInsideStand = (distXZ <= m_fStandRadius);
+        if (bInsideStand)
+        {
+            float rampInner = m_fStandRadius * 0.50f;
+            float t = (distXZ <= rampInner) ? 1.0f
+                    : (m_fStandRadius - distXZ) / (m_fStandRadius - rampInner);
+            t = fmaxf(0.0f, fminf(1.0f, t));
+            float standSurfaceY = GROUND_Y + t * (m_fIntroGroundY - GROUND_Y);
+            effectiveGroundY = fmaxf(effectiveGroundY, standSurfaceY);
+            // 표면 아래에서 영역에 들어오면 ramp 높이까지만 안착 (가장자리에선 거의 평지)
+            if (pos.y < effectiveGroundY)
+            {
+                pos.y = effectiveGroundY;
+                m_fVelocityY = 0.0f;
+                m_bOnGround = true;
+            }
+        }
+        else if (m_bOnGround && pos.y > GROUND_Y + 0.05f)
+        {
+            // 베이스 표면 위에 있었는데 영역 벗어남 → 자유낙하 시작
+            m_bOnGround = false;
+        }
+    }
     if (m_bFallZoneActive)
     {
         float dx = pos.x - m_xmf3SafeCenter.x;
@@ -401,6 +471,22 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
     }
 
     UpdateAnimation(deltaTime, bMoving, bAttackTriggered, bDashStarted, bDashing);
+}
+
+void PlayerComponent::StartIntroFly(float duration, float groundY,
+                                    const XMFLOAT3& standCenter, float standRadius)
+{
+    m_fIntroFlyTimer    = duration;
+    m_fLandingHoldTimer = 0.0f;
+    m_fIntroGroundY     = groundY;
+    m_xmf3StandCenter   = standCenter;
+    m_fStandRadius      = standRadius;
+    m_fVelocityY        = 0.0f;
+    m_bOnGround         = false;
+    m_eAnimState        = PlayerAnimState::IntroFall;
+    if (auto* pAnim = m_pOwner ? m_pOwner->GetComponent<AnimationComponent>() : nullptr)
+        pAnim->CrossFade("Levitating", 0.10f, true, true);
+    OutputDebugString(L"[Player] Intro Fly START\n");
 }
 
 void PlayerComponent::EnterTornadoTrap(const XMFLOAT3& tornadoCenter)

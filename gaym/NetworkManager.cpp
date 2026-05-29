@@ -1739,6 +1739,8 @@ struct MonsterPreset
     const char* texturePath;  // 명시적 텍스처 경로 — .bin에 <AlbedoMap> 없을 때 필수
     const char* attackClip;   // 공격 애니메이션 (S_MONSTER_ATTACK 수신 시 재생)
     const char* deathClip;    // 사망 애니메이션
+    // 카테고리 tint (EnemySpawner.cpp 프리셋과 동일 색). diffuse 에 곱해짐.
+    float colorR, colorG, colorB;
 };
 
 static MonsterPreset GetMonsterPresetByType(uint32 monsterType)
@@ -1756,79 +1758,91 @@ static MonsterPreset GetMonsterPresetByType(uint32 monsterType)
     {
     // attackClip/deathClip 는 EnemySpawner.cpp 의 m_AnimConfig.m_strAttackClip / m_strDeathClip 과 일치해야 함
     // 네트워크 monsterType → 오프라인 JSON Fire stage preset 과 동일한 Rd (red) 메쉬로 통일
-    case 2: // Melee → FireGolem_Rd
+    case 2: // Melee → FireGolem_Rd  | 카테고리: 근접 (주황)
         return { "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd.bin",
                  "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd_Anim.bin",
                  5.5f, "idle", "Run_Forward",
                  "Assets/Enemies/Elementals/FireGolem_Rd/Textures/T_FireGolem_Rd_D.png",
-                 "Combat_Unarmed_Attack", "Death" };
-    case 3: // Ranged → MagmaElemental_Rd
+                 "Combat_Unarmed_Attack", "Death",
+                 1.00f, 0.55f, 0.20f };
+    case 3: // Ranged → MagmaElemental_Rd  | 카테고리: 원거리 (청록)
         return { "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd.bin",
                  "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd_Anim.bin",
                  5.5f, "idle", "Run_Forward",
                  "Assets/Enemies/Elementals/MagmaElemental_Rd/Textures/T_MagmaElemental_Rd_D.png",
-                 "Combat_Unarmed_Attack", "Death" };
-    case 4: // RushAoE → MoltenElemental_Rd
+                 "Combat_Unarmed_Attack", "Death",
+                 0.30f, 0.95f, 0.85f };
+    case 4: // RushAoE → MoltenElemental_Rd  | 카테고리: 돌진 (빨강)
         return { "Assets/Enemies/Elementals/MoltenElemental_Rd/MoltenElemental_Rd.bin",
                  "Assets/Enemies/Elementals/MoltenElemental_Rd/MoltenElemental_Rd_Anim.bin",
                  5.5f, "idle", "Run_Forward",
                  "Assets/Enemies/Elementals/MoltenElemental_Rd/Textures/T_MoltenElemental_Rd_D.png",
-                 "Combat_Unarmed_Attack", "Death" };
-    case 5: // RushFront → ChaosElemental_Rd
+                 "Combat_Unarmed_Attack", "Death",
+                 1.00f, 0.35f, 0.30f };
+    case 5: // RushFront → ChaosElemental_Rd  | 카테고리: 돌진 (빨강)
         return { "Assets/Enemies/Elementals/ChaosElemental_Rd/ChaosElemental_Rd.bin",
                  "Assets/Enemies/Elementals/ChaosElemental_Rd/ChaosElemental_Rd_Anim.bin",
                  5.5f, "idle", "Run_Forward",
                  "Assets/Enemies/Elementals/ChaosElemental_Rd/Textures/T_ChaosElemental_Rd_D.png",
-                 "Combat_Unarmed_Attack", "Death" };
-    case 6: // Dragon (Red)
+                 "Combat_Unarmed_Attack", "Death",
+                 1.00f, 0.35f, 0.30f };
+    case 6: // Dragon (Red)  | 카테고리: 보스 — 화염 컨셉
         return { "Assets/Enemies/Dragon/Red.bin",
                  "Assets/Enemies/Dragon/Red_Anim.bin",
                  3.0f, "Idle01", "Walk", "",
-                 "Flame Attack", "Die" };
-    case 7: // Kraken
+                 "Flame Attack", "Die",
+                 1.0f, 0.50f, 0.30f };
+    case 7: // Kraken  | 카테고리: 보스 — 심해 (보라)
         return { "Assets/Enemies/Kraken/KRAKEN.bin",
                  "Assets/Enemies/Kraken/KRAKEN_Anim.bin",
                  3.0f, "Idle", "Walk", "",
-                 "Attack_Forward_RM", "Death" };
-    case 8: // Golem
+                 "Attack_Forward_RM", "Death",
+                 0.55f, 0.35f, 1.00f };
+    case 8: // Golem  | 카테고리: 보스 — 대지 (골드)
         return { "Assets/Enemies/Golem/Golem01_Generic_prefab.bin",
                  "Assets/Enemies/Golem/Golem01_Generic_prefab_Anim.bin",
                  14.0f, "Golem_stand_ge", "Golem_battle_stand_ge",
                  "Assets/Enemies/Golem/Textures/chr_04_Golem_alb.png",
-                 "Golem_battle_attack01_ge", "Golem_battle_die_ge" };;
-    case 9: // Demon
+                 "Golem_battle_attack01_ge", "Golem_battle_die_ge",
+                 1.00f, 0.75f, 0.30f };
+    case 9: // Demon  | 카테고리: 보스 — 짙은 빨강
         return { "Assets/Enemies/demon/Demon.bin",
                  "Assets/Enemies/demon/Demon_Anim.bin",
                  8.0f, "Idle1", "Run", "",
-                 "attack1", "Death1" };
-    case 10: // BlueDragon (EnemySpawner: idle="Idle", chase="Walk")
+                 "attack1", "Death1",
+                 1.00f, 0.30f, 0.25f };
+    case 10: // BlueDragon  | 카테고리: 보스(중간) — 청색
         return { "Assets/Enemies/Dragon_blue/Blue.bin",
                  "Assets/Enemies/Dragon_blue/Blue_Anim.bin",
                  3.0f, "Idle", "Walk", "",
-                 "Fireball Shoot", "Die" };
+                 "Fireball Shoot", "Die",
+                 0.30f, 0.55f, 1.00f };
     case 1: // TestEnemy — FireGolem_Rd 로 fallback (Melee 타입과 동일)
     default:
         return { "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd.bin",
                  "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd_Anim.bin",
                  5.5f, "idle", "Run_Forward",
                  "Assets/Enemies/Elementals/FireGolem_Rd/Textures/T_FireGolem_Rd_D.png",
-                 "Combat_Unarmed_Attack", "Death" };
+                 "Combat_Unarmed_Attack", "Death",
+                 1.00f, 0.55f, 0.20f };
     }
 }
 
-// EnemySpawner::LoadTextureToHierarchy 미러 — 하이러키 순회하며 텍스처+흰 머티리얼 적용.
+// EnemySpawner::LoadTextureToHierarchy 미러 — 하이러키 순회하며 텍스처+카테고리 색 머티리얼 적용.
 // 목적: MATERIAL이 garbage로 초기화되어 diffuse=0 → 메쉬가 까맣게 렌더되어 보이지 않는 문제 해결.
+// 추가: tint != (1,1,1) 시 카테고리 색이 텍스처 위에 입혀짐 (호스트/게스트 시각 동기화).
 static void ApplyWhiteMaterialAndTextureToHierarchy(
     Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList,
-    GameObject* pGO, const char* texturePath)
+    GameObject* pGO, const char* texturePath,
+    float tintR = 1.0f, float tintG = 1.0f, float tintB = 1.0f)
 {
     if (!pGO || !pScene) return;
 
     if (pGO->GetMesh())
     {
         MATERIAL mat;
-        mat.m_cAmbient  = XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f);
-        mat.m_cDiffuse  = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+        mat.m_cAmbient  = XMFLOAT4(tintR * 0.3f, tintG * 0.3f, tintB * 0.3f, 1.0f);
+        mat.m_cDiffuse  = XMFLOAT4(tintR, tintG, tintB, 1.0f);
         mat.m_cSpecular = XMFLOAT4(0.3f, 0.3f, 0.3f, 32.0f);
         mat.m_cEmissive = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
         pGO->SetMaterial(mat);
@@ -1866,8 +1880,8 @@ static void ApplyWhiteMaterialAndTextureToHierarchy(
         }
     }
 
-    if (pGO->m_pChild)   ApplyWhiteMaterialAndTextureToHierarchy(pScene, pDevice, pCommandList, pGO->m_pChild, texturePath);
-    if (pGO->m_pSibling) ApplyWhiteMaterialAndTextureToHierarchy(pScene, pDevice, pCommandList, pGO->m_pSibling, texturePath);
+    if (pGO->m_pChild)   ApplyWhiteMaterialAndTextureToHierarchy(pScene, pDevice, pCommandList, pGO->m_pChild, texturePath, tintR, tintG, tintB);
+    if (pGO->m_pSibling) ApplyWhiteMaterialAndTextureToHierarchy(pScene, pDevice, pCommandList, pGO->m_pSibling, texturePath, tintR, tintG, tintB);
 }
 
 void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
@@ -1927,9 +1941,11 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
         pAnim->Play(preset.idleClip, true);
     }
 
-    // 흰 머티리얼 + 텍스처 강제 적용 (MeshLoader가 .bin에서 세팅 안 했을 경우 대비)
+    // 머티리얼 + 텍스처 강제 적용 (MeshLoader가 .bin에서 세팅 안 했을 경우 대비)
     // → 서버 권위 스폰에서 유일하게 빠져 있던 스텝. EnemySpawner::LoadTextureToHierarchy 미러.
-    ApplyWhiteMaterialAndTextureToHierarchy(pScene, pDevice, pCommandList, pMonster, preset.texturePath);
+    // tint 는 카테고리 색 (EnemySpawner 프리셋과 동일) → 호스트/게스트 시각 일치.
+    ApplyWhiteMaterialAndTextureToHierarchy(pScene, pDevice, pCommandList, pMonster, preset.texturePath,
+                                            preset.colorR, preset.colorG, preset.colorB);
 
     // 쉐이더 등록 (렌더링)
     Shader* pDefaultShader = pScene->GetDefaultShader();
