@@ -6,7 +6,7 @@ class InputSystem; // Forward declaration for InputSystem
 class CCamera;     // Forward declaration for CCamera
 class SkillComponent; // Forward declaration for SkillComponent
 
-enum class PlayerAnimState { Idle, Walk, Attack, Dash };
+enum class PlayerAnimState { Idle, Walk, Attack, Dash, IntroFall };
 
 class PlayerComponent : public Component
 {
@@ -65,6 +65,13 @@ public:
     // Reset velocity when teleported — 중력이 플레이어를 바닥까지 끌어내리도록 onGround=false
     // (텔레포트 Y가 바닥보다 높으면 gravity가 자연스럽게 스냅; Y=0이면 즉시 ground 판정)
     void ResetGroundY() { m_fVelocityY = 0.0f; m_bOnGround = false; }
+
+    // Intro Fly — 게임 시작 직후 포탈에서 낙하하는 시퀀스. 입력 차단 + Levitating 애니 + 자유낙하.
+    //   바닥 도달 시 Landing 클립 짧게 후 자동 Idle 복귀. 타이머 안전망(duration).
+    //   groundY: 착지 높이 (포탈 베이스 표면 등). 기본 0.
+    //   standCenterXZ + standRadius: 베이스 영역 (XZ 평면). 영역 밖으로 이동하면 자유낙하 트리거.
+    void StartIntroFly(float duration, float groundY = 0.0f,
+                       const XMFLOAT3& standCenter = XMFLOAT3(0,0,0), float standRadius = 0.0f);
 
     // Flight Mode (4스테이지 바람 보스 비행 슈팅): 보스 중심 구면 좌표 비행
     void EnterFlightMode(GameObject* pFlightCenter);
@@ -132,6 +139,13 @@ private:
     // Animation state machine
     PlayerAnimState m_eAnimState = PlayerAnimState::Idle;
     float m_fAttackTimer = 0.0f;
+
+    // Intro Fly — 포탈 진입 후 낙하 시퀀스
+    float    m_fIntroFlyTimer    = 0.0f;   // > 0 동안 입력 차단 + 강제 비행 모션
+    float    m_fLandingHoldTimer = 0.0f;   // 바닥 도달 후 Landing 클립 유지 시간
+    float    m_fIntroGroundY     = 0.0f;   // 포탈 베이스 표면 등 착지 높이
+    XMFLOAT3 m_xmf3StandCenter   = { 0, 0, 0 };  // 베이스 영역 중심 (XZ)
+    float    m_fStandRadius      = 0.0f;   // > 0 동안 활성. 영역 밖 = 자유낙하.
     static constexpr float kAttackAnimDuration = 0.92f;  // Attack1 clip duration
 
     // Dash (Space key) — 짧은 무적 이동기. LevitateStart 애니 재사용 + 이미시브 플래시

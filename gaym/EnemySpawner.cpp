@@ -58,7 +58,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     // Register default test enemy preset
     EnemySpawnData testEnemy;
     testEnemy.m_xmf3Scale = XMFLOAT3(1.0f, 2.0f, 1.0f);  // Human-like proportions
-    testEnemy.m_xmf4Color = XMFLOAT4(1.0f, 0.2f, 0.2f, 1.0f);  // Red
+    // [카테고리: 근접] 큐브 적 → 강한 주황 (텍스처 없으므로 그대로 표현됨)
+    testEnemy.m_xmf4Color = XMFLOAT4(1.0f, 0.55f, 0.20f, 1.0f);
     testEnemy.m_Stats.m_fMaxHP = 50.0f;
     testEnemy.m_Stats.m_fCurrentHP = 50.0f;
     testEnemy.m_Stats.m_fMoveSpeed = 4.0f;
@@ -86,7 +87,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     airElemental.m_strAnimationPath = "Assets/Enemies/Elementals/AirElemental_Bl/AirElemental_Bl_Anim.bin";
     airElemental.m_strTexturePath   = "Assets/Enemies/Elementals/AirElemental_Bl/Textures/T_AirElemental_Body_Bl_D.png";
     airElemental.m_xmf3Scale = XMFLOAT3(5.5f, 5.5f, 5.5f);
-    airElemental.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+    // [카테고리: 근접] MapLoader 와 동일 카테고리 색 통일
+    airElemental.m_xmf4Color = XMFLOAT4(1.00f, 0.55f, 0.20f, 1.0f);
 
     airElemental.m_Stats.m_fMaxHP          = 80.0f;
     airElemental.m_Stats.m_fCurrentHP      = 80.0f;
@@ -110,7 +112,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     rushAoE.m_strAnimationPath = "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd_Anim.bin";
     rushAoE.m_strTexturePath   = "Assets/Enemies/Elementals/FireGolem_Rd/Textures/T_FireGolem_Rd_D.png";
     rushAoE.m_xmf3Scale = XMFLOAT3(5.5f, 5.5f, 5.5f);
-    rushAoE.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+    // [카테고리: 돌진] MapLoader 와 동일 카테고리 색 통일 (빨강)
+    rushAoE.m_xmf4Color = XMFLOAT4(1.00f, 0.35f, 0.30f, 1.0f);
 
     rushAoE.m_Stats.m_fMaxHP          = 100.0f;
     rushAoE.m_Stats.m_fCurrentHP      = 100.0f;
@@ -136,7 +139,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     rushFront.m_strAnimationPath = "Assets/Enemies/Elementals/EarthElemental_Gn/EarthElemental_Gn_Anim.bin";
     rushFront.m_strTexturePath   = "Assets/Enemies/Elementals/EarthElemental_Gn/Textures/T_EarthElemental_Gn_D.png";
     rushFront.m_xmf3Scale = XMFLOAT3(5.5f, 5.5f, 5.5f);
-    rushFront.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+    // [카테고리: 돌진] MapLoader 와 동일 카테고리 색 통일 (빨강)
+    rushFront.m_xmf4Color = XMFLOAT4(1.00f, 0.35f, 0.30f, 1.0f);
 
     rushFront.m_Stats.m_fMaxHP          = 80.0f;
     rushFront.m_Stats.m_fCurrentHP      = 80.0f;
@@ -163,7 +167,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     ranged.m_strAnimationPath = "Assets/Enemies/Elementals/StormElemental_Bl/StormElemental_Bl_Anim.bin";
     ranged.m_strTexturePath   = "Assets/Enemies/Elementals/StormElemental_Bl/Textures/T_StormElemental_Bl_D.png";
     ranged.m_xmf3Scale = XMFLOAT3(5.5f, 5.5f, 5.5f);
-    ranged.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+    // [카테고리: 원거리] MapLoader 와 동일 카테고리 색 통일 (청록)
+    ranged.m_xmf4Color = XMFLOAT4(0.30f, 0.95f, 0.85f, 1.0f);
 
     ranged.m_Stats.m_fMaxHP          = 60.0f;
     ranged.m_Stats.m_fCurrentHP      = 60.0f;
@@ -186,7 +191,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     dragon.m_strAnimationPath = "Assets/Enemies/Dragon/Red_Anim.bin";
     dragon.m_strTexturePath = "Assets/Enemies/Dragon/Textures/RedHP.png";
     dragon.m_xmf3Scale = XMFLOAT3(3.0f, 3.0f, 3.0f);  // 원본값 복원 (충돌/판정/브레스 범위 연동 때문에 보스는 스케일 유지)
-    dragon.m_xmf4Color = XMFLOAT4(1.0f, 0.3f, 0.1f, 1.0f);
+    // [카테고리: 보스] 화염 컨셉 — 빨강 강조 (강도 완화: 기존 (1,0.3,0.1)은 텍스처와 곱해져 너무 어두워짐)
+    dragon.m_xmf4Color = XMFLOAT4(1.0f, 0.50f, 0.30f, 1.0f);
     dragon.m_Stats.m_fMaxHP = 800.0f;           // HP 대폭 상향
     dragon.m_Stats.m_fCurrentHP = 800.0f;
     dragon.m_Stats.m_fMoveSpeed = 10.0f;        // 이동속도 상향
@@ -394,7 +400,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     kraken.m_strAnimationPath = "Assets/Enemies/Kraken/KRAKEN_Anim.bin";
     kraken.m_strTexturePath   = "Assets/Enemies/Kraken/Textures/Tex_KRAKEN_BODY_BaseColor.png";
     kraken.m_xmf3Scale = XMFLOAT3(3.0f, 3.0f, 3.0f);  // 원본값 복원
-    kraken.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+    // [카테고리: 보스] 심해 컨셉 — 보라 강화
+    kraken.m_xmf4Color = XMFLOAT4(0.55f, 0.35f, 1.00f, 1.0f);
     kraken.m_fColliderXZMultiplier = 0.8f;   // 거대 몸체에 맞춰 XZ 피격 반경 확대
 
     kraken.m_Stats.m_fMaxHP              = 1000.0f;
@@ -531,7 +538,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     golem.m_strAnimationPath = "Assets/Enemies/Golem/Golem01_Generic_prefab_Anim.bin";
     golem.m_strTexturePath   = "Assets/Enemies/Golem/Textures/chr_04_Golem_alb.png";
     golem.m_xmf3Scale = XMFLOAT3(14.0f, 14.0f, 14.0f);  // 원본값 복원 (17은 잔상/떨림 문제)
-    golem.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+    // [카테고리: 보스] 대지 컨셉 — 골드 강화
+    golem.m_xmf4Color = XMFLOAT4(1.00f, 0.75f, 0.30f, 1.0f);
 
     golem.m_Stats.m_fMaxHP              = 2500.0f;
     golem.m_Stats.m_fCurrentHP          = 2500.0f;
@@ -692,7 +700,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     demon.m_strAnimationPath = "Assets/Enemies/demon/Demon_Anim.bin";
     demon.m_strTexturePath   = "Assets/Enemies/demon/Textures/_Albedo.png";
     demon.m_xmf3Scale = XMFLOAT3(8.0f, 8.0f, 8.0f);  // 보스급 위압감
-    demon.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+    // [카테고리: 보스] 데몬 컨셉 — 짙은 빨강 (Dragon 보다 어둡고 차가운 톤)
+    demon.m_xmf4Color = XMFLOAT4(1.00f, 0.30f, 0.25f, 1.0f);
 
     demon.m_Stats.m_fMaxHP              = 3500.0f;
     demon.m_Stats.m_fCurrentHP          = 3500.0f;
@@ -896,7 +905,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     blueDragon.m_strAnimationPath = "Assets/Enemies/Dragon_blue/Blue_Anim.bin";
     blueDragon.m_strTexturePath   = "Assets/Enemies/Dragon_blue/Textures/BlueHP.png";
     blueDragon.m_xmf3Scale = XMFLOAT3(3.0f, 3.0f, 3.0f);  // 원본값 복원
-    blueDragon.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+    // [카테고리: 보스(중간보스)] 청룡 컨셉 — 청색 강화
+    blueDragon.m_xmf4Color = XMFLOAT4(0.30f, 0.55f, 1.00f, 1.0f);
     blueDragon.m_fColliderXZMultiplier = 1.0f;   // 뚱뚱한 몸집에 맞게 피격 판정 확대 (기본 0.3 → 1.0)
 
     blueDragon.m_Stats.m_fMaxHP              = 80.0f;
@@ -1343,7 +1353,8 @@ GameObject* EnemySpawner::CreateMeshEnemy(CRoom* pRoom, const XMFLOAT3& position
     // Load texture if specified
     if (!data.m_strTexturePath.empty())
     {
-        LoadTextureToHierarchy(pEnemy, data.m_strTexturePath);
+        // m_xmf4Color 를 텍스처 위 tint 로 전달 (카테고리별 색 구분)
+        LoadTextureToHierarchy(pEnemy, data.m_strTexturePath, data.m_xmf4Color);
     }
     else
     {
@@ -1446,7 +1457,8 @@ void EnemySpawner::ApplyColorToHierarchy(GameObject* pGameObject, const XMFLOAT4
     }
 }
 
-void EnemySpawner::LoadTextureToHierarchy(GameObject* pGameObject, const std::string& texturePath)
+void EnemySpawner::LoadTextureToHierarchy(GameObject* pGameObject, const std::string& texturePath,
+                                          const XMFLOAT4& tint)
 {
     if (!pGameObject || !m_pDevice || !m_pCommandList || !m_pScene) return;
 
@@ -1462,10 +1474,11 @@ void EnemySpawner::LoadTextureToHierarchy(GameObject* pGameObject, const std::st
         pGameObject->LoadTexture(m_pDevice, m_pCommandList, cpuHandle);
         pGameObject->SetSrvGpuDescriptorHandle(gpuHandle);
 
-        // Set white material to show texture properly
+        // diffuse 에 tint 곱해 텍스처 위에 카테고리 색을 입힘.
+        // tint == (1,1,1,1) 이면 기존 동작과 동일.
         MATERIAL material;
-        material.m_cAmbient = XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f);
-        material.m_cDiffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+        material.m_cAmbient = XMFLOAT4(tint.x * 0.3f, tint.y * 0.3f, tint.z * 0.3f, 1.0f);
+        material.m_cDiffuse = tint;
         material.m_cSpecular = XMFLOAT4(0.3f, 0.3f, 0.3f, 32.0f);
         material.m_cEmissive = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
         pGameObject->SetMaterial(material);
@@ -1477,11 +1490,11 @@ void EnemySpawner::LoadTextureToHierarchy(GameObject* pGameObject, const std::st
 
     if (pGameObject->m_pChild)
     {
-        LoadTextureToHierarchy(pGameObject->m_pChild, texturePath);
+        LoadTextureToHierarchy(pGameObject->m_pChild, texturePath, tint);
     }
     if (pGameObject->m_pSibling)
     {
-        LoadTextureToHierarchy(pGameObject->m_pSibling, texturePath);
+        LoadTextureToHierarchy(pGameObject->m_pSibling, texturePath, tint);
     }
 }
 
