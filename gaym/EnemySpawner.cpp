@@ -1522,15 +1522,16 @@ GameObject* EnemySpawner::CreateIndicatorObject(CRoom* pRoom, Mesh* pMesh)
     pMesh->AddRef();
     pIndicator->SetMesh(pMesh);
 
-    // 위협적인 붉은 발광 바닥 (로스트아크 텔레그래프 느낌)
+    // 초기 머티리얼 — 매 프레임 EnemyComponent 가 덮어쓰므로 첫 프레임용 기본값.
+    // 톤다운: emissive 1.6 → 0.6 (이전엔 bloom 과다, 스티커 느낌 가속).
     MATERIAL redMaterial;
-    redMaterial.m_cAmbient  = XMFLOAT4(0.5f, 0.05f, 0.02f, 1.0f);
-    redMaterial.m_cDiffuse  = XMFLOAT4(1.0f, 0.15f, 0.1f,  1.0f);
-    redMaterial.m_cSpecular = XMFLOAT4(0.0f, 0.0f,  0.0f,  1.0f);
-    redMaterial.m_cEmissive = XMFLOAT4(1.6f, 0.25f, 0.1f,  1.0f);  // 강한 붉은 발광
+    redMaterial.m_cAmbient  = XMFLOAT4(0.3f, 0.05f, 0.02f, 1.0f);
+    redMaterial.m_cDiffuse  = XMFLOAT4(0.85f, 0.20f, 0.12f, 1.0f);
+    redMaterial.m_cSpecular = XMFLOAT4(0.0f,  0.0f,  0.0f,  1.0f);
+    redMaterial.m_cEmissive = XMFLOAT4(0.60f, 0.12f, 0.05f, 1.0f);
     pIndicator->SetMaterial(redMaterial);
 
-    // Add render component — 오버레이 플래그로 depth 무시 + 맨 위에 렌더
+    // Add render component — 오버레이 플래그로 맨 위에 렌더 (depth=LESS 유지, 알파 블렌딩).
     auto* pRenderComp = pIndicator->AddComponent<RenderComponent>();
     pRenderComp->SetMesh(pMesh);
     pRenderComp->SetOverlay(true);
@@ -1541,6 +1542,10 @@ GameObject* EnemySpawner::CreateIndicatorObject(CRoom* pRoom, Mesh* pMesh)
     // 생성 직후 Transform과 CB를 한 번 강제 동기화.
     pIndicator->GetTransform()->Update(0.0f);
     pIndicator->Update(0.0f);
+
+    // 데칼 플래그 — 셰이더 bIsDecal 패스에서 lighting 우회 + UV V축 soft edge 적용.
+    // 반드시 Update 후 호출 (Update 안에서 CB가 ZeroMemory 될 수 있음).
+    pIndicator->SetDecal(true);
 
     return pIndicator;
 }

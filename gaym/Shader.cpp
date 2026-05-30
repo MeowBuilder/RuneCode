@@ -384,10 +384,18 @@ void Shader::Build(ID3D12Device* pDevice)
     CHECK_HR(pDevice->CreateGraphicsPipelineState(&waterPsoDesc, __uuidof(ID3D12PipelineState), (void**)&m_pd3dWaterPSO));
 
     // Indicator PSO — water 위에 그리되 보스/벽은 정상 occlude (depth=LESS 유지)
-    // DepthWriteMask=ZERO 로 depth 기록만 생략 → 뒤에 그려지는 다른 게 인디케이터 때문에 가려지지 않음
+    // DepthWriteMask=ZERO 로 depth 기록만 생략 → 뒤에 그려지는 다른 게 인디케이터 때문에 가려지지 않음.
+    // 알파 블렌딩 — 인디케이터 가장자리 soft fade. 알파=1 인 기존 오브젝트는 변화 없음.
     D3D12_GRAPHICS_PIPELINE_STATE_DESC indicatorPsoDesc = psoDesc;
     indicatorPsoDesc.DepthStencilState.DepthFunc      = D3D12_COMPARISON_FUNC_LESS;
     indicatorPsoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+    indicatorPsoDesc.BlendState.RenderTarget[0].BlendEnable    = TRUE;
+    indicatorPsoDesc.BlendState.RenderTarget[0].SrcBlend       = D3D12_BLEND_SRC_ALPHA;
+    indicatorPsoDesc.BlendState.RenderTarget[0].DestBlend      = D3D12_BLEND_INV_SRC_ALPHA;
+    indicatorPsoDesc.BlendState.RenderTarget[0].BlendOp        = D3D12_BLEND_OP_ADD;
+    indicatorPsoDesc.BlendState.RenderTarget[0].SrcBlendAlpha  = D3D12_BLEND_ONE;
+    indicatorPsoDesc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+    indicatorPsoDesc.BlendState.RenderTarget[0].BlendOpAlpha   = D3D12_BLEND_OP_ADD;
     CHECK_HR(pDevice->CreateGraphicsPipelineState(&indicatorPsoDesc, __uuidof(ID3D12PipelineState), (void**)&m_pd3dIndicatorPSO));
 
     // Outline PSO — Inverted Hull (월드스페이스 normal 푸시). Cull=FRONT 로

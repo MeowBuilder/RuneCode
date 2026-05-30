@@ -19,6 +19,8 @@
 #include <DirectXCollision.h>
 #include <random>
 
+extern void WriteNetworkLog(const std::string& msg);
+
 ProjectileManager::ProjectileManager()
 {
     m_Projectiles.reserve(MAX_PROJECTILES);
@@ -474,7 +476,37 @@ size_t ProjectileManager::GetActiveCount() const
 
 void ProjectileManager::Clear()
 {
+    // 투사체 벡터만 지우면, 투사체가 만들어둔 유체 VFX 슬롯은 계속 살아남을 수 있다.
+    // 방 전환 시에는 projectile trail / extra VFX / sub VFX를 먼저 Stop한 뒤 벡터를 비운다.
+    if (m_pVFXManager)
+    {
+        for (auto& projectile : m_Projectiles)
+        {
+            if (projectile.fluidVFXId >= 0)
+            {
+                m_pVFXManager->Stop(projectile.fluidVFXId);
+                projectile.fluidVFXId = -1;
+            }
+
+            for (int eid : projectile.extraVFXIds)
+            {
+                if (eid >= 0)
+                    m_pVFXManager->Stop(eid);
+            }
+            projectile.extraVFXIds.clear();
+
+            for (int sid : projectile.subVFXSlotIds)
+            {
+                if (sid >= 0)
+                    m_pVFXManager->Stop(sid);
+            }
+            projectile.subVFXSlotIds.clear();
+        }
+    }
+
     m_Projectiles.clear();
+
+    WriteNetworkLog("[ProjectileManager] Clear projectiles and VFX");
 }
 
 void ProjectileManager::CheckProjectileCollisions(Projectile& projectile)

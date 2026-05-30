@@ -761,17 +761,31 @@ float4 PS(PS_INPUT input) : SV_TARGET
     // Combine with material diffuse (optional: multiply)
     float4 baseColor = albedoColor * gMaterial.m_cDiffuse;
 
-    // (이전: 캐릭터 카테고리 색 추가 lerp 했었으나 m_cDiffuse 곱셈에 누적되어 채도 폭주.
-    //  m_cDiffuse 단일 곱셈만으로도 카테고리 색 전달은 충분하다고 판단해 제거.)
-
-    // 캐릭터 전체 밝기 다운 — lightTerm=1 강제로 풀 lit 이라 baseColor 그대로 노출 → 쨍한 인상.
-    //   0.62 곱: 텍스처 디테일/카테고리 색 그대로 유지하면서 밝기만 38% 다운.
+    // 채도 분리 폴라리티: 캐릭터는 vivid한 주인공, 환경은 약하게 desat된 무대.
+    //   - 0.80× 곱: lightTerm=1 강제로 풀 lit 상태라 1.0 그대로면 '자체 발광' 느낌.
+    //     원본 0.62 보다는 보존, 1.0 보다는 다운 — 중간점.
+    //   - sat/contrast 분리는 toon 그레이딩에서 처리.
     if (bIsSkinned != 0)
-        baseColor.rgb *= 0.62f;
+        baseColor.rgb *= 0.80f;
 
-    // 지면 데칼: 텍스처 알파로 마스킹, 조명 계산 우회
+    // 지면 데칼 / 공격 인디케이터: 조명 우회.
+    //   bHasTexture: 기존 텍스처 데칼 (변화 X — emissive 안 더함, 알파는 텍스처 그대로).
+    //   !bHasTexture: 인디케이터 — emissive 가산해서 발광색 노출 + V축 가장자리 soft fade.
+    //                  ring/disc 메쉬는 V=0 외곽/V=1 내곽(또는 중심) 컨벤션.
+    //                  box 메쉬는 V=0,1 양 long-edge → 부드러운 띠 형태.
     if (bIsDecal)
-        return float4(baseColor.rgb, albedoColor.a * gMaterial.m_cDiffuse.a);
+    {
+        float3 decalRGB = baseColor.rgb;
+        float  decalA   = albedoColor.a * gMaterial.m_cDiffuse.a;
+        if (bHasTexture == 0)
+        {
+            decalRGB += gMaterial.m_cEmissive.rgb;
+            float v = input.uv.y;
+            float edgeFade = smoothstep(0.0f, 0.12f, v) * smoothstep(1.0f, 0.88f, v);
+            decalA *= edgeFade;
+        }
+        return float4(decalRGB, decalA);
+    }
 
     // Apply water AO to base color
     if (bIsWater)
@@ -972,34 +986,34 @@ float4 PS(PS_INPUT input) : SV_TARGET
 
         // --- Depth Color Gradient (3-stop) ---
         // Trough: very dark deep navy
-        float3 troughColor = float3(0.003f, 0.018f, 0.07f);
-        // Mid wave: medium ocean blue
-        float3 midColor    = float3(0.015f, 0.07f,  0.18f);
-        // Crest base: 더 밝게 (파도 마루 강조)
-        float3 crestColor  = float3(0.08f,  0.28f,  0.55f);
+        float3 troughColor = float3(0.005f, 0.025f, 0.09f);
+        // Mid wave: 평균 픽셀 색 — 너무 어두우면 표면이 단조롭게 보임. 살짝 밝게.
+        float3 midColor    = float3(0.022f, 0.10f,  0.24f);
+        // Crest base: 파도 마루 강조
+        float3 crestColor  = float3(0.10f,  0.32f,  0.60f);
 
         // Smooth 3-stop blend using two lerps
         float3 waterColor = lerp(troughColor, midColor,   saturate(depthFactor * 2.0f));
         waterColor        = lerp(waterColor,  crestColor, saturate((depthFactor - 0.5f) * 2.0f));
 
-        // --- Subsurface Scattering (파도 마루에서 청록 빛 더 강하게) ---
-        float3 sssColor   = float3(0.05f, 0.55f, 0.65f);  // 더 선명한 청록
-        float sssStrength = pow(saturate(input.crestFactor * 1.5f), 2.0f) * 0.55f;  // 더 강하게
+        // --- Subsurface Scattering (파도 마루 청록) ---
+        float3 sssColor   = float3(0.08f, 0.40f, 0.52f);
+        float sssStrength = pow(saturate(input.crestFactor * 1.5f), 2.0f) * 0.42f;
         waterColor = lerp(waterColor, sssColor, sssStrength);
 
         // --- Directional light shading (subtle) ---
         float diff = saturate(dot(shadingNormal, -g_LightDirection));
-        waterColor = waterColor * (1.0f + diff * 0.35f);
+        waterColor = waterColor * (1.0f + diff * 0.32f);
 
         // --- Specular highlight (sun glint on waves) ---
         float3 halfVec = normalize(vToCamera + (-g_LightDirection));
-        float spec = pow(max(dot(shadingNormal, halfVec), 0.0f), 200.0f);  // 300→200 (범위 넓게)
-        float3 specColor = float3(1.0f, 0.97f, 0.90f) * spec * 0.80f;     // 0.55→0.80
+        float spec = pow(max(dot(shadingNormal, halfVec), 0.0f), 220.0f);
+        float3 specColor = float3(1.0f, 0.97f, 0.90f) * spec * 0.72f;
 
-        // --- Wave Crest Foam (threshold 낮춰서 더 잘 터지게) ---
-        float crestFoam = pow(input.crestFactor, 1.2f);           // 1.5→1.2 (더 낮은 crest에서도 활성)
-        crestFoam = smoothstep(0.30f, 0.70f, crestFoam);          // 0.55/0.90 → 0.30/0.70
-        float foamStrength = saturate(crestFoam * 1.0f);          // 0.75→1.0
+        // --- Wave Crest Foam ---
+        float crestFoam = pow(input.crestFactor, 1.4f);
+        crestFoam = smoothstep(0.38f, 0.78f, crestFoam);
+        float foamStrength = saturate(crestFoam * 0.85f);
         float3 foamColor   = float3(0.90f, 0.94f, 0.98f);
 
         // --- Fresnel (edge reflectivity) ---
@@ -1012,19 +1026,33 @@ float4 PS(PS_INPUT input) : SV_TARGET
         // === Final Composite ===
         finalColor.rgb = waterColor;
         finalColor.rgb += specColor * shadowFactor;
+
+        // --- Surface sparkle: 넓은 표면의 단조로움 깨기 (멀리 바깥 물에서 살아남) ---
+        //   grazing(시선이 표면과 평행할수록 1): 카메라 정면 위에서 본 평면은 sparkle 약함,
+        //   원거리에서 표면을 거의 옆에서 본 픽셀은 sparkle 강함 → 광활한 바깥 물 면이
+        //   햇빛 흩뿌리는 듯한 동적 패턴 획득.
+        //   peak only (pow 3.0): 표면 도배 아니라 점점이 반짝이는 인상.
+        float NdotV_w = saturate(dot(shadingNormal, vToCamera));
+        float grazing = pow(1.0f - NdotV_w, 1.6f);
+        float sparkle = WaterCaustics(input.worldPosition.xz * 0.45f, g_Time * 1.20f);
+        sparkle = pow(saturate(sparkle), 3.0f);
+        finalColor.rgb += float3(0.60f, 0.82f, 0.98f) * sparkle * grazing * 0.42f;
+
         finalColor.rgb  = lerp(finalColor.rgb, foamColor, foamStrength);
         finalColor.rgb  = lerp(finalColor.rgb, fresnelColor, waterFresnel * 0.18f);
 
-        // 일반 지오메트리와 동일한 atmospheric tint/fog를 물 표면에도 적용 → 시각적 연속성.
+        // 일반 지오메트리와 동일한 atmospheric tint/fog 적용 — 톤다운.
+        //   - fog 시작 거리 ↑(10→18) + 강도 ↓(0.75→0.45): 가까운 픽셀 파랗게 덮이는 현상 회피.
+        //   - tint 곱 약화(1.22→1.10) + 적용 비율 ↓(0.90→0.50): 청록 도배 완화.
+        //   - 전체 1.06× 가산 제거: 물맵이 전반적으로 떠 보이는 원인.
         if (g_StageTheme == 1)
         {
             float camDist_w = distance(g_CameraPosition, input.worldPosition);
-            float fog_w = saturate((camDist_w - 10.0f) / 55.0f);
-            float3 fogColor_w = float3(0.22f, 0.48f, 0.66f);
-            finalColor.rgb = lerp(finalColor.rgb, fogColor_w, fog_w * 0.75f);
-            float3 tinted_w = finalColor.rgb * float3(0.92f, 1.07f, 1.22f);
-            finalColor.rgb = lerp(finalColor.rgb, tinted_w, 0.90f);
-            finalColor.rgb *= 1.06f;
+            float fog_w = saturate((camDist_w - 18.0f) / 55.0f);
+            float3 fogColor_w = float3(0.22f, 0.42f, 0.58f);
+            finalColor.rgb = lerp(finalColor.rgb, fogColor_w, fog_w * 0.45f);
+            float3 tinted_w = finalColor.rgb * float3(0.96f, 1.04f, 1.10f);
+            finalColor.rgb = lerp(finalColor.rgb, tinted_w, 0.50f);
         }
 
         return float4(finalColor.rgb, waterAlpha);
@@ -1035,32 +1063,32 @@ float4 PS(PS_INPUT input) : SV_TARGET
     // 캐릭터(bIsSkinned)에는 환경 fog/tint 적용 안 함 → 카테고리 색이 물맵 청록에 묻히지 않음.
     if (g_StageTheme == 1 && !bIsSkinned)
     {
-        // Caustics — 벽면·바닥에만 (캐릭터는 분리해 카테고리 색 보존).
+        // Caustics — 톤다운: HDR 피크(1.45)·shimmer 진폭·강도 모두 축소.
+        //   peak > 1 유지(bloom 통과)는 살리되 네온 청록 폭격은 회피.
         float upFacing = saturate(normal.y);
         float caust = WaterCaustics(input.worldPosition.xz, g_Time);
-        float shimmer = 0.85f + 0.30f * sin(g_Time * 0.9f + input.worldPosition.x * 0.07f);
-        float3 causticColor = float3(0.65f, 1.05f, 1.45f);  // peak > 1.0 → bloom 통과
+        float shimmer = 0.90f + 0.18f * sin(g_Time * 0.9f + input.worldPosition.x * 0.07f);
+        float3 causticColor = float3(0.50f, 0.80f, 1.05f);
 
-        float caustWeight = lerp(0.35f, 1.0f, smoothstep(0.0f, 0.6f, upFacing));
-        finalColor.rgb += causticColor * caust * caustWeight * shadowFactor * 0.85f * shimmer;
+        float caustWeight = lerp(0.20f, 0.65f, smoothstep(0.0f, 0.6f, upFacing));
+        finalColor.rgb += causticColor * caust * caustWeight * shadowFactor * 0.45f * shimmer;
 
-        // 거리 기반 청록 안개 — 시작 거리 단축(16→10) + 농도 ↑(0.65→0.75)로 수중 가시거리 감각.
+        // 거리 fog — 시작 거리 ↑(10→18) + 강도 ↓(0.75→0.45). 가까운 픽셀까지 파랗던 문제 해소.
         float camDist = distance(g_CameraPosition, input.worldPosition);
-        float fog = saturate((camDist - 10.0f) / 55.0f);
-        float3 fogColor = float3(0.22f, 0.48f, 0.66f);  // 약간 더 진한 청록
-        finalColor.rgb = lerp(finalColor.rgb, fogColor, fog * 0.75f);
+        float fog = saturate((camDist - 18.0f) / 55.0f);
+        float3 fogColor = float3(0.22f, 0.42f, 0.58f);
+        finalColor.rgb = lerp(finalColor.rgb, fogColor, fog * 0.45f);
 
-        // 거리 기반 채도 감소 — 멀수록 청록으로 묻힘. 깊이감/뿌연 수중 시야.
+        // 거리 desat — 최대 강도 0.35→0.22. 멀수록 자연스럽게 묻히되 색 다 빠지지 않게.
         float lum_w = dot(finalColor.rgb, float3(0.299f, 0.587f, 0.114f));
-        float desat = saturate((camDist - 12.0f) / 50.0f) * 0.35f;
+        float desat = saturate((camDist - 18.0f) / 50.0f) * 0.22f;
         finalColor.rgb = lerp(finalColor.rgb,
-                              float3(lum_w * 0.85f, lum_w * 1.00f, lum_w * 1.10f),
+                              float3(lum_w * 0.90f, lum_w * 1.00f, lum_w * 1.06f),
                               desat);
 
-        // 청량 톤 시프트 + 전체 밝기 살짝 lift — "햇빛 잘 드는 얕은 물" 느낌.
-        float3 tinted = finalColor.rgb * float3(0.92f, 1.07f, 1.22f);
-        finalColor.rgb = lerp(finalColor.rgb, tinted, 0.90f);
-        finalColor.rgb *= 1.06f;
+        // 청량 톤 시프트 — 곱 약화 + 적용 비율 ↓, 전체 1.06× 가산 제거.
+        float3 tinted = finalColor.rgb * float3(0.96f, 1.04f, 1.10f);
+        finalColor.rgb = lerp(finalColor.rgb, tinted, 0.50f);
     }
 
     // ── Stage-themed environment: Earth (rocky-desert: sun-baked + sand ripple + heat haze) ──
@@ -1163,12 +1191,14 @@ float4 PS(PS_INPUT input) : SV_TARGET
     // cel boundary on flat lit surfaces. A global saturation+contrast bump on
     // toon mode makes the difference visible everywhere, not just on shadow
     // boundaries.
-    // 캐릭터는 이미 카테고리 색(m_cDiffuse) 이 강해서 전역 1.35×/1.10× 까지 누적되면
-    //   채도 폭주로 빤딱이게 됨. 캐릭터는 1.0× (거의 패스), 환경만 카툰 부스트 받음.
+    // 채도 분리 폴라리티 — 일반방 알록달록 해소를 위해 캐릭터까지 약하게 desat.
+    //   적 텍스처들이 이미 강한 원색이라 부스트하면 다중 적 동시 등장 시 노이즈 폭증.
+    //   - 캐릭터 sat 0.92× (환경과 동일) → 한 톤으로 정돈, 분리감은 rim/emit 으로 처리.
+    //   - 환경 sat 0.90× (살짝 더 desat) → 캐릭터가 약 2% 더 vivid 한 미세 분리만 유지.
     if (g_ToonEnabled != 0)
     {
-        float satBoost  = (bIsSkinned != 0) ? 1.05f : 1.35f;
-        float contBoost = (bIsSkinned != 0) ? 1.00f : 1.10f;
+        float satBoost  = (bIsSkinned != 0) ? 0.92f : 0.90f;
+        float contBoost = (bIsSkinned != 0) ? 1.05f : 1.10f;
         float lum = dot(finalColor.rgb, float3(0.299f, 0.587f, 0.114f));
         finalColor.rgb = lerp(float3(lum, lum, lum), finalColor.rgb, satBoost);
         // max() (not saturate) preserves HDR > 1 so bloom still picks up
@@ -1182,6 +1212,16 @@ float4 PS(PS_INPUT input) : SV_TARGET
     //   너무 높이면 ambient/lit 위에 누적되어 발광·쨍한 인상.
     if (bIsSkinned != 0)
         finalColor.rgb = max(finalColor.rgb, baseColor.rgb * 0.22f);
+
+    // 캐릭터 상시 림라이트 — sat 다운으로 칙칙해진 캐릭터 외곽 분리 보완.
+    //   0.10 → 0.14: sat 0.92×로 떨어진 만큼 외곽 림에서 색 정보 보충.
+    if (bIsSkinned != 0)
+    {
+        float3 rimView = normalize(g_CameraPosition - input.worldPosition);
+        float rimT = 1.0f - saturate(dot(normalize(input.worldNormal), rimView));
+        float rimMask = pow(rimT, 3.0f) * 0.14f;
+        finalColor.rgb += baseColor.rgb * rimMask;
+    }
 
     // Hit Flash: rim-based white outline flash + additive bloom pop
     //   lerp(→white)은 흰색에서 클램프되므로 림에 추가 additive로 "초과 밝기" 부여

@@ -186,6 +186,13 @@ public:
             m_pcbMappedGameObject->m_bIsPortal = bIsPortal ? 1 : 0;
         }
     }
+    void SetDecal(bool bIsDecal)
+    {
+        if (m_pcbMappedGameObject)
+        {
+            m_pcbMappedGameObject->m_bIsDecal = bIsDecal ? 1 : 0;
+        }
+    }
 
     void SetHitFlash(float f)
     {

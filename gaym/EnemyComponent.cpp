@@ -1182,21 +1182,7 @@ void EnemyComponent::UpdateDead(float dt)
         if (pScene)
         {
             // Mark indicator objects for deletion first
-            if (m_pRushLineIndicator)
-            {
-                pScene->MarkForDeletion(m_pRushLineIndicator);
-                m_pRushLineIndicator = nullptr;
-            }
-            if (m_pHitZoneIndicator)
-            {
-                pScene->MarkForDeletion(m_pHitZoneIndicator);
-                m_pHitZoneIndicator = nullptr;
-            }
-            if (m_pHitZoneFillIndicator)
-            {
-                pScene->MarkForDeletion(m_pHitZoneFillIndicator);
-                m_pHitZoneFillIndicator = nullptr;
-            }
+            DestroyIndicators(pScene);
 
             // Mark self for deletion (will also clean up child hierarchy)
             if (m_pOwner)
@@ -1238,6 +1224,29 @@ void EnemyComponent::ShowIndicators()
         if (typeOverride >= 0) effectiveType = static_cast<IndicatorType>(typeOverride);
     }
 
+    // emit 헬퍼 — 펄스(slow→fast)/임박감(urgency)/베이스 램프 결합한 emissive 스칼라.
+    //   baseLo→baseHi: fillProgress 따라 선형 램프 (정적 강도).
+    //   urgencyBoost: fillProgress > 0.6 부터 가속, 마지막 40%에 +urgencyBoost 만큼 추가.
+    //   pulse: ~3Hz → ~8Hz 로 urgency 따라 빨라지며 swing 폭도 0.15 → 0.35 확장.
+    auto emitFor = [this](float fillProgress, float baseLo, float baseHi, float urgencyBoost) -> float
+    {
+        float baseEmit = baseLo + (baseHi - baseLo) * fillProgress;
+        float urgency  = std::clamp((fillProgress - 0.60f) / 0.40f, 0.0f, 1.0f);
+        float slow     = 0.5f + 0.5f * sinf(m_fIndicatorTimer * 18.85f);   // ~3Hz
+        float fast     = 0.5f + 0.5f * sinf(m_fIndicatorTimer * 50.27f);   // ~8Hz
+        float pulse    = slow + (fast - slow) * urgency;
+        float swing    = 0.15f + 0.20f * urgency;
+        return baseEmit + urgencyBoost * urgency + swing * (pulse - 0.5f);
+    };
+
+    // alpha 헬퍼 — m_cDiffuse.a 캡. PS 의 V축 edge fade 와 곱해져서 외곽은 더 투명, 중심은 이 값까지.
+    //   1.0 으로 두면 평면 스티커처럼 보여서 0.5 부근으로 낮춰 바닥 텍스처가 비쳐 보이게.
+    //   Fill 은 fillProgress 따라 불투명도 ↑ → "임박할수록 단단해지는" 효과.
+    auto alphaFor = [](float fillProgress, float baseLo, float baseHi) -> float
+    {
+        return baseLo + (baseHi - baseLo) * std::clamp(fillProgress, 0.0f, 1.0f);
+    };
+
     if (effectiveType == IndicatorType::Circle)
     {
 
@@ -1271,7 +1280,11 @@ void EnemyComponent::ShowIndicators()
                     ? pActive->GetIndicatorRadius()
                     : m_IndicatorConfig.m_fHitRadius;
 
-        // ─── 테두리 링: 공격 내내 고정. fill 이 fullR 까지 차도 묻히지 않도록 fullR×1.03 으로 외곽에 ─
+        // 원소/패턴별 틴트 — behavior 의 GetIndicatorTint 사용. (1,1,1) = 기본 빨간색.
+        XMFLOAT3 tint = pActive ? pActive->GetIndicatorTint() : XMFLOAT3(1.0f, 1.0f, 1.0f);
+        bool bUseTint = !(tint.x == 1.0f && tint.y == 1.0f && tint.z == 1.0f);
+
+        // ─── 테두리 링: 공격 내내 고정. 약한 펄스, 임박감 적게. ─
         if (m_pHitZoneIndicator)
         {
             TransformComponent* pT = m_pHitZoneIndicator->GetTransform();
@@ -1281,16 +1294,20 @@ void EnemyComponent::ShowIndicators()
                 float borderR = fullR * 1.03f;
                 pT->SetScale(borderR, 1.0f, borderR);
 
+                XMFLOAT3 c = bUseTint ? tint : XMFLOAT3(1.0f, 0.20f, 0.10f);
+                float e = emitFor(fillProgress, 0.35f, 0.50f, 0.15f);
+                float a = alphaFor(fillProgress, 0.50f, 0.65f);
+
                 MATERIAL mat;
-                mat.m_cAmbient  = XMFLOAT4(0.5f, 0.02f, 0.02f, 1.0f);
-                mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.15f, 0.1f,  1.0f);
-                mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f,  0.0f,  1.0f);
-                mat.m_cEmissive = XMFLOAT4(2.0f, 0.25f, 0.1f,  1.0f);
+                mat.m_cAmbient  = XMFLOAT4(0.20f * c.x, 0.20f * c.y, 0.20f * c.z, 1.0f);
+                mat.m_cDiffuse  = XMFLOAT4(c.x, c.y, c.z, a);
+                mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                mat.m_cEmissive = XMFLOAT4(e * c.x, e * c.y, e * c.z, 1.0f);
                 m_pHitZoneIndicator->SetMaterial(mat);
             }
         }
 
-        // ─── 내부 Fill: 0 → fullR 까지 꽉 차게 (테두리는 fullR×1.03 으로 외곽에 있어 묻히지 않음) ─
+        // ─── 내부 Fill: 0 → fullR 까지 차오름. 강한 펄스 + urgency 가속. ─
         if (m_pHitZoneFillIndicator)
         {
             TransformComponent* pT = m_pHitZoneFillIndicator->GetTransform();
@@ -1301,16 +1318,16 @@ void EnemyComponent::ShowIndicators()
                 if (r < 0.01f) r = 0.01f;  // 0 스케일 방지
                 pT->SetScale(r, 1.0f, r);
 
-                // fill 이 찰수록 색이 붉음 → 노랑 으로 가열되는 느낌 (0=어두운 붉음, 1=밝은 노랑)
+                // Fill 은 살짝 노랑 쪽 (가열 메타포) — 틴트 있으면 그대로 사용
+                XMFLOAT3 c = bUseTint ? tint : XMFLOAT3(1.0f, 0.30f, 0.08f);
+                float e = emitFor(fillProgress, 0.45f, 0.85f, 0.40f);
+                float a = alphaFor(fillProgress, 0.40f, 0.80f);
+
                 MATERIAL mat;
-                mat.m_cAmbient  = XMFLOAT4(0.3f, 0.02f, 0.0f, 1.0f);
-                mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.2f + 0.5f * fillProgress, 0.05f, 1.0f);
+                mat.m_cAmbient  = XMFLOAT4(0.20f * c.x, 0.20f * c.y, 0.20f * c.z, 1.0f);
+                mat.m_cDiffuse  = XMFLOAT4(c.x, c.y, c.z, a);
                 mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-                mat.m_cEmissive = XMFLOAT4(
-                    0.8f + 1.0f * fillProgress,   // R: 0.8 → 1.8 밝아짐
-                    0.1f + 0.9f * fillProgress,   // G: 0.1 → 1.0 노랑
-                    0.05f,
-                    1.0f);
+                mat.m_cEmissive = XMFLOAT4(e * c.x, e * c.y, e * c.z, 1.0f);
                 m_pHitZoneFillIndicator->SetMaterial(mat);
             }
         }
@@ -1352,7 +1369,7 @@ void EnemyComponent::ShowIndicators()
         XMFLOAT3 tint = pActive ? pActive->GetIndicatorTint() : XMFLOAT3(1.0f, 1.0f, 1.0f);
         bool bUseTint = !(tint.x == 1.0f && tint.y == 1.0f && tint.z == 1.0f);
 
-        // 외곽 box — 공격 내내 고정 테두리. 사이드 방향만 1.06 마진, Z 는 fLen 그대로
+        // 외곽 box — 약한 펄스, 임박감 적게 (테두리).
         if (m_pHitZoneIndicator)
         {
             TransformComponent* pT = m_pHitZoneIndicator->GetTransform();
@@ -1361,25 +1378,21 @@ void EnemyComponent::ShowIndicators()
                 pT->SetPosition(centerX, indY + 0.02f, centerZ);
                 pT->SetRotation(0.0f, bossYawDeg, 0.0f);
                 pT->SetScale(fHalfW * 2.0f * 1.06f, 1.0f, fLen);
+
+                XMFLOAT3 c = bUseTint ? tint : XMFLOAT3(1.0f, 0.20f, 0.10f);
+                float e = emitFor(fillProgress, 0.35f, 0.50f, 0.15f);
+                float a = alphaFor(fillProgress, 0.50f, 0.65f);
+
                 MATERIAL mat;
-                if (bUseTint)
-                {
-                    mat.m_cAmbient  = XMFLOAT4(0.4f * tint.x, 0.4f * tint.y, 0.4f * tint.z, 1.0f);
-                    mat.m_cDiffuse  = XMFLOAT4(tint.x, tint.y, tint.z, 1.0f);
-                    mat.m_cEmissive = XMFLOAT4(2.0f * tint.x, 2.0f * tint.y, 2.0f * tint.z, 1.0f);
-                }
-                else
-                {
-                    mat.m_cAmbient  = XMFLOAT4(0.5f, 0.02f, 0.02f, 1.0f);
-                    mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.15f, 0.10f, 1.0f);
-                    mat.m_cEmissive = XMFLOAT4(2.0f, 0.25f, 0.10f, 1.0f);
-                }
+                mat.m_cAmbient  = XMFLOAT4(0.20f * c.x, 0.20f * c.y, 0.20f * c.z, 1.0f);
+                mat.m_cDiffuse  = XMFLOAT4(c.x, c.y, c.z, a);
+                mat.m_cEmissive = XMFLOAT4(e * c.x, e * c.y, e * c.z, 1.0f);
                 mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
                 m_pHitZoneIndicator->SetMaterial(mat);
             }
         }
 
-        // 내부 fill — 보스 쪽부터 전방으로 뻗어나가며 차오름
+        // 내부 fill — 강한 펄스 + urgency 가속.
         if (m_pHitZoneFillIndicator)
         {
             TransformComponent* pT = m_pHitZoneFillIndicator->GetTransform();
@@ -1394,21 +1407,14 @@ void EnemyComponent::ShowIndicators()
                 pT->SetRotation(0.0f, bossYawDeg, 0.0f);
                 pT->SetScale(fHalfW * 2.0f, 1.0f, curLen);
 
+                XMFLOAT3 c = bUseTint ? tint : XMFLOAT3(1.0f, 0.30f, 0.08f);
+                float e = emitFor(fillProgress, 0.45f, 0.85f, 0.40f);
+                float a = alphaFor(fillProgress, 0.40f, 0.80f);
+
                 MATERIAL mat;
-                if (bUseTint)
-                {
-                    // tint 기반 fill — fill 진행도에 따라 emissive 가 점점 강해짐
-                    float emitMul = 0.8f + 1.6f * fillProgress;   // 0.8 → 2.4
-                    mat.m_cAmbient  = XMFLOAT4(0.25f * tint.x, 0.25f * tint.y, 0.25f * tint.z, 1.0f);
-                    mat.m_cDiffuse  = XMFLOAT4(tint.x, tint.y, tint.z, 1.0f);
-                    mat.m_cEmissive = XMFLOAT4(emitMul * tint.x, emitMul * tint.y, emitMul * tint.z, 1.0f);
-                }
-                else
-                {
-                    mat.m_cAmbient  = XMFLOAT4(0.3f, 0.02f, 0.0f, 1.0f);
-                    mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.2f + 0.5f * fillProgress, 0.05f, 1.0f);
-                    mat.m_cEmissive = XMFLOAT4(0.8f + 1.0f * fillProgress, 0.1f + 0.9f * fillProgress, 0.05f, 1.0f);
-                }
+                mat.m_cAmbient  = XMFLOAT4(0.20f * c.x, 0.20f * c.y, 0.20f * c.z, 1.0f);
+                mat.m_cDiffuse  = XMFLOAT4(c.x, c.y, c.z, a);
+                mat.m_cEmissive = XMFLOAT4(e * c.x, e * c.y, e * c.z, 1.0f);
                 mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
                 m_pHitZoneFillIndicator->SetMaterial(mat);
             }
@@ -1484,6 +1490,44 @@ void EnemyComponent::HideIndicators()
     }
 }
 
+void EnemyComponent::DestroyIndicators(Scene* pScene)
+{
+    // 먼저 화면에서 즉시 숨긴다.
+    HideIndicators();
+
+    auto destroyObj = [pScene](GameObject*& pObj)
+        {
+            if (!pObj)
+                return;
+
+            // MarkForDeletion이 다음 프레임에 처리되므로,
+            // 그 사이 한 프레임이라도 보이지 않게 먼저 숨긴다.
+            if (TransformComponent* pT = pObj->GetTransform())
+            {
+                pT->SetPosition(0.0f, -1000.0f, 0.0f);
+                pT->SetScale(0.0f, 0.0f, 0.0f);
+            }
+
+            if (pScene)
+            {
+                pScene->MarkForDeletion(pObj);
+            }
+
+            pObj = nullptr;
+        };
+
+    // 공격 telegraph / hit zone
+    destroyObj(m_pRushLineIndicator);
+    destroyObj(m_pHitZoneIndicator);
+    destroyObj(m_pHitZoneFillIndicator);
+
+    // 타입 식별 메쉬 마커도 남아 있으면 같이 정리
+    destroyObj(m_pHeadMarker);
+    destroyObj(m_pHeadMarkerInner);
+    destroyObj(m_pFootMarker);
+    destroyObj(m_pFootMarkerInner);
+}
+
 XMFLOAT3 EnemyComponent::GetAttackOrigin() const
 {
     if (!m_pOwner) return XMFLOAT3(0.0f, 0.0f, 0.0f);
@@ -1529,15 +1573,25 @@ void EnemyComponent::Die()
 {
     OutputDebugString(L"[Enemy] Died!\n");
 
-    // Hide and release indicators
-    HideIndicators();
-    m_pRushLineIndicator     = nullptr;
-    m_pHitZoneIndicator      = nullptr;
-    m_pHitZoneFillIndicator  = nullptr;
+    // HideIndicators()만 하고 포인터를 nullptr로 바꾸면,
+    // indicator GameObject가 Scene에 남아도 다시 삭제할 방법이 사라진다.
+    // 따라서 사망 시에는 Scene에서 실제 삭제 예약까지 처리한다.
+    Scene* pScene = nullptr;
 
-    // 타입 식별 마커 정리 (상태이상 VFX는 UpdateStatusEffects 흐름이 별도 정리)
+    if (m_pRoom)
+    {
+        pScene = m_pRoom->GetScene();
+    }
+
+    if (!pScene && Dx12App::GetInstance())
+    {
+        pScene = Dx12App::GetInstance()->GetScene();
+    }
+
+    DestroyIndicators(pScene);
+
+    // 타입 식별 파티클 VFX 정리
     StopTypeMarkers();
-    HideTypeMarkers();
 
     // Notify room/callback
     if (m_OnDeathCallback)

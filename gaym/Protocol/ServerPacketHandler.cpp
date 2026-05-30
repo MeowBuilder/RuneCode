@@ -193,20 +193,34 @@ bool Handle_S_MONSTER_SPAWN(PacketSessionRef& session, Protocol::S_MONSTER_SPAWN
 {
     const Protocol::MonsterInfo& m = pkt.monster();
 
-    char buf[256];
-    sprintf_s(buf, "[Network] S_MONSTER_SPAWN received: id=%llu type=%u pos=(%.1f,%.1f,%.1f) yaw=%.2f hp=%.1f boss=%d",
-        m.monsterid(), m.monstertype(),
+    char buf[320];
+    sprintf_s(buf,
+        "[Network] S_MONSTER_SPAWN received: id=%llu type=%u attack=%u visual=%u pos=(%.1f,%.1f,%.1f) yaw=%.2f hp=%.1f boss=%d",
+        m.monsterid(),
+        m.monstertype(),
+        m.attacktype(),
+        m.visualtype(),
         m.x(), m.y(), m.z(),
-        m.yaw(), m.hp(), m.isboss() ? 1 : 0);
+        m.yaw(),
+        m.hp(),
+        m.isboss() ? 1 : 0);
     WriteNetworkLog(buf);
 
     NetworkManager* pNetMgr = NetworkManager::GetInstance();
     if (pNetMgr)
     {
-        pNetMgr->QueueMonsterSpawn(m.monsterid(), m.monstertype(),
-                                   m.x(), m.y(), m.z(), m.yaw(),
-                                   m.hp(), m.isboss());
+        pNetMgr->QueueMonsterSpawn(
+            m.monsterid(),
+            m.monstertype(),
+            m.attacktype(),
+            m.visualtype(),
+            m.x(), m.y(), m.z(),
+            m.yaw(),
+            m.hp(),
+            m.isboss()
+        );
     }
+
     return true;
 }
 

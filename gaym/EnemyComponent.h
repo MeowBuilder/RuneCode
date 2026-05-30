@@ -17,6 +17,7 @@ class AnimationComponent;
 class BossPhaseController;
 class BossPhaseConfig;
 class FluidSkillVFXManager;
+class Scene;
 
 struct EnemyAnimationConfig
 {
@@ -261,6 +262,8 @@ public:
         HideIndicators();
     }
 
+    // 공격 인디케이터 / 메쉬 마커 삭제
+    void DestroyIndicators(Scene* pScene);
 
     // 공격 원점 forward offset (크라켄처럼 몸 앞쪽 촉수에서 공격이 나가는 경우 사용)
     // 보스 위치에서 forward 방향으로 N 유닛 앞을 "공격 중심"으로 취급

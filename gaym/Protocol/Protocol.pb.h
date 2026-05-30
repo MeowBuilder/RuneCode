@@ -2596,6 +2596,8 @@ class MonsterInfo final :
     kHpFieldNumber = 7,
     kIsBossFieldNumber = 8,
     kStageIndexFieldNumber = 9,
+    kAttackTypeFieldNumber = 10,
+    kVisualTypeFieldNumber = 11,
   };
   // uint64 monsterId = 1;
   void clear_monsterid();
@@ -2678,6 +2680,24 @@ class MonsterInfo final :
   void _internal_set_stageindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
   public:
 
+  // uint32 attackType = 10;
+  void clear_attacktype();
+  ::PROTOBUF_NAMESPACE_ID::uint32 attacktype() const;
+  void set_attacktype(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_attacktype() const;
+  void _internal_set_attacktype(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
+  // uint32 visualType = 11;
+  void clear_visualtype();
+  ::PROTOBUF_NAMESPACE_ID::uint32 visualtype() const;
+  void set_visualtype(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_visualtype() const;
+  void _internal_set_visualtype(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.MonsterInfo)
  private:
   class _Internal;
@@ -2694,6 +2714,8 @@ class MonsterInfo final :
   float hp_;
   bool isboss_;
   ::PROTOBUF_NAMESPACE_ID::uint32 stageindex_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 attacktype_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 visualtype_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -6000,6 +6022,46 @@ inline void MonsterInfo::_internal_set_stageindex(::PROTOBUF_NAMESPACE_ID::uint3
 inline void MonsterInfo::set_stageindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
   _internal_set_stageindex(value);
   // @@protoc_insertion_point(field_set:Protocol.MonsterInfo.stageIndex)
+}
+
+// uint32 attackType = 10;
+inline void MonsterInfo::clear_attacktype() {
+  attacktype_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 MonsterInfo::_internal_attacktype() const {
+  return attacktype_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 MonsterInfo::attacktype() const {
+  // @@protoc_insertion_point(field_get:Protocol.MonsterInfo.attackType)
+  return _internal_attacktype();
+}
+inline void MonsterInfo::_internal_set_attacktype(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  attacktype_ = value;
+}
+inline void MonsterInfo::set_attacktype(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_attacktype(value);
+  // @@protoc_insertion_point(field_set:Protocol.MonsterInfo.attackType)
+}
+
+// uint32 visualType = 11;
+inline void MonsterInfo::clear_visualtype() {
+  visualtype_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 MonsterInfo::_internal_visualtype() const {
+  return visualtype_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 MonsterInfo::visualtype() const {
+  // @@protoc_insertion_point(field_get:Protocol.MonsterInfo.visualType)
+  return _internal_visualtype();
+}
+inline void MonsterInfo::_internal_set_visualtype(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  visualtype_ = value;
+}
+inline void MonsterInfo::set_visualtype(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_visualtype(value);
+  // @@protoc_insertion_point(field_set:Protocol.MonsterInfo.visualType)
 }
 
 // -------------------------------------------------------------------
