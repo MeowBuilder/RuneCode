@@ -6,6 +6,7 @@
 #include "VFXTypes.h"
 #include <memory>
 #include <array>
+#include <set>
 
 class ISkillBehavior;
 class InputSystem;
@@ -170,6 +171,9 @@ private:
 
     // Rune input blocking
     bool m_bRuneInputBlocked = false;
+
+    // echo(메아리) 로 발동된 슬롯 — Update() 호출하되 쿨다운 타이머는 초기화하지 않음
+    std::set<size_t> m_echoRunningSlots;
 
     // 활성화 VFX 컨텍스트 (Execute 직전에 세팅, 행동 클래스가 참조)
     VFXModifier m_activationVFXMod;

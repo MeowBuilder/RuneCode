@@ -790,6 +790,8 @@ void ProjectileManager::ApplyAoEDamage(Projectile& projectile, const XMFLOAT3& i
             falloff = max(0.5f, falloff);
 
             float finalDamage = projectile.damage * falloff;
+            if (projectile.execDamageBonus > 0.f && pEnemy->GetHpRatio() < 0.3f)
+                finalDamage *= (1.f + projectile.execDamageBonus);
             pEnemy->TakeDamage(finalDamage, false, projectile.execDamageBonus > 0.f);
 
             wchar_t buffer[128];

@@ -7,6 +7,7 @@ class GameObject;
 struct SkillData;
 class FluidSkillVFXManager;
 class Scene;
+class EnemyComponent;
 
 // Strategy pattern interface for skill execution
 class ISkillBehavior
@@ -69,6 +70,13 @@ public:
     virtual void SetVFXManager(FluidSkillVFXManager*) {}
     virtual void SetScene(Scene*) {}
 
+    // 메아리 룬(ABY_ECO)에 의한 재발동.
+    // 기본 구현은 Execute() 호출 — 채널 스킬처럼 Execute만으로 즉시 피해가 나지 않는
+    // 경우에는 서브클래스에서 override하여 단발 피해를 직접 적용한다.
+    virtual void OnEchoFire(GameObject* caster, const DirectX::XMFLOAT3& targetPos, float mult) {
+        Execute(caster, targetPos, mult);
+    }
+
     // Slot assignment (set by SkillComponent::EquipSkill)
     void      SetSlot(SkillSlot s) { m_slot = s; }
     SkillSlot GetSlot() const      { return m_slot; }
@@ -79,6 +87,10 @@ protected:
     // 이 스킬 슬롯에 처형자 룬(ABY_EXC)이 장착되어 있으면 true.
     // TakeDamage 세 번째 파라미터(bExecRune)에 직접 사용 가능.
     bool HasExecRune(GameObject* caster) const;
+
+    // HP 30% 이하 적에게 처형자 룬 보너스를 적용한 데미지 반환.
+    // bExecRune이 false거나 HP >= 30%면 dmg 그대로 반환.
+    float ApplyExecBonus(float dmg, EnemyComponent* pEnemy, GameObject* caster) const;
 
     // 원소 타입에 맞는 서브 VFX 이름 반환 (차지/강화 공용)
     static const char* SubVFXName(ElementType e)

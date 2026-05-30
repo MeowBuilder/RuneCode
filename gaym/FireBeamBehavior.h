@@ -25,10 +25,13 @@ public:
     virtual bool IsFinished() const override;
     virtual void Reset() override;
     virtual const SkillData& GetSkillData() const override { return m_SkillData; }
+    // 메아리 룬 재발동: 채널 세션 없이 즉시 단발 피해
+    virtual void OnEchoFire(GameObject* caster, const DirectX::XMFLOAT3& targetPos, float mult) override;
 
 private:
     uint32_t GetRuneFlags(GameObject* caster) const;
-    void     HitEnemiesInBeam(float damage);
+    // pDirOverride: null이면 caster의 Look 방향 사용, 지정 시 해당 방향으로 판정
+    void     HitEnemiesInBeam(float damage, const DirectX::XMFLOAT3* pDirOverride = nullptr);
 
     static EffectDef BuildCoreBeamDef();
     static EffectDef BuildSwirlDef();
@@ -49,7 +52,12 @@ private:
     // 히트 판정용
     float m_damageMult   = 1.f;
     float m_hitTimer     = 0.f;
-    static constexpr float HIT_INTERVAL  = 0.2f;  // 다단히트 간격 (초)
-    static constexpr float BEAM_RADIUS   = 2.0f;  // 빔 판정 반경 (m)
-    static constexpr float BEAM_RANGE    = 20.0f; // 빔 최대 사거리 (m)
+    // echo 모드: 방향 고정 + 자동 종료 타이머
+    DirectX::XMFLOAT3 m_overrideDir  = { 0.f, 0.f, 0.f };  // non-zero → GetLook() 대신 사용
+    DirectX::XMFLOAT3 m_echoOrigin   = { 0.f, 0.f, 0.f };  // 발동 시점 위치 고정 (캐릭터 추적 X)
+    float             m_echoTimeLeft = 0.f;                  // > 0 동안 echo 빔 실행 중
+    static constexpr float HIT_INTERVAL  = 0.2f;
+    static constexpr float BEAM_RADIUS   = 2.0f;
+    static constexpr float BEAM_RANGE    = 20.0f;
+    static constexpr float ECHO_DURATION = 1.5f;  // echo 빔 지속 시간 (초)
 };

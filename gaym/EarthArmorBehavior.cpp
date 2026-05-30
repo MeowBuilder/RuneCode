@@ -19,6 +19,7 @@ EarthArmorBehavior::EarthArmorBehavior()
 
 void EarthArmorBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
 {
+    m_pCaster      = caster;
     m_bChannelMode = true;
     m_bPostChannel = false;
     m_cachedElem   = ElementType::None;
@@ -97,7 +98,7 @@ void EarthArmorBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOA
         XMFLOAT3 ep = pT->GetPosition();
         XMVECTOR toE = XMVectorSetY(XMVectorSubtract(XMLoadFloat3(&ep), pV), 0.f);
         if (XMVectorGetX(XMVector3LengthSq(toE)) <= r2)
-            pEnemy->TakeDamage(damage, false, HasExecRune(m_pCaster));
+            pEnemy->TakeDamage(ApplyExecBonus(damage, pEnemy, caster), false, HasExecRune(caster));
     }
 }
 

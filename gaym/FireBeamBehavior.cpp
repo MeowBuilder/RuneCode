@@ -282,12 +282,51 @@ void FireBeamBehavior::Update(float deltaTime)
     if (!m_bIsActive || !m_pVFXManager || !m_pCaster) return;
     if (!m_pCaster->GetTransform()) return;
 
-    XMFLOAT3 origin = m_pCaster->GetTransform()->GetPosition();
-    origin.y += 1.5f;
+    // echo 모드: 타겟 추적 + 시간 만료 시 종료
+    if (m_echoTimeLeft > 0.f)
+    {
+        m_echoTimeLeft -= deltaTime;
+        if (m_echoTimeLeft <= 0.f)
+        {
+            Reset();
+            return;
+        }
+        // echo origin 기준으로 가장 가까운 적 방향 갱신 (위치 고정, 방향만 회전)
+        if (m_pScene && m_pCaster && m_pCaster->GetTransform())
+        {
+            EnemyComponent* pNearest = m_pScene->FindNearestEnemy(
+                m_pCaster->GetTransform()->GetPosition());
+            if (pNearest && pNearest->GetOwner() && pNearest->GetOwner()->GetTransform())
+            {
+                XMFLOAT3 ePos = pNearest->GetOwner()->GetTransform()->GetPosition();
+                XMVECTOR dirV = XMVectorSetY(
+                    XMLoadFloat3(&ePos) - XMLoadFloat3(&m_echoOrigin), 0.f);
+                if (XMVectorGetX(XMVector3LengthSq(dirV)) > 0.001f)
+                    XMStoreFloat3(&m_overrideDir, XMVector3Normalize(dirV));
+            }
+        }
+    }
 
-    XMVECTOR dirV = m_pCaster->GetTransform()->GetLook();
-    dirV = XMVectorSetY(dirV, 0.f);
-    dirV = XMVector3Normalize(dirV);
+    // echo 모드: 발동 시점 위치 고정 / 일반 모드: 캐릭터 현재 위치
+    XMFLOAT3 origin;
+    if (m_echoTimeLeft > 0.f)
+        origin = m_echoOrigin;
+    else
+    {
+        origin = m_pCaster->GetTransform()->GetPosition();
+        origin.y += 1.5f;
+    }
+
+    // echo 모드면 고정 방향, 일반 모드면 플레이어 시선
+    XMVECTOR dirV;
+    if (m_overrideDir.x != 0.f || m_overrideDir.z != 0.f)
+        dirV = XMVector3Normalize(XMLoadFloat3(&m_overrideDir));
+    else
+    {
+        dirV = m_pCaster->GetTransform()->GetLook();
+        dirV = XMVectorSetY(dirV, 0.f);
+        dirV = XMVector3Normalize(dirV);
+    }
 
     XMFLOAT3 dir;
     XMStoreFloat3(&dir, dirV);
@@ -305,24 +344,37 @@ void FireBeamBehavior::Update(float deltaTime)
     m_hitTimer += deltaTime;
     if (m_hitTimer >= HIT_INTERVAL) {
         m_hitTimer -= HIT_INTERVAL;
-        HitEnemiesInBeam(m_SkillData.damage * m_damageMult);
+        const XMFLOAT3* pDir = (m_overrideDir.x != 0.f || m_overrideDir.z != 0.f) ? &m_overrideDir : nullptr;
+        HitEnemiesInBeam(m_SkillData.damage * m_damageMult, pDir);
     }
 }
 
-void FireBeamBehavior::HitEnemiesInBeam(float damage)
+void FireBeamBehavior::HitEnemiesInBeam(float damage, const XMFLOAT3* pDirOverride)
 {
     if (!m_pScene || !m_pCaster || !m_pCaster->GetTransform()) return;
 
     CRoom* pRoom = m_pScene->GetCurrentRoom();
     if (!pRoom) return;
 
-    XMFLOAT3 originF = m_pCaster->GetTransform()->GetPosition();
-    originF.y += 1.5f;
+    XMFLOAT3 originF;
+    if (m_echoTimeLeft > 0.f)
+        originF = m_echoOrigin;
+    else
+    {
+        originF = m_pCaster->GetTransform()->GetPosition();
+        originF.y += 1.5f;
+    }
 
     XMVECTOR originV = XMLoadFloat3(&originF);
-    XMVECTOR dirV    = m_pCaster->GetTransform()->GetLook();
-    dirV = XMVectorSetY(dirV, 0.f);
-    dirV = XMVector3Normalize(dirV);
+    XMVECTOR dirV;
+    if (pDirOverride)
+        dirV = XMVector3Normalize(XMLoadFloat3(pDirOverride));
+    else
+    {
+        dirV = m_pCaster->GetTransform()->GetLook();
+        dirV = XMVectorSetY(dirV, 0.f);
+        dirV = XMVector3Normalize(dirV);
+    }
 
     SkillStats sts;
     bool hasStats = false;
@@ -360,7 +412,7 @@ void FireBeamBehavior::HitEnemiesInBeam(float damage)
 
         if (lateralDist < BEAM_RADIUS + eRadius)
         {
-            pEnemy->TakeDamage(damage, false, bExec);
+            pEnemy->TakeDamage(ApplyExecBonus(damage, pEnemy, m_pCaster), false, bExec);
 
             if (hasStats && !sts.onHitHooks.empty())
             {
@@ -376,6 +428,27 @@ void FireBeamBehavior::HitEnemiesInBeam(float damage)
             }
         }
     }
+}
+
+void FireBeamBehavior::OnEchoFire(GameObject* caster, const XMFLOAT3& targetPos, float mult)
+{
+    if (!caster || !caster->GetTransform()) return;
+
+    // 발동 시점 위치 고정 (echo 동안 캐릭터 이동 무관)
+    XMFLOAT3 origin = caster->GetTransform()->GetPosition();
+    origin.y += 1.5f;
+    m_echoOrigin = origin;
+
+    XMVECTOR originV = XMLoadFloat3(&origin);
+    XMVECTOR dirV = XMVectorSetY(XMLoadFloat3(&targetPos) - originV, 0.f);
+    if (XMVectorGetX(XMVector3LengthSq(dirV)) < 0.001f) return;
+    XMStoreFloat3(&m_overrideDir, XMVector3Normalize(dirV));
+
+    // 이미 빔이 켜져 있으면 강제 종료 후 재시작
+    if (m_bIsActive) Reset();
+
+    m_echoTimeLeft = ECHO_DURATION;
+    Execute(caster, targetPos, mult);  // VFX 스폰 + m_bIsActive = true
 }
 
 bool FireBeamBehavior::IsFinished() const
@@ -397,13 +470,16 @@ void FireBeamBehavior::Reset()
             OutputDebugString(L"[FireBeam] Stopped\n");
         }
     }
-    m_bIsFinished = true;
-    m_bIsActive   = false;
-    m_vfxCoreId   = -1;
-    m_vfxSwirlId  = -1;
-    m_vfxBurstId  = -1;
+    m_bIsFinished  = true;
+    m_bIsActive    = false;
+    m_vfxCoreId    = -1;
+    m_vfxSwirlId   = -1;
+    m_vfxBurstId   = -1;
     m_subVFXIds.clear();
-    m_pCaster     = nullptr;
+    m_pCaster      = nullptr;
+    m_overrideDir  = { 0.f, 0.f, 0.f };
+    m_echoOrigin   = { 0.f, 0.f, 0.f };
+    m_echoTimeLeft = 0.f;
 }
 
 uint32_t FireBeamBehavior::GetRuneFlags(GameObject* caster) const

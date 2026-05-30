@@ -320,9 +320,17 @@ void SkillComponent::Update(float deltaTime)
 
         if (m_Skills[slotIndex]->IsFinished())
         {
-            m_CooldownTimers[slotIndex] = GetEffectiveCooldown(slotIndex);
-            m_SkillStates[slotIndex] = SkillState::Cooldown;
+            bool bEchoRun = m_echoRunningSlots.erase(slotIndex) > 0;
             m_Skills[slotIndex]->Reset();
+            // echo 발동이었으면 쿨다운 타이머는 건드리지 않음 (이미 진행 중)
+            if (!bEchoRun)
+                m_CooldownTimers[slotIndex] = GetEffectiveCooldown(slotIndex);
+            // echo 종료 시 쿨다운이 이미 소진됐으면 바로 Ready
+            // (echo Casting 중 타이머가 0에 도달해도 Casting 상태라 Ready 전환이 skip됐던 경우 대응)
+            if (m_CooldownTimers[slotIndex] <= 0.0f)
+                m_SkillStates[slotIndex] = SkillState::Ready;
+            else
+                m_SkillStates[slotIndex] = SkillState::Cooldown;
 
             if (m_ActiveSkillSlot == thisSlot)
                 m_ActiveSkillSlot = SkillSlot::Count;
@@ -361,7 +369,15 @@ void SkillComponent::Update(float deltaTime)
                     m_bCurrentIsChannelTick = false;
                     m_bCurrentEnhanceUsed  = false;
                     if (echo.index < m_Skills.size() && m_Skills[echo.index])
-                        m_Skills[echo.index]->Execute(m_pOwner, enemyPos, echo.mult);
+                    {
+                        m_Skills[echo.index]->OnEchoFire(m_pOwner, enemyPos, echo.mult);
+                        // IsFinished()=false면 빔 등 지속형 스킬 → Casting으로 전환해서 Update() 호출
+                        if (!m_Skills[echo.index]->IsFinished())
+                        {
+                            m_echoRunningSlots.insert(echo.index);
+                            m_SkillStates[echo.index] = SkillState::Casting;
+                        }
+                    }
                     return true;
                 }),
             m_echoQueue.end());
@@ -926,6 +942,8 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
     RuneCombo combo = GetRuneCombo(slot);
 
     // 활성화 VFX mod 계산 + 저장 (행동 클래스가 GetCurrentActivationVFXMod()로 읽음)
+    // echo guard 용: 리셋 전에 캡처 (채널 틱 여부를 echo 체크까지 보존)
+    bool wasChannelTick = m_bCurrentIsChannelTick;
     m_activationVFXMod = BuildActivationVFXMod(slot, m_currentChargeRatio,
                                                 m_bCurrentIsChannelTick, m_bCurrentEnhanceUsed);
     // 다음 호출을 위해 초기화
@@ -982,8 +1000,8 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
     {
         m_Skills[index]->Execute(m_pOwner, target, mult);
         invokeOnCast();
-        // 메아리(ABY_ECO): 50% 확률로 큐에 등록, 2초 후 가장 가까운 적을 향해 50% 재발동
-        if (stats.echoOnCast && (rand() % 100) < 50)
+        // 메아리(ABY_ECO): 최초 발동 시에만 체크 (채널 틱마다 중복 등록 방지)
+        if (stats.echoOnCast && !wasChannelTick && (rand() % 100) < 50)
         {
             ElementType elem = stats.elementOverride.value_or(
                 m_Skills[index] ? m_Skills[index]->GetSkillData().element : ElementType::None);
@@ -1086,6 +1104,18 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
                 m_bIsEnhanced = false;
                 m_fEnhanceTimer = 0.0f;
             }
+
+            // 메아리: 채널/빔 스킬은 발동 시작 시 여기서 한 번만 등록
+            // (첫 틱도 m_bCurrentIsChannelTick=true로 처리되므로 ExecuteOrSplit 내 체크로는 등록 불가)
+            if (chStats.echoOnCast && !combo.hasPlace && (rand() % 100) < 50)
+            {
+                ElementType echoElem = chStats.elementOverride.value_or(
+                    m_Skills[index] ? m_Skills[index]->GetSkillData().element : ElementType::None);
+                EnemyComponent* pEchoTarget = nullptr;
+                int echoSlot = SpawnEchoTriggerVFX(echoElem, targetPosition, &pEchoTarget);
+                m_echoQueue.push_back({ index, tickMult * 0.5f, 2.0f, echoSlot, pEchoTarget });
+            }
+
             m_currentChargeRatio    = 0.f;
             m_bCurrentIsChannelTick = true;
             m_bCurrentEnhanceUsed  = false;
