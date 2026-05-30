@@ -20,6 +20,18 @@ void DamageNumberManager::AddNumber(const XMFLOAT3& worldPos, float damage)
     m_numbers.push_back(n);
 }
 
+void DamageNumberManager::AddText(const XMFLOAT3& worldPos, const wchar_t* text, XMFLOAT4 color)
+{
+    DamageNumber n;
+    n.worldPos   = worldPos;
+    n.damage     = 0.f;
+    n.lifetime   = LIFETIME;
+    n.riseOffset = 0.f;
+    n.color      = color;
+    wcscpy_s(n.customText, text);
+    m_numbers.push_back(n);
+}
+
 void DamageNumberManager::Update(float dt)
 {
     for (auto& n : m_numbers)
@@ -71,14 +83,15 @@ void DamageNumberManager::Render(SpriteBatch* pBatch, SpriteFont* pFont,
         if (alpha < 0.f) alpha = 0.f;
         if (alpha > 1.f) alpha = 1.f;
 
-        // Scale: larger at birth, stable after
         float scale = 1.0f + t * 0.25f;
 
-        // Color: yellow-orange
-        XMVECTORF32 color = { 1.f, 0.9f, 0.15f, alpha };
+        XMVECTORF32 color = { n.color.x, n.color.y, n.color.z, alpha };
 
         wchar_t buf[32];
-        swprintf_s(buf, L"%.0f", n.damage);
+        if (n.customText[0] != L'\0')
+            wcscpy_s(buf, n.customText);
+        else
+            swprintf_s(buf, L"%.0f", n.damage);
 
         XMVECTOR textSize = pFont->MeasureString(buf);
         float halfW = XMVectorGetX(textSize) * scale * 0.5f;

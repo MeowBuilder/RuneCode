@@ -71,7 +71,7 @@ void EarthquakeBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOA
         XMFLOAT3 ep = pT->GetPosition();
         XMVECTOR toE = XMVectorSetY(XMVectorSubtract(XMLoadFloat3(&ep), eV), 0.f);
         if (XMVectorGetX(XMVector3LengthSq(toE)) > radiusSq) continue;
-        pEnemy->TakeDamage(damage, false);
+        pEnemy->TakeDamage(damage, false, HasExecRune(m_pCaster));
     }
 }
 
@@ -229,7 +229,7 @@ void EarthquakeBehavior::UpdateWaves(float dt)
             float yTol = (std::max)(0.f, pT->GetScale().y * 0.6f);
             if (fabsf(ep.y - m_epicenter.y) > RING_HEIGHT + yTol) continue;
 
-            pEnemy->TakeDamage(dmg, true);
+            pEnemy->TakeDamage(dmg, true, HasExecRune(m_pCaster));
             m_hitEnemies.insert(pEnemy);
 
             if (m_pCaster) {

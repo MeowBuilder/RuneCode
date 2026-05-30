@@ -1,6 +1,5 @@
 #include "stdafx.h"
 #include "FireBeamBehavior.h"
-#include "DecalManager.h"
 #include "FluidSkillVFXManager.h"
 #include "EffectRegistry.h"
 #include "FluidParticle.h"
@@ -325,6 +324,17 @@ void FireBeamBehavior::HitEnemiesInBeam(float damage)
     dirV = XMVectorSetY(dirV, 0.f);
     dirV = XMVector3Normalize(dirV);
 
+    SkillStats sts;
+    bool hasStats = false;
+    {
+        auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count) {
+            sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            hasStats = true;
+        }
+    }
+    bool bExec = HasExecRune(m_pCaster);
+
     const auto& gameObjects = pRoom->GetGameObjects();
     for (const auto& obj : gameObjects)
     {
@@ -350,24 +360,19 @@ void FireBeamBehavior::HitEnemiesInBeam(float damage)
 
         if (lateralDist < BEAM_RADIUS + eRadius)
         {
-            pEnemy->TakeDamage(damage, false);
+            pEnemy->TakeDamage(damage, false, bExec);
 
-            auto* pSC = m_pCaster->GetComponent<SkillComponent>();
-            if (pSC && m_slot != SkillSlot::Count)
+            if (hasStats && !sts.onHitHooks.empty())
             {
-                SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-                if (!sts.onHitHooks.empty())
-                {
-                    SkillContext ctx;
-                    ctx.caster             = m_pCaster;
-                    ctx.baseDamage         = damage;
-                    ctx.damageDealt        = damage;
-                    ctx.hitEnemy           = pEnemy;
-                    ctx.hitEnemyPos        = pTransform->GetPosition();
-                    ctx.statusChanceMult   = sts.statusChanceMult;
-                    ctx.statusDurationMult = sts.statusDurationMult;
-                    for (auto& hook : sts.onHitHooks) hook(ctx);
-                }
+                SkillContext ctx;
+                ctx.caster             = m_pCaster;
+                ctx.baseDamage         = damage;
+                ctx.damageDealt        = damage;
+                ctx.hitEnemy           = pEnemy;
+                ctx.hitEnemyPos        = pTransform->GetPosition();
+                ctx.statusChanceMult   = sts.statusChanceMult;
+                ctx.statusDurationMult = sts.statusDurationMult;
+                for (auto& hook : sts.onHitHooks) hook(ctx);
             }
         }
     }

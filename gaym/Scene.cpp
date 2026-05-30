@@ -1,6 +1,5 @@
 #include "stdafx.h"
 #include "Scene.h"
-#include "DecalManager.h"
 #include "RenderComponent.h"
 #include "Shader.h"
 #include "RotatorComponent.h"
@@ -309,25 +308,6 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
     m_nNextDescriptorIndex += 64;
     m_pProjectileManager->Init(this, pDevice, pCommandList, m_pDescriptorHeap.get(), nProjectileDescriptorStart);
     OutputDebugString(L"[Scene] Projectile system initialized\n");
-
-    // Decal Manager (32 CBV + 4 SRV = 36 descriptor slots)
-    m_pDecalManager = std::make_unique<DecalManager>();
-    m_pDecalManager->Init(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex, pShader.get());
-    m_pDecalManager->LoadTexture(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
-        DecalTexture::Scorch1, L"Assets/Textures/VFX/scorch_01.png");
-    m_pDecalManager->LoadTexture(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
-        DecalTexture::Scorch2, L"Assets/Textures/VFX/scorch_02.png");
-    m_pDecalManager->LoadTexture(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
-        DecalTexture::Scorch3, L"Assets/Textures/VFX/scorch_03.png");
-    m_pDecalManager->LoadTexture(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
-        DecalTexture::Magic2,  L"Assets/Textures/VFX/magic_02.png");
-    m_pDecalManager->LoadTexture(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
-        DecalTexture::Magic3,  L"Assets/Textures/VFX/magic_03.png");
-    OutputDebugString(L"[Scene] Decal system initialized\n");
-
-    // [DISABLED] 데칼 스킬 연결 — 위치 보정 후 재활성화 예정
-    // if (m_pPlayerGameObject) { ... pBeh->SetDecalManager(m_pDecalManager.get()); }
-    // m_pProjectileManager->SetDecalManager(m_pDecalManager.get());
 
     // Debug Renderer (no descriptors)
     m_pDebugRenderer->Init(pDevice, pCommandList);
@@ -1503,8 +1483,6 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         m_pProjectileManager->Update(deltaTime);
     }
 
-    if (m_pDecalManager)
-        m_pDecalManager->Update(deltaTime);
 
     // (구) ParticleSystem 기반 환경 파티클 업데이트 블록은 마이그레이션과 함께
     //  제거되었습니다. 동일 효과 필요 시 LightEmitterSystem 으로 재구현하세요.
@@ -1869,9 +1847,6 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
     }
 
     // 구 ParticleSystem.Render 호출은 LightEmitterSystem 통합으로 제거됨.
-
-    // [DISABLED] Ground decals — 위치 보정 후 재활성화 예정
-    if (m_pDecalManager) m_pDecalManager->Render(pCommandList, GetPassCBVAddress());
 
     // ---------- Screen-Space Fluid 렌더링 (VFXManager 통합 경로) ----------
     bool bHasFluid = (m_pVFXManager != nullptr); // 매니저 있으면 SSF 시도

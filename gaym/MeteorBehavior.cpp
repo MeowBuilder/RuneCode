@@ -1,6 +1,5 @@
 #include "stdafx.h"
 #include "MeteorBehavior.h"
-#include "DecalManager.h"
 #include "FluidSkillVFXManager.h"
 #include "EffectRegistry.h"
 #include "FluidParticle.h"
@@ -11,6 +10,7 @@
 #include "Scene.h"
 #include "Room.h"
 #include "EnemyComponent.h"
+#include "DamageNumberManager.h"
 #include <cmath>
 #include <algorithm>
 #include <random>
@@ -447,6 +447,18 @@ void MeteorBehavior::ApplyExplosionDamage(float damage, float radius, const XMFL
     if (!pRoom) return;
 
     XMVECTOR centerV = XMLoadFloat3(&center);
+
+    // SkillStats를 루프 밖에서 한 번만 빌드
+    SkillStats sts;
+    bool hasStats = false;
+    if (m_pCaster) {
+        auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count) {
+            sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            hasStats = true;
+        }
+    }
+
     const auto& gameObjects = pRoom->GetGameObjects();
     for (const auto& obj : gameObjects)
     {
@@ -468,25 +480,25 @@ void MeteorBehavior::ApplyExplosionDamage(float damage, float radius, const XMFL
             float falloff = 1.f - (dist / (radius + eRadius)) * 0.5f;
             falloff = max(0.5f, falloff);
             float actualDmg = damage * falloff;
-            pEnemy->TakeDamage(actualDmg, bTriggerStagger);
 
-            if (m_pCaster) {
-                auto* pSC = m_pCaster->GetComponent<SkillComponent>();
-                if (pSC && m_slot != SkillSlot::Count) {
-                    SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-                    if (!sts.onHitHooks.empty()) {
-                        SkillContext ctx;
-                        ctx.caster             = m_pCaster;
-                        ctx.baseDamage         = damage;
-                        ctx.damageDealt        = actualDmg;
-                        ctx.hitEnemy           = pEnemy;
-                        ctx.hitEnemyPos        = ePos;
-                        ctx.scene              = m_pScene;
-                        ctx.statusChanceMult   = sts.statusChanceMult;
-                        ctx.statusDurationMult = sts.statusDurationMult;
-                        for (auto& hook : sts.onHitHooks) hook(ctx);
-                    }
-                }
+            // 처형자: HP 30% 이하 추가 피해
+            bool bExec = hasStats && sts.execDamageBonus > 0.f;
+            if (bExec && pEnemy->GetHpRatio() < 0.3f)
+                actualDmg *= (1.f + sts.execDamageBonus);
+
+            pEnemy->TakeDamage(actualDmg, bTriggerStagger, bExec);
+
+            if (hasStats && !sts.onHitHooks.empty()) {
+                SkillContext ctx;
+                ctx.caster             = m_pCaster;
+                ctx.baseDamage         = damage;
+                ctx.damageDealt        = actualDmg;
+                ctx.hitEnemy           = pEnemy;
+                ctx.hitEnemyPos        = ePos;
+                ctx.scene              = m_pScene;
+                ctx.statusChanceMult   = sts.statusChanceMult;
+                ctx.statusDurationMult = sts.statusDurationMult;
+                for (auto& hook : sts.onHitHooks) hook(ctx);
             }
         }
     }

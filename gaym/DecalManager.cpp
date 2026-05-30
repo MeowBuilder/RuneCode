@@ -143,6 +143,9 @@ void DecalManager::Render(ID3D12GraphicsCommandList* pCmdList,
 {
     if (!m_pPSO || !m_pRootSig) return;
 
+    ID3D12DescriptorHeap* heaps[] = { m_pDescHeap->GetHeap() };
+    pCmdList->SetDescriptorHeaps(1, heaps);
+
     pCmdList->SetGraphicsRootSignature(m_pRootSig);
     pCmdList->SetPipelineState(m_pPSO);
     pCmdList->SetGraphicsRootConstantBufferView(1, passCBGpuAddr);
@@ -155,12 +158,35 @@ void DecalManager::Render(ID3D12GraphicsCommandList* pCmdList,
         int texIdx = (int)d.tex;
         if (texIdx < 0 || texIdx >= (int)DecalTexture::Count || !m_texSlots[texIdx].loaded) continue;
 
+        // skull: pop-in → settle → fade-out 애니메이션. 그 외: 기본 라이프타임 페이드
+        float sizeMult = 1.0f;
+        float alpha;
+        if (d.tex == DecalTexture::Skull)
+        {
+            float t = 1.0f - (d.lifeRemain / d.lifeMax); // 0→1 경과
+            if (t < 0.2f) {
+                float p = t / 0.2f;
+                sizeMult = 1.0f + 0.35f * p;   // 1.0 → 1.35
+                alpha = d.color.w;
+            } else if (t < 0.5f) {
+                float p = (t - 0.2f) / 0.3f;
+                sizeMult = 1.35f - 0.35f * p;  // 1.35 → 1.0
+                alpha = d.color.w;
+            } else {
+                float p = (t - 0.5f) / 0.5f;
+                sizeMult = 1.0f;
+                alpha = d.color.w * (1.0f - p); // 1.0 → 0
+            }
+        }
+        else
+        {
+            alpha = d.color.w * (d.lifeRemain / d.lifeMax);
+        }
+
         // World matrix: Scale × RotY × Translate (decal slightly above ground)
-        XMMATRIX world = XMMatrixScaling(d.size, 1.f, d.size)
+        XMMATRIX world = XMMatrixScaling(d.size * sizeMult, 1.f, d.size * sizeMult)
                        * XMMatrixRotationY(d.rotY)
                        * XMMatrixTranslation(d.pos.x, d.pos.y + 0.1f, d.pos.z);
-
-        float fade = d.lifeRemain / d.lifeMax;
 
         BYTE* pSlot = m_pMappedCB + (UINT64)i * kCBStride;
         auto* pCB = reinterpret_cast<ObjectConstants*>(pSlot);
@@ -179,8 +205,7 @@ void DecalManager::Render(ID3D12GraphicsCommandList* pCmdList,
         pCB->m_bIsDecal              = 1;
         pCB->m_grassPad2             = 0;
         pCB->mMaterial.m_cAmbient    = { 0.f, 0.f, 0.f, 0.f };
-        // 원소 색상 틴트 × 라이프타임 페이드
-        pCB->mMaterial.m_cDiffuse    = { d.color.x, d.color.y, d.color.z, d.color.w * fade };
+        pCB->mMaterial.m_cDiffuse    = { d.color.x, d.color.y, d.color.z, alpha };
         pCB->mMaterial.m_cSpecular   = { 0.f, 0.f, 0.f, 0.f };
         pCB->mMaterial.m_cEmissive   = { 0.f, 0.f, 0.f, 0.f };
 

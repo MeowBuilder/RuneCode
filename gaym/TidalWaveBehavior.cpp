@@ -86,7 +86,7 @@ void TidalWaveBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT
         if (fwd < 0.f || fwd > CHANNEL_RANGE) continue;
         XMVECTOR latV = XMVectorSubtract(toE, XMVectorScale(dV, fwd));
         if (XMVectorGetX(XMVector3Length(latV)) > CHANNEL_HALF_W) continue;
-        pEnemy->TakeDamage(damage, false);
+        pEnemy->TakeDamage(damage, false, HasExecRune(m_pCaster));
     }
 }
 
@@ -275,7 +275,7 @@ void TidalWaveBehavior::HitEnemiesInWave(float damage)
         float yTol = (std::max)(0.f, eScale.y * 0.6f);
         if (fabsf(ePos.y - waveOrigin.y) > WAVE_HALF_H + yTol) continue;
 
-        pEnemy->TakeDamage(damage, true);  // 해일은 경직 유발
+        pEnemy->TakeDamage(damage, true, HasExecRune(m_pCaster));  // 해일은 경직 유발
         m_hitEnemies.insert(pEnemy);
 
         if (m_pCaster) {

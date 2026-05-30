@@ -8,8 +8,6 @@
 class FluidSkillVFXManager;
 class Scene;
 class EnemyComponent;
-class DecalManager;
-
 // Q 슬롯 - 웨이브 슬래시 (파도 본체 단타 + 불꽃 자국 DoT)
 class WaveSlashBehavior : public ISkillBehavior
 {
@@ -20,8 +18,6 @@ public:
 
     void SetVFXManager(FluidSkillVFXManager* mgr)    { m_pVFXManager   = mgr; }
     void SetScene(Scene* pScene)                     { m_pScene        = pScene; }
-    void SetDecalManager(DecalManager* m) override   { m_pDecalManager = m; }
-
     // ISkillBehavior 인터페이스
     virtual SkillCategory GetCategory() const override { return SkillCategory::Wave; }
     virtual void Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier = 1.0f) override;
@@ -63,7 +59,6 @@ private:
     GameObject*           m_pCaster      = nullptr;
     FluidSkillVFXManager* m_pVFXManager  = nullptr;
     Scene*                m_pScene       = nullptr;
-    DecalManager*         m_pDecalManager = nullptr;
     int        m_vfxId            = -1;
     int        m_channelAmbientId = -1;
     int        m_chargeVFXId      = -1;

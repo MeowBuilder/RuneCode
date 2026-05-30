@@ -223,7 +223,7 @@ void WaterWaveBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT
         XMVECTOR latV = XMVectorSubtract(toE, XMVectorScale(dV, fwd));
         if (XMVectorGetX(XMVector3Length(latV)) > WAVE_HALF_W) continue;
 
-        pEnemy->TakeDamage(damage, false);
+        pEnemy->TakeDamage(damage, false, HasExecRune(m_pCaster));
 
         auto* pSC = caster->GetComponent<SkillComponent>();
         if (pSC && m_slot != SkillSlot::Count)
@@ -308,7 +308,7 @@ void WaterWaveBehavior::HitEnemiesInWave(float damage)
         float yTol = (std::max)(0.f, eScale.y * 0.6f);
         if (fabsf(ePos.y - waveOrigin.y) > WAVE_HALF_H + yTol) continue;
 
-        pEnemy->TakeDamage(damage, false);
+        pEnemy->TakeDamage(damage, false, HasExecRune(m_pCaster));
         m_hitEnemies.insert(pEnemy);
 
         if (m_pCaster)
@@ -375,7 +375,7 @@ void WaterWaveBehavior::UpdateWaterPools(float deltaTime)
             XMFLOAT3 ep = pT->GetPosition();
             float dx = ep.x - pool.center.x, dz = ep.z - pool.center.z;
             if (dx * dx + dz * dz <= POOL_RADIUS * POOL_RADIUS)
-                pEnemy->TakeDamage(dotDmg, false);
+                pEnemy->TakeDamage(dotDmg, false, HasExecRune(m_pCaster));
         }
     }
 

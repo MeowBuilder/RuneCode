@@ -63,7 +63,10 @@ struct FluidVFXSlot {
 class FluidSkillVFXManager
 {
 public:
-    static constexpr int MAX_EFFECTS = 64;
+    static constexpr int MAX_EFFECTS     = 64;
+    // MagicCircle/Sprite 타입은 VFXSpriteManager로 위임.
+    // 반환 ID는 kSpriteIDBase + vfxSpriteSlot 으로 인코딩.
+    static constexpr int kSpriteIDBase   = 10000;
 
     void Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList,
               CDescriptorHeap* pDescriptorHeap, UINT nStartDescIndex);

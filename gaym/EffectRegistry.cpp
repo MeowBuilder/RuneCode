@@ -1737,11 +1737,11 @@ void EffectRegistry::Initialize()
             burst.edgeColor      = { 0.45f, 0.30f, 0.10f, 0.0f };
             burst.particleCount  = 280;
             burst.duration       = 0.6f;
-            burst.speedMin       = 8.f;  burst.speedMax  = 28.f;
-            burst.lifetimeMin    = 0.3f; burst.lifetimeMax = 0.8f;
+            burst.speedMin       = 6.f;  burst.speedMax  = 14.f;
+            burst.lifetimeMin    = 0.3f; burst.lifetimeMax = 0.6f;
             burst.sizeScale      = 2.8f;
 
-            burst.cone.halfAngle     = 75.f;
+            burst.cone.halfAngle     = 45.f;
             burst.cone.gravityScale  = 0.55f;
             burst.cone.startSizeMult = 1.5f;
             burst.cone.endSizeMult   = 0.05f;
@@ -2773,6 +2773,44 @@ void EffectRegistry::Initialize()
         ring.ring.normalSpeedMax = 6.f;
 
         def.layers.push_back(ring);
+        Register(std::move(def));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ▌ 룬 텍스처 이펙트 (MagicCircle / Sprite → VFXSpriteManager 위임)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // ABY_ECO_Trigger — 메아리 룬 발 아래 회전 마법진
+    {
+        EffectDef def;
+        def.name    = "ABY_ECO_Trigger";
+        def.element = ElementType::None;
+
+        EffectLayer layer;
+        layer.type = EmitterType::MagicCircle;
+        layer.magicCircle.texId       = "magic3";
+        layer.magicCircle.screenSize  = 140.f;
+        layer.magicCircle.rotateSpeed = 1.5f;
+        layer.magicCircle.duration    = 2.5f;
+        layer.magicCircle.color       = { 1.f, 1.f, 1.f, 1.f }; // 색상은 호출 시 원소별로 오버라이드
+        def.layers.push_back(layer);
+        Register(std::move(def));
+    }
+
+    // ABY_EXC_Kill — 처형자 룬 처형 킬 skull 마커
+    {
+        EffectDef def;
+        def.name    = "ABY_EXC_Kill";
+        def.element = ElementType::None;
+
+        EffectLayer layer;
+        layer.type = EmitterType::Sprite;
+        layer.sprite.texId      = "skull";
+        layer.sprite.screenSize = 96.f;
+        layer.sprite.duration   = 1.0f;
+        layer.sprite.color      = { 0.9f, 0.15f, 0.1f, 1.f };
+        layer.sprite.skullPop   = true;
+        def.layers.push_back(layer);
         Register(std::move(def));
     }
 }

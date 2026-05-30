@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "ProjectileManager.h"
-#include "DecalManager.h"
+#include "VFXSpriteManager.h"
+#include "DamageNumberManager.h"
 #include "FluidSkillVFXManager.h"
 #include "VFXManager.h"
 #include "VFXTypes.h"
@@ -602,11 +603,13 @@ void ProjectileManager::ApplyDamage(Projectile& projectile, EnemyComponent* pEne
 
     float dmg = projectile.damage;
 
-    // 처형자: 대상 HP 30% 이하일 때 추가 피해
+    // 처형자: HP 30% 이하 시 추가 피해 (데미지 보너스 조건)
     if (projectile.execDamageBonus > 0.f && pEnemy->GetHpRatio() < 0.3f)
         dmg *= (1.f + projectile.execDamageBonus);
 
-    pEnemy->TakeDamage(dmg);
+    pEnemy->TakeDamage(dmg, false, projectile.execDamageBonus > 0.f);
+
+    // 처형자: 룬이 장착된 상태에서 적이 죽으면 skull 표시 (HP 조건 무관)
 
     // 흡수: 피해량 * ratio 만큼 시전자 HP 회복
     if (projectile.lifestealRatio > 0.f && projectile.owner)
@@ -755,7 +758,7 @@ void ProjectileManager::ApplyAoEDamage(Projectile& projectile, const XMFLOAT3& i
             falloff = max(0.5f, falloff);
 
             float finalDamage = projectile.damage * falloff;
-            pEnemy->TakeDamage(finalDamage);
+            pEnemy->TakeDamage(finalDamage, false, projectile.execDamageBonus > 0.f);
 
             wchar_t buffer[128];
             swprintf_s(buffer, 128, L"[ProjectileManager] AoE hit! Damage: %.0f (falloff: %.2f)\n", finalDamage, falloff);

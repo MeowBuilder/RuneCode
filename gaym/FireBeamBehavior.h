@@ -8,8 +8,6 @@
 
 class FluidSkillVFXManager;
 class Scene;
-class DecalManager;
-
 // E 슬롯 - 화염 빔 (Channel 방식, 키 누르는 동안 지속)
 class FireBeamBehavior : public ISkillBehavior
 {
@@ -20,8 +18,6 @@ public:
 
     void SetVFXManager(FluidSkillVFXManager* mgr)    { m_pVFXManager   = mgr; }
     void SetScene(Scene* pScene)                     { m_pScene        = pScene; }
-    void SetDecalManager(DecalManager* m) override   { m_pDecalManager = m; }
-
     // ISkillBehavior 인터페이스
     virtual SkillCategory GetCategory() const override { return SkillCategory::Beam; }
     virtual void Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier = 1.0f) override;
@@ -43,7 +39,6 @@ private:
     bool m_bIsActive = false;
     FluidSkillVFXManager* m_pVFXManager  = nullptr;
     Scene*                m_pScene       = nullptr;
-    DecalManager*         m_pDecalManager = nullptr;
     int m_vfxCoreId  = -1;  // 코어 빔 (직선 흐름)
     int m_vfxSwirlId = -1;  // 나선 공전
     int m_vfxBurstId = -1;  // 시작점 방사 스파크

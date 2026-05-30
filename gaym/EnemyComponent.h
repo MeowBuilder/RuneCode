@@ -119,7 +119,8 @@ public:
 
     // Damage handling
     // bTriggerStagger=false: 데미지만 입히고 경직 없음 (다단히트 스킬용)
-    void TakeDamage(float fDamage, bool bTriggerStagger = true);
+    // bExecRune=true: 이 타격이 처형자 룬 스킬에서 온 경우 — 킬 시 skull 표시
+    void TakeDamage(float fDamage, bool bTriggerStagger = true, bool bExecRune = false);
     bool IsDead() const { return m_eCurrentState == EnemyState::Dead; }
 
     // 방어 분쇄 디버프: defenseMult (0~1, 예: 0.75 = 방어력 25% 감소), duration 초

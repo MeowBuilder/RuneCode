@@ -55,6 +55,7 @@ public:
     void ClearInvincible() { m_fInvincibleTimer = 0.f; }
     bool IsInvincible() const { return m_fInvincibleTimer > 0.f; }
 
+
     // 네트워크 권위 HP 세팅 — 서버에서 S_PLAYER_DAMAGE 받아 호출. 로컬 TakeDamage 우회.
     void SetCurrentHP(float fHP);
     // 서버 데미지 알림 — HP 갱신은 SetCurrentHP 로 별도. 이건 피격 연출만 트리거.

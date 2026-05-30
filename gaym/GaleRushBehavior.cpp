@@ -295,7 +295,7 @@ void GaleRushBehavior::HitEnemiesNearCaster(float damage)
         float dist = XMVectorGetX(XMVector3Length(toE));
         if (dist > HIT_RADIUS) continue;
 
-        pEnemy->TakeDamage(damage, true);
+        pEnemy->TakeDamage(damage, true, HasExecRune(m_pCaster));
         m_hitEnemies.insert(pEnemy);
 
         {

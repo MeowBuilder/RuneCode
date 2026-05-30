@@ -62,7 +62,7 @@ private:
     static constexpr int   SPIKE_COUNT    = 4;
     static constexpr float SPIKE_INTERVAL = 0.28f;  // 기둥 간 시간차
     static constexpr float SPIKE_SPACING  = 5.0f;   // 기둥 간 거리
-    static constexpr float HIT_RADIUS     = 3.5f;
+    static constexpr float HIT_RADIUS     = 5.0f;
     static constexpr float HIT_HEIGHT     = 5.0f;
     static constexpr float TOTAL_DURATION = SPIKE_COUNT * SPIKE_INTERVAL + 0.5f;
 };

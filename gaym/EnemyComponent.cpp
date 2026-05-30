@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "EnemyComponent.h"
 #include "DamageNumberManager.h"
+#include "VFXSpriteManager.h"
 #include "GameObject.h"
 #include "TransformComponent.h"
 #include "IAttackBehavior.h"
@@ -240,7 +241,7 @@ void EnemyComponent::ChangeState(EnemyState newState)
     }
 }
 
-void EnemyComponent::TakeDamage(float fDamage, bool bTriggerStagger)
+void EnemyComponent::TakeDamage(float fDamage, bool bTriggerStagger, bool bExecRune)
 {
     if (m_eCurrentState == EnemyState::Dead) return;
 
@@ -266,7 +267,6 @@ void EnemyComponent::TakeDamage(float fDamage, bool bTriggerStagger)
         DamageNumberManager::Get().AddNumber(pos, fDamage);
     }
 
-
     // Boss Phase System: HP 변화 알림
     if (m_pPhaseController)
     {
@@ -277,11 +277,19 @@ void EnemyComponent::TakeDamage(float fDamage, bool bTriggerStagger)
     {
         m_Stats.m_fCurrentHP = 0.0f;
         ChangeState(EnemyState::Dead);
+
+        // 킬 타격이 처형자 룬 스킬인 경우에만 skull 표시
+        if (bExecRune && m_pOwner && m_pOwner->GetTransform())
+        {
+            XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+            VFXSpriteManager::Get().Spawn("skull", pos, 64.f, 1.0f,
+                { 1.f, 0.f, 0.f, 1.f }, 0.f, VFXSpriteAnim::SkullPop);
+        }
     }
-    else if (bTriggerStagger && !m_bIsBoss)
+    else
     {
-        // 경직 허용 + 일반 적만 경직 (보스는 피해만 받고 패턴 유지)
-        ChangeState(EnemyState::Stagger);
+        if (bTriggerStagger && !m_bIsBoss)
+            ChangeState(EnemyState::Stagger);
     }
 }
 

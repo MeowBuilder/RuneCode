@@ -10,8 +10,6 @@ class EnemyComponent;
 class Mesh;
 class CDescriptorHeap;
 class VFXManager;
-class DecalManager;
-
 // Forward declare MATERIAL from GameObject.h
 struct MATERIAL;
 
@@ -85,8 +83,6 @@ public:
     // Spawn explosion particles at position — 네트워크 모드에서 서버 권위 피격 통지를 받아 클라가 직접 폭발 VFX 생성할 때도 사용
     void SpawnExplosionParticles(const XMFLOAT3& position, ElementType element);
 
-    void SetDecalManager(DecalManager* m) { m_pDecalManager = m; }
-
 private:
     // Check collisions for a single projectile
     void CheckProjectileCollisions(Projectile& projectile);
@@ -107,8 +103,6 @@ private:
     std::vector<Projectile> m_Projectiles;
     Scene*         m_pScene        = nullptr;
     VFXManager*    m_pVFXManager   = nullptr;  // 통합 VFX 파사드 (player/enemy 슬롯 풀 통합)
-    DecalManager*  m_pDecalManager = nullptr;
-
     // Rendering resources
     std::unique_ptr<Mesh> m_pProjectileMesh;
     ComPtr<ID3D12Resource> m_pd3dcbProjectiles;

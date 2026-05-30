@@ -25,7 +25,6 @@
 
 struct ID3D12Device;
 struct ID3D12GraphicsCommandList;
-class DecalManager;
 
 // Stage theme for different environments
 enum class StageTheme
@@ -143,8 +142,6 @@ public:
     CRoom* GetCurrentRoom() const { return m_pCurrentRoom; } // Added getter for current room
     void SetCurrentRoom(CRoom* pRoom) { m_pCurrentRoom = pRoom; }
     ProjectileManager* GetProjectileManager() { return m_pProjectileManager.get(); }
-    DecalManager*      GetDecalManager()      { return m_pDecalManager.get(); }
-
     // 통합 VFX 파사드: 신규 코드는 이 API만 사용한다.
     VFXManager* GetVFXManager() { return m_pVFXManager.get(); }
 
@@ -456,9 +453,6 @@ private:
 
     // Projectile System
     std::unique_ptr<ProjectileManager> m_pProjectileManager;
-
-    // Ground Decal System
-    std::unique_ptr<DecalManager> m_pDecalManager;
 
     // 통합 VFX 매니저 (player SSF + enemy 빌보드 두 슬롯 풀을 내부에서 소유)
     // 환경 파티클(Ember/Dust/Sandstorm)은 마이그레이션 과정에서 제거됨.

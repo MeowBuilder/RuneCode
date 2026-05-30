@@ -8,6 +8,8 @@
 #include "Scene.h"
 #include "Room.h"
 #include "EnemyComponent.h"
+#include "VFXSpriteManager.h"
+#include "DamageNumberManager.h"
 
 StoneSpikesBehavior::StoneSpikesBehavior()
     : m_SkillData(EarthSkillPresets::StoneSpikes())
@@ -17,6 +19,7 @@ StoneSpikesBehavior::StoneSpikesBehavior()
 void StoneSpikesBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
 {
     m_bChannelMode = true;
+    m_pCaster = caster;  // 채널 모드에서도 caster 캐시 (처형자 룬 등 SkillStats 조회에 필요)
     // Execute에서 원소를 캐시하지 않으므로 여기서 미리 캐시
     m_cachedElem = ElementType::None;
     if (caster) {
@@ -188,6 +191,16 @@ void StoneSpikesBehavior::HitEnemiesAtSpike(const DirectX::XMFLOAT3& center, flo
     CRoom* pRoom = m_pScene->GetCurrentRoom();
     if (!pRoom) return;
 
+    // stats를 루프 밖에서 한 번만 계산
+    SkillStats sts;
+    bool hasStats = false;
+    if (m_pCaster) {
+        auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count) {
+            sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            hasStats = true;
+        }
+    }
     for (const auto& obj : pRoom->GetGameObjects())
     {
         if (!obj) continue;
@@ -202,25 +215,27 @@ void StoneSpikesBehavior::HitEnemiesAtSpike(const DirectX::XMFLOAT3& center, flo
         if (distSq > HIT_RADIUS * HIT_RADIUS) continue;
         if (fabsf(ep.y - center.y) > HIT_HEIGHT) continue;
 
-        pEnemy->TakeDamage(damage, true);
+        float dmg = damage;
+        // 처형자: HP 30% 이하 시 추가 피해
+        if (hasStats && sts.execDamageBonus > 0.f && pEnemy->GetHpRatio() < 0.3f)
+            dmg *= (1.f + sts.execDamageBonus);
 
-        if (m_pCaster) {
-            auto* pSC = m_pCaster->GetComponent<SkillComponent>();
-            if (pSC && m_slot != SkillSlot::Count) {
-                SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-                if (!sts.onHitHooks.empty()) {
-                    SkillContext ctx;
-                    ctx.caster             = m_pCaster;
-                    ctx.baseDamage         = damage;
-                    ctx.damageDealt        = damage;
-                    ctx.hitEnemy           = pEnemy;
-                    ctx.hitEnemyPos        = ep;
-                    ctx.scene              = m_pScene;
-                    ctx.statusChanceMult   = sts.statusChanceMult;
-                    ctx.statusDurationMult = sts.statusDurationMult;
-                    for (auto& hook : sts.onHitHooks) hook(ctx);
-                }
-            }
+        bool bExec = hasStats && sts.execDamageBonus > 0.f;
+        pEnemy->TakeDamage(dmg, true, bExec);
+
+        // 처형자: 룬이 장착된 상태에서 적이 죽으면 skull 표시 (HP 조건 무관)
+
+        if (hasStats && !sts.onHitHooks.empty()) {
+            SkillContext ctx;
+            ctx.caster             = m_pCaster;
+            ctx.baseDamage         = damage;
+            ctx.damageDealt        = dmg;
+            ctx.hitEnemy           = pEnemy;
+            ctx.hitEnemyPos        = ep;
+            ctx.scene              = m_pScene;
+            ctx.statusChanceMult   = sts.statusChanceMult;
+            ctx.statusDurationMult = sts.statusDurationMult;
+            for (auto& hook : sts.onHitHooks) hook(ctx);
         }
     }
 }

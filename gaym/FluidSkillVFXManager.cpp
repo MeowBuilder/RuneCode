@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "FluidSkillVFXManager.h"
+#include "VFXSpriteManager.h"
 #include "EffectRegistry.h"
 #include "ScreenSpaceFluid.h"
 #include "DescriptorHeap.h"
@@ -350,6 +351,12 @@ int FluidSkillVFXManager::SpawnSPHLayer(const XMFLOAT3& origin, const XMFLOAT3& 
 
 void FluidSkillVFXManager::TrackEffect(int id, const XMFLOAT3& origin, const XMFLOAT3& direction)
 {
+    // VFXSprite 위임 ID
+    if (id >= kSpriteIDBase)
+    {
+        VFXSpriteManager::Get().SetPosition(id - kSpriteIDBase, origin);
+        return;
+    }
     if (id < 0 || id >= MAX_EFFECTS || !m_Slots[id].isActive) return;
     auto& slot = m_Slots[id];
     slot.origin    = origin;
@@ -366,6 +373,12 @@ void FluidSkillVFXManager::TrackEffect(int id, const XMFLOAT3& origin, const XMF
 
 void FluidSkillVFXManager::StopEffect(int id)
 {
+    // VFXSprite 위임 ID
+    if (id >= kSpriteIDBase)
+    {
+        VFXSpriteManager::Get().Stop(id - kSpriteIDBase);
+        return;
+    }
     if (id < 0 || id >= MAX_EFFECTS) return;
     auto& slot = m_Slots[id];
 
@@ -463,6 +476,25 @@ int FluidSkillVFXManager::SpawnEffectLayer(const XMFLOAT3& origin, const XMFLOAT
                                             const std::string& effectName,
                                             const EffectLayer& layer, bool isPlayerEffect)
 {
+    // MagicCircle/Sprite: VFXSpriteManager로 위임, ID = kSpriteIDBase + spriteSlot
+    if (layer.type == EmitterType::MagicCircle)
+    {
+        const auto& p = layer.magicCircle;
+        int slot = VFXSpriteManager::Get().Spawn(
+            p.texId, origin, p.screenSize, p.duration,
+            p.color, p.rotateSpeed, VFXSpriteAnim::FadeOut);
+        return (slot >= 0) ? (kSpriteIDBase + slot) : -1;
+    }
+    if (layer.type == EmitterType::Sprite)
+    {
+        const auto& p = layer.sprite;
+        VFXSpriteAnim anim = p.skullPop ? VFXSpriteAnim::SkullPop : VFXSpriteAnim::FadeOut;
+        int slot = VFXSpriteManager::Get().Spawn(
+            p.texId, origin, p.screenSize, p.duration,
+            p.color, 0.f, anim);
+        return (slot >= 0) ? (kSpriteIDBase + slot) : -1;
+    }
+
     // SPH 레이어: SpawnSPHLayer로 라우팅 (EffectLayer 직접 사용)
     bool isSPH = (layer.type == EmitterType::SPH_Attract ||
                   layer.type == EmitterType::SPH_Gravity  ||

@@ -13,7 +13,8 @@ enum class DecalTexture : int
     Scorch3 = 2,  // WaveSlash 파도 진행로
     Magic2  = 3,  // 메테오 최종 착지 (광원 서클)
     Magic3  = 4,  // 메아리 룬(ABY_ECO) 마법진 — 회전 + 원소 색상
-    Count   = 5
+    Skull   = 5,  // 처형자 룬(ABY_EXC) 처형 킬 마커
+    Count   = 6
 };
 
 class DecalManager

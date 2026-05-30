@@ -267,7 +267,7 @@ struct SPHEmitterParams {
     float waveOscWaveNumber    = 0.8f;
 };
 
-// ── 텍스처 이펙트 파라미터 (향후 구현) ────────────────────────────────────────
+// ── 텍스처 이펙트 파라미터 ────────────────────────────────────────────────────
 
 struct DecalParams {
     float radius      = 3.f;
@@ -276,24 +276,24 @@ struct DecalParams {
     float fadeOutTime = 0.5f;
     bool  rotate      = false;
     float rotateSpeed = 0.f;
-    // std::string texturePath;  // 향후 텍스처 시스템 추가 시
 };
 
+// VFXSpriteManager에 등록된 texId로 회전 마법진 이미지를 표시
 struct MagicCircleParams {
-    float radius      = 3.f;
+    std::string texId;         // VFXSpriteManager 등록 키
+    float screenSize  = 140.f; // 화면 픽셀 크기
     float rotateSpeed = 1.f;   // rad/s
     float duration    = 3.f;
-    bool  pulse       = true;
-    float pulseFreq   = 2.f;
-    // std::string texturePath;
+    XMFLOAT4 color    = { 1.f, 1.f, 1.f, 1.f };
 };
 
+// VFXSpriteManager에 등록된 texId로 스프라이트 이미지를 표시
 struct SpriteParams {
-    int   frameCount = 1;
-    float frameRate  = 24.f;
-    bool  loop       = true;
-    float duration   = -1.f;
-    // std::string texturePath;
+    std::string texId;         // VFXSpriteManager 등록 키
+    float screenSize  = 96.f;  // 화면 픽셀 크기
+    float duration    = 1.f;
+    XMFLOAT4 color    = { 1.f, 1.f, 1.f, 1.f };
+    bool  skullPop    = false; // true면 SkullPop 애니메이션
 };
 
 // ── EffectLayer: 단일 이미터 레이어 ──────────────────────────────────────────

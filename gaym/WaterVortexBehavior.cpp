@@ -213,7 +213,7 @@ void WaterVortexBehavior::PullAndDamageEnemies(float deltaTime)
         // 주기 피해 + onHit 훅
         if (bDoTick)
         {
-            pEnemy->TakeDamage(dotDmg, false);
+            pEnemy->TakeDamage(dotDmg, false, HasExecRune(m_pCaster));
             if (m_pCaster) {
                 auto* pSC = m_pCaster->GetComponent<SkillComponent>();
                 if (pSC && m_slot != SkillSlot::Count) {

@@ -11,11 +11,11 @@
 #include "PlayerComponent.h" // 원격 동기화 시 element 별 wire 포맷 분기용
 #include "EnemyComponent.h" // 메아리 룬 지연 발동 시 적 탐색
 #include "Scene.h"          // FindNearestEnemy
-#include "DecalManager.h"   // 메아리 트리거 마법진
+#include "VFXSpriteManager.h"
+#include "EffectRegistry.h"
 #include "FluidParticle.h"  // FluidElementColors
 #include "RuneRegistry.h"
 #include "FluidSkillVFXManager.h"
-#include "EffectRegistry.h"
 #include <set>
 #include <random>
 
@@ -333,14 +333,15 @@ void SkillComponent::Update(float deltaTime)
     if (!m_echoQueue.empty())
     {
         Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
-        DecalManager* pDecal = pScene ? pScene->GetDecalManager() : nullptr;
-
         for (auto& echo : m_echoQueue)
         {
             echo.timer -= deltaTime;
-            // 데칼이 플레이어를 따라오도록 위치 갱신
-            if (pDecal && echo.decalSlot >= 0 && m_pOwner && m_pOwner->GetTransform())
-                pDecal->SetPosition(echo.decalSlot, m_pOwner->GetTransform()->GetPosition());
+            // 마법진이 타겟 적을 따라다니도록 위치 갱신
+            if (echo.decalSlot >= 0 && echo.pTarget && !echo.pTarget->IsDead())
+            {
+                auto* pT = echo.pTarget->GetOwner() ? echo.pTarget->GetOwner()->GetTransform() : nullptr;
+                if (pT) VFXSpriteManager::Get().SetPosition(echo.decalSlot, pT->GetPosition());
+            }
         }
 
         m_echoQueue.erase(
@@ -749,6 +750,15 @@ int SkillComponent::GetEquippedRuneCount(SkillSlot skill) const
     return count;
 }
 
+bool SkillComponent::HasRuneEquipped(SkillSlot skill, const char* runeId) const
+{
+    size_t skillIdx = static_cast<size_t>(skill);
+    if (skillIdx >= static_cast<size_t>(SkillSlot::Count)) return false;
+    for (int i = 0; i < RUNES_PER_SKILL; ++i)
+        if (m_SkillRunes[skillIdx][i].runeId == runeId) return true;
+    return false;
+}
+
 SkillStats SkillComponent::BuildSkillStats(SkillSlot skill, ActivationType defaultType) const
 {
     SkillStats stats;
@@ -880,21 +890,24 @@ VFXModifier SkillComponent::BuildActivationVFXMod(SkillSlot slot, float chargeRa
     return mod;
 }
 
-int SkillComponent::SpawnEchoTriggerVFX(ElementType element)
+int SkillComponent::SpawnEchoTriggerVFX(ElementType element, const XMFLOAT3& targetPos, EnemyComponent** pOutTarget)
 {
     if (!m_pOwner || !m_pOwner->GetTransform()) return -1;
     Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
-    if (!pScene) return -1;
-    DecalManager* pDecal = pScene->GetDecalManager();
-    if (!pDecal) return -1;
 
-    XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+    // 타겟 위치 기준으로 가장 가까운 적 탐색
+    EnemyComponent* pTarget = pScene ? pScene->FindNearestEnemy(targetPos) : nullptr;
+    if (pOutTarget) *pOutTarget = pTarget;
+
+    // 마법진 위치: 적이 있으면 적 발 위치, 없으면 타겟 위치
+    XMFLOAT3 spawnPos = targetPos;
+    if (pTarget && pTarget->GetOwner() && pTarget->GetOwner()->GetTransform())
+        spawnPos = pTarget->GetOwner()->GetTransform()->GetPosition();
 
     FluidElementColor ec = FluidElementColors::Get(element);
-    XMFLOAT4 color = ec.coreColor;
-
-    // 발 아래 마법진 — 2.5초 지속, 1.5rad/s 회전, 크기 7.0
-    return pDecal->Spawn(DecalTexture::Magic3, pos, 7.0f, 0.f, 2.5f, color, 1.5f);
+    // MagicCircle → VFXSpriteManager 직접 위임 (원소 색상 적용)
+    return VFXSpriteManager::Get().Spawn(
+        "magic3", spawnPos, 140.f, 2.5f, ec.coreColor, 1.5f);
 }
 
 void SkillComponent::ProcessRuneInput(InputSystem* pInputSystem)
@@ -974,8 +987,9 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
         {
             ElementType elem = stats.elementOverride.value_or(
                 m_Skills[index] ? m_Skills[index]->GetSkillData().element : ElementType::None);
-            int decalSlot = SpawnEchoTriggerVFX(elem);
-            m_echoQueue.push_back({ index, mult * 0.5f, 2.0f, decalSlot });
+            EnemyComponent* pTarget = nullptr;
+            int decalSlot = SpawnEchoTriggerVFX(elem, target, &pTarget);
+            m_echoQueue.push_back({ index, mult * 0.5f, 2.0f, decalSlot, pTarget });
         }
         return;
     }
@@ -1002,8 +1016,9 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
     {
         ElementType elem = stats.elementOverride.value_or(
             m_Skills[index] ? m_Skills[index]->GetSkillData().element : ElementType::None);
-        int decalSlot = SpawnEchoTriggerVFX(elem);
-        m_echoQueue.push_back({ index, mult * 0.5f, 2.0f, decalSlot });
+        EnemyComponent* pTarget = nullptr;
+        int decalSlot = SpawnEchoTriggerVFX(elem, target, &pTarget);
+        m_echoQueue.push_back({ index, mult * 0.5f, 2.0f, decalSlot, pTarget });
     }
 }
 

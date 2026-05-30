@@ -7,8 +7,6 @@
 
 class FluidSkillVFXManager;
 class Scene;
-class DecalManager;
-
 struct SmallMeteorData
 {
     XMFLOAT3 spawnPos     = {};
@@ -30,8 +28,6 @@ public:
     virtual SkillCategory GetCategory() const override { return SkillCategory::AoE; }
     void SetVFXManager(FluidSkillVFXManager* mgr)    { m_pVFXManager    = mgr; }
     void SetScene(Scene* pScene)                     { m_pScene         = pScene; }
-    void SetDecalManager(DecalManager* m) override   { m_pDecalManager  = m; }
-
     virtual void Execute(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float damageMultiplier = 1.0f) override;
     virtual void OnChargeBegin(GameObject* caster) override;
     virtual void OnChargeUpdate(GameObject* caster, float chargeRatio) override;
@@ -60,7 +56,6 @@ private:
     bool                  m_bIsFinished = true;
     FluidSkillVFXManager* m_pVFXManager    = nullptr;
     Scene*                m_pScene         = nullptr;
-    DecalManager*         m_pDecalManager  = nullptr;
     GameObject*           m_pCaster        = nullptr;
     ElementType           m_elementType = ElementType::Fire;
 

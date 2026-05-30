@@ -395,6 +395,8 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClCompile Include="EarthShardBehavior.cpp" />
     <ClCompile Include="MeteorBehavior.cpp" />
     <ClCompile Include="DamageNumberManager.cpp" />
+    <ClCompile Include="ISkillBehavior.cpp" />
+    <ClCompile Include="VFXSpriteManager.cpp" />
     <ClCompile Include="ProjectileManager.cpp" />
     <ClCompile Include="BloomPostProcess.cpp" />
     <ClCompile Include="FluidParticleSystem.cpp" />

@@ -98,7 +98,7 @@ void WindCutterBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOA
         if (fwd < 0.f || fwd > CHANNEL_RANGE) continue;
         XMVECTOR latV = XMVectorSubtract(toE, XMVectorScale(dV, fwd));
         if (XMVectorGetX(XMVector3Length(latV)) > HALF_W) continue;
-        pEnemy->TakeDamage(damage, false);
+        pEnemy->TakeDamage(damage, false, HasExecRune(caster));
     }
 }
 
@@ -178,6 +178,7 @@ void WindCutterBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& ta
         XMStoreFloat3(&m_direction, dV);
     }
 
+    m_pCaster = caster;
     uint32_t runeFlags = GetRuneFlags(caster);
     EffectDef def = EffectRegistry::Get().GetEffect("Q_WindCutter", runeFlags);
     m_vfxId = m_pVFXManager->SpawnEffectDef(m_origin, m_direction, def, true);
@@ -236,7 +237,7 @@ void WindCutterBehavior::HitEnemiesInCutter(float damage)
         if (fabsf(ePos.y - m_origin.y) > HALF_H + yTol) continue;
 
         // 관통 — 이미 히트한 적도 매 프레임 체크하지 않으므로 set에 넣어 중복 방지
-        pEnemy->TakeDamage(damage, false);
+        pEnemy->TakeDamage(damage, false, HasExecRune(m_pCaster));
         m_hitEnemies.insert(pEnemy);
     }
 }

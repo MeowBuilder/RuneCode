@@ -3,6 +3,7 @@
 #include "Scene.h"
 #include "InputSystem.h" // Added InputSystem include
 #include "HealthBarUI.h"
+#include "VFXSpriteManager.h"
 #include "NetworkManager.h" // Added NetworkManager include
 #include "BloomPostProcess.h"
 #include "CharacterSelectScreen.h"
@@ -116,6 +117,12 @@ private:
 
     // Health Bar UI
     std::unique_ptr<HealthBarUI> m_pHealthBarUI;
+
+    // VFX 스프라이트 텍스처 (힙 슬롯 4: magic_03, 5: skull)
+    ComPtr<ID3D12Resource> m_pMagicDecalTex;
+    ComPtr<ID3D12Resource> m_pMagicDecalUpload;
+    ComPtr<ID3D12Resource> m_pSkullTex;
+    ComPtr<ID3D12Resource> m_pSkullUpload;
 
     // Bloom post-process (owns HDR scene RT + blur chain + tonemap composite)
     std::unique_ptr<BloomPostProcess> m_pBloom;

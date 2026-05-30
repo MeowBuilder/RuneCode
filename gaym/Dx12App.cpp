@@ -556,6 +556,7 @@ void Dx12App::FrameAdvance()
 
     // Update damage number animations
     DamageNumberManager::Get().Update(m_GameTimer.GetTimeElapsed());
+    VFXSpriteManager::Get().Update(m_GameTimer.GetTimeElapsed());
 
     // ========================================================================
     // Shadow Pass: Render depth from light's perspective
@@ -1101,11 +1102,12 @@ void Dx12App::InitializeText()
 
     // 폰트용 디스크립터 힙 생성
     //   [0] 폰트, [1] HP바 base, [2] HP바 fill, [3] 캐릭터선택 흰픽셀
+    //   [4] VFX magic_03, [5] VFX skull
     m_fontDescriptorHeap = std::make_unique<DirectX::DescriptorHeap>(
         m_pd3dDevice.Get(),
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-        4
+        6
     );
 
     // 리소스 업로드 배치
@@ -1164,6 +1166,56 @@ void Dx12App::InitializeText()
     CHECK_HR(m_pd3dCommandList->Close());
     ID3D12CommandList* ppd3dCommandLists[] = { m_pd3dCommandList.Get() };
     m_pd3dCommandQueue->ExecuteCommandLists(_countof(ppd3dCommandLists), ppd3dCommandLists);
+    WaitForGpuComplete();
+
+    // VFX 스프라이트 텍스처 로드 (힙 슬롯 4, 5)
+    CHECK_HR(m_pd3dCommandAllocator->Reset());
+    CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
+    {
+        auto loadVFXTex = [&](const wchar_t* path,
+                               ComPtr<ID3D12Resource>& tex, ComPtr<ID3D12Resource>& upload,
+                               UINT heapSlot, const std::string& regId)
+        {
+            std::unique_ptr<uint8_t[]> decoded;
+            D3D12_SUBRESOURCE_DATA sub{};
+            if (FAILED(DirectX::LoadWICTextureFromFile(m_pd3dDevice.Get(), path,
+                                                        tex.ReleaseAndGetAddressOf(), decoded, sub)))
+            {
+                char buf[256];
+                sprintf_s(buf, "[VFXSprite] 텍스처 로드 실패: %ls\n", path);
+                OutputDebugStringA(buf);
+                return;
+            }
+            UINT64 sz = GetRequiredIntermediateSize(tex.Get(), 0, 1);
+            CD3DX12_HEAP_PROPERTIES hp(D3D12_HEAP_TYPE_UPLOAD);
+            auto bd = CD3DX12_RESOURCE_DESC::Buffer(sz);
+            m_pd3dDevice->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd,
+                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&upload));
+            UpdateSubresources(m_pd3dCommandList.Get(), tex.Get(), upload.Get(), 0, 0, 1, &sub);
+            auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(tex.Get(),
+                D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            m_pd3dCommandList->ResourceBarrier(1, &barrier);
+
+            D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+            srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            srvDesc.Format                  = tex->GetDesc().Format;
+            srvDesc.ViewDimension           = D3D12_SRV_DIMENSION_TEXTURE2D;
+            srvDesc.Texture2D.MipLevels     = tex->GetDesc().MipLevels;
+            m_pd3dDevice->CreateShaderResourceView(tex.Get(), &srvDesc,
+                m_fontDescriptorHeap->GetCpuHandle(heapSlot));
+
+            auto desc = tex->GetDesc();
+            VFXSpriteManager::Get().RegisterTex(regId,
+                m_fontDescriptorHeap->GetGpuHandle(heapSlot),
+                (UINT)desc.Width, (UINT)desc.Height);
+        };
+
+        loadVFXTex(L"Assets/Textures/VFX/magic_03.png",   m_pMagicDecalTex, m_pMagicDecalUpload, 4, "magic3");
+        loadVFXTex(L"Assets/Textures/VFX/human-skull.png", m_pSkullTex,      m_pSkullUpload,      5, "skull");
+    }
+    CHECK_HR(m_pd3dCommandList->Close());
+    ID3D12CommandList* vfxCmdLists[] = { m_pd3dCommandList.Get() };
+    m_pd3dCommandQueue->ExecuteCommandLists(_countof(vfxCmdLists), vfxCmdLists);
     WaitForGpuComplete();
 }
 
@@ -1827,6 +1879,8 @@ void Dx12App::RenderText()
         XMStoreFloat4x4(&vp4x4, vp);
         DamageNumberManager::Get().Render(m_spriteBatch.get(), m_spriteFont.get(),
                                           vp4x4, (int)m_nWndClientWidth, (int)m_nWndClientHeight);
+        VFXSpriteManager::Get().Render(m_spriteBatch.get(),
+                                       vp4x4, (int)m_nWndClientWidth, (int)m_nWndClientHeight);
     }
 
     // ========== Debug Rune Inspector (overlay) ==========

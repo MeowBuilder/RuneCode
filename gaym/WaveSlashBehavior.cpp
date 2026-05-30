@@ -1,6 +1,5 @@
 #include "stdafx.h"
 #include "WaveSlashBehavior.h"
-#include "DecalManager.h"
 #include "FluidSkillVFXManager.h"
 #include "EffectRegistry.h"
 #include "GameObject.h"
@@ -64,6 +63,7 @@ void WaveSlashBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOA
 {
     m_bChannelActive = true;
     m_hitHalfW       = CHANNEL_WAVE_HALF_W;
+    m_pCaster        = caster;  // 채널 모드에서도 exec 룬 등 SkillStats 조회에 필요
 
     m_cachedElem = ElementType::None;
     if (caster) {
@@ -135,6 +135,8 @@ void WaveSlashBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT
     XMFLOAT3 groundOrigin = { origin.x, 0.f, origin.z };
     XMVECTOR gV = XMLoadFloat3(&groundOrigin);
     float damage = m_SkillData.damage * tickMult;
+
+    bool bExecCh = HasExecRune(caster);
     for (const auto& obj : pRoom->GetGameObjects())
     {
         if (!obj) continue;
@@ -148,7 +150,7 @@ void WaveSlashBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT
         if (fwd < 0.f || fwd > CHANNEL_RANGE) continue;
         XMVECTOR latV = XMVectorSubtract(toE, XMVectorScale(dV, fwd));
         if (XMVectorGetX(XMVector3Length(latV)) > CHANNEL_WAVE_HALF_W) continue;
-        pEnemy->TakeDamage(damage, false);
+        pEnemy->TakeDamage(damage, false, bExecCh);
     }
 }
 
@@ -309,13 +311,6 @@ void WaveSlashBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& tar
         m_hitEnemies.clear();
         m_fireTrail.clear();
 
-        // 파도 진행로 데칼 — 발사 지점 지면에 스코치 자국
-        if (m_pDecalManager)
-        {
-            XMFLOAT3 groundOrigin = origin;
-            groundOrigin.y -= 5.0f; // origin.y가 +5 오프셋 적용됐으므로 원위치
-            float rotY = atan2f(direction.x, direction.z);
-        }
     }
     else
     {
@@ -377,6 +372,16 @@ void WaveSlashBehavior::HitEnemiesInWave(float damage)
     float hitFront = m_waveElapsed * WAVE_PARTICLE_SPEED;
     float hitBack  = (std::max)(0.f, hitFront - WAVE_HIT_DEPTH);
 
+    SkillStats sts;
+    bool hasStats = false;
+    if (m_pCaster) {
+        auto* pSC = m_pCaster->GetComponent<SkillComponent>();
+        if (pSC && m_slot != SkillSlot::Count) {
+            sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
+            hasStats = true;
+        }
+    }
+
     const auto& gameObjects = pRoom->GetGameObjects();
     for (const auto& obj : gameObjects)
     {
@@ -391,45 +396,34 @@ void WaveSlashBehavior::HitEnemiesInWave(float damage)
         XMFLOAT3 ePos    = pTransform->GetPosition();
         XMVECTOR toEnemy = XMVectorSubtract(XMLoadFloat3(&ePos), originV);
 
-        // 적 크기 반영 (FireBeam/Meteor 와 동일한 스타일) — 뚱뚱한 보스도 잘 맞게
         XMFLOAT3 eScale = pTransform->GetScale();
         float eRadius = max(0.f, max(eScale.x, eScale.z) * 0.9f);
 
-        // 전진 방향 거리: 슬랩 범위 체크 (적 반경만큼 관대하게)
         float fwdProj = XMVectorGetX(XMVector3Dot(toEnemy, dirV));
         if (fwdProj < hitBack - eRadius || fwdProj > hitFront + eRadius) continue;
 
-        // 수평 측면 거리 (적 반경만큼 관대하게)
         XMVECTOR lateralV = XMVectorSubtract(toEnemy, XMVectorScale(dirV, fwdProj));
         lateralV = XMVectorSetY(lateralV, 0.f);
         if (XMVectorGetX(XMVector3Length(lateralV)) > m_hitHalfW + eRadius) continue;
 
-        // 수직 범위 (적 키만큼 관대하게)
         float yTolerance = max(0.f, eScale.y * 0.6f);
         if (fabsf(ePos.y - waveOrigin.y) > WAVE_HALF_H + yTolerance) continue;
 
-        pEnemy->TakeDamage(damage, false);
+        bool bExec = hasStats && sts.execDamageBonus > 0.f;
+        pEnemy->TakeDamage(damage, false, bExec);
         m_hitEnemies.insert(pEnemy);
 
-        if (m_pCaster)
+        if (hasStats && !sts.onHitHooks.empty())
         {
-            auto* pSC = m_pCaster->GetComponent<SkillComponent>();
-            if (pSC && m_slot != SkillSlot::Count)
-            {
-                SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-                if (!sts.onHitHooks.empty())
-                {
-                    SkillContext ctx;
-                    ctx.caster             = m_pCaster;
-                    ctx.baseDamage         = damage;
-                    ctx.damageDealt        = damage;
-                    ctx.hitEnemy           = pEnemy;
-                    ctx.hitEnemyPos        = pTransform->GetPosition();
-                    ctx.statusChanceMult   = sts.statusChanceMult;
-                    ctx.statusDurationMult = sts.statusDurationMult;
-                    for (auto& hook : sts.onHitHooks) hook(ctx);
-                }
-            }
+            SkillContext ctx;
+            ctx.caster             = m_pCaster;
+            ctx.baseDamage         = damage;
+            ctx.damageDealt        = damage;
+            ctx.hitEnemy           = pEnemy;
+            ctx.hitEnemyPos        = pTransform->GetPosition();
+            ctx.statusChanceMult   = sts.statusChanceMult;
+            ctx.statusDurationMult = sts.statusDurationMult;
+            for (auto& hook : sts.onHitHooks) hook(ctx);
         }
     }
 }
@@ -473,6 +467,8 @@ void WaveSlashBehavior::UpdateFireTrail(float deltaTime)
     const auto& gameObjects = pRoom->GetGameObjects();
     float dotDamage = m_SkillData.damage * m_damageMult * TRAIL_DMG_MULT;
 
+    bool trailExec = HasExecRune(m_pCaster);
+
     for (auto& zone : m_fireTrail)
     {
         zone.lifetime  -= deltaTime;
@@ -481,7 +477,6 @@ void WaveSlashBehavior::UpdateFireTrail(float deltaTime)
         if (zone.tickTimer < TRAIL_TICK_INTERVAL) continue;
         zone.tickTimer = 0.f;
 
-        // 존 안의 적에게 DoT (경직 없음)
         for (const auto& obj : gameObjects)
         {
             if (!obj) continue;
@@ -495,9 +490,7 @@ void WaveSlashBehavior::UpdateFireTrail(float deltaTime)
             float dx = ePos.x - zone.center.x;
             float dz = ePos.z - zone.center.z;
             if (dx * dx + dz * dz <= TRAIL_ZONE_RADIUS * TRAIL_ZONE_RADIUS)
-            {
-                pEnemy->TakeDamage(dotDamage, false);
-            }
+                pEnemy->TakeDamage(dotDamage, false, trailExec);
         }
     }
 

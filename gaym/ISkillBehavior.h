@@ -68,7 +68,6 @@ public:
     // VFX/Scene 연결 — 기본 구현은 아무것도 안 함 (필요한 서브클래스만 override)
     virtual void SetVFXManager(FluidSkillVFXManager*) {}
     virtual void SetScene(Scene*) {}
-    virtual void SetDecalManager(class DecalManager*) {}
 
     // Slot assignment (set by SkillComponent::EquipSkill)
     void      SetSlot(SkillSlot s) { m_slot = s; }
@@ -76,6 +75,10 @@ public:
 
 protected:
     SkillSlot m_slot = SkillSlot::Count;
+
+    // 이 스킬 슬롯에 처형자 룬(ABY_EXC)이 장착되어 있으면 true.
+    // TakeDamage 세 번째 파라미터(bExecRune)에 직접 사용 가능.
+    bool HasExecRune(GameObject* caster) const;
 
     // 원소 타입에 맞는 서브 VFX 이름 반환 (차지/강화 공용)
     static const char* SubVFXName(ElementType e)

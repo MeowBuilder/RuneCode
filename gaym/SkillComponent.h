@@ -11,6 +11,7 @@ class ISkillBehavior;
 class InputSystem;
 class CCamera;
 class FluidSkillVFXManager;
+class EnemyComponent;
 
 // Number of rune slots per skill
 constexpr int RUNES_PER_SKILL = 3;
@@ -66,6 +67,8 @@ public:
     EquippedRune GetRuneSlot(SkillSlot skill, int runeIndex) const;
     void         ClearRuneSlot(SkillSlot skill, int runeIndex);
     int          GetEquippedRuneCount(SkillSlot skill) const;
+    // BuildSkillStats 없이 특정 룬 장착 여부만 빠르게 조회
+    bool         HasRuneEquipped(SkillSlot skill, const char* runeId) const;
 
     // Build accumulated SkillStats from all runes equipped on a slot.
     // defaultType: the skill's own ActivationType used as fallback if no rune overrides it.
@@ -184,7 +187,9 @@ private:
     void SpawnChargeGatherVFX(int step);
 
     // 메아리 트리거 VFX (큐에 등록될 때 발 아래 회전 마법진 연출, 슬롯 인덱스 반환)
-    int SpawnEchoTriggerVFX(ElementType element);
+    // targetPos: 스킬 타겟 위치 (가장 가까운 적 탐색 기준)
+    // pOutTarget: 찾은 적 포인터 반환 (DeferredEcho 추적용)
+    int SpawnEchoTriggerVFX(ElementType element, const DirectX::XMFLOAT3& targetPos, EnemyComponent** pOutTarget = nullptr);
 
     // 차지 VFX (슬롯별 독립)
     FluidSkillVFXManager* m_pVFXManager = nullptr;
@@ -196,6 +201,6 @@ private:
     std::array<bool, static_cast<size_t>(SkillSlot::Count)> m_overheatReady{};
 
     // 메아리 지연 큐 (ABY_ECO: 2초 후 가장 가까운 적을 향해 50% 재발동)
-    struct DeferredEcho { size_t index; float mult; float timer; int decalSlot = -1; };
+    struct DeferredEcho { size_t index; float mult; float timer; int decalSlot = -1; EnemyComponent* pTarget = nullptr; };
     std::vector<DeferredEcho> m_echoQueue;
 };
