@@ -294,9 +294,15 @@ private:
     {
         std::string idle, walk, attack, death;
         uint32 monsterType = 0;
+        uint32 attackType = 0;
+        uint32 visualType = 0;
         bool   isBoss = false;
+        bool   isMiniBoss = false;
     };
     std::unordered_map<uint64, ServerMonsterClips> m_mapServerMonsterClips;
+
+    // 서버 몬스터 현재 애니메이션 클립 캐시
+    std::unordered_map<uint64, std::string> m_mapServerMonsterCurrentAnimClip;
 
     // 공격 애니 재생 중인 몬스터 — 이 시간 동안은 Move 와서도 Walk 로 덮어쓰지 않음
     std::unordered_map<uint64, float> m_mapServerMonsterAttackTimer;
@@ -328,6 +334,24 @@ private:
         bool  hasTarget = false;
     };
     std::unordered_map<uint64, ServerMonsterTarget> m_mapServerMonsterTarget;
+
+    // 서버 몬스터 스폰 등장 연출 상태
+    // 서버 몬스터는 이미 생성해두되, 일정 시간 동안 공중 포탈 위치에 머물렀다가 바닥으로 낙하시킨다.
+    struct ServerMonsterSpawnEffect
+    {
+        float elapsed = 0.0f;
+
+        float portalDelay = 0.7f;
+        float fallTime = 0.4f;
+        float portalHeight = 6.0f;
+
+        float groundX = 0.0f;
+        float groundY = 0.0f;
+        float groundZ = 0.0f;
+
+        float yaw = 0.0f;
+    };
+    std::unordered_map<uint64, ServerMonsterSpawnEffect> m_mapServerMonsterSpawnEffects;
 
     // 보스 spawn 위치 — MegaBreath cover 4개 spawn 좌표 (방 중심).
     // ProcessMonsterSpawn 시점에 boss 면 기록.
@@ -512,6 +536,10 @@ public:
     // 매 프레임 타겟을 향해 몬스터 transform 보간 (Dx12App 메인 루프에서 호출)
     void InterpolateServerMonsters(float deltaTime);
 
+    // 매 프레임 서버 몬스터 스폰 연출 갱신
+    bool IsServerMonsterSpawnEffectActive(uint64 monsterId) const;
+    void UpdateServerMonsterSpawnEffects(float deltaTime);
+    
     // 서버 보스 인디케이터(Circle/ForwardBox) fill 진행도 갱신 (Dx12App 메인 루프에서 호출)
     //   ProcessMonsterAttack 에서 windup 시작, 매 프레임 0→1 차오르고 종료 시 hide.
     void UpdateServerMonsterIndicators(float deltaTime);

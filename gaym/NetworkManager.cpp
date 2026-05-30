@@ -45,6 +45,16 @@
 #include <cstring>
 #include <algorithm>
 
+namespace
+{
+    constexpr float kNetSpawnPortalDelay = 0.7f;
+    constexpr float kNetSpawnPortalY = 6.0f;
+    constexpr float kNetSpawnFallTime = 0.4f;
+}
+
+// ServerPacketHandler.cpp에 정의된 파일 로그 함수 — network_log.txt에 append
+extern void WriteNetworkLog(const std::string& msg);
+
 // 네트워크 전용 RushFront 연출 Behavior
 // 오프라인 RushFrontAttackBehavior는 건드리지 않고,
 // 서버 권위 일반 몬스터에서만 RushCone(FanMesh) telegraph를 사용한다.
@@ -59,8 +69,29 @@ public:
     }
 };
 
-// ServerPacketHandler.cpp에 정의된 파일 로그 함수 — network_log.txt에 append
-extern void WriteNetworkLog(const std::string& msg);
+// 네트워크 중간보스 RushAoE 연출 Behavior
+// 일반 RushAoEEnemy는 RushCircle / radius 5를 쓰지만,
+// 클라 단독 중간보스는 Circle / radius 10을 사용한다.
+class NetworkMiniBossRushAoEVisualBehavior : public RushAoEAttackBehavior
+{
+public:
+    using RushAoEAttackBehavior::RushAoEAttackBehavior;
+
+    virtual int GetIndicatorTypeOverride() const override
+    {
+        return static_cast<int>(IndicatorType::Circle);
+    }
+
+    virtual float GetIndicatorRadius() const override
+    {
+        return 10.0f;
+    }
+
+    virtual float GetTimeToHit() const override
+    {
+        return 0.45f;
+    }
+};
 
 // 싱글톤 인스턴스
 NetworkManager* NetworkManager::s_pInstance = nullptr;
@@ -172,6 +203,9 @@ void NetworkManager::Shutdown()
             entry.behavior->Reset();
     }
     m_vNetworkDemonBehaviors.clear();
+
+	m_mapServerMonsterSpawnEffects.clear(); // 몬스터 스폰 연출 상태 초기화
+	m_mapServerMonsterCurrentAnimClip.clear(); // 몬스터 애니메이션 캐시 초기화
 
     if (!m_bConnected && !m_pService)
         return;
@@ -409,6 +443,13 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             break;
         }
     }
+
+    // 서버 몬스터 위치 보간
+    InterpolateServerMonsters(deltaTime);
+    // 서버 몬스터 스폰 포탈 / 낙하 연출
+    UpdateServerMonsterSpawnEffects(deltaTime);
+    // 서버 몬스터 idle / attack timer 처리
+    CheckServerMonsterIdle(deltaTime);
 
     // 방 전환이 처리된 바로 그 프레임에는 TorchInteract 타이머를 줄이지 않음
     // 즉, 최소 다음 프레임부터 카운트다운 시작
@@ -793,6 +834,8 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     m_mapServerMonsters.clear();
     m_mapServerMonsterClips.clear();
     m_mapServerMonsterTarget.clear();
+    m_mapServerMonsterSpawnEffects.clear();
+    m_mapServerMonsterCurrentAnimClip.clear();
     m_mapServerMonsterMoveTime.clear();
     m_mapServerMonsterAttackTimer.clear();
     m_mapServerMonsterHitFlashTimer.clear();
@@ -1858,7 +1901,7 @@ static MonsterPreset GetMonsterPresetByType(uint32 monsterType)
     }
 }
 
-// 서버 MonsterVisualType enum 값과 일치해야 함.
+// 서버 MonsterVisualType enum 값과 일치해야 한다.
 // monsterType은 서버 AI / 판정용이고, visualType은 클라 외형 프리셋 선택용이다.
 enum class NetworkMonsterVisualType : uint32
 {
@@ -1878,9 +1921,21 @@ enum class NetworkMonsterVisualType : uint32
     MagmaElemental_Rd_Sniper = 9,
 
     // 일반방 마지막 웨이브용 중간보스 외형
-    MiniBoss_MoltenElemental_Rd = 10
+    MiniBoss_FireGolem_Rd = 10,
+    MiniBoss_ChaosElemental_Rd = 11,
+    MiniBoss_LavaMan_Rd = 12,
+    MiniBoss_MoltenElemental_Rd = 13,
+    MiniBoss_MagmaElemental_Rd = 14
 };
 
+static bool IsNetworkMiniBossVisualType(uint32 visualType)
+{
+    return visualType >= static_cast<uint32>(NetworkMonsterVisualType::MiniBoss_FireGolem_Rd) &&
+        visualType <= static_cast<uint32>(NetworkMonsterVisualType::MiniBoss_MagmaElemental_Rd);
+}
+
+// visualType → 클라 프리셋 메쉬 / 애니메이션 / 스케일 매핑
+// visualType이 없으면 기존 monsterType 기준 매핑으로 fallback한다.
 // visualType → 클라 프리셋 메쉬 / 애니메이션 / 스케일 매핑
 // visualType이 없으면 기존 monsterType 기준 매핑으로 fallback한다.
 static MonsterPreset GetMonsterPresetByVisualType(uint32 visualType, uint32 monsterType)
@@ -1931,6 +1986,30 @@ static MonsterPreset GetMonsterPresetByVisualType(uint32 visualType, uint32 mons
                  "Combat_Unarmed_Attack", "Death",
                  0.30f, 0.95f, 0.85f };
 
+    case NetworkMonsterVisualType::MiniBoss_FireGolem_Rd:
+        return { "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd.bin",
+                 "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd_Anim.bin",
+                 11.0f, "idle", "Run_Forward",
+                 "Assets/Enemies/Elementals/FireGolem_Rd/Textures/T_FireGolem_Rd_D.png",
+                 "Combat_Unarmed_Attack", "Death",
+                 1.00f, 0.55f, 0.20f };
+
+    case NetworkMonsterVisualType::MiniBoss_ChaosElemental_Rd:
+        return { "Assets/Enemies/Elementals/ChaosElemental_Rd/ChaosElemental_Rd.bin",
+                 "Assets/Enemies/Elementals/ChaosElemental_Rd/ChaosElemental_Rd_Anim.bin",
+                 11.0f, "idle", "Run_Forward",
+                 "Assets/Enemies/Elementals/ChaosElemental_Rd/Textures/T_ChaosElemental_Rd_D.png",
+                 "Combat_Unarmed_Attack", "Death",
+                 1.00f, 0.35f, 0.30f };
+
+    case NetworkMonsterVisualType::MiniBoss_LavaMan_Rd:
+        return { "Assets/Enemies/Elementals/LavaMan_Rd/LavaMan_Rd.bin",
+                 "Assets/Enemies/Elementals/LavaMan_Rd/LavaMan_Rd_Anim.bin",
+                 11.0f, "idle", "Run_Forward",
+                 "Assets/Enemies/Elementals/LavaMan_Rd/Textures/T_LavaMan_Rd_D.png",
+                 "Combat_Unarmed_Attack", "Death",
+                 1.00f, 0.55f, 0.20f };
+
     case NetworkMonsterVisualType::MiniBoss_MoltenElemental_Rd:
         return { "Assets/Enemies/Elementals/MoltenElemental_Rd/MoltenElemental_Rd.bin",
                  "Assets/Enemies/Elementals/MoltenElemental_Rd/MoltenElemental_Rd_Anim.bin",
@@ -1938,6 +2017,14 @@ static MonsterPreset GetMonsterPresetByVisualType(uint32 visualType, uint32 mons
                  "Assets/Enemies/Elementals/MoltenElemental_Rd/Textures/T_MoltenElemental_Rd_D.png",
                  "Combat_Unarmed_Attack", "Death",
                  1.00f, 0.35f, 0.30f };
+
+    case NetworkMonsterVisualType::MiniBoss_MagmaElemental_Rd:
+        return { "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd.bin",
+                 "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd_Anim.bin",
+                 11.0f, "idle", "Run_Forward",
+                 "Assets/Enemies/Elementals/MagmaElemental_Rd/Textures/T_MagmaElemental_Rd_D.png",
+                 "Combat_Unarmed_Attack", "Death",
+                 0.30f, 0.95f, 0.85f };
 
     case NetworkMonsterVisualType::None:
     default:
@@ -2029,6 +2116,21 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
     CRoom* pPrevRoom = pScene->GetCurrentRoom();
     pScene->SetCurrentRoom(nullptr);
 
+	// 첫 몬스터 스폰 시 현재 방을 강제로 Active로 전환한다.
+    if (pPrevRoom && pPrevRoom->GetState() == RoomState::Inactive)
+    {
+        pPrevRoom->SetState(RoomState::Active);
+
+        // Inactive 상태에서 멈춰 있던 방 소속 오브젝트들의 CB를 한 번 갱신한다.
+        for (const auto& pGO : pPrevRoom->GetGameObjects())
+        {
+            if (pGO)
+                pGO->Update(0.0f);
+        }
+
+        WriteNetworkLog("[Network] Current room activated by first monster spawn");
+    }
+
     GameObject* pMonster = MeshLoader::LoadGeometryFromFile(
         pScene, pDevice, pCommandList, nullptr, preset.meshPath);
 
@@ -2049,10 +2151,35 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
     TransformComponent* pT = pMonster->GetTransform();
     if (pT)
     {
-        pT->SetPosition(x, y, z);
+        float spawnY = y;
+
+        // 일반 몬스터는 처음에 공중 포탈 위치에서 시작한다.
+        // 보스는 기존 보스 컷신 / BossEvent 흐름을 유지한다.
+        if (isBoss == false)
+        {
+            spawnY = y + kNetSpawnPortalY;
+        }
+
+        pT->SetPosition(x, spawnY, z);
         pT->SetScale(preset.scale, preset.scale, preset.scale);
-        // 서버가 yaw를 도(degree)로 보냄 → 그대로 사용 (이중 변환 버그 제거)
+
+        // 서버가 yaw를 도(degree)로 보냄 → 그대로 사용
         pT->SetRotation(0.0f, yaw, 0.0f);
+    }
+
+    // 일반 몬스터 스폰 포탈 VFX
+    if (isBoss == false && pScene)
+    {
+        if (VFXManager* pVFX = pScene->GetVFXManager())
+        {
+            XMFLOAT3 up(0.0f, 1.0f, 0.0f);
+
+            XMFLOAT3 portalPos(x, y + kNetSpawnPortalY, z);
+            pVFX->Spawn("Spawn_Portal", portalPos, up, 0u, false);
+
+            XMFLOAT3 groundPos(x, y + 0.15f, z);
+            pVFX->Spawn("Spawn_PortalGround", groundPos, up, 0u, false);
+        }
     }
 
     // 애니메이션
@@ -2060,7 +2187,12 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
     if (pAnim)
     {
         pAnim->LoadAnimation(preset.animPath);
+        pAnim->SetCullEnabled(false);
         pAnim->Play(preset.idleClip, true);
+
+        // 스폰 직후 현재 애니메이션은 idle로 기록한다.
+        // 이후 정지 MOVE 패킷이 와도 walk로 잘못 전환하지 않기 위한 기준값이다.
+        m_mapServerMonsterCurrentAnimClip[monsterId] = preset.idleClip;
     }
 
     // 머티리얼 + 텍스처 강제 적용 (MeshLoader가 .bin에서 세팅 안 했을 경우 대비)
@@ -2082,16 +2214,19 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
     m_mapServerMonsters[monsterId] = pMonster;
     {
         ServerMonsterClips clips;
-        clips.idle        = preset.idleClip;
-        clips.walk        = preset.walkClip;
-        clips.attack      = preset.attackClip;
-        clips.death       = preset.deathClip;
+        clips.idle = preset.idleClip;
+        clips.walk = preset.walkClip;
+        clips.attack = preset.attackClip;
+        clips.death = preset.deathClip;
         clips.monsterType = monsterType;
-        clips.isBoss      = isBoss;
+        clips.attackType = attackType;
+        clips.visualType = visualType;
+        clips.isBoss = isBoss;
+        clips.isMiniBoss = IsNetworkMiniBossVisualType(visualType);
         m_mapServerMonsterClips[monsterId] = clips;
 
         // 일반 Rush 몬스터는 클라 오프라인 EnemyComponent 인디케이터 시스템을 그대로 사용한다.
-        if (monsterType == 2 || monsterType == 3 || monsterType == 4 || monsterType == 5)
+        if (monsterType == 2 || monsterType == 3 || monsterType == 4 || monsterType == 5 || IsNetworkMiniBossVisualType(visualType))
         {
             EnemyComponent* pEnemyComp = pMonster->GetComponent<EnemyComponent>();
             if (pEnemyComp == nullptr)
@@ -2107,16 +2242,33 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
 
             AttackIndicatorConfig config;
 
-            if (monsterType == 2)
+            if (IsNetworkMiniBossVisualType(visualType))
+            {
+                // 중간보스는 클라 단독 MapLoader 기준
+                // RushAoE 공격을 쓰지만 indicator는 RushCircle이 아니라 큰 원형 Circle이다.
+                config.m_eType = IndicatorType::Circle;
+                config.m_fHitRadius = 10.0f;
+                config.m_fRushDistance = 0.0f;
+                config.m_fConeAngle = 0.0f;
+                config.m_fHitLength = 0.0f;
+            }
+            else if (monsterType == 2)
             {
                 // AirElemental: 클라 원본과 동일
                 config.m_eType = IndicatorType::Circle;
                 config.m_fHitRadius = 4.0f;
+                config.m_fRushDistance = 0.0f;
+                config.m_fConeAngle = 0.0f;
+                config.m_fHitLength = 0.0f;
             }
             else if (monsterType == 3)
             {
                 // RangedEnemy: 클라 원본은 지면 telegraph 없음
                 config.m_eType = IndicatorType::None;
+                config.m_fHitRadius = 0.0f;
+                config.m_fRushDistance = 0.0f;
+                config.m_fConeAngle = 0.0f;
+                config.m_fHitLength = 0.0f;
             }
             else if (monsterType == 4)
             {
@@ -2124,6 +2276,8 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
                 config.m_eType = IndicatorType::RushCircle;
                 config.m_fRushDistance = 18.0f;
                 config.m_fHitRadius = 5.0f;
+                config.m_fConeAngle = 0.0f;
+                config.m_fHitLength = 0.0f;
             }
             else
             {
@@ -2132,6 +2286,7 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
                 config.m_fRushDistance = 18.0f;
                 config.m_fHitRadius = 4.0f;
                 config.m_fConeAngle = 90.0f;
+                config.m_fHitLength = 0.0f;
             }
 
             if (EnemySpawner* pSpawner = pScene ? pScene->GetEnemySpawner() : nullptr)
@@ -2140,9 +2295,10 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
                     pMonster,
                     pEnemyComp,
                     config,
-                    nullptr
+                    pPrevRoom
                 );
             }
+
             pEnemyComp->ResetNetworkAttackIndicator();
         }
     }
@@ -2165,12 +2321,44 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
         }
     }
 
-    // 보간 타겟 초기값 = 스폰 위치 (첫 MOVE 전까진 제자리)
+    // 보간 타겟 초기값은 실제 바닥 위치로 저장한다.
+// 화면상 Transform은 공중에서 시작하지만, 서버 기준 target은 바닥 좌표다.
     ServerMonsterTarget initTgt;
-    initTgt.px = x; initTgt.py = y; initTgt.pz = z;
+    initTgt.px = x;
+    initTgt.py = y;
+    initTgt.pz = z;
     initTgt.yaw = yaw;
     initTgt.hasTarget = true;
     m_mapServerMonsterTarget[monsterId] = initTgt;
+
+    // 일반 몬스터 스폰 낙하 연출 등록
+    if (isBoss == false)
+    {
+        ServerMonsterSpawnEffect fx;
+        fx.elapsed = 0.0f;
+        fx.portalDelay = kNetSpawnPortalDelay;
+        fx.fallTime = kNetSpawnFallTime;
+        fx.portalHeight = kNetSpawnPortalY;
+
+        fx.groundX = x;
+        fx.groundY = y;
+        fx.groundZ = z;
+        fx.yaw = yaw;
+
+        m_mapServerMonsterSpawnEffects[monsterId] = fx;
+
+        char buf[180];
+        sprintf_s(
+            buf,
+            sizeof(buf),
+            "[Network] Monster spawn portal scheduled: id=%llu pos=(%.2f,%.2f,%.2f)",
+            monsterId,
+            x,
+            y,
+            z
+        );
+        WriteNetworkLog(buf);
+    }
 
     // 보스면 spawn 위치 영구 보존 — MegaBreath cover 좌표 기준점
     if (isBoss)
@@ -2242,24 +2430,63 @@ void NetworkManager::ProcessMonsterMove(uint64 monsterId, float x, float y, floa
 
     GameObject* pMonster = it->second;
 
-    // 직접 SetPosition하지 않고 타겟만 갱신. InterpolateServerMonsters에서 부드럽게 접근.
+    // 직접 SetPosition하지 않고 타겟만 갱신한다.
+    // 단, 서버는 실제로 움직이지 않는 몬스터에게도 매 프레임 S_MONSTER_MOVE를 보낸다.
+    // 따라서 "MOVE 패킷 수신"이 아니라 "좌표 변화량"으로 walk / idle을 판단해야 한다.
+    auto prevTargetIt = m_mapServerMonsterTarget.find(monsterId);
+
+    bool hadPrevTarget =
+        prevTargetIt != m_mapServerMonsterTarget.end() &&
+        prevTargetIt->second.hasTarget;
+
+    float prevX = hadPrevTarget ? prevTargetIt->second.px : x;
+    float prevZ = hadPrevTarget ? prevTargetIt->second.pz : z;
+
+    float moveDx = x - prevX;
+    float moveDz = z - prevZ;
+    float moveDistSq = moveDx * moveDx + moveDz * moveDz;
+
+    // 서버 좌표가 실제로 변했는지 판단.
+    // 너무 작으면 정지 상태로 본다.
+    bool bActuallyMoved = (!hadPrevTarget || moveDistSq > 0.0004f);
+
+    // 타겟 좌표 갱신
     ServerMonsterTarget& tgt = m_mapServerMonsterTarget[monsterId];
-    tgt.px = x; tgt.py = y; tgt.pz = z;
+    tgt.px = x;
+    tgt.py = y;
+    tgt.pz = z;
     tgt.yaw = yaw;
+
     if (!tgt.hasTarget)
     {
-        // 첫 패킷은 즉시 스냅 (스폰 직후 0,0,0에서 시작하지 않게)
         TransformComponent* pT = pMonster->GetTransform();
         if (pT)
         {
             pT->SetPosition(x, y, z);
+
             XMFLOAT3 rot = pT->GetRotation();
             pT->SetRotation(rot.x, yaw, rot.z);
         }
+
         tgt.hasTarget = true;
     }
 
-    // 공격 애니 재생 중이면 walk 로 덮어쓰지 않음 — 자연스러운 전환
+    // 스폰 포탈 / 낙하 연출 중이면 좌표만 저장하고 애니메이션은 절대 건드리지 않는다.
+    auto spawnFxIt = m_mapServerMonsterSpawnEffects.find(monsterId);
+    if (spawnFxIt != m_mapServerMonsterSpawnEffects.end())
+    {
+        spawnFxIt->second.groundX = x;
+        spawnFxIt->second.groundY = y;
+        spawnFxIt->second.groundZ = z;
+        spawnFxIt->second.yaw = yaw;
+
+        // 스폰 연출 중에는 idle 전환 타이머가 쌓이지 않게 한다.
+        m_mapServerMonsterMoveTime[monsterId] = 0.0f;
+
+        return;
+    }
+
+    // 공격 애니 재생 중이면 walk / idle 전환 금지
     bool bAttackLocked = false;
     {
         auto atkIt = m_mapServerMonsterAttackTimer.find(monsterId);
@@ -2267,28 +2494,200 @@ void NetworkManager::ProcessMonsterMove(uint64 monsterId, float x, float y, floa
             bAttackLocked = true;
     }
 
-    // 죽은 몬스터는 death 애니 유지 — walk 로 덮지 않음 (despawn 대기 중 2s 동안 이동 패킷 올 수 있음)
+    // 죽은 몬스터는 death 애니 유지
     bool bDead = (m_setDeadServerMonsters.find(monsterId) != m_setDeadServerMonsters.end());
 
-    // 걷기 애니메이션 부드럽게 전환 — preset별 walk 클립 이름 사용
-    auto* pAnim = pMonster->GetComponent<AnimationComponent>();
-    if (pAnim && !bAttackLocked && !bDead)
-    {
-        auto clipIt = m_mapServerMonsterClips.find(monsterId);
-        const char* walkClip = (clipIt != m_mapServerMonsterClips.end())
-            ? clipIt->second.walk.c_str() : "Walk";
-        pAnim->CrossFade(walkClip, 0.1f, true);
-    }
+    auto clipIt = m_mapServerMonsterClips.find(monsterId);
+    std::string walkClip = (clipIt != m_mapServerMonsterClips.end())
+        ? clipIt->second.walk
+        : "Walk";
 
-    m_mapServerMonsterMoveTime[monsterId] = 0.0f;
+    // 실제로 좌표가 변했을 때만 walk로 전환한다.
+    // 정지 MOVE 패킷은 walk로 보지 않는다.
+    if (bActuallyMoved)
+    {
+        auto* pAnim = pMonster->GetComponent<AnimationComponent>();
+        if (pAnim && !bAttackLocked && !bDead)
+        {
+            auto curIt = m_mapServerMonsterCurrentAnimClip.find(monsterId);
+            bool needChange =
+                curIt == m_mapServerMonsterCurrentAnimClip.end() ||
+                curIt->second != walkClip;
+
+            if (needChange)
+            {
+                pAnim->CrossFade(walkClip, 0.1f, true);
+                m_mapServerMonsterCurrentAnimClip[monsterId] = walkClip;
+            }
+        }
+
+        // 실제로 움직였을 때만 idle 전환 타이머를 리셋한다.
+        m_mapServerMonsterMoveTime[monsterId] = 0.0f;
+    }
+    else
+    {
+        // 서버가 정지 좌표를 계속 보내는 경우에는 moveTime을 리셋하지 않는다.
+        // 그래야 CheckServerMonsterIdle()이 일정 시간 후 idle로 돌릴 수 있다.
+        auto curIt = m_mapServerMonsterCurrentAnimClip.find(monsterId);
+
+        if (curIt != m_mapServerMonsterCurrentAnimClip.end() &&
+            curIt->second == walkClip &&
+            m_mapServerMonsterMoveTime.find(monsterId) == m_mapServerMonsterMoveTime.end())
+        {
+            m_mapServerMonsterMoveTime[monsterId] = 0.0f;
+        }
+    }
+}
+
+bool NetworkManager::IsServerMonsterSpawnEffectActive(uint64 monsterId) const
+{
+    return m_mapServerMonsterSpawnEffects.find(monsterId) != m_mapServerMonsterSpawnEffects.end();
+}
+
+void NetworkManager::UpdateServerMonsterSpawnEffects(float deltaTime)
+{
+    if (m_mapServerMonsterSpawnEffects.empty())
+        return;
+
+    for (auto it = m_mapServerMonsterSpawnEffects.begin(); it != m_mapServerMonsterSpawnEffects.end(); )
+    {
+        uint64 monsterId = it->first;
+        ServerMonsterSpawnEffect& fx = it->second;
+
+        auto monIt = m_mapServerMonsters.find(monsterId);
+        if (monIt == m_mapServerMonsters.end() || monIt->second == nullptr)
+        {
+            it = m_mapServerMonsterSpawnEffects.erase(it);
+            continue;
+        }
+
+        GameObject* pMonster = monIt->second;
+        TransformComponent* pT = pMonster->GetTransform();
+        if (pT == nullptr)
+        {
+            it = m_mapServerMonsterSpawnEffects.erase(it);
+            continue;
+        }
+
+        fx.elapsed += deltaTime;
+
+        float skyY = fx.groundY + fx.portalHeight;
+
+        // 1. 포탈 대기 구간
+        if (fx.elapsed < fx.portalDelay)
+        {
+            pT->SetPosition(fx.groundX, skyY, fx.groundZ);
+
+            XMFLOAT3 rot = pT->GetRotation();
+            pT->SetRotation(rot.x, fx.yaw, rot.z);
+
+            ++it;
+            continue;
+        }
+
+        // 2. 낙하 구간
+        float fallElapsed = fx.elapsed - fx.portalDelay;
+        float t = fallElapsed / fx.fallTime;
+
+        if (t > 1.0f)
+            t = 1.0f;
+
+        float eased = t * t * (3.0f - 2.0f * t);
+        float y = skyY + (fx.groundY - skyY) * eased;
+
+        pT->SetPosition(fx.groundX, y, fx.groundZ);
+
+        XMFLOAT3 rot = pT->GetRotation();
+        pT->SetRotation(rot.x, fx.yaw, rot.z);
+
+        // 3. 낙하 완료
+        if (t >= 1.0f)
+        {
+            pT->SetPosition(fx.groundX, fx.groundY, fx.groundZ);
+
+            char buf[180];
+            sprintf_s(
+                buf,
+                sizeof(buf),
+                "[Network] Monster spawn fall finished: id=%llu pos=(%.2f,%.2f,%.2f)",
+                monsterId,
+                fx.groundX,
+                fx.groundY,
+                fx.groundZ
+            );
+            WriteNetworkLog(buf);
+
+            it = m_mapServerMonsterSpawnEffects.erase(it);
+            continue;
+        }
+
+        ++it;
+    }
 }
 
 void NetworkManager::CheckServerMonsterIdle(float deltaTime)
 {
-    // (0) Hit flash 페이드아웃 — SetHitFlashAll 이 자동 감쇠 안 하므로 수동 tick (원격 플레이어와 동일 패턴)
+    // 서버 몬스터는 S_MONSTER_MOVE 패킷 간격이 렌더 프레임보다 느릴 수 있다.
+    // 기존 IDLE_TRANSITION_TIME이 너무 짧으면 이동 중에도 walk -> idle -> walk가 반복된다.
+    constexpr float SERVER_MONSTER_IDLE_TRANSITION_TIME = 0.45f;
+
+    // 현재 클라 Transform이 서버 target 위치에 아직 도착하지 않았으면
+    // MOVE 패킷이 잠깐 안 와도 이동 중으로 본다.
+    constexpr float TARGET_REMAIN_DIST_SQ = 0.04f; // 0.2m
+
+    auto IsStillMovingToTarget = [&](uint64 monsterId, GameObject* pMonster) -> bool
+        {
+            if (!pMonster)
+                return false;
+
+            auto tgtIt = m_mapServerMonsterTarget.find(monsterId);
+            if (tgtIt == m_mapServerMonsterTarget.end() || !tgtIt->second.hasTarget)
+                return false;
+
+            TransformComponent* pT = pMonster->GetTransform();
+            if (!pT)
+                return false;
+
+            XMFLOAT3 cur = pT->GetPosition();
+
+            float dx = tgtIt->second.px - cur.x;
+            float dz = tgtIt->second.pz - cur.z;
+            float distSq = dx * dx + dz * dz;
+
+            return distSq > TARGET_REMAIN_DIST_SQ;
+        };
+
+    auto PlayIdleIfNeeded = [&](uint64 monsterId, GameObject* pMonster, float fadeTime)
+        {
+            if (!pMonster)
+                return;
+
+            AnimationComponent* pAnim = pMonster->GetComponent<AnimationComponent>();
+            if (!pAnim)
+                return;
+
+            auto clipIt = m_mapServerMonsterClips.find(monsterId);
+            std::string idleClip = (clipIt != m_mapServerMonsterClips.end())
+                ? clipIt->second.idle
+                : "Idle";
+
+            auto curIt = m_mapServerMonsterCurrentAnimClip.find(monsterId);
+            bool needChange =
+                curIt == m_mapServerMonsterCurrentAnimClip.end() ||
+                curIt->second != idleClip;
+
+            if (needChange)
+            {
+                pAnim->CrossFade(idleClip, fadeTime, true);
+                m_mapServerMonsterCurrentAnimClip[monsterId] = idleClip;
+            }
+        };
+
+    // 0. Hit flash 페이드아웃
     for (auto it = m_mapServerMonsterHitFlashTimer.begin(); it != m_mapServerMonsterHitFlashTimer.end(); )
     {
         it->second -= deltaTime;
+
         auto mIt = m_mapServerMonsters.find(it->first);
         if (mIt != m_mapServerMonsters.end() && mIt->second)
         {
@@ -2302,61 +2701,93 @@ void NetworkManager::CheckServerMonsterIdle(float deltaTime)
                 mIt->second->SetHitFlashAll(0.0f);
             }
         }
-        if (it->second <= 0.0f) it = m_mapServerMonsterHitFlashTimer.erase(it);
-        else ++it;
+
+        if (it->second <= 0.0f)
+            it = m_mapServerMonsterHitFlashTimer.erase(it);
+        else
+            ++it;
     }
 
-    // (1) 공격 애니 타이머 감소 — 0 되면 idle 로 자동 복귀 (Move 안 오고 공격만 끝난 경우)
+    // 1. 공격 애니 타이머 감소
+    // 공격이 끝났더라도 아직 target까지 이동 보간 중이면 idle로 돌리지 않는다.
     for (auto it = m_mapServerMonsterAttackTimer.begin(); it != m_mapServerMonsterAttackTimer.end(); )
     {
         it->second -= deltaTime;
+
         if (it->second <= 0.0f)
         {
-            auto mIt = m_mapServerMonsters.find(it->first);
-            // 죽은 몬스터는 death 애니 유지 — idle 로 덮지 않음
-            bool bDead = (m_setDeadServerMonsters.find(it->first) != m_setDeadServerMonsters.end());
-            if (mIt != m_mapServerMonsters.end() && !bDead)
+            uint64 monsterId = it->first;
+
+            auto mIt = m_mapServerMonsters.find(monsterId);
+            bool bDead = (m_setDeadServerMonsters.find(monsterId) != m_setDeadServerMonsters.end());
+
+            if (mIt != m_mapServerMonsters.end() && mIt->second && !bDead)
             {
-                auto* pAnim = mIt->second->GetComponent<AnimationComponent>();
-                if (pAnim)
+                GameObject* pMonster = mIt->second;
+
+                if (!IsStillMovingToTarget(monsterId, pMonster))
                 {
-                    auto clipIt = m_mapServerMonsterClips.find(it->first);
-                    const char* idleClip = (clipIt != m_mapServerMonsterClips.end())
-                        ? clipIt->second.idle.c_str() : "Idle";
-                    pAnim->CrossFade(idleClip, 0.15f, true);
+                    PlayIdleIfNeeded(monsterId, pMonster, 0.15f);
                 }
             }
+
             it = m_mapServerMonsterAttackTimer.erase(it);
         }
-        else ++it;
+        else
+        {
+            ++it;
+        }
     }
 
-    // (2) 기존: Move 후 일정 시간 idle 전환
+    // 2. Move 이후 idle 전환 처리
     for (auto it = m_mapServerMonsterMoveTime.begin(); it != m_mapServerMonsterMoveTime.end(); )
     {
-        it->second += deltaTime;
-        if (it->second >= IDLE_TRANSITION_TIME)
-        {
-            auto mIt = m_mapServerMonsters.find(it->first);
-            bool bDead = (m_setDeadServerMonsters.find(it->first) != m_setDeadServerMonsters.end());
-            if (mIt != m_mapServerMonsters.end() && !bDead)
-            {
-                // 공격 애니 재생 중이면 건드리지 않음 (공격 타이머 쪽이 마무리함)
-                auto atkIt = m_mapServerMonsterAttackTimer.find(it->first);
-                bool bAttackLocked = (atkIt != m_mapServerMonsterAttackTimer.end() && atkIt->second > 0.0f);
+        uint64 monsterId = it->first;
 
-                auto* pAnim = mIt->second->GetComponent<AnimationComponent>();
-                if (pAnim && !bAttackLocked)
-                {
-                    auto clipIt = m_mapServerMonsterClips.find(it->first);
-                    const char* idleClip = (clipIt != m_mapServerMonsterClips.end())
-                        ? clipIt->second.idle.c_str() : "Idle";
-                    pAnim->CrossFade(idleClip, 0.2f, true);
-                }
-            }
-            it = m_mapServerMonsterMoveTime.erase(it);
+        it->second += deltaTime;
+
+        if (it->second < SERVER_MONSTER_IDLE_TRANSITION_TIME)
+        {
+            ++it;
+            continue;
         }
-        else ++it;
+
+        auto mIt = m_mapServerMonsters.find(monsterId);
+        bool bDead = (m_setDeadServerMonsters.find(monsterId) != m_setDeadServerMonsters.end());
+
+        if (mIt == m_mapServerMonsters.end() || !mIt->second || bDead)
+        {
+            it = m_mapServerMonsterMoveTime.erase(it);
+            continue;
+        }
+
+        GameObject* pMonster = mIt->second;
+
+        // 공격 애니 재생 중이면 idle 전환 금지
+        auto atkIt = m_mapServerMonsterAttackTimer.find(monsterId);
+        bool bAttackLocked = (atkIt != m_mapServerMonsterAttackTimer.end() && atkIt->second > 0.0f);
+
+        if (bAttackLocked)
+        {
+            it->second = 0.0f;
+            ++it;
+            continue;
+        }
+
+        // 핵심:
+        // MOVE 패킷이 잠깐 안 와도, 현재 Transform이 아직 서버 target까지 보간 중이면
+        // idle로 돌리면 안 된다. 이 경우 walk 유지.
+        if (IsStillMovingToTarget(monsterId, pMonster))
+        {
+            it->second = 0.0f;
+            ++it;
+            continue;
+        }
+
+        // target에 거의 도착했고, 일정 시간 MOVE도 없었으면 idle 전환
+        PlayIdleIfNeeded(monsterId, pMonster, 0.2f);
+
+        it = m_mapServerMonsterMoveTime.erase(it);
     }
 }
 
@@ -3145,7 +3576,8 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
         : ((clipIt != m_mapServerMonsterClips.end() && !clipIt->second.attack.empty())
             ? clipIt->second.attack.c_str() : "Attack");
 
-    pAnim->CrossFade(attackClip, 0.1f, false, true);  // forceRestart — 연속 공격도 처음부터
+    pAnim->CrossFade(attackClip, 0.08f, false, true);
+    m_mapServerMonsterCurrentAnimClip[monsterId] = attackClip;
 
     // 공격 애니 지속 시간 등록 — 이 기간 Move 왔을 때 walk 로 덮지 않음
     //  서버 windupSec(예고) + 추정 재생시간. 짧은 windup 공격도 최소 ATTACK_ANIM_LOCK 은 유지
@@ -4356,6 +4788,16 @@ void NetworkManager::PlayNetworkNormalMonsterAttackBehavior(
     // 4. 일반 몬스터 attackType에 맞는 클라 오프라인 Behavior 생성
     std::unique_ptr<IAttackBehavior> behavior;
 
+    uint32 visualType = 0;
+    bool isMiniBoss = false;
+
+    auto clipIt = m_mapServerMonsterClips.find(monsterId);
+    if (clipIt != m_mapServerMonsterClips.end())
+    {
+        visualType = clipIt->second.visualType;
+        isMiniBoss = clipIt->second.isMiniBoss;
+    }
+
     switch (attackType)
     {
     case 1:
@@ -4400,25 +4842,46 @@ void NetworkManager::PlayNetworkNormalMonsterAttackBehavior(
         behavior = std::move(ranged);
         break;
     }
+
     case 3:
     {
-        // RushAoEEnemy
-        // 클라 RushAoEAttackBehavior preset과 동일 수치
-        auto rushAoE = std::make_unique<RushAoEAttackBehavior>(
-            15.0f,  // damage
-            15.0f,  // rushSpeed
-            1.2f,   // rushDuration
-            0.3f,   // windupTime
-            0.2f,   // hitTime
-            0.3f,   // recoveryTime
-            5.0f,   // aoeRadius
-            0.45f   // telegraphTime
-        );
+        if (isMiniBoss)
+        {
+            // 중간보스는 클라 단독 MapLoader 기준:
+            // RushAoEAttackBehavior를 쓰되 indicator는 RushCircle이 아니라 Circle radius 10이다.
+            auto rushAoE = std::make_unique<NetworkMiniBossRushAoEVisualBehavior>(
+                15.0f,  // damage
+                0.0f,   // rushSpeed - 서버 권위 모드에서는 클라 직접 이동 금지
+                0.0f,   // rushDuration
+                0.3f,   // windupTime
+                0.2f,   // hitTime
+                0.3f,   // recoveryTime
+                10.0f,  // aoeRadius
+                0.45f   // telegraphTime
+            );
 
-        // 서버 권위 모드: 클라 직접 이동/데미지 금지
-        rushAoE->SetNetworkVisualOnly(true);
+            rushAoE->SetNetworkVisualOnly(true);
 
-        behavior = std::move(rushAoE);
+            behavior = std::move(rushAoE);
+        }
+        else
+        {
+            // 일반 RushAoEEnemy
+            auto rushAoE = std::make_unique<RushAoEAttackBehavior>(
+                15.0f,  // damage
+                15.0f,  // rushSpeed
+                1.2f,   // rushDuration
+                0.3f,   // windupTime
+                0.2f,   // hitTime
+                0.3f,   // recoveryTime
+                5.0f,   // aoeRadius
+                0.45f   // telegraphTime
+            );
+
+            rushAoE->SetNetworkVisualOnly(true);
+
+            behavior = std::move(rushAoE);
+        }
         break;
     }
 
@@ -4572,12 +5035,17 @@ void NetworkManager::PlayNetworkNormalMonsterAttackBehavior(
     entry.monsterId = monsterId;
     m_vNetworkNormalMonsterBehaviors.push_back(entry);
 
-    char buf[180];
-    sprintf_s(buf,
-        "[Network] PlayNetworkNormalMonsterAttackBehavior monsterId=%llu monsterType=%u attackType=%u",
+    char buf[240];
+    sprintf_s(
+        buf,
+        sizeof(buf),
+        "[Network] PlayNetworkNormalMonsterAttackBehavior monsterId=%llu monsterType=%u attackType=%u visualType=%u miniBoss=%d",
         monsterId,
         monsterType,
-        attackType);
+        attackType,
+        visualType,
+        isMiniBoss ? 1 : 0
+    );
     WriteNetworkLog(buf);
 }
 
@@ -4656,6 +5124,7 @@ void NetworkManager::ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float
         {
             const char* hitClip = GetMonsterHitReactClip(mt);
             pAnim->CrossFade(hitClip, 0.08f, false, true);
+            m_mapServerMonsterCurrentAnimClip[monsterId] = hitClip;
 
             // 피격 모션이 바로 Walk/Idle로 덮이지 않도록 짧게 잠금
             m_mapServerMonsterAttackTimer[monsterId] = 0.45f;
@@ -4712,6 +5181,7 @@ void NetworkManager::ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float
         if (pAnim && clipIt != m_mapServerMonsterClips.end() && !clipIt->second.death.empty())
         {
             pAnim->CrossFade(clipIt->second.death.c_str(), 0.15f, false, true);
+            m_mapServerMonsterCurrentAnimClip[monsterId] = clipIt->second.death;
         }
 
         m_setDeadServerMonsters.insert(monsterId);
@@ -4785,6 +5255,8 @@ void NetworkManager::ProcessMonsterDespawn(Scene* pScene, uint64 monsterId)
     m_mapServerMonsterMoveTime.erase(monsterId);
     m_mapServerMonsterClips.erase(monsterId);
     m_mapServerMonsterTarget.erase(monsterId);
+    m_mapServerMonsterSpawnEffects.erase(monsterId);
+    m_mapServerMonsterCurrentAnimClip.erase(monsterId);
     m_mapServerMonsterAttackTimer.erase(monsterId);
     m_mapServerMonsterHitFlashTimer.erase(monsterId);
     m_setDeadServerMonsters.erase(monsterId);
@@ -5633,10 +6105,18 @@ void NetworkManager::UpdateNetworkDemonBehaviors(float deltaTime)
 
 void NetworkManager::InterpolateServerMonsters(float deltaTime)
 {
-    // 각 몬스터의 현재 transform을 타겟을 향해 exponential smoothing.
-    // 서버 MOVE 패킷이 띄엄띄엄 와도 움직임은 부드럽게 이어짐.
-    constexpr float POS_SMOOTH_RATE = 12.0f;  // 높을수록 빨리 따라감 (클 수록 덜 부드러움)
+    // 서버 MOVE 패킷은 일정 간격으로 들어오고,
+    // 렌더 프레임은 그보다 촘촘하게 돈다.
+    // 따라서 일반적인 이동은 절대 스냅하지 않고 항상 보간한다.
+    // 큰 거리 차이는 방 전환 / 컷신 / 비정상 위치 보정으로 보고 즉시 스냅한다.
+    constexpr float POS_SMOOTH_RATE = 10.0f;
     constexpr float YAW_SMOOTH_RATE = 10.0f;
+
+    // 너무 멀리 벌어진 경우만 텔레포트성 보정으로 스냅
+    constexpr float TELEPORT_SNAP_DIST_SQ = 100.0f; // 10m 이상
+
+    // 거의 같은 위치면 미세 떨림 방지용으로만 정확히 맞춘다
+    constexpr float TINY_SNAP_DIST_SQ = 0.0001f; // 1cm 수준
 
     const float posAlpha = 1.0f - expf(-POS_SMOOTH_RATE * deltaTime);
     const float yawAlpha = 1.0f - expf(-YAW_SMOOTH_RATE * deltaTime);
@@ -5645,27 +6125,34 @@ void NetworkManager::InterpolateServerMonsters(float deltaTime)
     {
         uint64 monsterId = kv.first;
         const ServerMonsterTarget& tgt = kv.second;
-        if (!tgt.hasTarget) continue;
+
+        if (!tgt.hasTarget)
+            continue;
 
         Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
         if (pScene && pScene->IsNetworkKrakenCutsceneTarget(monsterId))
-        {
             continue;
-        }
 
-        // 인트로/메가브레스 컷신 진행 중인 보스는 보간 스킵 — Update*가 위치 직접 제어
+        // 스폰 포탈 / 낙하 연출 중에는 UpdateServerMonsterSpawnEffects가 위치를 직접 제어한다.
+        // 여기서 보간하면 공중 낙하 위치와 서버 ground target이 서로 싸워서 떨릴 수 있다.
+        if (m_mapServerMonsterSpawnEffects.find(monsterId) != m_mapServerMonsterSpawnEffects.end())
+            continue;
+
+        // 인트로 / 메가브레스 컷신 진행 중인 보스는 보간 스킵
         if (m_mapServerBossIntros.find(monsterId) != m_mapServerBossIntros.end())
             continue;
+
         if (m_mapServerMegaBreathCutscenes.find(monsterId) != m_mapServerMegaBreathCutscenes.end())
             continue;
 
         auto mIt = m_mapServerMonsters.find(monsterId);
-        if (mIt == m_mapServerMonsters.end()) continue;
+        if (mIt == m_mapServerMonsters.end())
+            continue;
 
         TransformComponent* pT = mIt->second->GetTransform();
-        if (!pT) continue;
+        if (!pT)
+            continue;
 
-        // 위치 보간
         XMFLOAT3 cur = pT->GetPosition();
 
         float dx = tgt.px - cur.x;
@@ -5673,26 +6160,49 @@ void NetworkManager::InterpolateServerMonsters(float deltaTime)
         float dz = tgt.pz - cur.z;
         float distSq = dx * dx + dy * dy + dz * dz;
 
-        // 서버 목표 위치와 거의 가까우면 보간하지 말고 바로 스냅한다.
-        if (distSq <= 0.25f) // 0.5m 이내
+        // 1. 비정상적으로 많이 벌어진 경우만 스냅
+        if (distSq >= TELEPORT_SNAP_DIST_SQ)
         {
             pT->SetPosition(tgt.px, tgt.py, tgt.pz);
         }
+        // 2. 거의 같은 위치면 미세 떨림 방지용으로 정착
+        else if (distSq <= TINY_SNAP_DIST_SQ)
+        {
+            pT->SetPosition(tgt.px, tgt.py, tgt.pz);
+        }
+        // 3. 일반 이동은 무조건 부드럽게 보간
         else
         {
             XMFLOAT3 next;
             next.x = cur.x + dx * posAlpha;
             next.y = cur.y + dy * posAlpha;
             next.z = cur.z + dz * posAlpha;
+
             pT->SetPosition(next);
         }
 
-        // yaw 보간 — 360 경계 넘어갈 때 최단 경로 선택
+        // yaw 보간 — 360도 경계 넘어갈 때 최단 경로 선택
         XMFLOAT3 rot = pT->GetRotation();
+
         float delta = tgt.yaw - rot.y;
-        while (delta >  180.0f) delta -= 360.0f;
-        while (delta < -180.0f) delta += 360.0f;
-        float nextYaw = rot.y + delta * yawAlpha;
+        while (delta > 180.0f)
+            delta -= 360.0f;
+        while (delta < -180.0f)
+            delta += 360.0f;
+
+        // yaw도 아주 작은 변화면 정확히 맞추고, 그 외에는 보간
+        float nextYaw = rot.y;
+        if (fabsf(delta) < 0.05f)
+        {
+            nextYaw = tgt.yaw;
+        }
+        else
+        {
+            nextYaw = rot.y + delta * yawAlpha;
+        }
+
         pT->SetRotation(rot.x, nextYaw, rot.z);
     }
 }
+
+
