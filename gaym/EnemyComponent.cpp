@@ -1174,21 +1174,7 @@ void EnemyComponent::UpdateDead(float dt)
         if (pScene)
         {
             // Mark indicator objects for deletion first
-            if (m_pRushLineIndicator)
-            {
-                pScene->MarkForDeletion(m_pRushLineIndicator);
-                m_pRushLineIndicator = nullptr;
-            }
-            if (m_pHitZoneIndicator)
-            {
-                pScene->MarkForDeletion(m_pHitZoneIndicator);
-                m_pHitZoneIndicator = nullptr;
-            }
-            if (m_pHitZoneFillIndicator)
-            {
-                pScene->MarkForDeletion(m_pHitZoneFillIndicator);
-                m_pHitZoneFillIndicator = nullptr;
-            }
+            DestroyIndicators(pScene);
 
             // Mark self for deletion (will also clean up child hierarchy)
             if (m_pOwner)
@@ -1476,6 +1462,44 @@ void EnemyComponent::HideIndicators()
     }
 }
 
+void EnemyComponent::DestroyIndicators(Scene* pScene)
+{
+    // 먼저 화면에서 즉시 숨긴다.
+    HideIndicators();
+
+    auto destroyObj = [pScene](GameObject*& pObj)
+        {
+            if (!pObj)
+                return;
+
+            // MarkForDeletion이 다음 프레임에 처리되므로,
+            // 그 사이 한 프레임이라도 보이지 않게 먼저 숨긴다.
+            if (TransformComponent* pT = pObj->GetTransform())
+            {
+                pT->SetPosition(0.0f, -1000.0f, 0.0f);
+                pT->SetScale(0.0f, 0.0f, 0.0f);
+            }
+
+            if (pScene)
+            {
+                pScene->MarkForDeletion(pObj);
+            }
+
+            pObj = nullptr;
+        };
+
+    // 공격 telegraph / hit zone
+    destroyObj(m_pRushLineIndicator);
+    destroyObj(m_pHitZoneIndicator);
+    destroyObj(m_pHitZoneFillIndicator);
+
+    // 타입 식별 메쉬 마커도 남아 있으면 같이 정리
+    destroyObj(m_pHeadMarker);
+    destroyObj(m_pHeadMarkerInner);
+    destroyObj(m_pFootMarker);
+    destroyObj(m_pFootMarkerInner);
+}
+
 XMFLOAT3 EnemyComponent::GetAttackOrigin() const
 {
     if (!m_pOwner) return XMFLOAT3(0.0f, 0.0f, 0.0f);
@@ -1521,15 +1545,25 @@ void EnemyComponent::Die()
 {
     OutputDebugString(L"[Enemy] Died!\n");
 
-    // Hide and release indicators
-    HideIndicators();
-    m_pRushLineIndicator     = nullptr;
-    m_pHitZoneIndicator      = nullptr;
-    m_pHitZoneFillIndicator  = nullptr;
+    // HideIndicators()만 하고 포인터를 nullptr로 바꾸면,
+    // indicator GameObject가 Scene에 남아도 다시 삭제할 방법이 사라진다.
+    // 따라서 사망 시에는 Scene에서 실제 삭제 예약까지 처리한다.
+    Scene* pScene = nullptr;
 
-    // 타입 식별 마커 정리 (상태이상 VFX는 UpdateStatusEffects 흐름이 별도 정리)
+    if (m_pRoom)
+    {
+        pScene = m_pRoom->GetScene();
+    }
+
+    if (!pScene && Dx12App::GetInstance())
+    {
+        pScene = Dx12App::GetInstance()->GetScene();
+    }
+
+    DestroyIndicators(pScene);
+
+    // 타입 식별 파티클 VFX 정리
     StopTypeMarkers();
-    HideTypeMarkers();
 
     // Notify room/callback
     if (m_OnDeathCallback)

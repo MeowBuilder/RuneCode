@@ -72,6 +72,8 @@ struct NetworkCommandData
     // Monster fields
     uint64 monsterId;
     uint32 monsterType;
+    uint32 monsterAttackType = 0; // 서버 공격 패턴 타입
+    uint32 monsterVisualType = 0; // 서버 외형 프리셋 타입
     float monsterYaw;
     float monsterHp;
     bool monsterIsBoss;
@@ -199,9 +201,7 @@ public:
     void QueueRoomTransition(uint32 stageIndex, uint32 roomIndex, bool isBossRoom, const std::string& mapId);
 
     // 몬스터 큐잉 (네트워크 스레드에서 호출 → 메인 스레드에서 처리)
-    void QueueMonsterSpawn(uint64 monsterId, uint32 monsterType,
-                           float x, float y, float z, float yaw,
-                           float hp, bool isBoss);
+    void QueueMonsterSpawn(uint64 monsterId, uint32 monsterType, uint32 attackType, uint32 visualType, float x, float y, float z, float yaw, float hp, bool isBoss);
     void QueueMonsterMove(uint64 monsterId, float x, float y, float z, float yaw);
     void QueueMonsterDespawn(uint64 monsterId);
 
@@ -266,10 +266,7 @@ private:
     void ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uint32 roomIndex, bool isBossRoom, const std::string& mapId);
 
     // 몬스터 처리 (메인 스레드)
-    void ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList,
-                             uint64 monsterId, uint32 monsterType,
-                             float x, float y, float z, float yaw,
-                             float hp, bool isBoss);
+    void ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList, uint64 monsterId, uint32 monsterType, uint32 attackType, uint32 visualType, float x, float y, float z, float yaw, float hp, bool isBoss);
     void ProcessMonsterMove(uint64 monsterId, float x, float y, float z, float yaw);
     void ProcessMonsterDespawn(Scene* pScene, uint64 monsterId);
 

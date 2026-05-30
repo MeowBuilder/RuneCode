@@ -236,7 +236,9 @@ constexpr MonsterInfo::MonsterInfo(
   , yaw_(0)
   , hp_(0)
   , isboss_(false)
-  , stageindex_(0u){}
+  , stageindex_(0u)
+  , attacktype_(0u)
+  , visualtype_(0u){}
 struct MonsterInfoDefaultTypeInternal {
   constexpr MonsterInfoDefaultTypeInternal()
     : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
@@ -573,6 +575,8 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_Protocol_2eproto::offsets[] PR
   PROTOBUF_FIELD_OFFSET(::Protocol::MonsterInfo, hp_),
   PROTOBUF_FIELD_OFFSET(::Protocol::MonsterInfo, isboss_),
   PROTOBUF_FIELD_OFFSET(::Protocol::MonsterInfo, stageindex_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::MonsterInfo, attacktype_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::MonsterInfo, visualtype_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::S_MONSTER_SPAWN, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -705,18 +709,18 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOB
   { 103, -1, sizeof(::Protocol::C_TORCH_INTERACT)},
   { 108, -1, sizeof(::Protocol::S_ROOM_TRANSITION)},
   { 117, -1, sizeof(::Protocol::MonsterInfo)},
-  { 131, -1, sizeof(::Protocol::S_MONSTER_SPAWN)},
-  { 137, -1, sizeof(::Protocol::S_MONSTER_MOVE)},
-  { 147, -1, sizeof(::Protocol::S_MONSTER_DESPAWN)},
-  { 153, -1, sizeof(::Protocol::S_MONSTER_ATTACK)},
-  { 168, -1, sizeof(::Protocol::S_PLAYER_DAMAGE)},
-  { 178, -1, sizeof(::Protocol::C_PLAYER_ATTACK)},
-  { 193, -1, sizeof(::Protocol::S_MONSTER_DAMAGE)},
-  { 204, -1, sizeof(::Protocol::S_ROOM_CLEARED)},
-  { 211, -1, sizeof(::Protocol::S_BOSS_EVENT)},
-  { 219, -1, sizeof(::Protocol::C_BOSS_CUTSCENE_END)},
-  { 227, -1, sizeof(::Protocol::S_MONSTER_STAGGER)},
-  { 234, -1, sizeof(::Protocol::S_MAP_TORNADO_EVENT)},
+  { 133, -1, sizeof(::Protocol::S_MONSTER_SPAWN)},
+  { 139, -1, sizeof(::Protocol::S_MONSTER_MOVE)},
+  { 149, -1, sizeof(::Protocol::S_MONSTER_DESPAWN)},
+  { 155, -1, sizeof(::Protocol::S_MONSTER_ATTACK)},
+  { 170, -1, sizeof(::Protocol::S_PLAYER_DAMAGE)},
+  { 180, -1, sizeof(::Protocol::C_PLAYER_ATTACK)},
+  { 195, -1, sizeof(::Protocol::S_MONSTER_DAMAGE)},
+  { 206, -1, sizeof(::Protocol::S_ROOM_CLEARED)},
+  { 213, -1, sizeof(::Protocol::S_BOSS_EVENT)},
+  { 221, -1, sizeof(::Protocol::C_BOSS_CUTSCENE_END)},
+  { 229, -1, sizeof(::Protocol::S_MONSTER_STAGGER)},
+  { 236, -1, sizeof(::Protocol::S_MAP_TORNADO_EVENT)},
 };
 
 static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] = {
@@ -774,11 +778,12 @@ const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABL
   "\014\n\004dirZ\030\010 \001(\002\"\023\n\021C_PORTAL_INTERACT\"\022\n\020C_"
   "TORCH_INTERACT\"]\n\021S_ROOM_TRANSITION\022\022\n\ns"
   "tageIndex\030\001 \001(\r\022\021\n\troomIndex\030\002 \001(\r\022\022\n\nis"
-  "BossRoom\030\003 \001(\010\022\r\n\005mapId\030\004 \001(\t\"\223\001\n\013Monste"
+  "BossRoom\030\003 \001(\010\022\r\n\005mapId\030\004 \001(\t\"\273\001\n\013Monste"
   "rInfo\022\021\n\tmonsterId\030\001 \001(\004\022\023\n\013monsterType\030"
   "\002 \001(\r\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\t\n\001z\030\005 \001(\002\022\013"
   "\n\003yaw\030\006 \001(\002\022\n\n\002hp\030\007 \001(\002\022\016\n\006isBoss\030\010 \001(\010\022"
-  "\022\n\nstageIndex\030\t \001(\r\"9\n\017S_MONSTER_SPAWN\022&"
+  "\022\n\nstageIndex\030\t \001(\r\022\022\n\nattackType\030\n \001(\r\022"
+  "\022\n\nvisualType\030\013 \001(\r\"9\n\017S_MONSTER_SPAWN\022&"
   "\n\007monster\030\001 \001(\0132\025.Protocol.MonsterInfo\"Q"
   "\n\016S_MONSTER_MOVE\022\021\n\tmonsterId\030\001 \001(\004\022\t\n\001x"
   "\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\013\n\003yaw\030\005 \001("
@@ -819,7 +824,7 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor
 };
 static ::PROTOBUF_NAMESPACE_ID::internal::once_flag descriptor_table_Protocol_2eproto_once;
 const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_Protocol_2eproto = {
-  false, false, 2409, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
+  false, false, 2449, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
   &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 28,
   schemas, file_default_instances, TableStruct_Protocol_2eproto::offsets,
   file_level_metadata_Protocol_2eproto, file_level_enum_descriptors_Protocol_2eproto, file_level_service_descriptors_Protocol_2eproto,
@@ -4398,16 +4403,16 @@ MonsterInfo::MonsterInfo(const MonsterInfo& from)
   : ::PROTOBUF_NAMESPACE_ID::Message() {
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
   ::memcpy(&monsterid_, &from.monsterid_,
-    static_cast<size_t>(reinterpret_cast<char*>(&stageindex_) -
-    reinterpret_cast<char*>(&monsterid_)) + sizeof(stageindex_));
+    static_cast<size_t>(reinterpret_cast<char*>(&visualtype_) -
+    reinterpret_cast<char*>(&monsterid_)) + sizeof(visualtype_));
   // @@protoc_insertion_point(copy_constructor:Protocol.MonsterInfo)
 }
 
 void MonsterInfo::SharedCtor() {
 ::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
     reinterpret_cast<char*>(&monsterid_) - reinterpret_cast<char*>(this)),
-    0, static_cast<size_t>(reinterpret_cast<char*>(&stageindex_) -
-    reinterpret_cast<char*>(&monsterid_)) + sizeof(stageindex_));
+    0, static_cast<size_t>(reinterpret_cast<char*>(&visualtype_) -
+    reinterpret_cast<char*>(&monsterid_)) + sizeof(visualtype_));
 }
 
 MonsterInfo::~MonsterInfo() {
@@ -4437,8 +4442,8 @@ void MonsterInfo::Clear() {
   (void) cached_has_bits;
 
   ::memset(&monsterid_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&stageindex_) -
-      reinterpret_cast<char*>(&monsterid_)) + sizeof(stageindex_));
+      reinterpret_cast<char*>(&visualtype_) -
+      reinterpret_cast<char*>(&monsterid_)) + sizeof(visualtype_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -4508,6 +4513,20 @@ const char* MonsterInfo::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID
       case 9:
         if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 72)) {
           stageindex_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // uint32 attackType = 10;
+      case 10:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 80)) {
+          attacktype_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // uint32 visualType = 11;
+      case 11:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 88)) {
+          visualtype_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
           CHK_(ptr);
         } else goto handle_unusual;
         continue;
@@ -4594,6 +4613,18 @@ failure:
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt32ToArray(9, this->_internal_stageindex(), target);
   }
 
+  // uint32 attackType = 10;
+  if (this->attacktype() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt32ToArray(10, this->_internal_attacktype(), target);
+  }
+
+  // uint32 visualType = 11;
+  if (this->visualtype() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt32ToArray(11, this->_internal_visualtype(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -4661,6 +4692,20 @@ size_t MonsterInfo::ByteSizeLong() const {
         this->_internal_stageindex());
   }
 
+  // uint32 attackType = 10;
+  if (this->attacktype() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt32Size(
+        this->_internal_attacktype());
+  }
+
+  // uint32 visualType = 11;
+  if (this->visualtype() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt32Size(
+        this->_internal_visualtype());
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     return ::PROTOBUF_NAMESPACE_ID::internal::ComputeUnknownFieldsSize(
         _internal_metadata_, total_size, &_cached_size_);
@@ -4719,6 +4764,12 @@ void MonsterInfo::MergeFrom(const MonsterInfo& from) {
   if (from.stageindex() != 0) {
     _internal_set_stageindex(from._internal_stageindex());
   }
+  if (from.attacktype() != 0) {
+    _internal_set_attacktype(from._internal_attacktype());
+  }
+  if (from.visualtype() != 0) {
+    _internal_set_visualtype(from._internal_visualtype());
+  }
 }
 
 void MonsterInfo::CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
@@ -4743,8 +4794,8 @@ void MonsterInfo::InternalSwap(MonsterInfo* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(MonsterInfo, stageindex_)
-      + sizeof(MonsterInfo::stageindex_)
+      PROTOBUF_FIELD_OFFSET(MonsterInfo, visualtype_)
+      + sizeof(MonsterInfo::visualtype_)
       - PROTOBUF_FIELD_OFFSET(MonsterInfo, monsterid_)>(
           reinterpret_cast<char*>(&monsterid_),
           reinterpret_cast<char*>(&other->monsterid_));

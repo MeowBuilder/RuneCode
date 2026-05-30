@@ -54,6 +54,9 @@ public:
     void Impact(int id, const XMFLOAT3& impactPos);
     void Explode(int id, const XMFLOAT3& impactPos);
 
+    // 모든 플레이어 / 적 VFX 슬롯 정리
+    void ClearAll();
+
     // ─── 매 프레임 호출 ────────────────────────────────────────────────────
     void Update(float dt);
     void DispatchSPH(ID3D12GraphicsCommandList* pCmdList, float dt);

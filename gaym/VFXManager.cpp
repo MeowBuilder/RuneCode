@@ -3,6 +3,8 @@
 #include "EffectRegistry.h"
 #include "DescriptorHeap.h"
 
+extern void WriteNetworkLog(const std::string& msg);
+
 //==============================================================================
 // VFXManager — 두 개의 FluidSkillVFXManager(player/enemy)를 묶는 파사드
 //------------------------------------------------------------------------------
@@ -122,6 +124,31 @@ void VFXManager::Explode(int id, const XMFLOAT3& impactPos)
 {
     if (auto* m = GetManager(id))
         m->ExplodeEffect(ToLocalId(id), impactPos);
+}
+
+void VFXManager::ClearAll()
+{
+    // Player VFX 슬롯 전체 정리
+    // FluidSkillVFXManager 내부 슬롯은 local id 기준이므로 0 ~ MAX_EFFECTS-1 순회.
+    if (m_pPlayerVFX)
+    {
+        for (int i = 0; i < FluidSkillVFXManager::MAX_EFFECTS; ++i)
+        {
+            m_pPlayerVFX->StopEffect(i);
+        }
+    }
+
+    // Enemy VFX 슬롯 전체 정리
+    // 보스 탄막, 적 투사체, 네트워크 몬스터 폭발 VFX가 다음 방까지 남는 것을 방지.
+    if (m_pEnemyVFX)
+    {
+        for (int i = 0; i < FluidSkillVFXManager::MAX_EFFECTS; ++i)
+        {
+            m_pEnemyVFX->StopEffect(i);
+        }
+    }
+
+    WriteNetworkLog("[VFXManager] ClearAll");
 }
 
 // ─── 프레임 업데이트/렌더 ────────────────────────────────────────────────────

@@ -354,10 +354,7 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             break;
 
         case NetworkCommand::MonsterSpawn:
-            ProcessMonsterSpawn(pScene, pDevice, pCommandList,
-                                cmd.monsterId, cmd.monsterType,
-                                cmd.x, cmd.y, cmd.z, cmd.monsterYaw,
-                                cmd.monsterHp, cmd.monsterIsBoss);
+            ProcessMonsterSpawn(pScene, pDevice, pCommandList, cmd.monsterId, cmd.monsterType, cmd.monsterAttackType, cmd.monsterVisualType, cmd.x, cmd.y, cmd.z, cmd.monsterYaw, cmd.monsterHp, cmd.monsterIsBoss);
             break;
 
         case NetworkCommand::MonsterMove:
@@ -622,18 +619,27 @@ void NetworkManager::QueueRoomTransition(uint32 stageIndex, uint32 roomIndex, bo
 }
 
 void NetworkManager::QueueMonsterSpawn(uint64 monsterId, uint32 monsterType,
-                                       float x, float y, float z, float yaw,
-                                       float hp, bool isBoss)
+    uint32 attackType, uint32 visualType,
+    float x, float y, float z, float yaw,
+    float hp, bool isBoss)
 {
     std::lock_guard<std::mutex> lock(m_queueMutex);
+
     NetworkCommandData cmd{};
     cmd.type = NetworkCommand::MonsterSpawn;
+
     cmd.monsterId = monsterId;
     cmd.monsterType = monsterType;
-    cmd.x = x; cmd.y = y; cmd.z = z;
+    cmd.monsterAttackType = attackType;
+    cmd.monsterVisualType = visualType;
+
+    cmd.x = x;
+    cmd.y = y;
+    cmd.z = z;
     cmd.monsterYaw = yaw;
     cmd.monsterHp = hp;
     cmd.monsterIsBoss = isBoss;
+
     m_vCommandQueue.push_back(cmd);
 }
 
@@ -728,8 +734,8 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
         return;
 
     // 방 전환 전에 네트워크 일반 몬스터 연출 정리
-// 이제 entry는 EnemyComponent*를 직접 들고 있지 않고 monsterId만 저장한다.
-// 매번 m_mapServerMonsters에서 다시 찾아 dangling pointer 접근을 막는다.
+    // 이제 entry는 EnemyComponent*를 직접 들고 있지 않고 monsterId만 저장한다.
+    // 매번 m_mapServerMonsters에서 다시 찾아 dangling pointer 접근을 막는다.
     for (auto& entry : m_vNetworkNormalMonsterBehaviors)
     {
         auto monIt = m_mapServerMonsters.find(entry.monsterId);
@@ -765,10 +771,25 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
 
     // 이전 방 서버 몬스터 전부 정리 — GameObject 는 Scene 에 MarkForDeletion 으로 삭제 예약,
     // 보조 맵들은 즉시 clear. 새 방에서 같은 monsterId 가 재전송돼도 깨끗한 상태에서 재스폰됨.
+    // 일반 몬스터 공격 인디케이터는 몬스터 본체와 별도 GameObject로 생성되므로,
+    // 몬스터 삭제 전에 반드시 EnemyComponent를 통해 같이 삭제해야 한다.
     for (auto& kv : m_mapServerMonsters)
     {
-        if (kv.second) pScene->MarkForDeletion(kv.second);
+        GameObject* pMonster = kv.second;
+        if (!pMonster)
+            continue;
+
+        if (EnemyComponent* pEnemy = pMonster->GetComponent<EnemyComponent>())
+        {
+            pEnemy->DestroyIndicators(pScene);
+
+            if (IAttackBehavior* pBehavior = pEnemy->GetAttackBehavior())
+                pBehavior->Reset();
+        }
+
+        pScene->MarkForDeletion(pMonster);
     }
+
     m_mapServerMonsters.clear();
     m_mapServerMonsterClips.clear();
     m_mapServerMonsterTarget.clear();
@@ -790,8 +811,17 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     // 지연 VFX 큐도 비워야 이전 방의 미발사 투사체가 새 방에서 튀지 않음
     m_vPendingMonsterVFX.clear();
 
+    // 원격/네트워크 스킬 예약 VFX 정리
+    // MeteorShower 같은 지연 스폰형 VFX가 방 전환 후 다음 스테이지에서 계속 생성되는 것 방지
+    m_vPendingMeteorShowers.clear();
+
+    // 실제로 이미 생성된 투사체 / 유체 VFX / 보스 탄막 VFX 정리
+    // m_vPendingMonsterVFX.clear()는 예약만 지우므로, 이미 Spawn된 VFX는 Scene 쪽에서 직접 정리해야 한다.
+    pScene->ClearTransientCombatEffects();
+
     // 서버가 내려준 mapId 우선 분기. mapId 가 비었거나 미매칭이면 stageIndex/roomIndex 기반 fallback.
     bool bHandled = false;
+
     if (!mapId.empty())
     {
         if (mapId == "fire_boss")           { pScene->TransitionToBossRoom();        bHandled = true; }
@@ -1828,6 +1858,93 @@ static MonsterPreset GetMonsterPresetByType(uint32 monsterType)
     }
 }
 
+// 서버 MonsterVisualType enum 값과 일치해야 함.
+// monsterType은 서버 AI / 판정용이고, visualType은 클라 외형 프리셋 선택용이다.
+enum class NetworkMonsterVisualType : uint32
+{
+    None = 0,
+
+    // 기본 일반 몬스터 외형
+    FireGolem_Rd = 1,
+    ChaosElemental_Rd = 2,
+    LavaMan_Rd = 3,
+    MoltenElemental_Rd = 4,
+    MagmaElemental_Rd = 5,
+
+    // 일반 몬스터 변종 외형
+    FireGolem_Rd_Bomber = 6,
+    FireGolem_Rd_Jabber = 7,
+    MagmaElemental_Rd_Grenadier = 8,
+    MagmaElemental_Rd_Sniper = 9,
+
+    // 일반방 마지막 웨이브용 중간보스 외형
+    MiniBoss_MoltenElemental_Rd = 10
+};
+
+// visualType → 클라 프리셋 메쉬 / 애니메이션 / 스케일 매핑
+// visualType이 없으면 기존 monsterType 기준 매핑으로 fallback한다.
+static MonsterPreset GetMonsterPresetByVisualType(uint32 visualType, uint32 monsterType)
+{
+    switch (static_cast<NetworkMonsterVisualType>(visualType))
+    {
+    case NetworkMonsterVisualType::FireGolem_Rd:
+    case NetworkMonsterVisualType::FireGolem_Rd_Bomber:
+    case NetworkMonsterVisualType::FireGolem_Rd_Jabber:
+        return { "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd.bin",
+                 "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd_Anim.bin",
+                 5.5f, "idle", "Run_Forward",
+                 "Assets/Enemies/Elementals/FireGolem_Rd/Textures/T_FireGolem_Rd_D.png",
+                 "Combat_Unarmed_Attack", "Death",
+                 1.00f, 0.55f, 0.20f };
+
+    case NetworkMonsterVisualType::ChaosElemental_Rd:
+        return { "Assets/Enemies/Elementals/ChaosElemental_Rd/ChaosElemental_Rd.bin",
+                 "Assets/Enemies/Elementals/ChaosElemental_Rd/ChaosElemental_Rd_Anim.bin",
+                 5.5f, "idle", "Run_Forward",
+                 "Assets/Enemies/Elementals/ChaosElemental_Rd/Textures/T_ChaosElemental_Rd_D.png",
+                 "Combat_Unarmed_Attack", "Death",
+                 1.00f, 0.35f, 0.30f };
+
+    case NetworkMonsterVisualType::LavaMan_Rd:
+        return { "Assets/Enemies/Elementals/LavaMan_Rd/LavaMan_Rd.bin",
+                 "Assets/Enemies/Elementals/LavaMan_Rd/LavaMan_Rd_Anim.bin",
+                 5.5f, "idle", "Run_Forward",
+                 "Assets/Enemies/Elementals/LavaMan_Rd/Textures/T_LavaMan_Rd_D.png",
+                 "Combat_Unarmed_Attack", "Death",
+                 1.00f, 0.55f, 0.20f };
+
+    case NetworkMonsterVisualType::MoltenElemental_Rd:
+        return { "Assets/Enemies/Elementals/MoltenElemental_Rd/MoltenElemental_Rd.bin",
+                 "Assets/Enemies/Elementals/MoltenElemental_Rd/MoltenElemental_Rd_Anim.bin",
+                 5.5f, "idle", "Run_Forward",
+                 "Assets/Enemies/Elementals/MoltenElemental_Rd/Textures/T_MoltenElemental_Rd_D.png",
+                 "Combat_Unarmed_Attack", "Death",
+                 1.00f, 0.35f, 0.30f };
+
+    case NetworkMonsterVisualType::MagmaElemental_Rd:
+    case NetworkMonsterVisualType::MagmaElemental_Rd_Grenadier:
+    case NetworkMonsterVisualType::MagmaElemental_Rd_Sniper:
+        return { "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd.bin",
+                 "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd_Anim.bin",
+                 5.5f, "idle", "Run_Forward",
+                 "Assets/Enemies/Elementals/MagmaElemental_Rd/Textures/T_MagmaElemental_Rd_D.png",
+                 "Combat_Unarmed_Attack", "Death",
+                 0.30f, 0.95f, 0.85f };
+
+    case NetworkMonsterVisualType::MiniBoss_MoltenElemental_Rd:
+        return { "Assets/Enemies/Elementals/MoltenElemental_Rd/MoltenElemental_Rd.bin",
+                 "Assets/Enemies/Elementals/MoltenElemental_Rd/MoltenElemental_Rd_Anim.bin",
+                 11.0f, "idle", "Run_Forward",
+                 "Assets/Enemies/Elementals/MoltenElemental_Rd/Textures/T_MoltenElemental_Rd_D.png",
+                 "Combat_Unarmed_Attack", "Death",
+                 1.00f, 0.35f, 0.30f };
+
+    case NetworkMonsterVisualType::None:
+    default:
+        return GetMonsterPresetByType(monsterType);
+    }
+}
+
 // EnemySpawner::LoadTextureToHierarchy 미러 — 하이러키 순회하며 텍스처+카테고리 색 머티리얼 적용.
 // 목적: MATERIAL이 garbage로 초기화되어 diffuse=0 → 메쉬가 까맣게 렌더되어 보이지 않는 문제 해결.
 // 추가: tint != (1,1,1) 시 카테고리 색이 텍스처 위에 입혀짐 (호스트/게스트 시각 동기화).
@@ -1885,10 +2002,11 @@ static void ApplyWhiteMaterialAndTextureToHierarchy(
 }
 
 void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
-                                         ID3D12GraphicsCommandList* pCommandList,
-                                         uint64 monsterId, uint32 monsterType,
-                                         float x, float y, float z, float yaw,
-                                         float hp, bool isBoss)
+    ID3D12GraphicsCommandList* pCommandList,
+    uint64 monsterId, uint32 monsterType,
+    uint32 attackType, uint32 visualType,
+    float x, float y, float z, float yaw,
+    float hp, bool isBoss)
 {
     // 중복 방지: 같은 monsterId 가 이미 있으면 새 GameObject 만들지 않고 skip.
     // (기존은 위치만 갱신했으나 방 전환 후 서버가 같은 id 를 재전송할 때 이전 방 몬스터가
@@ -1901,8 +2019,12 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
         return;
     }
 
-    MonsterPreset preset = GetMonsterPresetByType(monsterType);
+    // attackType은 현재 스폰 외형 선택에는 직접 사용하지 않지만,
+    // 로그 / 이후 스폰 연출 분기에서 사용할 수 있도록 같이 전달받는다.
+    (void)attackType;
 
+    MonsterPreset preset = GetMonsterPresetByVisualType(visualType, monsterType);
+    
     // 서버 몬스터는 로컬 Room에 속하지 않는 전역 오브젝트로 생성
     CRoom* pPrevRoom = pScene->GetCurrentRoom();
     pScene->SetCurrentRoom(nullptr);
@@ -1915,8 +2037,8 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
     if (!pMonster)
     {
         wchar_t buf[256];
-        swprintf_s(buf, L"[Network] ProcessMonsterSpawn: mesh load FAILED type=%u path=%hs\n",
-            monsterType, preset.meshPath);
+        swprintf_s(buf, L"[Network] ProcessMonsterSpawn: mesh load FAILED type=%u visual=%u path=%hs\n",
+            monsterType, visualType, preset.meshPath);
         OutputDebugString(buf);
         return;
     }
@@ -2061,24 +2183,21 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
     XMFLOAT3 finalPos = pT ? pT->GetPosition() : XMFLOAT3{0,0,0};
     XMFLOAT3 finalRot = pT ? pT->GetRotation() : XMFLOAT3{0,0,0};
     XMFLOAT3 finalSca = pT ? pT->GetScale()    : XMFLOAT3{1,1,1};
-    wchar_t wbuf[512];
-    swprintf_s(wbuf, L"[Network] Spawned NetMonster_%llu type=%u boss=%d hp=%.1f\n"
-                     L"  pos=(%.2f,%.2f,%.2f) rot=(%.1f,%.1f,%.1f) scale=(%.2f,%.2f,%.2f)\n"
-                     L"  idleClip=%hs walkClip=%hs mesh=%hs\n",
-        monsterId, monsterType, isBoss ? 1 : 0, hp,
-        finalPos.x, finalPos.y, finalPos.z,
-        finalRot.x, finalRot.y, finalRot.z,
-        finalSca.x, finalSca.y, finalSca.z,
-        preset.idleClip, preset.walkClip, preset.meshPath);
-    OutputDebugString(wbuf);
-
-    char abuf[512];
-    sprintf_s(abuf, "[Network] Spawned NetMonster_%llu type=%u boss=%d hp=%.1f | pos=(%.2f,%.2f,%.2f) rot=(%.1f,%.1f,%.1f) scale=(%.2f,%.2f,%.2f) | idleClip=%s walkClip=%s mesh=%s",
-        monsterId, monsterType, isBoss ? 1 : 0, hp,
-        finalPos.x, finalPos.y, finalPos.z,
-        finalRot.x, finalRot.y, finalRot.z,
-        finalSca.x, finalSca.y, finalSca.z,
-        preset.idleClip, preset.walkClip, preset.meshPath);
+    char abuf[1024];
+    sprintf_s(abuf, sizeof(abuf),
+        "[Network] Spawned NetMonster_%llu type=%u attack=%u visual=%u boss=%d hp=%.1f | pos=(%.2f,%.2f,%.2f) rot=(0.0,%.1f,0.0) scale=(%.2f,%.2f,%.2f) | idleClip=%s walkClip=%s mesh=%s",
+        monsterId,
+        monsterType,
+        attackType,
+        visualType,
+        isBoss ? 1 : 0,
+        hp,
+        x, y, z,
+        yaw,
+        preset.scale, preset.scale, preset.scale,
+        preset.idleClip,
+        preset.walkClip,
+        preset.meshPath);
     WriteNetworkLog(abuf);
 }
 
@@ -4507,9 +4626,10 @@ void NetworkManager::ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float
         m_mapServerMonsterAttackTimer.erase(monsterId);
 
         // 일반 몬스터 공격 인디케이터 정리
+        // 사망한 몬스터의 telegraph는 더 이상 필요 없으므로 숨김이 아니라 삭제 예약한다.
         if (EnemyComponent* pEnemy = pMonster->GetComponent<EnemyComponent>())
         {
-            pEnemy->HideNetworkAttackIndicator();
+            pEnemy->DestroyIndicators(pScene);
 
             if (IAttackBehavior* pBehavior = pEnemy->GetAttackBehavior())
                 pBehavior->Reset();
@@ -4638,7 +4758,9 @@ void NetworkManager::ProcessMonsterDespawn(Scene* pScene, uint64 monsterId)
     // 몬스터 despawn 전에 숨겨서 방 클리어 후 잔상 방지
     if (EnemyComponent* pEnemy = pMonster->GetComponent<EnemyComponent>())
     {
-        pEnemy->HideNetworkAttackIndicator();
+        // Hide만 하면 indicator GameObject는 Scene 전역에 계속 남을 수 있다.
+        // Despawn 시에는 몬스터가 들고 있던 공격 인디케이터를 실제 삭제 예약한다.
+        pEnemy->DestroyIndicators(pScene);
 
         if (IAttackBehavior* pBehavior = pEnemy->GetAttackBehavior())
             pBehavior->Reset();

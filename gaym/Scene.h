@@ -148,6 +148,9 @@ public:
     // 통합 VFX 파사드: 신규 코드는 이 API만 사용한다.
     VFXManager* GetVFXManager() { return m_pVFXManager.get(); }
 
+    // 방 전환 / 스테이지 전환 시 남아 있는 전투용 임시 이펙트 정리
+    void ClearTransientCombatEffects();
+     
     // ─── 호환용 게터: 기존 SetVFXManager(FluidSkillVFXManager*) 패턴 보존 ───
     // 신규 코드에서 사용하지 말 것 — 점진적 마이그레이션을 위해 잠시 유지.
     FluidSkillVFXManager* GetFluidVFXManager()      { return m_pVFXManager ? m_pVFXManager->GetPlayerVFX() : nullptr; }

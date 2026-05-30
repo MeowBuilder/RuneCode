@@ -2922,6 +2922,40 @@ void Scene::ProcessPendingDeletions()
     m_vPendingDeletions.clear();
 }
 
+void Scene::ClearTransientCombatEffects()
+{
+    // 1. 투사체 정리
+    // ProjectileManager::Clear() 내부에서 projectile trail / extra VFX / sub VFX까지 Stop한다.
+    if (m_pProjectileManager)
+    {
+        m_pProjectileManager->Clear();
+    }
+
+    // 2. 비행 보스 탄막 정리
+    // m_FlightBossBullets는 Scene이 직접 들고 있으므로 여기서 따로 정리한다.
+    if (m_pVFXManager)
+    {
+        for (auto& bullet : m_FlightBossBullets)
+        {
+            if (bullet.fluidId >= 0)
+            {
+                m_pVFXManager->Stop(bullet.fluidId);
+                bullet.fluidId = -1;
+            }
+        }
+    }
+    m_FlightBossBullets.clear();
+
+    // 3. 통합 VFX 슬롯 전체 정리
+    // ProjectileManager가 추적하지 않는 LightEmitter burst, 스킬 장판, 보스 발사 이펙트까지 정리한다.
+    if (m_pVFXManager)
+    {
+        m_pVFXManager->ClearAll();
+    }
+
+    WriteNetworkLog("[Scene] ClearTransientCombatEffects done");
+}
+
 // 모든 플레이어 목록 반환 (로컬 + 원격)
 std::vector<GameObject*> Scene::GetAllPlayers() const
 {

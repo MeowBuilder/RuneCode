@@ -117,6 +117,8 @@ message MonsterInfo // 서버 -> 클라 몬스터 기본 정보
 	float hp = 7;           // 몬스터 HP
 	bool isBoss = 8;        // 보스 여부
 	uint32 stageIndex = 9;  // 현재 스테이지 번호(1=Fire, 2=Water, 3=Earth, 4=Grass) / 클라 몬스터 색상·머티리얼 변경용
+	uint32 attackType = 10; // 몬스터 공격 패턴
+	uint32 visualType = 11; // 클라 외형 프리셋
 }
 
 message S_MONSTER_SPAWN // 서버 -> 클라 몬스터 스폰 알림 패킷
