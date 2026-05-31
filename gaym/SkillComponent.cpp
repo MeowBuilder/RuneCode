@@ -9,8 +9,9 @@
 #include "Dx12App.h" // For runtime window size
 #include "NetworkManager.h" // For skill sync
 #include "PlayerComponent.h" // 원격 동기화 시 element 별 wire 포맷 분기용
-#include "EnemyComponent.h" // 메아리 룬 지연 발동 시 적 탐색
+#include "EnemyComponent.h" // 메아리/설치 룬 적 탐색
 #include "Scene.h"          // FindNearestEnemy
+#include "Room.h"           // GetGameObjects (설치 룬 감지)
 #include "VFXSpriteManager.h"
 #include "EffectRegistry.h"
 #include "FluidParticle.h"  // FluidElementColors
@@ -184,9 +185,8 @@ void SkillComponent::Update(float deltaTime)
                 if (tickCat == SkillCategory::Projectile || tickDefType == ActivationType::Channel)
                 {
                     // 투사체: 반복 발사 / 고유 채널(Beam 등): 기존 틱 로직
-                    if (combo.hasPlace)
-                        m_Skills[index]->Execute(m_pOwner, m_ChannelTargetPosition, -(tickMult * 1.5f));
-                    else
+                    // 설치 룬 + 채널: 진입 시 이미 SpawnPlaceTrap 완료 → 틱에서는 skip
+                    if (!combo.hasPlace)
                         ExecuteOrSplit(index, m_ChannelTargetPosition, tickMult);
                 }
                 else
@@ -359,12 +359,21 @@ void SkillComponent::Update(float deltaTime)
                     if (echo.timer > 0.f) return false;
                     if (!pScene || !m_pOwner || !m_pOwner->GetTransform()) return true;
 
-                    EnemyComponent* pNearest = pScene->FindNearestEnemy(
-                        m_pOwner->GetTransform()->GetPosition());
-                    if (!pNearest || !pNearest->GetOwner() || !pNearest->GetOwner()->GetTransform())
+                    // 표시된 적이 살아있으면 최우선 타겟, 아니면 가장 가까운 적
+                    EnemyComponent* pTarget = nullptr;
+                    if (echo.pTarget && !echo.pTarget->IsDead() &&
+                        echo.pTarget->GetOwner() && echo.pTarget->GetOwner()->GetTransform())
+                    {
+                        pTarget = echo.pTarget;
+                    }
+                    else
+                    {
+                        pTarget = pScene->FindNearestEnemy(m_pOwner->GetTransform()->GetPosition());
+                    }
+                    if (!pTarget || !pTarget->GetOwner() || !pTarget->GetOwner()->GetTransform())
                         return true;
 
-                    XMFLOAT3 enemyPos = pNearest->GetOwner()->GetTransform()->GetPosition();
+                    XMFLOAT3 enemyPos = pTarget->GetOwner()->GetTransform()->GetPosition();
                     m_currentChargeRatio    = 0.f;
                     m_bCurrentIsChannelTick = false;
                     m_bCurrentEnhanceUsed  = false;
@@ -381,6 +390,63 @@ void SkillComponent::Update(float deltaTime)
                     return true;
                 }),
             m_echoQueue.end());
+    }
+
+    // 설치 룬 함정 처리 (TRF_DEP)
+    if (!m_placeQueue.empty())
+    {
+        Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
+        CRoom* pRoom  = pScene ? pScene->GetCurrentRoom() : nullptr;
+
+        for (auto& trap : m_placeQueue)
+        {
+            if (trap.windGate) continue; // 바람 문은 ProcessSkillInput에서 처리
+
+            if (!trap.playerTrigger)
+            {
+                // 적이 밟으면 발동
+                if (!pRoom) continue;
+                for (const auto& obj : pRoom->GetGameObjects())
+                {
+                    if (!obj) continue;
+                    auto* pEnemy = obj->GetComponent<EnemyComponent>();
+                    if (!pEnemy || pEnemy->IsDead()) continue;
+                    auto* pT = obj->GetTransform();
+                    if (!pT) continue;
+                    XMFLOAT3 ep = pT->GetPosition();
+                    float dx = ep.x - trap.worldPos.x;
+                    float dz = ep.z - trap.worldPos.z;
+                    if (dx * dx + dz * dz <= trap.activateRadius * trap.activateRadius)
+                    {
+                        trap.triggered = true;
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                // 플레이어가 밟으면 발동
+                if (m_pOwner && m_pOwner->GetTransform())
+                {
+                    XMFLOAT3 pp = m_pOwner->GetTransform()->GetPosition();
+                    float dx = pp.x - trap.worldPos.x;
+                    float dz = pp.z - trap.worldPos.z;
+                    if (dx * dx + dz * dz <= trap.activateRadius * trap.activateRadius)
+                        trap.triggered = true;
+                }
+            }
+        }
+
+        m_placeQueue.erase(
+            std::remove_if(m_placeQueue.begin(), m_placeQueue.end(),
+                [this](PlacedTrap& trap) -> bool
+                {
+                    if (trap.windGate) return false;
+                    if (!trap.triggered) return false;
+                    FirePlacedTrap(trap, trap.worldPos);
+                    return true;
+                }),
+            m_placeQueue.end());
     }
 }
 
@@ -440,10 +506,9 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
                 m_bCurrentIsChannelTick = false;
                 m_bCurrentEnhanceUsed  = (m_bIsEnhanced); // 이미 소모됨
 
-                // Combo: Charge+Place → trap with charge damage
                 if (combo.hasPlace)
                 {
-                    m_Skills[index]->Execute(m_pOwner, targetPos, -(damageMultiplier * 1.5f));
+                    SpawnPlaceTrap(index, targetPos, damageMultiplier, combo);
                 }
                 else
                 {
@@ -511,11 +576,30 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
     for (size_t i = 0; i < static_cast<size_t>(SkillSlot::Count); ++i)
     {
         SkillSlot slot = static_cast<SkillSlot>(i);
-        if (IsSkillKeyPressed(slot, pInputSystem))
+        if (!IsSkillKeyPressed(slot, pInputSystem)) continue;
+
+        // 바람 문(WindGate) 재입력: 이미 해당 슬롯에 windGate 함정이 있으면 텔레포트 돌진
+        RuneCombo combo = GetRuneCombo(slot);
+        if (combo.hasPlace)
         {
-            ExecuteWithActivationType(slot, targetPos);
-            break;  // Only use one skill per frame
+            auto it = std::find_if(m_placeQueue.begin(), m_placeQueue.end(),
+                [i](const PlacedTrap& t){ return t.skillIndex == i && t.windGate; });
+            if (it != m_placeQueue.end())
+            {
+                PlacedTrap trap = *it;
+                m_placeQueue.erase(it);
+                if (m_SkillStates[i] == SkillState::Ready || m_SkillStates[i] == SkillState::Cooldown)
+                {
+                    FirePlacedTrap(trap, targetPos);
+                    m_SkillStates[i] = SkillState::Casting;
+                    m_ActiveSkillSlot = slot;
+                }
+                break;
+            }
         }
+
+        ExecuteWithActivationType(slot, targetPos);
+        break;  // Only use one skill per frame
     }
 }
 
@@ -926,6 +1010,96 @@ int SkillComponent::SpawnEchoTriggerVFX(ElementType element, const XMFLOAT3& tar
         "magic3", spawnPos, 140.f, 2.5f, ec.coreColor, 1.5f);
 }
 
+void SkillComponent::SpawnPlaceTrap(size_t skillIndex, const XMFLOAT3& pos, float mult, const RuneCombo& /*combo*/)
+{
+    if (skillIndex >= m_Skills.size() || !m_Skills[skillIndex]) return;
+
+    XMFLOAT3 groundPos = pos;
+    groundPos.y = 0.f;
+
+    bool playerTrig = m_Skills[skillIndex]->IsPlayerTriggered();
+
+    // GaleRush (Dash 카테고리) → 바람 문 방식
+    bool windGate = (m_Skills[skillIndex]->GetCategory() == SkillCategory::Dash);
+
+    // 원소 색상
+    ElementType elem = m_Skills[skillIndex]->GetSkillData().element;
+    FluidElementColor ec = FluidElementColors::Get(elem);
+
+    // 기존 함정 제거 (한 슬롯 1개 유지)
+    for (auto& t : m_placeQueue)
+    {
+        if (t.skillIndex == skillIndex)
+        {
+            if (t.spriteSlot >= 0) VFXSpriteManager::Get().Stop(t.spriteSlot);
+            t.spriteSlot = -1;
+        }
+    }
+    m_placeQueue.erase(
+        std::remove_if(m_placeQueue.begin(), m_placeQueue.end(),
+            [skillIndex](const PlacedTrap& t){ return t.skillIndex == skillIndex; }),
+        m_placeQueue.end());
+
+    int spriteSlot = VFXSpriteManager::Get().Spawn(
+        "star_08", groundPos, 110.f, 30.f, ec.coreColor, 1.2f);
+
+    m_placeQueue.push_back({ skillIndex, mult, groundPos, spriteSlot, 3.0f, playerTrig, windGate });
+    OutputDebugString(L"[Skill] PlacedTrap spawned\n");
+}
+
+void SkillComponent::FirePlacedTrap(PlacedTrap& trap, const XMFLOAT3& currentTargetPos)
+{
+    if (trap.spriteSlot >= 0) { VFXSpriteManager::Get().Stop(trap.spriteSlot); trap.spriteSlot = -1; }
+    if (trap.skillIndex >= m_Skills.size() || !m_Skills[trap.skillIndex]) return;
+
+    m_currentChargeRatio    = 0.f;
+    m_bCurrentIsChannelTick = false;
+    m_bCurrentEnhanceUsed  = false;
+
+    if (trap.windGate)
+    {
+        // GaleRush 바람 문: 실제로 캐스터를 함정 위치로 이동 후 커서 방향 돌진
+        if (m_pOwner && m_pOwner->GetTransform())
+            m_pOwner->GetTransform()->SetPosition(trap.worldPos);
+        m_Skills[trap.skillIndex]->OnPlaceTrigger(m_pOwner, currentTargetPos, trap.damageMultiplier);
+    }
+    else
+    {
+        // 일반 트리거: 캐스터를 임시로 함정 위치로 이동해 Execute의 origin을 함정 위치로 고정
+        XMFLOAT3 savedPos = {};
+        bool moved = false;
+        if (m_pOwner && m_pOwner->GetTransform())
+        {
+            savedPos = m_pOwner->GetTransform()->GetPosition();
+            m_pOwner->GetTransform()->SetPosition(trap.worldPos);
+            moved = true;
+        }
+
+        // 방향 타겟: 함정 위치에서 가장 가까운 적, 없으면 현재 커서 위치
+        Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
+        XMFLOAT3 dirTarget = currentTargetPos;
+        if (pScene)
+        {
+            EnemyComponent* pNearest = pScene->FindNearestEnemy(trap.worldPos);
+            if (pNearest && pNearest->GetOwner() && pNearest->GetOwner()->GetTransform())
+                dirTarget = pNearest->GetOwner()->GetTransform()->GetPosition();
+        }
+
+        m_Skills[trap.skillIndex]->OnPlaceTrigger(m_pOwner, dirTarget, trap.damageMultiplier);
+
+        // 캐스터 위치 복원 (GaleRush windGate가 아닌 경우 플레이어 위치 유지)
+        if (moved)
+            m_pOwner->GetTransform()->SetPosition(savedPos);
+    }
+
+    if (!m_Skills[trap.skillIndex]->IsFinished())
+    {
+        m_placeRunningSlots.insert(trap.skillIndex);
+        m_SkillStates[trap.skillIndex] = SkillState::Casting;
+    }
+    OutputDebugString(L"[Skill] PlacedTrap triggered!\n");
+}
+
 void SkillComponent::ProcessRuneInput(InputSystem* pInputSystem)
 {
     // Rune input is now handled through the drop item UI system
@@ -1120,7 +1294,7 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
             m_bCurrentIsChannelTick = true;
             m_bCurrentEnhanceUsed  = false;
             if (combo.hasPlace)
-                m_Skills[index]->Execute(m_pOwner, targetPosition, -(tickMult * 1.5f));
+                SpawnPlaceTrap(index, targetPosition, tickMult, combo);
             else
                 ExecuteOrSplit(index, targetPosition, tickMult);
         }
@@ -1140,7 +1314,7 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
             m_bCurrentIsChannelTick = false;
             m_bCurrentEnhanceUsed  = (damageMultiplier > 1.5f);
             if (combo.hasPlace)
-                m_Skills[index]->Execute(m_pOwner, targetPosition, -(damageMultiplier * 1.5f));
+                SpawnPlaceTrap(index, targetPosition, damageMultiplier, combo);
             else
                 ExecuteOrSplit(index, targetPosition, damageMultiplier);
         }
@@ -1181,8 +1355,8 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
 
         if (combo.hasPlace)
         {
-            OutputDebugString(L"[Skill] Placing at target location!\n");
-            m_Skills[index]->Execute(m_pOwner, targetPosition, -(damageMultiplier * 1.5f));
+            SpawnPlaceTrap(index, targetPosition, damageMultiplier, combo);
+            OutputDebugString(L"[Skill] Trap placed!\n");
         }
         else
         {

@@ -27,6 +27,8 @@ public:
     virtual const SkillData& GetSkillData() const override { return m_SkillData; }
     // 메아리 룬 재발동: 채널 세션 없이 즉시 단발 피해
     virtual void OnEchoFire(GameObject* caster, const DirectX::XMFLOAT3& targetPos, float mult) override;
+    // 설치 룬 발동: 설치 위치에 고정, 가장 가까운 적 방향으로 빔
+    virtual void OnPlaceTrigger(GameObject* caster, const DirectX::XMFLOAT3& trapPos, float mult) override;
 
 private:
     uint32_t GetRuneFlags(GameObject* caster) const;

@@ -34,6 +34,7 @@ public:
     virtual bool IsFinished() const override;
     virtual void Reset() override;
     virtual const SkillData& GetSkillData() const override { return m_SkillData; }
+    virtual void OnEchoFire(GameObject* caster, const DirectX::XMFLOAT3& targetPos, float mult) override;
 
 private:
     uint32_t GetRuneFlags(GameObject* caster) const;

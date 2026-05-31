@@ -31,6 +31,7 @@ public:
     virtual bool IsFinished() const override;
     virtual void Reset() override;
     virtual const SkillData& GetSkillData() const override { return m_SkillData; }
+    virtual void OnEchoFire(GameObject* caster, const DirectX::XMFLOAT3& targetPos, float mult) override;
     virtual bool HasPostChannelWork() const override { return m_bActive || m_bPostChannelPuddles; }
 
 private:

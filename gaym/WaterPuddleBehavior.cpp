@@ -29,24 +29,11 @@ void WaterPuddleBehavior::OnChargeUpdate(GameObject* caster, float chargeRatio)
 
 void WaterPuddleBehavior::OnEnhanceActivate(GameObject* caster)
 {
-    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
-    const char* fx = SubVFXName(m_SkillData.element);
-    if (!EffectRegistry::Get().HasEffect(fx)) return;
-    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
-    XMFLOAT3 up  = { 0.f, 1.f, 0.f };
-    m_enhanceAuraId = m_pVFXManager->SpawnEffectDef(pos, up, EffectRegistry::Get().GetEffect(fx), true);
 }
 
 void WaterPuddleBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
 {
     if (m_pVFXManager && m_enhanceAuraId >= 0) { m_pVFXManager->StopEffect(m_enhanceAuraId); m_enhanceAuraId = -1; }
-    if (!m_pVFXManager) return;
-    const char* fx = SubVFXName(m_SkillData.element);
-    if (!EffectRegistry::Get().HasEffect(fx)) return;
-    XMFLOAT3 up = { 0.f, 1.f, 0.f };
-    EffectDef def = EffectRegistry::Get().GetEffect(fx);
-    for (auto& l : def.layers) l.particleCount *= 3;
-    m_pVFXManager->SpawnEffectDef(targetPosition, up, def, false);
 }
 
 void WaterPuddleBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
@@ -399,6 +386,20 @@ void WaterPuddleBehavior::RemoveSlowFromAll()
         if (!pEnemy->IsDead())
             pEnemy->SetSpeedMultiplier(1.0f);
     m_slowedEnemies.clear();
+}
+
+void WaterPuddleBehavior::OnEchoFire(GameObject* caster, const XMFLOAT3& targetPos, float mult)
+{
+    if (!m_bActive)
+    {
+        Execute(caster, targetPos, mult);
+        return;
+    }
+    // 웅덩이 활성 중 — 기존 VFX 슬롯을 -1로 밀어 orphan 처리 후 echo 위치에 새 웅덩이 완전 발동
+    // Reset()의 StopEffect(-1)는 no-op → 기존 VFX 계속 실행
+    m_vfxId     = -1;
+    m_fallVfxId = -1;
+    Execute(caster, targetPos, mult);
 }
 
 bool WaterPuddleBehavior::IsFinished() const

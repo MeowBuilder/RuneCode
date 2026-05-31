@@ -77,6 +77,16 @@ public:
         Execute(caster, targetPos, mult);
     }
 
+    // 설치 룬(TRF_DEP) — 표식을 트리거했을 때 발동.
+    // 기본 구현은 trapPos에서 Execute() 호출.
+    // 채널 스킬 등 특수 처리가 필요한 경우 override.
+    virtual void OnPlaceTrigger(GameObject* caster, const DirectX::XMFLOAT3& trapPos, float mult) {
+        Execute(caster, trapPos, mult);
+    }
+
+    // 설치 룬 트리거 조건: true면 플레이어가 밟을 때, false(기본)면 적이 밟을 때.
+    virtual bool IsPlayerTriggered() const { return false; }
+
     // Slot assignment (set by SkillComponent::EquipSkill)
     void      SetSlot(SkillSlot s) { m_slot = s; }
     SkillSlot GetSlot() const      { return m_slot; }

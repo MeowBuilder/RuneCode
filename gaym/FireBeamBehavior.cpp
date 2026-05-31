@@ -10,6 +10,7 @@
 #include "Scene.h"
 #include "Room.h"
 #include "EnemyComponent.h"
+#include "Dx12App.h"
 
 static void ApplyElementColors(EffectDef& def, ElementType e)
 {
@@ -449,6 +450,18 @@ void FireBeamBehavior::OnEchoFire(GameObject* caster, const XMFLOAT3& targetPos,
 
     m_echoTimeLeft = ECHO_DURATION;
     Execute(caster, targetPos, mult);  // VFX 스폰 + m_bIsActive = true
+}
+
+void FireBeamBehavior::OnPlaceTrigger(GameObject* caster, const XMFLOAT3& trapPos, float mult)
+{
+    Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
+    EnemyComponent* pNearest = pScene ? pScene->FindNearestEnemy(trapPos) : nullptr;
+
+    XMFLOAT3 target = trapPos;
+    if (pNearest && pNearest->GetOwner() && pNearest->GetOwner()->GetTransform())
+        target = pNearest->GetOwner()->GetTransform()->GetPosition();
+
+    OnEchoFire(caster, target, mult);
 }
 
 bool FireBeamBehavior::IsFinished() const

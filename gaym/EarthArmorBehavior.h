@@ -25,6 +25,7 @@ public:
     virtual bool HasPostChannelWork() const override { return true; }
     virtual void OnEnhanceActivate(GameObject* caster) override;
     virtual void OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
+    virtual bool IsPlayerTriggered() const override { return true; }
     virtual void Update(float deltaTime) override;
     virtual bool IsFinished() const override { return m_bIsFinished; }
     virtual void Reset() override;

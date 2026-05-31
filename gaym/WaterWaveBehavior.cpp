@@ -82,14 +82,6 @@ void WaterWaveBehavior::OnChannelEnd(GameObject* caster)
 
 void WaterWaveBehavior::OnEnhanceActivate(GameObject* caster)
 {
-    if (!m_pVFXManager || !caster || !caster->GetTransform()) return;
-    if (!EffectRegistry::Get().HasEffect("sub_water")) return;
-
-    XMFLOAT3 pos = caster->GetTransform()->GetPosition();
-    XMFLOAT3 up = { 0.f, 1.f, 0.f };
-    // 강화 버프 활성화 시 수속성 오라 생성
-    m_enhanceAuraId = m_pVFXManager->SpawnEffectDef(pos, up,
-        EffectRegistry::Get().GetEffect("sub_water"), true);
 }
 
 void WaterWaveBehavior::OnEnhanceConsumed(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
@@ -196,14 +188,6 @@ void WaterWaveBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT
         dV = XMVector3Normalize(XMVectorSetY(caster->GetTransform()->GetLook(), 0.f));
 
     XMFLOAT3 direction; XMStoreFloat3(&direction, dV);
-
-    // 미니 웨이브 VFX — sub_water를 전방으로 방출
-    if (m_pVFXManager && EffectRegistry::Get().HasEffect("sub_water"))
-    {
-        XMFLOAT3 spawnPos = { origin.x, origin.y + 0.3f, origin.z };
-        m_pVFXManager->SpawnEffectDef(spawnPos, direction,
-            EffectRegistry::Get().GetEffect("sub_water", 0), false);
-    }
 
     // 전방 직사각형 피해 — 틱마다 hit set 리셋으로 연속 타격 허용
     float damage = m_SkillData.damage * tickMult;
@@ -383,6 +367,50 @@ void WaterWaveBehavior::UpdateWaterPools(float deltaTime)
         std::remove_if(m_waterPools.begin(), m_waterPools.end(),
             [](const WaterPool& p) { return p.lifetime <= 0.f; }),
         m_waterPools.end());
+}
+
+void WaterWaveBehavior::OnEchoFire(GameObject* caster, const XMFLOAT3& targetPos, float mult)
+{
+    if (m_bWaveActive)
+    {
+        // 파도가 진행 중 — 기존 파도를 건드리지 않고 에코 위치에 VFX + 즉시 피해 적용
+        if (m_pVFXManager && EffectRegistry::Get().HasEffect("Q_WaterWave"))
+        {
+            XMFLOAT3 spawnPos = { targetPos.x, targetPos.y + 5.f, targetPos.z };
+            // 타겟 방향: 현재 파도 진행 방향 재사용
+            XMFLOAT3 dir = { 0.f, 0.f, 1.f };
+            if (caster && caster->GetTransform())
+            {
+                XMVECTOR dV = XMVector3Normalize(XMVectorSetY(
+                    XMVectorSubtract(XMLoadFloat3(&targetPos),
+                                     XMLoadFloat3(&caster->GetTransform()->GetPosition())), 0.f));
+                if (XMVectorGetX(XMVector3LengthSq(dV)) >= 0.001f)
+                    XMStoreFloat3(&dir, dV);
+            }
+            EffectDef def = EffectRegistry::Get().GetEffect("Q_WaterWave");
+            VFXModifier mod; mod.sizeScaleMult = 0.8f; mod.particleCountMult = 0.6f;
+            ApplyVFXModifier(def, mod);
+            m_pVFXManager->SpawnEffectDef(spawnPos, dir, def, false);
+        }
+        if (!m_pScene) return;
+        CRoom* pRoom = m_pScene->GetCurrentRoom();
+        if (!pRoom) return;
+        float damage = m_SkillData.damage * mult;
+        for (const auto& obj : pRoom->GetGameObjects())
+        {
+            if (!obj) continue;
+            auto* pEnemy = obj->GetComponent<EnemyComponent>();
+            if (!pEnemy || pEnemy->IsDead()) continue;
+            auto* pT = obj->GetTransform();
+            if (!pT) continue;
+            XMFLOAT3 ep = pT->GetPosition();
+            float dx = ep.x - targetPos.x, dz = ep.z - targetPos.z;
+            if (dx * dx + dz * dz > WAVE_HALF_W * WAVE_HALF_W) continue;
+            pEnemy->TakeDamage(ApplyExecBonus(damage, pEnemy, caster), false, HasExecRune(caster));
+        }
+        return;
+    }
+    Execute(caster, targetPos, mult);
 }
 
 bool WaterWaveBehavior::IsFinished() const

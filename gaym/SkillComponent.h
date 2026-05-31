@@ -175,6 +175,9 @@ private:
     // echo(메아리) 로 발동된 슬롯 — Update() 호출하되 쿨다운 타이머는 초기화하지 않음
     std::set<size_t> m_echoRunningSlots;
 
+    // place(설치) 로 발동된 슬롯 — 동일 패턴
+    std::set<size_t> m_placeRunningSlots;
+
     // 활성화 VFX 컨텍스트 (Execute 직전에 세팅, 행동 클래스가 참조)
     VFXModifier m_activationVFXMod;
     float       m_currentChargeRatio    = 0.f;
@@ -207,4 +210,20 @@ private:
     // 메아리 지연 큐 (ABY_ECO: 2초 후 가장 가까운 적을 향해 50% 재발동)
     struct DeferredEcho { size_t index; float mult; float timer; int decalSlot = -1; EnemyComponent* pTarget = nullptr; };
     std::vector<DeferredEcho> m_echoQueue;
+
+    // 설치 룬 함정 큐 (TRF_DEP: 바닥 표식 → 트리거 시 스킬 발동)
+    struct PlacedTrap {
+        size_t    skillIndex;
+        float     damageMultiplier;
+        DirectX::XMFLOAT3 worldPos;
+        int       spriteSlot    = -1;
+        float     activateRadius = 3.0f;
+        bool      playerTrigger = false;  // true: 플레이어가 밟으면 (EarthArmor)
+        bool      windGate      = false;  // true: E키 재입력으로 텔레포트 (GaleRush)
+        bool      triggered     = false;  // 발동 플래그 (spriteSlot 덮어쓰지 않음)
+    };
+    std::vector<PlacedTrap> m_placeQueue;
+
+    void SpawnPlaceTrap(size_t skillIndex, const DirectX::XMFLOAT3& pos, float mult, const RuneCombo& combo);
+    void FirePlacedTrap(PlacedTrap& trap, const DirectX::XMFLOAT3& currentTargetPos);
 };
