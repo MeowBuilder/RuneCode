@@ -380,6 +380,20 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
                 SpawnDashBurst(startPos, 36, 1.6f);
             }
             m_fDashTrailAccum = 0.0f;
+
+            // 네트워크 연출 액션 — 대쉬 망토 펄럭임 시작 알림
+            if (NetworkManager* pNetMgr = NetworkManager::GetInstance())
+            {
+                if (pNetMgr->IsConnected())
+                {
+                    XMFLOAT3 actionPos = pTransform->GetPosition();
+
+                    pNetMgr->SendPlayerAction(
+                        PLAYER_ACTION_DASH_CAPE_FLUTTER,
+                        actionPos.x, actionPos.y, actionPos.z,
+                        m_xmf3DashDir.x, m_xmf3DashDir.y, m_xmf3DashDir.z);
+                }
+            }
         }
     }
 
@@ -444,7 +458,9 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
     pTransform->SetPosition(XMFLOAT3(XMVectorGetX(currentPosition), currentY, XMVectorGetZ(currentPosition)));
 
     // --- 네트워크 동기화: 이동 또는 회전 변경 시 전송 ---
-    if (bMoving || bRotationChanged)
+    bool bHasDisplacement = XMVectorGetX(XMVector3LengthSq(displacement)) > 0.000001f;
+
+    if (bMoving || bRotationChanged || bDashStarted || bDashing || bHasDisplacement)
     {
         NetworkManager* pNetMgr = NetworkManager::GetInstance();
         if (pNetMgr && pNetMgr->IsConnected())

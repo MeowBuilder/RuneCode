@@ -31,6 +31,13 @@ struct NetworkPlayerInfo
     float x, y, z;
 };
 
+// 플레이어 연출 액션 타입
+enum : uint32
+{
+    PLAYER_ACTION_DASH_CAPE_FLUTTER = 1,
+    PLAYER_ACTION_PORTAL_INTRO_FLY = 2,
+};
+
 // 패킷 처리를 위한 명령 타입
 enum class NetworkCommand
 {
@@ -38,6 +45,7 @@ enum class NetworkCommand
     Despawn,
     Move,
     Skill,
+    PlayerAction,
     SetLocalPlayerId,
     RoomTransition,
     MonsterSpawn,
@@ -49,7 +57,8 @@ enum class NetworkCommand
     RoomCleared,
     BossEvent,
     MonsterStagger,
-	MapTornadoEvent
+	MapTornadoEvent,
+    RoomStart
 };
 
 // 네트워크 명령 구조체
@@ -62,6 +71,7 @@ struct NetworkCommandData
     float x, y, z;
     float dirX, dirY, dirZ;  // 방향 정보
     int skillType;           // 스킬 타입 (Protocol::SkillType)
+    uint32 playerActionType = 0; // 플레이어 연출 액션 타입
 
     // Room transition fields
     uint32 stageIndex;
@@ -161,6 +171,9 @@ public:
     // 로컬 플레이어 스킬 전송
     void SendSkill(int skillType, float x, float y, float z, float dirX, float dirY, float dirZ);
 
+    // 로컬 플레이어 연출 액션 전송
+    void SendPlayerAction(uint32 actionType, float x, float y, float z, float dirX, float dirY, float dirZ);
+
     // 포탈 상호작용 전송 (F키)
     void SendPortalInteract();
 
@@ -197,6 +210,7 @@ public:
     void QueueDespawnPlayer(uint64 playerId);
     void QueueMovePlayer(uint64 playerId, float x, float y, float z, float dirX, float dirY, float dirZ);
     void QueueSkill(uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ);
+    void QueuePlayerAction(uint64 playerId, uint32 actionType, float x, float y, float z, float dirX, float dirY, float dirZ);
     void QueueSetLocalPlayerId(uint64 playerId);
     void QueueRoomTransition(uint32 stageIndex, uint32 roomIndex, bool isBossRoom, const std::string& mapId);
 
@@ -208,6 +222,9 @@ public:
     // 전투 큐잉 (S_MONSTER_ATTACK / S_PLAYER_DAMAGE)
     void QueueMonsterAttack(uint64 monsterId, uint64 targetPlayerId, uint32 attackType, float x, float y, float z, float yaw, float windupSec, const std::vector<DirectX::XMFLOAT3>& effectPositions = {}, uint32 effectOption = 0);
     void QueuePlayerDamage(uint64 playerId, float damage, float currentHp, bool isDead, uint64 attackerMonsterId);
+
+    // 방 시작 큐잉
+    void QueueRoomStart(uint64 starterPlayerId);
 
     // 몬스터 피격 / 방 클리어 큐잉 (네트워크 스레드 → 메인 스레드)
     void QueueMonsterDamage(uint64 monsterId, float damage, float currentHp, bool isDead,
@@ -250,6 +267,28 @@ private:
     // 원격 플레이어의 캐릭터 원소 — ProcessSkill 에서 (element, slot) 매핑에 사용.
     std::unordered_map<uint64, ElementType> m_mapRemotePlayerElement;
 
+    // 원격 플레이어 연출 액션 잠금
+    std::unordered_map<uint64, float> m_mapRemotePlayerActionLockTimer;
+
+    // 원격 플레이어 포탈 Intro Fly 연출 상태
+    struct RemotePlayerPortalIntroFlyEffect
+    {
+        float introTimer = 3.0f;        // StartIntroFly(duration) 기존 클라 수치
+        float landingHoldTimer = 0.0f; // 착지 후 Landing 유지 시간
+        float velocityY = 0.0f;        // PlayerComponent와 같은 자유낙하 방식
+        float groundY = 0.0f;          // 포탈 베이스 표면 Y
+
+        float groundX = 0.0f;
+        float groundZ = 0.0f;
+
+        bool onGround = false;
+    };
+
+    std::unordered_map<uint64, RemotePlayerPortalIntroFlyEffect> m_mapRemotePlayerPortalIntroFlyEffects;
+
+    void UpdateRemotePlayerActionLocks(float deltaTime);
+    void UpdateRemotePlayerPortalIntroFlyEffects(float deltaTime);
+
     // 네트워크 스레드에서 메인 스레드로 전달할 명령 큐
     std::mutex m_queueMutex;
     std::vector<NetworkCommandData> m_vCommandQueue;
@@ -263,6 +302,7 @@ private:
     void ProcessDespawnPlayer(Scene* pScene, uint64 playerId);
     void ProcessMovePlayer(uint64 playerId, float x, float y, float z, float dirX, float dirY, float dirZ);
     void ProcessSkill(Scene* pScene, uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ);
+    void ProcessPlayerAction(Scene* pScene, uint64 playerId, uint32 actionType, float x, float y, float z, float dirX, float dirY, float dirZ);
     void ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uint32 roomIndex, bool isBossRoom, const std::string& mapId);
 
     // 몬스터 처리 (메인 스레드)
@@ -276,6 +316,7 @@ private:
     void ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float damage, float currentHp, bool isDead,
                               uint64 attackerPlayerId, int skillType);
     void ProcessRoomCleared(Scene* pScene, uint32 stageIndex, uint32 roomIndex);
+    void ProcessRoomStart(Scene* pScene, uint64 starterPlayerId);
     void ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 eventType, uint32 phaseIndex);
     void ProcessMonsterStagger(uint64 monsterId, float duration);
 
@@ -559,6 +600,12 @@ public:
 private:
     std::unordered_map<uint64, float> m_mapServerMonsterMoveTime;  // idle 전환용
 
+    // 로컬 플레이어 초기 위치 동기화 예약
+    int m_nInitialLocalPositionSyncFrames = 0;
+
+    // 로컬 플레이어의 실제 시작 위치를 서버에 알려준다.
+    void SyncLocalPlayerPositionToServer(Scene* pScene);
+     
     // 원격 플레이어 마지막 이동 시간 (idle 전환용)
     std::unordered_map<uint64, float> m_mapRemotePlayerMoveTime;
 

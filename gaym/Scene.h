@@ -163,6 +163,7 @@ public:
     bool IsNearInteractionCube() const;
     bool IsInteractionCubeActive() const { return m_bInteractionCubeActive; }
     void TriggerInteraction();
+    void HideInteractionCubeByNetworkStart();
 
     // Portal interaction system
     bool IsNearPortalCube() const;

@@ -53,6 +53,12 @@ public:
     void SetPlaybackSpeed(float fSpeed) { m_fPlaybackSpeed = fSpeed; }
     float GetPlaybackSpeed() const { return m_fPlaybackSpeed; }
 
+    // 디버그용 — 현재 재생 중인 클립이 특정 클립인지 확인한다.
+    bool IsCurrentClip(const std::string& strClipName) const;
+
+    // 디버그용 — 현재 애니메이션 재생 시간을 확인한다.
+    float GetCurrentTime() const { return m_fCurrentTime; }
+
 private:
     std::shared_ptr<AnimationSet> m_pAnimationSet;
     AnimationClip* m_pCurrentClip = nullptr;

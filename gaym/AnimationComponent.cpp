@@ -151,6 +151,15 @@ void AnimationComponent::Restart()
     }
 }
 
+bool AnimationComponent::IsCurrentClip(const std::string& strClipName) const
+{
+    if (!m_pAnimationSet || !m_pCurrentClip)
+        return false;
+
+    AnimationClip* pClip = m_pAnimationSet->GetClip(strClipName);
+    return pClip == m_pCurrentClip;
+}
+
 void AnimationComponent::Update(float deltaTime)
 {
     if (!m_bIsPlaying || !m_pCurrentClip) return;

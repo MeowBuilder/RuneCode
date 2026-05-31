@@ -50,6 +50,44 @@ namespace
     constexpr float kNetSpawnPortalDelay = 0.7f;
     constexpr float kNetSpawnPortalY = 6.0f;
     constexpr float kNetSpawnFallTime = 0.4f;
+
+    // 플레이어 포탈 Intro Fly 
+    constexpr float kPlayerPortalIntroStartHeight = 22.0f;
+    constexpr float kPlayerPortalIntroDuration = 3.0f;
+    constexpr float kPlayerPortalIntroStandRadius = 5.0f;
+    constexpr float kPlayerPortalIntroGravity = 50.0f;
+    constexpr float kPlayerPortalIntroLandingHold = 0.50f;
+
+    static XMFLOAT4 GetNetworkPlayerColor(ElementType element)
+    {
+        switch (element)
+        {
+        case ElementType::Fire:  return XMFLOAT4(1.00f, 0.55f, 0.30f, 1.0f);
+        case ElementType::Water: return XMFLOAT4(0.35f, 0.85f, 0.95f, 1.0f);
+        case ElementType::Wind:  return XMFLOAT4(0.65f, 0.95f, 0.55f, 1.0f);
+        case ElementType::Earth: return XMFLOAT4(0.95f, 0.75f, 0.40f, 1.0f);
+        default:                 return XMFLOAT4(0.85f, 0.90f, 1.00f, 1.0f);
+        }
+    }
+
+    static void ApplyNetworkPlayerMaterial(GameObject* go, const XMFLOAT4& playerColor)
+    {
+        if (!go)
+            return;
+
+        MATERIAL mat;
+
+        // 로컬 플레이어 Scene::Init()과 같은 머티리얼 수치를 원격 플레이어에도 적용한다.
+        mat.m_cAmbient = XMFLOAT4(playerColor.x * 0.30f, playerColor.y * 0.30f, playerColor.z * 0.30f, 1.0f);
+        mat.m_cDiffuse = playerColor;
+        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 32.0f);
+        mat.m_cEmissive = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+
+        go->SetMaterial(mat);
+
+        ApplyNetworkPlayerMaterial(go->m_pChild, playerColor);
+        ApplyNetworkPlayerMaterial(go->m_pSibling, playerColor);
+    }
 }
 
 // ServerPacketHandler.cpp에 정의된 파일 로그 함수 — network_log.txt에 append
@@ -303,6 +341,41 @@ void NetworkManager::Disconnect()
     OutputDebugString(L"[Network] Disconnected\n");
 }
 
+void NetworkManager::SyncLocalPlayerPositionToServer(Scene* pScene)
+{
+    if (!pScene)
+        return;
+
+    if (!m_bConnected || !m_pSession)
+        return;
+
+    if (m_nLocalPlayerId.load() == 0)
+        return;
+
+    GameObject* pLocal = pScene->GetPlayer();
+    if (!pLocal)
+        return;
+
+    TransformComponent* pLocalT = pLocal->GetTransform();
+    if (!pLocalT)
+        return;
+
+    XMFLOAT3 pos = pLocalT->GetPosition();
+
+    // 인트로 낙하 중이면 현재 y는 공중 높이일 수 있다.
+    // 서버에는 시각용 공중 y가 아니라 착지 기준 y를 저장한다.
+    float syncY = pos.y;
+    if (syncY > 10.0f)
+        syncY -= kPlayerPortalIntroStartHeight;
+
+    // 서버의 player->x/y/z를 실제 시작 위치로 보정한다.
+    SendMove(
+        pos.x, syncY, pos.z,
+        0.0f, 0.0f, 1.0f);
+
+    WriteNetworkLog("[Network] Initial local position sync sent");
+}
+
 void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList, float deltaTime)
 {
     if (!pScene || !pDevice || !pCommandList)
@@ -327,6 +400,10 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
         {
             m_nLocalPlayerId.store(cmd.playerId);
             localIdWasSet = true;
+
+            // LocalPlayerId를 받은 직후부터 몇 프레임 동안 초기 위치를 서버에 반복 전송한다.
+            m_nInitialLocalPositionSyncFrames = 60;
+
             wchar_t buf[128];
             swprintf_s(buf, L"[Network] Local player ID set to: %llu\n", cmd.playerId);
             OutputDebugString(buf);
@@ -344,6 +421,31 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
                              pending.x, pending.y, pending.z);
         }
         m_vPendingSpawns.clear();
+    }
+
+    // LocalPlayerId가 설정된 직후, 내 실제 시작 위치를 서버에 한 번 알려준다.
+    if (localIdWasSet)
+    {
+        if (GameObject* pLocal = pScene->GetPlayer())
+        {
+            if (auto* pLocalT = pLocal->GetTransform())
+            {
+                XMFLOAT3 pos = pLocalT->GetPosition();
+
+                // 처음 인트로 낙하 중이면 현재 y는 공중 높이일 수 있다.
+                // 서버에는 시각용 공중 y가 아니라 착지 기준 y를 저장해야 한다.
+                float syncY = pos.y;
+                if (syncY > 10.0f)
+                    syncY -= kPlayerPortalIntroStartHeight;
+
+                // 서버의 player->x/y/z를 실제 맵 스폰 위치로 초기 보정한다.
+                SendMove(
+                    pos.x, syncY, pos.z,
+                    0.0f, 0.0f, 1.0f);
+
+                WriteNetworkLog("[Network] Initial local spawn position synced to server");
+            }
+        }
     }
 
     // 2차: 나머지 명령 처리
@@ -379,12 +481,20 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             ProcessSkill(pScene, cmd.playerId, cmd.skillType, cmd.x, cmd.y, cmd.z, cmd.dirX, cmd.dirY, cmd.dirZ);
             break;
 
+        case NetworkCommand::PlayerAction:
+            ProcessPlayerAction(pScene, cmd.playerId, cmd.playerActionType, cmd.x, cmd.y, cmd.z, cmd.dirX, cmd.dirY, cmd.dirZ);
+            break;
+
         case NetworkCommand::SetLocalPlayerId:
             // 이미 1차에서 처리됨
             break;
 
         case NetworkCommand::RoomTransition:
             ProcessRoomTransition(pScene, cmd.stageIndex, cmd.roomIndex, cmd.isBossRoom, cmd.mapId);
+            break;
+
+        case NetworkCommand::RoomStart:
+            ProcessRoomStart(pScene, cmd.playerId);
             break;
 
         case NetworkCommand::MonsterSpawn:
@@ -451,14 +561,28 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
     // 서버 몬스터 idle / attack timer 처리
     CheckServerMonsterIdle(deltaTime);
 
+    // 원격 플레이어 연출 액션 타이머 처리
+    UpdateRemotePlayerActionLocks(deltaTime);
+
+	// 원격 플레이어 포탈 Intro Fly 연출 처리
+    UpdateRemotePlayerPortalIntroFlyEffects(deltaTime);
+
+    // 입장 직후 서버가 내 위치를 0,0,0으로 들고 있을 수 있으므로,
+    // 몇 프레임 동안 실제 시작 위치를 반복 전송한다.
+    if (m_nInitialLocalPositionSyncFrames > 0)
+    {
+        // 매 프레임 보내면 너무 많으니 5프레임마다 한 번만 보낸다.
+        if ((m_nInitialLocalPositionSyncFrames % 5) == 0)
+            SyncLocalPlayerPositionToServer(pScene);
+
+        --m_nInitialLocalPositionSyncFrames;
+    }
+
     // 방 전환이 처리된 바로 그 프레임에는 TorchInteract 타이머를 줄이지 않음
-    // 즉, 최소 다음 프레임부터 카운트다운 시작
     if (roomTransitionProcessedThisFrame)
         return;
 
     // 방 전환 후 지연 TorchInteract 처리
-    // ProcessRoomTransition 직후 바로 보내면 맵 로딩/오브젝트 정리와
-    // 몬스터 스폰 패킷이 겹쳐 클라가 끊길 수 있으므로 몇 프레임 뒤에 전송한다.
     if (m_bPendingTorchInteract)
     {
         m_nPendingTorchInteractFrame--;
@@ -537,6 +661,34 @@ void NetworkManager::SendSkill(int skillType, float x, float y, float z, float d
 
     auto sendBuffer = ServerPacketHandler::MakeSendBuffer(skillPkt);
     m_pSession->Send(sendBuffer);
+}
+
+void NetworkManager::SendPlayerAction(uint32 actionType,
+    float x, float y, float z,
+    float dirX, float dirY, float dirZ)
+{
+    if (!m_bConnected || !m_pSession)
+        return;
+
+    Protocol::C_PLAYER_ACTION pkt;
+    pkt.set_actiontype(actionType);
+
+    pkt.set_x(x);
+    pkt.set_y(y);
+    pkt.set_z(z);
+
+    pkt.set_dirx(dirX);
+    pkt.set_diry(dirY);
+    pkt.set_dirz(dirZ);
+
+    auto sendBuffer = ServerPacketHandler::MakeSendBuffer(pkt);
+    m_pSession->Send(sendBuffer);
+
+    char buf[256];
+    sprintf_s(buf,
+        "[Network] C_PLAYER_ACTION sent: actionType=%u pos=(%.2f, %.2f, %.2f)",
+        actionType, x, y, z);
+    WriteNetworkLog(buf);
 }
 
 void NetworkManager::SendPortalInteract()
@@ -734,6 +886,17 @@ void NetworkManager::QueuePlayerDamage(uint64 playerId, float damage, float curr
     m_vCommandQueue.push_back(cmd);
 }
 
+void NetworkManager::QueueRoomStart(uint64 starterPlayerId)
+{
+    std::lock_guard<std::mutex> lock(m_queueMutex);
+
+    NetworkCommandData cmd{};
+    cmd.type = NetworkCommand::RoomStart;
+    cmd.playerId = starterPlayerId;
+
+    m_vCommandQueue.push_back(cmd);
+}
+
 // 몬스터 기절/그로기 큐 등록
 void NetworkManager::QueueMonsterStagger(uint64 monsterId, float duration)
 {
@@ -774,9 +937,15 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     if (!pScene)
         return;
 
+    // 중복 전환 방어
+    if (m_bInRoomTransition)
+    {
+        WriteNetworkLog("[Network] ProcessRoomTransition skipped: already transitioning");
+        return;
+    }
+    m_bInRoomTransition = true;
+
     // 방 전환 전에 네트워크 일반 몬스터 연출 정리
-    // 이제 entry는 EnemyComponent*를 직접 들고 있지 않고 monsterId만 저장한다.
-    // 매번 m_mapServerMonsters에서 다시 찾아 dangling pointer 접근을 막는다.
     for (auto& entry : m_vNetworkNormalMonsterBehaviors)
     {
         auto monIt = m_mapServerMonsters.find(entry.monsterId);
@@ -793,17 +962,7 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
         if (IAttackBehavior* pBehavior = pEnemy->GetAttackBehavior())
             pBehavior->Reset();
     }
-
     m_vNetworkNormalMonsterBehaviors.clear();
-
-    // 중복 전환 방어: 서버가 S_ROOM_TRANSITION 을 동일 프레임에 두 번 보내거나
-    // 클라 큐에 중복 push 된 경우, 방 정리 중 다시 정리·재생성 호출로 dangling pointer 크래시 발생.
-    if (m_bInRoomTransition)
-    {
-        WriteNetworkLog("[Network] ProcessRoomTransition skipped: already transitioning");
-        return;
-    }
-    m_bInRoomTransition = true;
 
     wchar_t buf[512];
     swprintf_s(buf, L"[Network] ProcessRoomTransition stage=%u room=%u boss=%d mapId=%S\n",
@@ -913,24 +1072,57 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
         }
     }
 
-    // 원격 플레이어 좌표 리셋 — 서버 HandlePortalInteract 는 좌표를 건드리지 않으므로
-    // 이전 방 좌표가 그대로 남아 새 맵에서 맵 밖/이상한 위치로 보일 수 있음 ("안 보이는 현상").
-    // 다음 S_MOVE 패킷 오면 실제 위치로 갱신되므로 임시로 로컬 플레이어 근처에 모아둠.
+    // 방 전환 후 플레이어 포탈 Intro Fly 시작
+    // 서버 HandlePortalInteract 는 플레이어 좌표를 직접 바꾸지 않으므로,
+    // 새 맵 로드 직후 로컬 플레이어의 현재 위치를 착지 기준점으로 사용한다.
     if (GameObject* pLocal = pScene->GetPlayer())
     {
         if (auto* pLocalT = pLocal->GetTransform())
         {
-            XMFLOAT3 localPos = pLocalT->GetPosition();
+            XMFLOAT3 groundPos = pLocalT->GetPosition();
+
+            // 원격 플레이어 좌표 리셋
+            // 이전 방 좌표가 그대로 남으면 새 맵에서 맵 밖/이상한 위치로 보일 수 있으므로
+            // 우선 착지 기준점으로 모아둔다.
+            // 단, 로컬 플레이어를 y + 22.0f 로 올리기 전에 groundPos 를 먼저 저장해야 한다.
             for (auto& kv : m_mapRemotePlayers)
             {
                 if (GameObject* pRemote = kv.second)
                 {
                     if (auto* pT = pRemote->GetTransform())
                     {
-                        pT->SetPosition(localPos.x, localPos.y, localPos.z);
+                        pT->SetPosition(groundPos.x, groundPos.y, groundPos.z);
                     }
                 }
             }
+
+            // 로컬 플레이어 포탈 Intro Fly 시작
+            pLocalT->SetPosition(
+                groundPos.x,
+                groundPos.y + kPlayerPortalIntroStartHeight,
+                groundPos.z);
+
+            if (auto* pPC = pLocal->GetComponent<PlayerComponent>())
+            {
+                pPC->StartIntroFly(
+                    kPlayerPortalIntroDuration,
+                    groundPos.y,
+                    XMFLOAT3(groundPos.x, groundPos.y, groundPos.z),
+                    kPlayerPortalIntroStandRadius);
+            }
+
+            // 네트워크 연출 액션 — 다른 클라에도 이 플레이어의 포탈 Intro Fly를 재생시킨다.
+            // 위치 판정이 아니라 연출 시작 알림만 보낸다.
+            SendPlayerAction(
+                PLAYER_ACTION_PORTAL_INTRO_FLY,
+                groundPos.x, groundPos.y, groundPos.z,
+                0.0f, 0.0f, 1.0f);
+
+            WriteNetworkLog("[Network] Local PortalIntroFly started after room transition");
+          
+            // 방 전환 직후에도 서버가 이전 위치를 들고 있을 수 있으므로,
+            // 새 방의 실제 시작 위치를 몇 프레임 동안 반복 전송한다.
+            m_nInitialLocalPositionSyncFrames = 60;
         }
     }
 
@@ -1008,6 +1200,26 @@ void NetworkManager::QueueSkill(uint64 playerId, int skillType, float x, float y
     m_vCommandQueue.push_back(cmd);
 }
 
+void NetworkManager::QueuePlayerAction(uint64 playerId, uint32 actionType, float x, float y, float z, float dirX, float dirY, float dirZ)
+{
+    std::lock_guard<std::mutex> lock(m_queueMutex);
+
+    NetworkCommandData cmd{};
+    cmd.type = NetworkCommand::PlayerAction;
+    cmd.playerId = playerId;
+    cmd.playerActionType = actionType;
+
+    cmd.x = x;
+    cmd.y = y;
+    cmd.z = z;
+
+    cmd.dirX = dirX;
+    cmd.dirY = dirY;
+    cmd.dirZ = dirZ;
+
+    m_vCommandQueue.push_back(cmd);
+}
+
 void NetworkManager::QueueSetLocalPlayerId(uint64 playerId)
 {
     std::lock_guard<std::mutex> lock(m_queueMutex);
@@ -1027,6 +1239,113 @@ GameObject* NetworkManager::GetRemotePlayer(uint64 playerId)
         return it->second;
     }
     return nullptr;
+}
+
+void NetworkManager::UpdateRemotePlayerActionLocks(float deltaTime)
+{
+    for (auto it = m_mapRemotePlayerActionLockTimer.begin();
+        it != m_mapRemotePlayerActionLockTimer.end(); )
+    {
+        it->second -= deltaTime;
+
+        if (it->second <= 0.0f)
+            it = m_mapRemotePlayerActionLockTimer.erase(it);
+        else
+            ++it;
+    }
+}
+
+void NetworkManager::UpdateRemotePlayerPortalIntroFlyEffects(float deltaTime)
+{
+    for (auto it = m_mapRemotePlayerPortalIntroFlyEffects.begin();
+        it != m_mapRemotePlayerPortalIntroFlyEffects.end(); )
+    {
+        uint64 playerId = it->first;
+        RemotePlayerPortalIntroFlyEffect& fx = it->second;
+
+        auto playerIt = m_mapRemotePlayers.find(playerId);
+        if (playerIt == m_mapRemotePlayers.end() || !playerIt->second)
+        {
+            it = m_mapRemotePlayerPortalIntroFlyEffects.erase(it);
+            continue;
+        }
+
+        GameObject* pRemotePlayer = playerIt->second;
+        TransformComponent* pTransform = pRemotePlayer->GetTransform();
+        AnimationComponent* pAnim = pRemotePlayer->GetComponent<AnimationComponent>();
+
+        if (!pTransform)
+        {
+            it = m_mapRemotePlayerPortalIntroFlyEffects.erase(it);
+            continue;
+        }
+
+        if (!fx.onGround)
+        {
+            // 원격 플레이어가 실제로 Levitating을 유지하고 있는지 확인한다.
+            if (pAnim)
+            {
+                bool bLevitating = pAnim->IsCurrentClip("Levitating");
+
+                char buf[256];
+                sprintf_s(buf,
+                    "[Network] Remote IntroFly AnimCheck: playerId=%llu isLevitating=%d animTime=%.3f y=%.2f",
+                    playerId,
+                    bLevitating ? 1 : 0,
+                    pAnim->GetCurrentTime(),
+                    pTransform->GetPosition().y);
+                WriteNetworkLog(buf);
+            }
+
+            // 포탈 Intro Fly 중에는 원격 플레이어도 Levitating 상태를 유지한다.
+            if (pAnim)
+                pAnim->CrossFade("Levitating", 0.10f, true, false);
+
+            // 로컬 PlayerComponent::StartIntroFly()와 같은 자유낙하 방식
+            // velocityY = 0 에서 시작하고 GRAVITY=50.0f 로 내려온다.
+            XMFLOAT3 pos = pTransform->GetPosition();
+
+            fx.velocityY -= kPlayerPortalIntroGravity * deltaTime;
+            pos.y += fx.velocityY * deltaTime;
+
+            if (pos.y <= fx.groundY)
+            {
+                pos.y = fx.groundY;
+                fx.velocityY = 0.0f;
+                fx.onGround = true;
+                fx.landingHoldTimer = kPlayerPortalIntroLandingHold;
+                fx.introTimer = 0.0f;
+
+                if (pAnim)
+                    pAnim->CrossFade("Landing", 0.05f, false, true);
+            }
+
+            pTransform->SetPosition(fx.groundX, pos.y, fx.groundZ);
+
+            if (fx.introTimer > 0.0f)
+                fx.introTimer -= deltaTime;
+
+            ++it;
+            continue;
+        }
+
+        if (fx.landingHoldTimer > 0.0f)
+        {
+            fx.landingHoldTimer = fmaxf(0.0f, fx.landingHoldTimer - deltaTime);
+
+            if (fx.landingHoldTimer <= 0.0f)
+            {
+                if (pAnim)
+                    pAnim->CrossFade("Idle", 0.15f, true);
+
+                m_mapRemotePlayerActionLockTimer.erase(playerId);
+                it = m_mapRemotePlayerPortalIntroFlyEffects.erase(it);
+                continue;
+            }
+        }
+
+        ++it;
+    }
 }
 
 void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
@@ -1071,6 +1390,19 @@ void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
         remoteElement = static_cast<ElementType>(playerType);
     const CharacterData& cdata = GetCharacterData(remoteElement);
 
+    // 원격 플레이어가 실제로 어떤 캐릭터/애니메이션 파일을 쓰는지 확인한다.
+    {
+        char buf[512];
+        sprintf_s(buf,
+            "[Network] RemotePlayer SpawnData: playerId=%llu playerType=%d remoteElement=%d mesh=%s anim=%s",
+            playerId,
+            playerType,
+            static_cast<int>(remoteElement),
+            cdata.meshPath,
+            cdata.animPath);
+        WriteNetworkLog(buf);
+    }
+
     // 새 원격 플레이어 모델 로드 — 선택한 원소의 mesh 파일.
     GameObject* pRemotePlayer = MeshLoader::LoadGeometryFromFile(pScene, pDevice, pCommandList, NULL, cdata.meshPath);
     if (!pRemotePlayer)
@@ -1087,14 +1419,41 @@ void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
     // CurrentRoom 복원
     pScene->SetCurrentRoom(pTempRoom);
 
-    // 이름 설정
-    sprintf_s(pRemotePlayer->m_pstrFrameName, "RemotePlayer_%llu", playerId);
-
     // 위치 및 스케일 설정
     TransformComponent* pTransform = pRemotePlayer->GetTransform();
     if (pTransform)
     {
-        pTransform->SetPosition(x, y, z);
+        float spawnX = x;
+        float spawnY = y;
+        float spawnZ = z;
+
+        // 서버가 아직 기존 플레이어의 실제 위치를 모르면 0,0,0으로 스폰될 수 있다.
+        // 이 경우 첫 화면에서 벽쪽에 보이므로, 임시로 내 현재 시작 위치 근처에 배치한다.
+        bool bInvalidSpawnPos =
+            (fabsf(spawnX) < 0.001f && fabsf(spawnY) < 0.001f && fabsf(spawnZ) < 0.001f);
+
+        if (bInvalidSpawnPos)
+        {
+            if (GameObject* pLocal = pScene->GetPlayer())
+            {
+                if (auto* pLocalT = pLocal->GetTransform())
+                {
+                    XMFLOAT3 localPos = pLocalT->GetPosition();
+
+                    spawnX = localPos.x;
+                    spawnY = localPos.y;
+                    spawnZ = localPos.z;
+
+                    // 내 캐릭터가 인트로 공중에 있으면 원격도 착지 기준 위치로 보정한다.
+                    if (spawnY > 10.0f)
+                        spawnY -= kPlayerPortalIntroStartHeight;
+
+                    WriteNetworkLog("[Network] Remote spawn position fallback applied");
+                }
+            }
+        }
+
+        pTransform->SetPosition(spawnX, spawnY, spawnZ);
         pTransform->SetScale(5.0f, 5.0f, 5.0f);
     }
 
@@ -1104,6 +1463,7 @@ void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
     {
         pAnim->LoadAnimation(cdata.animPath);
         pAnim->Play("Idle", true);
+        pAnim->SetCullEnabled(false);
     }
 
     // 셰이더 등록
@@ -1111,6 +1471,8 @@ void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
     if (pDefaultShader)
     {
         pScene->AddRenderComponentsToHierarchy(pDevice, pCommandList, pRemotePlayer, pDefaultShader, true);
+        // 원격 플레이어도 로컬 플레이어와 같은 영웅 톤 머티리얼을 적용한다.
+        ApplyNetworkPlayerMaterial(pRemotePlayer, GetNetworkPlayerColor(remoteElement));
     }
 
     // 컴포넌트 초기화 (AnimationComponent::BuildBoneCache 포함)
@@ -1157,6 +1519,8 @@ void NetworkManager::ProcessDespawnPlayer(Scene* pScene, uint64 playerId)
     m_mapRemotePlayerMoveTime.erase(playerId);
     m_setDeadRemotePlayers.erase(playerId);
     m_mapRemotePlayerHitFlashTimer.erase(playerId);
+    m_mapRemotePlayerActionLockTimer.erase(playerId);
+    m_mapRemotePlayerPortalIntroFlyEffects.erase(playerId);
 
     wchar_t buf[128];
     swprintf_s(buf, L"[Network] Despawned remote player %llu\n", playerId);
@@ -1175,40 +1539,101 @@ void NetworkManager::ProcessMovePlayer(uint64 playerId, float x, float y, float 
 
     GameObject* pRemotePlayer = it->second;
     TransformComponent* pTransform = pRemotePlayer->GetTransform();
-    if (pTransform)
+
+    bool bPortalIntroPlaying = (m_mapRemotePlayerPortalIntroFlyEffects.find(playerId) != m_mapRemotePlayerPortalIntroFlyEffects.end());
+
+    AnimationComponent* pAnim = pRemotePlayer->GetComponent<AnimationComponent>();
+
+    // 초기 접속 또는 패킷 순서 차이로 PLAYER_ACTION_PORTAL_INTRO_FLY보다 S_MOVE가 먼저 올 수 있다.
+    // 이때 y가 높으면 일반 이동이 아니라 포탈 Intro Fly 중인 공중 위치로 보고 Levitating을 먼저 잡아준다.
+    if (!bPortalIntroPlaying && pTransform && y > 10.0f)
     {
-        // 위치 설정
+        RemotePlayerPortalIntroFlyEffect fx{};
+        fx.introTimer = kPlayerPortalIntroDuration;
+        fx.landingHoldTimer = 0.0f;
+        fx.velocityY = 0.0f;
+
+        // S_MOVE의 y는 현재 공중 높이이므로, 기존 클라 수치 22.0f를 빼서 착지 높이를 추정한다.
+        fx.groundX = x;
+        fx.groundY = y - kPlayerPortalIntroStartHeight;
+        fx.groundZ = z;
+        fx.onGround = false;
+
+        m_mapRemotePlayerPortalIntroFlyEffects[playerId] = fx;
+
+        // 인트로 중에는 Walk/Idle이 끼어들지 않도록 잠깐 잠근다.
+        m_mapRemotePlayerActionLockTimer[playerId] =
+            kPlayerPortalIntroDuration + kPlayerPortalIntroLandingHold;
+
         pTransform->SetPosition(x, y, z);
 
-        // 방향 벡터로 Y축 회전 계산 (XZ 평면 기준)
+        if (pAnim)
+            pAnim->CrossFade("Levitating", 0.10f, true, true);
+
+        // 인트로 중에는 idle 타이머가 끼어들면 안 된다.
+        m_mapRemotePlayerMoveTime.erase(playerId);
+
+        bPortalIntroPlaying = true;
+
+        WriteNetworkLog("[Network] Remote PortalIntroFly fallback started from high S_MOVE");
+    }
+
+    // 이번 S_MOVE가 실제 이동인지, 마우스 회전만인지 구분한다.
+    bool bPositionMoved = false;
+
+    if (pTransform)
+    {
+        XMFLOAT3 oldPos = pTransform->GetPosition();
+
+        auto introIt = m_mapRemotePlayerPortalIntroFlyEffects.find(playerId);
+        if (introIt != m_mapRemotePlayerPortalIntroFlyEffects.end())
+        {
+            // 포탈 Intro Fly 중이면 S_MOVE 위치를 바로 Transform에 덮어쓰지 않는다.
+            // 대신 착지 기준 좌표만 최신 서버 좌표로 갱신한다.
+            introIt->second.groundX = x;
+            introIt->second.groundZ = z;
+        }
+        else
+        {
+            // 실제 위치 변화가 있을 때만 이동으로 판단한다.
+            // 마우스로 방향만 돌린 C_MOVE는 Walk 애니로 바꾸면 안 된다.
+            float dx = x - oldPos.x;
+            float dz = z - oldPos.z;
+            bPositionMoved = (dx * dx + dz * dz) > 0.000001f;
+
+            // 일반 상태에서는 서버 위치를 그대로 반영한다.
+            pTransform->SetPosition(x, y, z);
+        }
+
+        // 방향은 이동/회전 구분과 상관없이 항상 갱신한다.
         float length = sqrtf(dirX * dirX + dirZ * dirZ);
         if (length > 0.001f)
         {
-            // atan2로 Y축 회전각 계산 (라디안)
             float yaw = atan2f(dirX, dirZ);
-            // 라디안을 도(degree)로 변환
             float yawDegrees = XMConvertToDegrees(yaw);
 
-            // Y축 회전만 적용 (기존 X, Z 회전은 유지)
             XMFLOAT3 currentRot = pTransform->GetRotation();
             pTransform->SetRotation(currentRot.x, yawDegrees, currentRot.z);
         }
     }
 
-    // 죽은 원격 플레이어는 데스 애니 유지 — walk/idle 로 덮지 않음
+    // 죽은 원격 플레이어는 데스 애니 유지한다.
     bool bDead = (m_setDeadRemotePlayers.find(playerId) != m_setDeadRemotePlayers.end());
 
-    // 걷기 애니메이션 활성화
-    AnimationComponent* pAnim = pRemotePlayer->GetComponent<AnimationComponent>();
-    if (pAnim && !bDead)
+    // 대쉬/인트로 같은 연출 중에는 Walk/Idle이 끼어들면 안 된다.
+    bool bActionLocked = (m_mapRemotePlayerActionLockTimer.find(playerId) != m_mapRemotePlayerActionLockTimer.end());
+
+    if (pAnim && !bDead && !bActionLocked && !bPortalIntroPlaying && bPositionMoved)
     {
-        // CrossFade로 부드럽게 전환 (이미 걷기 중이면 무시)
+        // 실제 위치가 바뀐 경우에만 Walk로 전환한다.
         pAnim->CrossFade("Walk", 0.1f, true);
     }
 
-    // 마지막 이동 시간 기록 (idle 전환용)
-    if (!bDead)
+    if (!bDead && !bPortalIntroPlaying && bPositionMoved)
+    {
+        // 실제 이동했을 때만 idle 전환 타이머를 갱신한다.
         m_mapRemotePlayerMoveTime[playerId] = 0.0f;
+    }
 }
 
 void NetworkManager::CheckRemotePlayerIdle(float deltaTime)
@@ -1246,7 +1671,10 @@ void NetworkManager::CheckRemotePlayerIdle(float deltaTime)
         {
             bool bDead = (m_setDeadRemotePlayers.find(playerId) != m_setDeadRemotePlayers.end());
             auto playerIt = m_mapRemotePlayers.find(playerId);
-            if (!bDead && playerIt != m_mapRemotePlayers.end())
+            bool bActionLocked = (m_mapRemotePlayerActionLockTimer.find(playerId) != m_mapRemotePlayerActionLockTimer.end());
+            bool bPortalIntroPlaying = (m_mapRemotePlayerPortalIntroFlyEffects.find(playerId) != m_mapRemotePlayerPortalIntroFlyEffects.end());
+
+            if (!bDead && !bActionLocked && !bPortalIntroPlaying && playerIt != m_mapRemotePlayers.end())
             {
                 AnimationComponent* pAnim = playerIt->second->GetComponent<AnimationComponent>();
                 if (pAnim)
@@ -1254,6 +1682,7 @@ void NetworkManager::CheckRemotePlayerIdle(float deltaTime)
                     pAnim->CrossFade("Idle", 0.2f, true);
                 }
             }
+
             // 처리 완료 후 맵에서 제거
             it = m_mapRemotePlayerMoveTime.erase(it);
         }
@@ -1797,6 +2226,87 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
     OutputDebugString(buf);
 }
 
+void NetworkManager::ProcessPlayerAction(Scene* pScene, uint64 playerId, uint32 actionType, float x, float y, float z, float dirX, float dirY, float dirZ)
+{
+    // 로컬 플레이어는 이미 자기 입력/Scene 전환 흐름에서 연출을 실행했으므로 중복 재생하지 않는다.
+    if (playerId == m_nLocalPlayerId.load())
+        return;
+
+    auto it = m_mapRemotePlayers.find(playerId);
+    if (it == m_mapRemotePlayers.end())
+        return;
+
+    GameObject* pRemotePlayer = it->second;
+    if (!pRemotePlayer)
+        return;
+
+    AnimationComponent* pAnim = pRemotePlayer->GetComponent<AnimationComponent>();
+    TransformComponent* pTransform = pRemotePlayer->GetTransform();
+
+    switch (actionType)
+    {
+    case PLAYER_ACTION_DASH_CAPE_FLUTTER:
+    {
+        // 대쉬 망토/몸 플래시 연출
+        // 위치는 건드리지 않고, 원격 클라에서 모션과 흰색 플래시만 재생한다.
+        if (pAnim)
+            pAnim->CrossFade("Run", 0.05f, true, true);
+
+        // 대쉬 연출 중 S_MOVE 가 Walk 로 바로 덮지 않도록 짧게 막는다.
+        m_mapRemotePlayerActionLockTimer[playerId] = 0.35f;
+
+        // 로컬 대쉬처럼 몸이 하얗게 보이도록 원격 플레이어에도 HitFlash를 건다.
+        pRemotePlayer->SetHitFlashAll(1.0f);
+
+        // 기존 원격 hit flash 페이드 구조를 그대로 재사용한다. 수치는 클라 기존값 0.15f.
+        m_mapRemotePlayerHitFlashTimer[playerId] = REMOTE_HIT_FLASH_DURATION;
+
+        WriteNetworkLog("[Network] Remote DashCapeFlutter flash started");
+        break;
+    }
+
+    case PLAYER_ACTION_PORTAL_INTRO_FLY:
+    {
+        if (!pTransform)
+            break;
+
+        // 원격 플레이어 포탈 Intro Fly 연출
+        RemotePlayerPortalIntroFlyEffect fx{};
+        fx.introTimer = kPlayerPortalIntroDuration;
+        fx.landingHoldTimer = 0.0f;
+        fx.velocityY = 0.0f;
+        fx.groundY = y;
+        fx.groundX = x;
+        fx.groundZ = z;
+        fx.onGround = false;
+
+        m_mapRemotePlayerPortalIntroFlyEffects[playerId] = fx;
+
+        // Intro Fly 중에는 S_MOVE/idle 이 Levitating/Landing 애니를 덮지 않도록 락을 길게 잡는다.
+        m_mapRemotePlayerActionLockTimer[playerId] =
+            kPlayerPortalIntroDuration + kPlayerPortalIntroLandingHold;
+
+        pTransform->SetPosition(x, y + kPlayerPortalIntroStartHeight, z);
+
+        if (pAnim)
+            pAnim->CrossFade("Levitating", 0.10f, true, true);
+
+        // 등장 연출 중에는 idle 타이머가 끼어들지 않도록 초기화한다.
+        m_mapRemotePlayerMoveTime.erase(playerId);
+
+        char buf[224];
+        sprintf_s(buf,
+            "[Network] Remote PortalIntroFly START: playerId=%llu ground=(%.2f, %.2f, %.2f)",
+            playerId, x, y, z);
+        WriteNetworkLog(buf);
+        break;
+    }
+
+    default:
+        break;
+    }
+}
+
 // =============================================================================
 // 몬스터 처리 (서버 권위)
 // =============================================================================
@@ -2095,6 +2605,13 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
     float x, float y, float z, float yaw,
     float hp, bool isBoss)
 {
+    if (!pScene)
+        return;
+
+    // 서버 몬스터 스폰을 받았다는 것은 누군가 F를 눌러 방이 시작됐다는 뜻이다.
+    // F를 누르지 않은 다른 클라에서도 시작 포탈이 남아있지 않도록 같이 숨긴다.
+    pScene->HideInteractionCubeByNetworkStart();
+
     // 중복 방지: 같은 monsterId 가 이미 있으면 새 GameObject 만들지 않고 skip.
     // (기존은 위치만 갱신했으나 방 전환 후 서버가 같은 id 를 재전송할 때 이전 방 몬스터가
     //  새 방에 재등장하는 혼란 발생 — ProcessRoomTransition 이 맵을 clear 하므로 여기선 단순 skip.)
@@ -5213,6 +5730,21 @@ void NetworkManager::ProcessRoomCleared(Scene* pScene, uint32 stageIndex, uint32
     char buf[128];
     sprintf_s(buf, "[Network] RoomCleared applied: stage=%u room=%u portalSpawned=%d",
               stageIndex, roomIndex, (pRoom && pRoom->HasPortalCube()) ? 1 : 0);
+    WriteNetworkLog(buf);
+}
+
+void NetworkManager::ProcessRoomStart(Scene* pScene, uint64 starterPlayerId)
+{
+    if (!pScene)
+        return;
+
+    // 서버가 방 시작을 확정했으므로 모든 클라에서 시작 포탈을 즉시 숨긴다.
+    pScene->HideInteractionCubeByNetworkStart();
+
+    char buf[160];
+    sprintf_s(buf,
+        "[Network] RoomStart processed: starterPlayerId=%llu",
+        starterPlayerId);
     WriteNetworkLog(buf);
 }
 

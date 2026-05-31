@@ -222,3 +222,35 @@ message S_MAP_TORNADO_EVENT // 서버 -> 클라 맵 토네이도 이벤트 알�
 	float warningSec = 5; // 경고 시간(초)
 	float activeSec = 6;  // 토네이도 지속 시간(초)
 }
+
+message C_PLAYER_ACTION // 클라 -> 서버 플레이어 연출 액션 요청 패킷
+{
+	uint32 actionType = 1; // 1=대쉬 망토 펄럭임, 2=포탈 Intro Fly
+
+	float x = 2;           // 액션 기준 위치 X
+	float y = 3;           // 액션 기준 위치 Y
+	float z = 4;           // 액션 기준 위치 Z
+
+	float dirX = 5;        // 액션 기준 방향 X
+	float dirY = 6;        // 액션 기준 방향 Y
+	float dirZ = 7;        // 액션 기준 방향 Z
+}
+
+message S_PLAYER_ACTION // 서버 -> 클라 플레이어 연출 액션 브로드캐스트 패킷
+{
+	uint64 playerId = 1;   // 액션을 시작한 플레이어 ID
+	uint32 actionType = 2; // 1=대쉬 망토 펄럭임, 2=포탈 Intro Fly
+
+	float x = 3;           // 액션 기준 위치 X
+	float y = 4;           // 액션 기준 위치 Y
+	float z = 5;           // 액션 기준 위치 Z
+
+	float dirX = 6;        // 액션 기준 방향 X
+	float dirY = 7;        // 액션 기준 방향 Y
+	float dirZ = 8;        // 액션 기준 방향 Z
+}
+
+message S_ROOM_START // 서버 -> 클라 방 시작 알림 패킷
+{
+    uint64 starterplayerid = 1; // 방을 시작한 플레이어 ID 
+}

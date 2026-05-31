@@ -18,6 +18,7 @@
 #include "WaveSlashBehavior.h"
 #include "FireBeamBehavior.h"
 #include "MeteorBehavior.h"
+#include "NetworkManager.h"
 // 물결술사
 #include "WaterPuddleBehavior.h"
 #include "WaterVortexBehavior.h"
@@ -551,8 +552,22 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
         //   standRadius: 베이스 영역 (XZ 반경). 영역 밖으로 이동하면 자유낙하 (부양 방지).
         m_pPlayerGameObject->GetTransform()->SetPosition(playerSpawn.x, playerSpawn.y + 22.0f, playerSpawn.z);
         if (auto* pc = m_pPlayerGameObject->GetComponent<PlayerComponent>())
+        {
             pc->StartIntroFly(3.0f, playerSpawn.y,
-                              XMFLOAT3(playerSpawn.x, playerSpawn.y, playerSpawn.z), 5.0f);
+                XMFLOAT3(playerSpawn.x, playerSpawn.y, playerSpawn.z), 5.0f);
+
+            // 네트워크 연출 액션 — 포탈 Intro Fly 동기화
+            if (NetworkManager* pNetMgr = NetworkManager::GetInstance())
+            {
+                if (pNetMgr->IsConnected())
+                {
+                    pNetMgr->SendPlayerAction(
+                        PLAYER_ACTION_PORTAL_INTRO_FLY,
+                        playerSpawn.x, playerSpawn.y, playerSpawn.z,
+                        0.0f, 0.0f, 1.0f);
+                }
+            }
+        }
     }
 
     // --------------------------------------------------------------------------
@@ -2172,6 +2187,28 @@ void Scene::TriggerInteraction()
         m_bInteractionCubeActive = false;
         m_bEnemiesSpawned = true;
     }
+}
+
+void Scene::HideInteractionCubeByNetworkStart()
+{
+    if (!m_pInteractionCube)
+        return;
+
+    auto* pInteractable = m_pInteractionCube->GetComponent<InteractableComponent>();
+
+    // 이미 숨겨진 상태면 중복 처리하지 않는다.
+    if (!m_bInteractionCubeActive && (!pInteractable || !pInteractable->IsActive()))
+        return;
+
+    // 다른 클라가 F를 눌러도 서버 몬스터 스폰을 받는 순간 내 포탈도 숨긴다.
+    if (pInteractable)
+        pInteractable->Hide();
+
+    // Scene::Update의 포탈 VFX 추적도 같이 멈추도록 상태값을 맞춘다.
+    m_bInteractionCubeActive = false;
+    m_bEnemiesSpawned = true;
+
+    WriteNetworkLog("[Scene] InteractionCube hidden by network room start");
 }
 
 bool Scene::IsNearDropItem() const

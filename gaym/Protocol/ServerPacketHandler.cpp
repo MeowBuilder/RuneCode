@@ -477,3 +477,48 @@ bool Handle_S_MAP_TORNADO_EVENT(PacketSessionRef& session, Protocol::S_MAP_TORNA
 
     return true;
 }
+
+// 서버 -> 클라 플레이어 연출 액션 처리
+// 서버가 "누가 어떤 연출을 시작했는지" 알려주면 NetworkManager 큐로 넘긴다.
+bool Handle_S_PLAYER_ACTION(PacketSessionRef& session, Protocol::S_PLAYER_ACTION& pkt)
+{
+    uint64 playerId = pkt.playerid();
+    uint32 actionType = pkt.actiontype();
+
+    char buf[256];
+    sprintf_s(buf,
+        "[Network] S_PLAYER_ACTION received: playerId=%llu actionType=%u pos=(%.2f, %.2f, %.2f)",
+        playerId, actionType, pkt.x(), pkt.y(), pkt.z());
+    WriteNetworkLog(buf);
+
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr)
+    {
+        pNetMgr->QueuePlayerAction(
+            playerId,
+            actionType,
+            pkt.x(), pkt.y(), pkt.z(),
+            pkt.dirx(), pkt.diry(), pkt.dirz());
+    }
+
+    return true;
+}
+
+bool Handle_S_ROOM_START(PacketSessionRef& session, Protocol::S_ROOM_START& pkt)
+{
+    uint64 starterPlayerId = pkt.starterplayerid();
+
+    char buf[160];
+    sprintf_s(buf,
+        "[Network] S_ROOM_START received: starterPlayerId=%llu",
+        starterPlayerId);
+    WriteNetworkLog(buf);
+
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr)
+    {
+        pNetMgr->QueueRoomStart(starterPlayerId);
+    }
+
+    return true;
+}
