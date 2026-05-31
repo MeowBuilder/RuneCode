@@ -33,6 +33,9 @@ public:
     // Animation helpers
     float GetBobOffset() const { return m_fBobOffset; }
 
+    // 네트워크 보상 룬 오브젝트용
+    void SetFloatingBaseY(float baseY);
+
 private:
     std::array<EquippedRune, 3> m_RuneOptions;
     bool m_bIsActive = true;

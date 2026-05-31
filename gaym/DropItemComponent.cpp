@@ -133,3 +133,25 @@ XMFLOAT4 DropItemComponent::GetGradeColor(RuneGrade grade)
     default:                   return { 1.00f, 1.00f, 1.00f, 1.f };
     }
 }
+
+void DropItemComponent::SetFloatingBaseY(float baseY)
+{
+    // 기본 DropItemComponent는 GROUND_Y까지 떨어진 뒤 bobbing한다.
+    // 네트워크 보상 룬 오브젝트는 서버가 내려준 높이를 기준으로 떠 있어야 하므로,
+    // 생성 직후 ground 상태로 고정하고 baseY를 서버 위치로 맞춘다.
+    m_bOnGround = true;
+    m_fVelocityY = 0.0f;
+    m_fBaseY = baseY;
+    m_fBobTime = 0.0f;
+    m_fBobOffset = 0.0f;
+
+    if (m_pOwner)
+    {
+        TransformComponent* pTransform = m_pOwner->GetTransform();
+        if (pTransform)
+        {
+            XMFLOAT3 pos = pTransform->GetPosition();
+            pTransform->SetPosition(pos.x, baseY, pos.z);
+        }
+    }
+}

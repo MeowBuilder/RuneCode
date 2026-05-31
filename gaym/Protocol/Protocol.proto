@@ -254,3 +254,32 @@ message S_ROOM_START // 서버 -> 클라 방 시작 알림 패킷
 {
     uint64 starterplayerid = 1; // 방을 시작한 플레이어 ID 
 }
+
+message RewardRuneObjectInfo // 서버 -> 클라 룬 보상 오브젝트 위치 정보
+{
+	uint64 ownerPlayerId = 1; // 이 룬 오브젝트의 주인 플레이어 ID
+	float x = 2;             // 룬 오브젝트 위치 X
+	float y = 3;             // 룬 오브젝트 위치 Y
+	float z = 4;             // 룬 오브젝트 위치 Z
+}
+
+message S_ROOM_REWARD_SPAWN // 서버 -> 클라 방 클리어 보상 오브젝트 생성 알림 패킷
+{
+	uint32 stageIndex = 1; // 보상이 생성된 스테이지 번호
+	uint32 roomIndex = 2;  // 보상이 생성된 방 번호
+
+	float portalX = 3;    // 공통 포탈 위치 X
+	float portalY = 4;    // 공통 포탈 위치 Y
+	float portalZ = 5;    // 공통 포탈 위치 Z
+
+	repeated RewardRuneObjectInfo runeObjects = 6; // 플레이어별 룬 오브젝트 위치 목록
+}
+
+message C_RUNE_REWARD_PICK // 클라 -> 서버 룬 보상 선택 완료 알림 패킷
+{
+}
+
+message S_RUNE_REWARD_PICKED // 서버 -> 클라 특정 플레이어의 룬 보상 선택 완료 알림 패킷
+{
+    uint64 ownerPlayerId = 1; // 룬 오브젝트를 제거할 플레이어 ID
+}

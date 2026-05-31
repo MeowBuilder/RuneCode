@@ -39,6 +39,9 @@ enum : uint16
 	PKT_C_PLAYER_ACTION = 1028,
 	PKT_S_PLAYER_ACTION = 1029,
 	PKT_S_ROOM_START = 1030,
+	PKT_S_ROOM_REWARD_SPAWN = 1031,
+	PKT_C_RUNE_REWARD_PICK = 1032,
+	PKT_S_RUNE_REWARD_PICKED = 1033,
 };
 
 // Custom Handlers
@@ -63,6 +66,8 @@ bool Handle_S_MONSTER_STAGGER(PacketSessionRef& session, Protocol::S_MONSTER_STA
 bool Handle_S_MAP_TORNADO_EVENT(PacketSessionRef& session, Protocol::S_MAP_TORNADO_EVENT& pkt);
 bool Handle_S_PLAYER_ACTION(PacketSessionRef& session, Protocol::S_PLAYER_ACTION& pkt);
 bool Handle_S_ROOM_START(PacketSessionRef& session, Protocol::S_ROOM_START& pkt);
+bool Handle_S_ROOM_REWARD_SPAWN(PacketSessionRef& session, Protocol::S_ROOM_REWARD_SPAWN& pkt);
+bool Handle_S_RUNE_REWARD_PICKED(PacketSessionRef& session, Protocol::S_RUNE_REWARD_PICKED& pkt);
 
 class ServerPacketHandler
 {
@@ -91,6 +96,8 @@ public:
 		GPacketHandler[PKT_S_MAP_TORNADO_EVENT] = [](PacketSessionRef& session, BYTE* buffer, int32 len) {return HandlePacket<Protocol::S_MAP_TORNADO_EVENT>(Handle_S_MAP_TORNADO_EVENT, session, buffer, len); };
 		GPacketHandler[PKT_S_PLAYER_ACTION] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_PLAYER_ACTION>(Handle_S_PLAYER_ACTION, session, buffer, len); };
 		GPacketHandler[PKT_S_ROOM_START] = [](PacketSessionRef& session, BYTE* buffer, int32 len) {return HandlePacket<Protocol::S_ROOM_START>(Handle_S_ROOM_START, session, buffer, len); };
+		GPacketHandler[PKT_S_ROOM_REWARD_SPAWN] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_ROOM_REWARD_SPAWN>(Handle_S_ROOM_REWARD_SPAWN, session, buffer, len); };
+		GPacketHandler[PKT_S_RUNE_REWARD_PICKED] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_RUNE_REWARD_PICKED>(Handle_S_RUNE_REWARD_PICKED, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)
@@ -108,6 +115,7 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::C_PLAYER_ATTACK& pkt) { return MakeSendBuffer(pkt, PKT_C_PLAYER_ATTACK); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_BOSS_CUTSCENE_END& pkt) { return MakeSendBuffer(pkt, PKT_C_BOSS_CUTSCENE_END); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_PLAYER_ACTION& pkt) { return MakeSendBuffer(pkt, PKT_C_PLAYER_ACTION); }
+	static SendBufferRef MakeSendBuffer(Protocol::C_RUNE_REWARD_PICK& pkt) { return MakeSendBuffer(pkt, PKT_C_RUNE_REWARD_PICK); }
 	// [DEBUG] 빈 본문 — C_PORTAL_INTERACT 메시지 형식만 빌려서 ID 만 다르게 보냄
 	static SendBufferRef MakeDebugKillAllSendBuffer() { Protocol::C_PORTAL_INTERACT pkt; return MakeSendBuffer(pkt, PKT_C_DEBUG_KILL_ALL); }
 	

@@ -31,6 +31,13 @@ struct NetworkPlayerInfo
     float x, y, z;
 };
 
+// 방 클리어 보상 룬 오브젝트 정보
+struct NetworkRewardRuneObjectInfo
+{
+    uint64 ownerPlayerId = 0;
+    DirectX::XMFLOAT3 pos = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
+};
+
 // 플레이어 연출 액션 타입
 enum : uint32
 {
@@ -58,7 +65,9 @@ enum class NetworkCommand
     BossEvent,
     MonsterStagger,
 	MapTornadoEvent,
-    RoomStart
+    RoomStart,
+    RoomRewardSpawn,
+    RuneRewardPicked
 };
 
 // 네트워크 명령 구조체
@@ -115,6 +124,12 @@ struct NetworkCommandData
     float mapTornadoZ = 0.0f;
     float mapTornadoWarningSec = 0.0f;
     float mapTornadoActiveSec = 0.0f;
+
+    // 방 클리어 보상 오브젝트 필드
+    float rewardPortalX = 0.0f;
+    float rewardPortalY = 0.0f;
+    float rewardPortalZ = 0.0f;
+    std::vector<NetworkRewardRuneObjectInfo> rewardRuneObjects;
 };
 
 // =============================================================================
@@ -180,6 +195,9 @@ public:
     // 방 전투 시작 요청 전송 (상호작용 큐브 F키) — 서버가 몬스터 스폰 트리거
     void SendTorchInteract();
 
+    // 룬 보상 획득 전송
+    void SendRuneRewardPick();
+
     // 플레이어 공격(히트 판정 요청) 전송 — 서버가 히트 판정 후 S_MONSTER_DAMAGE 브로드캐스트
     void SendPlayerAttack(int skillType,
                           float x, float y, float z,
@@ -227,9 +245,14 @@ public:
     void QueueRoomStart(uint64 starterPlayerId);
 
     // 몬스터 피격 / 방 클리어 큐잉 (네트워크 스레드 → 메인 스레드)
-    void QueueMonsterDamage(uint64 monsterId, float damage, float currentHp, bool isDead,
-                            uint64 attackerPlayerId, int skillType);
+    void QueueMonsterDamage(uint64 monsterId, float damage, float currentHp, bool isDead, uint64 attackerPlayerId, int skillType);
     void QueueRoomCleared(uint32 stageIndex, uint32 roomIndex);
+
+	// 방 보상 스폰 큐잉
+    void QueueRoomRewardSpawn(uint32 stageIndex, uint32 roomIndex, const DirectX::XMFLOAT3& portalPos, const std::vector<NetworkRewardRuneObjectInfo>& runeObjects);
+
+	// 룬 보상 획득 큐잉
+    void QueueRuneRewardPicked(uint64 ownerPlayerId);
 
     // 보스 이벤트 (인트로/페이즈 전환/사망 컷씬)
     void QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 phaseIndex);
@@ -313,10 +336,11 @@ private:
     // 전투 처리 (메인 스레드)
     void ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint32 attackType, float windupSec, uint64 targetPlayerId, float atkX, float atkY, float atkZ, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption);
     void ProcessPlayerDamage(Scene* pScene, uint64 playerId, float damage, float currentHp, bool isDead, uint64 attackerMonsterId);
-    void ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float damage, float currentHp, bool isDead,
-                              uint64 attackerPlayerId, int skillType);
+    void ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float damage, float currentHp, bool isDead, uint64 attackerPlayerId, int skillType);
     void ProcessRoomCleared(Scene* pScene, uint32 stageIndex, uint32 roomIndex);
     void ProcessRoomStart(Scene* pScene, uint64 starterPlayerId);
+    void ProcessRoomRewardSpawn(Scene* pScene, uint32 stageIndex, uint32 roomIndex, const DirectX::XMFLOAT3& portalPos, const std::vector<NetworkRewardRuneObjectInfo>& runeObjects);
+    void ProcessRuneRewardPicked(Scene* pScene, uint64 ownerPlayerId);
     void ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 eventType, uint32 phaseIndex);
     void ProcessMonsterStagger(uint64 monsterId, float duration);
 

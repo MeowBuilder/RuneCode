@@ -2,6 +2,7 @@
 #include "stdafx.h"
 #include "GameObject.h"
 #include "EnemySpawnData.h"
+#include <unordered_map>
 
 class EnemyComponent;
 class EnemySpawner;
@@ -65,13 +66,17 @@ public:
     // Drop item system
     void SetScene(Scene* pScene) { m_pScene = pScene; }
     Scene* GetScene() const { return m_pScene; }
-    void SpawnDropItem();
+    void SpawnDropItem(); // 오프라인용 기존 룬 드랍 생성
+    void SpawnRewardRuneObjectAt(uint64 ownerPlayerId, const XMFLOAT3& spawnPos); // 온라인/서버 보상용 룬 오브젝트 생성
     GameObject* GetDropItem() const { return m_pDropItem; }
     bool HasDropItem() const { return m_pDropItem != nullptr; }
-    void ClearDropItem() { m_pDropItem = nullptr; }
+    void ClearDropItem(); // 현재 로컬 플레이어가 상호작용 중인 룬 오브젝트를 숨긴다.
+    void ClearRewardRuneObjects();  // 방 클리어 보상 룬 오브젝트 전체 정리
+    void HideRewardRuneObject(uint64 ownerPlayerId); // 특정 플레이어의 룬 보상 오브젝트만 숨긴다.
 
     // Portal cube system
-    void SpawnPortalCube();
+    void SpawnPortalCube(); // 오프라인용 기존 포탈 생성
+    void SpawnPortalCubeAt(const XMFLOAT3& spawnPos); // 서버가 지정한 위치에 공통 포탈 생성
     GameObject* GetPortalCube() const { return m_pPortalCube; }
     bool HasPortalCube() const { return m_pPortalCube != nullptr; }
     void ClearPortalCube();
@@ -136,6 +141,7 @@ protected:
     // Drop item system
     Scene* m_pScene = nullptr;
     GameObject* m_pDropItem = nullptr;
+    std::unordered_map<uint64, GameObject*> m_mapRewardRuneObjects; // 온라인 보상 룬 오브젝트 목록
 
     // Portal cube system
     GameObject* m_pPortalCube = nullptr;

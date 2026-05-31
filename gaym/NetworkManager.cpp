@@ -548,6 +548,14 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             ProcessRoomCleared(pScene, cmd.stageIndex, cmd.roomIndex);
             break;
 
+        case NetworkCommand::RoomRewardSpawn:
+            ProcessRoomRewardSpawn(pScene, cmd.stageIndex, cmd.roomIndex, DirectX::XMFLOAT3(cmd.rewardPortalX, cmd.rewardPortalY, cmd.rewardPortalZ), cmd.rewardRuneObjects);
+            break;
+
+        case NetworkCommand::RuneRewardPicked:
+            ProcessRuneRewardPicked(pScene, cmd.playerId);
+            break;
+
         case NetworkCommand::BossEvent:
             ProcessBossEvent(pScene, cmd.monsterId, cmd.bossEventType, cmd.phaseIndex);
             break;
@@ -722,6 +730,21 @@ void NetworkManager::SendTorchInteract()
 
     OutputDebugString(L"[CLIENT][SendTorchInteract] sent\n");
     WriteNetworkLog("[Network] C_TORCH_INTERACT sent");
+}
+
+void NetworkManager::SendRuneRewardPick()
+{
+    if (!m_bConnected || !m_pSession)
+        return;
+
+    // 룬 선택 완료 알림
+    // 실제 ownerPlayerId는 서버가 현재 세션의 playerId로 판단한다.
+    Protocol::C_RUNE_REWARD_PICK pkt;
+
+    auto sendBuffer = ServerPacketHandler::MakeSendBuffer(pkt);
+    m_pSession->Send(sendBuffer);
+
+    WriteNetworkLog("[Network] C_RUNE_REWARD_PICK sent");
 }
 
 void NetworkManager::SendDebugKillAll()
@@ -4766,6 +4789,34 @@ void NetworkManager::QueueRoomCleared(uint32 stageIndex, uint32 roomIndex)
     m_vCommandQueue.push_back(cmd);
 }
 
+void NetworkManager::QueueRoomRewardSpawn(uint32 stageIndex, uint32 roomIndex, const DirectX::XMFLOAT3& portalPos, const std::vector<NetworkRewardRuneObjectInfo>& runeObjects)
+{
+    std::lock_guard<std::mutex> lock(m_queueMutex);
+
+    NetworkCommandData cmd{};
+    cmd.type = NetworkCommand::RoomRewardSpawn;
+    cmd.stageIndex = stageIndex;
+    cmd.roomIndex = roomIndex;
+
+    cmd.rewardPortalX = portalPos.x;
+    cmd.rewardPortalY = portalPos.y;
+    cmd.rewardPortalZ = portalPos.z;
+    cmd.rewardRuneObjects = runeObjects;
+
+    m_vCommandQueue.push_back(cmd);
+}
+
+void NetworkManager::QueueRuneRewardPicked(uint64 ownerPlayerId)
+{
+    std::lock_guard<std::mutex> lock(m_queueMutex);
+
+    NetworkCommandData cmd{};
+    cmd.type = NetworkCommand::RuneRewardPicked;
+    cmd.playerId = ownerPlayerId;
+
+    m_vCommandQueue.push_back(cmd);
+}
+
 void NetworkManager::QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 phaseIndex)
 {
     std::lock_guard<std::mutex> lock(m_queueMutex);
@@ -5714,22 +5765,23 @@ void NetworkManager::ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float
 
 void NetworkManager::ProcessRoomCleared(Scene* pScene, uint32 stageIndex, uint32 roomIndex)
 {
-    if (!pScene) return;
+    if (!pScene)
+        return;
 
-    // 현재 로컬 방을 Cleared 상태로 마크하고 포탈 큐브 스폰 (오프라인 경로와 동일 연출)
+    // S_ROOM_CLEARED는 방 상태만 Cleared로 맞춘다.
+    // 포탈/룬 오브젝트 생성 위치는 서버가 S_ROOM_REWARD_SPAWN으로 따로 보내므로 여기서 생성하지 않는다.
     CRoom* pRoom = pScene->GetCurrentRoom();
     if (pRoom)
     {
         if (pRoom->GetState() != RoomState::Cleared)
             pRoom->SetState(RoomState::Cleared);
-
-        if (!pRoom->HasPortalCube())
-            pRoom->SpawnPortalCube();
     }
 
     char buf[128];
-    sprintf_s(buf, "[Network] RoomCleared applied: stage=%u room=%u portalSpawned=%d",
-              stageIndex, roomIndex, (pRoom && pRoom->HasPortalCube()) ? 1 : 0);
+    sprintf_s(buf,
+        "[Network] RoomCleared applied: stage=%u room=%u",
+        stageIndex,
+        roomIndex);
     WriteNetworkLog(buf);
 }
 
@@ -5745,6 +5797,65 @@ void NetworkManager::ProcessRoomStart(Scene* pScene, uint64 starterPlayerId)
     sprintf_s(buf,
         "[Network] RoomStart processed: starterPlayerId=%llu",
         starterPlayerId);
+    WriteNetworkLog(buf);
+}
+
+void NetworkManager::ProcessRoomRewardSpawn(Scene* pScene, uint32 stageIndex, uint32 roomIndex, const DirectX::XMFLOAT3& portalPos, const std::vector<NetworkRewardRuneObjectInfo>& runeObjects)
+{
+    if (!pScene)
+        return;
+
+    CRoom* pRoom = pScene->GetCurrentRoom();
+    if (!pRoom)
+        return;
+
+    // 서버가 방 클리어 보상 생성을 확정했으므로,
+    // 혹시 S_ROOM_CLEARED보다 먼저 처리되어도 방 상태를 Cleared로 맞춘다.
+    if (pRoom->GetState() != RoomState::Cleared)
+        pRoom->SetState(RoomState::Cleared);
+
+    // 기존 로컬 기준 보상 오브젝트가 남아있을 수 있으므로 먼저 정리한다.
+    pRoom->ClearPortalCube();
+    pRoom->ClearRewardRuneObjects();
+
+    // 서버가 계산한 공통 위치에 포탈 1개 생성
+    pRoom->SpawnPortalCubeAt(portalPos);
+
+    // 서버가 계산한 각 플레이어 앞 위치에 룬 오브젝트 생성
+    for (const auto& info : runeObjects)
+    {
+        pRoom->SpawnRewardRuneObjectAt(info.ownerPlayerId, info.pos);
+    }
+
+    char buf[256];
+    sprintf_s(buf,
+        "[Network] RoomRewardSpawn applied: stage=%u room=%u portal=(%.2f, %.2f, %.2f) runeCount=%d",
+        stageIndex,
+        roomIndex,
+        portalPos.x,
+        portalPos.y,
+        portalPos.z,
+        static_cast<int>(runeObjects.size()));
+    WriteNetworkLog(buf);
+}
+
+void NetworkManager::ProcessRuneRewardPicked(Scene* pScene, uint64 ownerPlayerId)
+{
+    if (!pScene)
+        return;
+
+    CRoom* pRoom = pScene->GetCurrentRoom();
+    if (!pRoom)
+        return;
+
+    // 서버가 특정 플레이어의 룬 선택 완료를 알렸으므로,
+    // 모든 클라에서 해당 플레이어 앞의 룬 오브젝트를 숨긴다.
+    pRoom->HideRewardRuneObject(ownerPlayerId);
+
+    char buf[160];
+    sprintf_s(buf,
+        "[Network] RuneRewardPicked applied: ownerPlayerId=%llu",
+        ownerPlayerId);
     WriteNetworkLog(buf);
 }
 

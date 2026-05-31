@@ -48,7 +48,7 @@ struct TableStruct_Protocol_2eproto {
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::AuxiliaryParseTableField aux[]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
-  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[31]
+  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[35]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::FieldMetadata field_metadata[];
   static const ::PROTOBUF_NAMESPACE_ID::internal::SerializationTable serialization_table[];
@@ -80,6 +80,9 @@ extern C_PLAYER_ATTACKDefaultTypeInternal _C_PLAYER_ATTACK_default_instance_;
 class C_PORTAL_INTERACT;
 struct C_PORTAL_INTERACTDefaultTypeInternal;
 extern C_PORTAL_INTERACTDefaultTypeInternal _C_PORTAL_INTERACT_default_instance_;
+class C_RUNE_REWARD_PICK;
+struct C_RUNE_REWARD_PICKDefaultTypeInternal;
+extern C_RUNE_REWARD_PICKDefaultTypeInternal _C_RUNE_REWARD_PICK_default_instance_;
 class C_SKILL;
 struct C_SKILLDefaultTypeInternal;
 extern C_SKILLDefaultTypeInternal _C_SKILL_default_instance_;
@@ -89,6 +92,9 @@ extern C_TORCH_INTERACTDefaultTypeInternal _C_TORCH_INTERACT_default_instance_;
 class MonsterInfo;
 struct MonsterInfoDefaultTypeInternal;
 extern MonsterInfoDefaultTypeInternal _MonsterInfo_default_instance_;
+class RewardRuneObjectInfo;
+struct RewardRuneObjectInfoDefaultTypeInternal;
+extern RewardRuneObjectInfoDefaultTypeInternal _RewardRuneObjectInfo_default_instance_;
 class S_BOSS_EVENT;
 struct S_BOSS_EVENTDefaultTypeInternal;
 extern S_BOSS_EVENTDefaultTypeInternal _S_BOSS_EVENT_default_instance_;
@@ -137,12 +143,18 @@ extern S_PLAYER_DAMAGEDefaultTypeInternal _S_PLAYER_DAMAGE_default_instance_;
 class S_ROOM_CLEARED;
 struct S_ROOM_CLEAREDDefaultTypeInternal;
 extern S_ROOM_CLEAREDDefaultTypeInternal _S_ROOM_CLEARED_default_instance_;
+class S_ROOM_REWARD_SPAWN;
+struct S_ROOM_REWARD_SPAWNDefaultTypeInternal;
+extern S_ROOM_REWARD_SPAWNDefaultTypeInternal _S_ROOM_REWARD_SPAWN_default_instance_;
 class S_ROOM_START;
 struct S_ROOM_STARTDefaultTypeInternal;
 extern S_ROOM_STARTDefaultTypeInternal _S_ROOM_START_default_instance_;
 class S_ROOM_TRANSITION;
 struct S_ROOM_TRANSITIONDefaultTypeInternal;
 extern S_ROOM_TRANSITIONDefaultTypeInternal _S_ROOM_TRANSITION_default_instance_;
+class S_RUNE_REWARD_PICKED;
+struct S_RUNE_REWARD_PICKEDDefaultTypeInternal;
+extern S_RUNE_REWARD_PICKEDDefaultTypeInternal _S_RUNE_REWARD_PICKED_default_instance_;
 class S_SKILL;
 struct S_SKILLDefaultTypeInternal;
 extern S_SKILLDefaultTypeInternal _S_SKILL_default_instance_;
@@ -159,9 +171,11 @@ template<> ::Protocol::C_MOVE* Arena::CreateMaybeMessage<::Protocol::C_MOVE>(Are
 template<> ::Protocol::C_PLAYER_ACTION* Arena::CreateMaybeMessage<::Protocol::C_PLAYER_ACTION>(Arena*);
 template<> ::Protocol::C_PLAYER_ATTACK* Arena::CreateMaybeMessage<::Protocol::C_PLAYER_ATTACK>(Arena*);
 template<> ::Protocol::C_PORTAL_INTERACT* Arena::CreateMaybeMessage<::Protocol::C_PORTAL_INTERACT>(Arena*);
+template<> ::Protocol::C_RUNE_REWARD_PICK* Arena::CreateMaybeMessage<::Protocol::C_RUNE_REWARD_PICK>(Arena*);
 template<> ::Protocol::C_SKILL* Arena::CreateMaybeMessage<::Protocol::C_SKILL>(Arena*);
 template<> ::Protocol::C_TORCH_INTERACT* Arena::CreateMaybeMessage<::Protocol::C_TORCH_INTERACT>(Arena*);
 template<> ::Protocol::MonsterInfo* Arena::CreateMaybeMessage<::Protocol::MonsterInfo>(Arena*);
+template<> ::Protocol::RewardRuneObjectInfo* Arena::CreateMaybeMessage<::Protocol::RewardRuneObjectInfo>(Arena*);
 template<> ::Protocol::S_BOSS_EVENT* Arena::CreateMaybeMessage<::Protocol::S_BOSS_EVENT>(Arena*);
 template<> ::Protocol::S_CHAT* Arena::CreateMaybeMessage<::Protocol::S_CHAT>(Arena*);
 template<> ::Protocol::S_DESPAWN* Arena::CreateMaybeMessage<::Protocol::S_DESPAWN>(Arena*);
@@ -178,8 +192,10 @@ template<> ::Protocol::S_MOVE* Arena::CreateMaybeMessage<::Protocol::S_MOVE>(Are
 template<> ::Protocol::S_PLAYER_ACTION* Arena::CreateMaybeMessage<::Protocol::S_PLAYER_ACTION>(Arena*);
 template<> ::Protocol::S_PLAYER_DAMAGE* Arena::CreateMaybeMessage<::Protocol::S_PLAYER_DAMAGE>(Arena*);
 template<> ::Protocol::S_ROOM_CLEARED* Arena::CreateMaybeMessage<::Protocol::S_ROOM_CLEARED>(Arena*);
+template<> ::Protocol::S_ROOM_REWARD_SPAWN* Arena::CreateMaybeMessage<::Protocol::S_ROOM_REWARD_SPAWN>(Arena*);
 template<> ::Protocol::S_ROOM_START* Arena::CreateMaybeMessage<::Protocol::S_ROOM_START>(Arena*);
 template<> ::Protocol::S_ROOM_TRANSITION* Arena::CreateMaybeMessage<::Protocol::S_ROOM_TRANSITION>(Arena*);
+template<> ::Protocol::S_RUNE_REWARD_PICKED* Arena::CreateMaybeMessage<::Protocol::S_RUNE_REWARD_PICKED>(Arena*);
 template<> ::Protocol::S_SKILL* Arena::CreateMaybeMessage<::Protocol::S_SKILL>(Arena*);
 template<> ::Protocol::S_SPAWN* Arena::CreateMaybeMessage<::Protocol::S_SPAWN>(Arena*);
 PROTOBUF_NAMESPACE_CLOSE
@@ -5334,6 +5350,618 @@ class S_ROOM_START final :
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
+// -------------------------------------------------------------------
+
+class RewardRuneObjectInfo final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.RewardRuneObjectInfo) */ {
+ public:
+  inline RewardRuneObjectInfo() : RewardRuneObjectInfo(nullptr) {}
+  ~RewardRuneObjectInfo() override;
+  explicit constexpr RewardRuneObjectInfo(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  RewardRuneObjectInfo(const RewardRuneObjectInfo& from);
+  RewardRuneObjectInfo(RewardRuneObjectInfo&& from) noexcept
+    : RewardRuneObjectInfo() {
+    *this = ::std::move(from);
+  }
+
+  inline RewardRuneObjectInfo& operator=(const RewardRuneObjectInfo& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline RewardRuneObjectInfo& operator=(RewardRuneObjectInfo&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const RewardRuneObjectInfo& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const RewardRuneObjectInfo* internal_default_instance() {
+    return reinterpret_cast<const RewardRuneObjectInfo*>(
+               &_RewardRuneObjectInfo_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    31;
+
+  friend void swap(RewardRuneObjectInfo& a, RewardRuneObjectInfo& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(RewardRuneObjectInfo* other) {
+    if (other == this) return;
+    if (GetOwningArena() == other->GetOwningArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(RewardRuneObjectInfo* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline RewardRuneObjectInfo* New() const final {
+    return new RewardRuneObjectInfo();
+  }
+
+  RewardRuneObjectInfo* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<RewardRuneObjectInfo>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const RewardRuneObjectInfo& from);
+  void MergeFrom(const RewardRuneObjectInfo& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(RewardRuneObjectInfo* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.RewardRuneObjectInfo";
+  }
+  protected:
+  explicit RewardRuneObjectInfo(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kOwnerPlayerIdFieldNumber = 1,
+    kXFieldNumber = 2,
+    kYFieldNumber = 3,
+    kZFieldNumber = 4,
+  };
+  // uint64 ownerPlayerId = 1;
+  void clear_ownerplayerid();
+  ::PROTOBUF_NAMESPACE_ID::uint64 ownerplayerid() const;
+  void set_ownerplayerid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_ownerplayerid() const;
+  void _internal_set_ownerplayerid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
+  // float x = 2;
+  void clear_x();
+  float x() const;
+  void set_x(float value);
+  private:
+  float _internal_x() const;
+  void _internal_set_x(float value);
+  public:
+
+  // float y = 3;
+  void clear_y();
+  float y() const;
+  void set_y(float value);
+  private:
+  float _internal_y() const;
+  void _internal_set_y(float value);
+  public:
+
+  // float z = 4;
+  void clear_z();
+  float z() const;
+  void set_z(float value);
+  private:
+  float _internal_z() const;
+  void _internal_set_z(float value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.RewardRuneObjectInfo)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 ownerplayerid_;
+  float x_;
+  float y_;
+  float z_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_Protocol_2eproto;
+};
+// -------------------------------------------------------------------
+
+class S_ROOM_REWARD_SPAWN final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_ROOM_REWARD_SPAWN) */ {
+ public:
+  inline S_ROOM_REWARD_SPAWN() : S_ROOM_REWARD_SPAWN(nullptr) {}
+  ~S_ROOM_REWARD_SPAWN() override;
+  explicit constexpr S_ROOM_REWARD_SPAWN(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_ROOM_REWARD_SPAWN(const S_ROOM_REWARD_SPAWN& from);
+  S_ROOM_REWARD_SPAWN(S_ROOM_REWARD_SPAWN&& from) noexcept
+    : S_ROOM_REWARD_SPAWN() {
+    *this = ::std::move(from);
+  }
+
+  inline S_ROOM_REWARD_SPAWN& operator=(const S_ROOM_REWARD_SPAWN& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_ROOM_REWARD_SPAWN& operator=(S_ROOM_REWARD_SPAWN&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_ROOM_REWARD_SPAWN& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_ROOM_REWARD_SPAWN* internal_default_instance() {
+    return reinterpret_cast<const S_ROOM_REWARD_SPAWN*>(
+               &_S_ROOM_REWARD_SPAWN_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    32;
+
+  friend void swap(S_ROOM_REWARD_SPAWN& a, S_ROOM_REWARD_SPAWN& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_ROOM_REWARD_SPAWN* other) {
+    if (other == this) return;
+    if (GetOwningArena() == other->GetOwningArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_ROOM_REWARD_SPAWN* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline S_ROOM_REWARD_SPAWN* New() const final {
+    return new S_ROOM_REWARD_SPAWN();
+  }
+
+  S_ROOM_REWARD_SPAWN* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<S_ROOM_REWARD_SPAWN>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const S_ROOM_REWARD_SPAWN& from);
+  void MergeFrom(const S_ROOM_REWARD_SPAWN& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_ROOM_REWARD_SPAWN* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_ROOM_REWARD_SPAWN";
+  }
+  protected:
+  explicit S_ROOM_REWARD_SPAWN(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kRuneObjectsFieldNumber = 6,
+    kStageIndexFieldNumber = 1,
+    kRoomIndexFieldNumber = 2,
+    kPortalXFieldNumber = 3,
+    kPortalYFieldNumber = 4,
+    kPortalZFieldNumber = 5,
+  };
+  // repeated .Protocol.RewardRuneObjectInfo runeObjects = 6;
+  int runeobjects_size() const;
+  private:
+  int _internal_runeobjects_size() const;
+  public:
+  void clear_runeobjects();
+  ::Protocol::RewardRuneObjectInfo* mutable_runeobjects(int index);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::RewardRuneObjectInfo >*
+      mutable_runeobjects();
+  private:
+  const ::Protocol::RewardRuneObjectInfo& _internal_runeobjects(int index) const;
+  ::Protocol::RewardRuneObjectInfo* _internal_add_runeobjects();
+  public:
+  const ::Protocol::RewardRuneObjectInfo& runeobjects(int index) const;
+  ::Protocol::RewardRuneObjectInfo* add_runeobjects();
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::RewardRuneObjectInfo >&
+      runeobjects() const;
+
+  // uint32 stageIndex = 1;
+  void clear_stageindex();
+  ::PROTOBUF_NAMESPACE_ID::uint32 stageindex() const;
+  void set_stageindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_stageindex() const;
+  void _internal_set_stageindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
+  // uint32 roomIndex = 2;
+  void clear_roomindex();
+  ::PROTOBUF_NAMESPACE_ID::uint32 roomindex() const;
+  void set_roomindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_roomindex() const;
+  void _internal_set_roomindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
+  // float portalX = 3;
+  void clear_portalx();
+  float portalx() const;
+  void set_portalx(float value);
+  private:
+  float _internal_portalx() const;
+  void _internal_set_portalx(float value);
+  public:
+
+  // float portalY = 4;
+  void clear_portaly();
+  float portaly() const;
+  void set_portaly(float value);
+  private:
+  float _internal_portaly() const;
+  void _internal_set_portaly(float value);
+  public:
+
+  // float portalZ = 5;
+  void clear_portalz();
+  float portalz() const;
+  void set_portalz(float value);
+  private:
+  float _internal_portalz() const;
+  void _internal_set_portalz(float value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_ROOM_REWARD_SPAWN)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::RewardRuneObjectInfo > runeobjects_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 stageindex_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 roomindex_;
+  float portalx_;
+  float portaly_;
+  float portalz_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_Protocol_2eproto;
+};
+// -------------------------------------------------------------------
+
+class C_RUNE_REWARD_PICK final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.C_RUNE_REWARD_PICK) */ {
+ public:
+  inline C_RUNE_REWARD_PICK() : C_RUNE_REWARD_PICK(nullptr) {}
+  ~C_RUNE_REWARD_PICK() override;
+  explicit constexpr C_RUNE_REWARD_PICK(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  C_RUNE_REWARD_PICK(const C_RUNE_REWARD_PICK& from);
+  C_RUNE_REWARD_PICK(C_RUNE_REWARD_PICK&& from) noexcept
+    : C_RUNE_REWARD_PICK() {
+    *this = ::std::move(from);
+  }
+
+  inline C_RUNE_REWARD_PICK& operator=(const C_RUNE_REWARD_PICK& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline C_RUNE_REWARD_PICK& operator=(C_RUNE_REWARD_PICK&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const C_RUNE_REWARD_PICK& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const C_RUNE_REWARD_PICK* internal_default_instance() {
+    return reinterpret_cast<const C_RUNE_REWARD_PICK*>(
+               &_C_RUNE_REWARD_PICK_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    33;
+
+  friend void swap(C_RUNE_REWARD_PICK& a, C_RUNE_REWARD_PICK& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(C_RUNE_REWARD_PICK* other) {
+    if (other == this) return;
+    if (GetOwningArena() == other->GetOwningArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(C_RUNE_REWARD_PICK* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline C_RUNE_REWARD_PICK* New() const final {
+    return new C_RUNE_REWARD_PICK();
+  }
+
+  C_RUNE_REWARD_PICK* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<C_RUNE_REWARD_PICK>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const C_RUNE_REWARD_PICK& from);
+  void MergeFrom(const C_RUNE_REWARD_PICK& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(C_RUNE_REWARD_PICK* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.C_RUNE_REWARD_PICK";
+  }
+  protected:
+  explicit C_RUNE_REWARD_PICK(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:Protocol.C_RUNE_REWARD_PICK)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_Protocol_2eproto;
+};
+// -------------------------------------------------------------------
+
+class S_RUNE_REWARD_PICKED final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_RUNE_REWARD_PICKED) */ {
+ public:
+  inline S_RUNE_REWARD_PICKED() : S_RUNE_REWARD_PICKED(nullptr) {}
+  ~S_RUNE_REWARD_PICKED() override;
+  explicit constexpr S_RUNE_REWARD_PICKED(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_RUNE_REWARD_PICKED(const S_RUNE_REWARD_PICKED& from);
+  S_RUNE_REWARD_PICKED(S_RUNE_REWARD_PICKED&& from) noexcept
+    : S_RUNE_REWARD_PICKED() {
+    *this = ::std::move(from);
+  }
+
+  inline S_RUNE_REWARD_PICKED& operator=(const S_RUNE_REWARD_PICKED& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_RUNE_REWARD_PICKED& operator=(S_RUNE_REWARD_PICKED&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_RUNE_REWARD_PICKED& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_RUNE_REWARD_PICKED* internal_default_instance() {
+    return reinterpret_cast<const S_RUNE_REWARD_PICKED*>(
+               &_S_RUNE_REWARD_PICKED_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    34;
+
+  friend void swap(S_RUNE_REWARD_PICKED& a, S_RUNE_REWARD_PICKED& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_RUNE_REWARD_PICKED* other) {
+    if (other == this) return;
+    if (GetOwningArena() == other->GetOwningArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_RUNE_REWARD_PICKED* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline S_RUNE_REWARD_PICKED* New() const final {
+    return new S_RUNE_REWARD_PICKED();
+  }
+
+  S_RUNE_REWARD_PICKED* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<S_RUNE_REWARD_PICKED>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const S_RUNE_REWARD_PICKED& from);
+  void MergeFrom(const S_RUNE_REWARD_PICKED& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_RUNE_REWARD_PICKED* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_RUNE_REWARD_PICKED";
+  }
+  protected:
+  explicit S_RUNE_REWARD_PICKED(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kOwnerPlayerIdFieldNumber = 1,
+  };
+  // uint64 ownerPlayerId = 1;
+  void clear_ownerplayerid();
+  ::PROTOBUF_NAMESPACE_ID::uint64 ownerplayerid() const;
+  void set_ownerplayerid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_ownerplayerid() const;
+  void _internal_set_ownerplayerid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_RUNE_REWARD_PICKED)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 ownerplayerid_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_Protocol_2eproto;
+};
 // ===================================================================
 
 
@@ -8154,9 +8782,272 @@ inline void S_ROOM_START::set_starterplayerid(::PROTOBUF_NAMESPACE_ID::uint64 va
   // @@protoc_insertion_point(field_set:Protocol.S_ROOM_START.starterplayerid)
 }
 
+// -------------------------------------------------------------------
+
+// RewardRuneObjectInfo
+
+// uint64 ownerPlayerId = 1;
+inline void RewardRuneObjectInfo::clear_ownerplayerid() {
+  ownerplayerid_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 RewardRuneObjectInfo::_internal_ownerplayerid() const {
+  return ownerplayerid_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 RewardRuneObjectInfo::ownerplayerid() const {
+  // @@protoc_insertion_point(field_get:Protocol.RewardRuneObjectInfo.ownerPlayerId)
+  return _internal_ownerplayerid();
+}
+inline void RewardRuneObjectInfo::_internal_set_ownerplayerid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  ownerplayerid_ = value;
+}
+inline void RewardRuneObjectInfo::set_ownerplayerid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_ownerplayerid(value);
+  // @@protoc_insertion_point(field_set:Protocol.RewardRuneObjectInfo.ownerPlayerId)
+}
+
+// float x = 2;
+inline void RewardRuneObjectInfo::clear_x() {
+  x_ = 0;
+}
+inline float RewardRuneObjectInfo::_internal_x() const {
+  return x_;
+}
+inline float RewardRuneObjectInfo::x() const {
+  // @@protoc_insertion_point(field_get:Protocol.RewardRuneObjectInfo.x)
+  return _internal_x();
+}
+inline void RewardRuneObjectInfo::_internal_set_x(float value) {
+  
+  x_ = value;
+}
+inline void RewardRuneObjectInfo::set_x(float value) {
+  _internal_set_x(value);
+  // @@protoc_insertion_point(field_set:Protocol.RewardRuneObjectInfo.x)
+}
+
+// float y = 3;
+inline void RewardRuneObjectInfo::clear_y() {
+  y_ = 0;
+}
+inline float RewardRuneObjectInfo::_internal_y() const {
+  return y_;
+}
+inline float RewardRuneObjectInfo::y() const {
+  // @@protoc_insertion_point(field_get:Protocol.RewardRuneObjectInfo.y)
+  return _internal_y();
+}
+inline void RewardRuneObjectInfo::_internal_set_y(float value) {
+  
+  y_ = value;
+}
+inline void RewardRuneObjectInfo::set_y(float value) {
+  _internal_set_y(value);
+  // @@protoc_insertion_point(field_set:Protocol.RewardRuneObjectInfo.y)
+}
+
+// float z = 4;
+inline void RewardRuneObjectInfo::clear_z() {
+  z_ = 0;
+}
+inline float RewardRuneObjectInfo::_internal_z() const {
+  return z_;
+}
+inline float RewardRuneObjectInfo::z() const {
+  // @@protoc_insertion_point(field_get:Protocol.RewardRuneObjectInfo.z)
+  return _internal_z();
+}
+inline void RewardRuneObjectInfo::_internal_set_z(float value) {
+  
+  z_ = value;
+}
+inline void RewardRuneObjectInfo::set_z(float value) {
+  _internal_set_z(value);
+  // @@protoc_insertion_point(field_set:Protocol.RewardRuneObjectInfo.z)
+}
+
+// -------------------------------------------------------------------
+
+// S_ROOM_REWARD_SPAWN
+
+// uint32 stageIndex = 1;
+inline void S_ROOM_REWARD_SPAWN::clear_stageindex() {
+  stageindex_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_ROOM_REWARD_SPAWN::_internal_stageindex() const {
+  return stageindex_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_ROOM_REWARD_SPAWN::stageindex() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ROOM_REWARD_SPAWN.stageIndex)
+  return _internal_stageindex();
+}
+inline void S_ROOM_REWARD_SPAWN::_internal_set_stageindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  stageindex_ = value;
+}
+inline void S_ROOM_REWARD_SPAWN::set_stageindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_stageindex(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_ROOM_REWARD_SPAWN.stageIndex)
+}
+
+// uint32 roomIndex = 2;
+inline void S_ROOM_REWARD_SPAWN::clear_roomindex() {
+  roomindex_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_ROOM_REWARD_SPAWN::_internal_roomindex() const {
+  return roomindex_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_ROOM_REWARD_SPAWN::roomindex() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ROOM_REWARD_SPAWN.roomIndex)
+  return _internal_roomindex();
+}
+inline void S_ROOM_REWARD_SPAWN::_internal_set_roomindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  roomindex_ = value;
+}
+inline void S_ROOM_REWARD_SPAWN::set_roomindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_roomindex(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_ROOM_REWARD_SPAWN.roomIndex)
+}
+
+// float portalX = 3;
+inline void S_ROOM_REWARD_SPAWN::clear_portalx() {
+  portalx_ = 0;
+}
+inline float S_ROOM_REWARD_SPAWN::_internal_portalx() const {
+  return portalx_;
+}
+inline float S_ROOM_REWARD_SPAWN::portalx() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ROOM_REWARD_SPAWN.portalX)
+  return _internal_portalx();
+}
+inline void S_ROOM_REWARD_SPAWN::_internal_set_portalx(float value) {
+  
+  portalx_ = value;
+}
+inline void S_ROOM_REWARD_SPAWN::set_portalx(float value) {
+  _internal_set_portalx(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_ROOM_REWARD_SPAWN.portalX)
+}
+
+// float portalY = 4;
+inline void S_ROOM_REWARD_SPAWN::clear_portaly() {
+  portaly_ = 0;
+}
+inline float S_ROOM_REWARD_SPAWN::_internal_portaly() const {
+  return portaly_;
+}
+inline float S_ROOM_REWARD_SPAWN::portaly() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ROOM_REWARD_SPAWN.portalY)
+  return _internal_portaly();
+}
+inline void S_ROOM_REWARD_SPAWN::_internal_set_portaly(float value) {
+  
+  portaly_ = value;
+}
+inline void S_ROOM_REWARD_SPAWN::set_portaly(float value) {
+  _internal_set_portaly(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_ROOM_REWARD_SPAWN.portalY)
+}
+
+// float portalZ = 5;
+inline void S_ROOM_REWARD_SPAWN::clear_portalz() {
+  portalz_ = 0;
+}
+inline float S_ROOM_REWARD_SPAWN::_internal_portalz() const {
+  return portalz_;
+}
+inline float S_ROOM_REWARD_SPAWN::portalz() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ROOM_REWARD_SPAWN.portalZ)
+  return _internal_portalz();
+}
+inline void S_ROOM_REWARD_SPAWN::_internal_set_portalz(float value) {
+  
+  portalz_ = value;
+}
+inline void S_ROOM_REWARD_SPAWN::set_portalz(float value) {
+  _internal_set_portalz(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_ROOM_REWARD_SPAWN.portalZ)
+}
+
+// repeated .Protocol.RewardRuneObjectInfo runeObjects = 6;
+inline int S_ROOM_REWARD_SPAWN::_internal_runeobjects_size() const {
+  return runeobjects_.size();
+}
+inline int S_ROOM_REWARD_SPAWN::runeobjects_size() const {
+  return _internal_runeobjects_size();
+}
+inline void S_ROOM_REWARD_SPAWN::clear_runeobjects() {
+  runeobjects_.Clear();
+}
+inline ::Protocol::RewardRuneObjectInfo* S_ROOM_REWARD_SPAWN::mutable_runeobjects(int index) {
+  // @@protoc_insertion_point(field_mutable:Protocol.S_ROOM_REWARD_SPAWN.runeObjects)
+  return runeobjects_.Mutable(index);
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::RewardRuneObjectInfo >*
+S_ROOM_REWARD_SPAWN::mutable_runeobjects() {
+  // @@protoc_insertion_point(field_mutable_list:Protocol.S_ROOM_REWARD_SPAWN.runeObjects)
+  return &runeobjects_;
+}
+inline const ::Protocol::RewardRuneObjectInfo& S_ROOM_REWARD_SPAWN::_internal_runeobjects(int index) const {
+  return runeobjects_.Get(index);
+}
+inline const ::Protocol::RewardRuneObjectInfo& S_ROOM_REWARD_SPAWN::runeobjects(int index) const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ROOM_REWARD_SPAWN.runeObjects)
+  return _internal_runeobjects(index);
+}
+inline ::Protocol::RewardRuneObjectInfo* S_ROOM_REWARD_SPAWN::_internal_add_runeobjects() {
+  return runeobjects_.Add();
+}
+inline ::Protocol::RewardRuneObjectInfo* S_ROOM_REWARD_SPAWN::add_runeobjects() {
+  // @@protoc_insertion_point(field_add:Protocol.S_ROOM_REWARD_SPAWN.runeObjects)
+  return _internal_add_runeobjects();
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::RewardRuneObjectInfo >&
+S_ROOM_REWARD_SPAWN::runeobjects() const {
+  // @@protoc_insertion_point(field_list:Protocol.S_ROOM_REWARD_SPAWN.runeObjects)
+  return runeobjects_;
+}
+
+// -------------------------------------------------------------------
+
+// C_RUNE_REWARD_PICK
+
+// -------------------------------------------------------------------
+
+// S_RUNE_REWARD_PICKED
+
+// uint64 ownerPlayerId = 1;
+inline void S_RUNE_REWARD_PICKED::clear_ownerplayerid() {
+  ownerplayerid_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_REWARD_PICKED::_internal_ownerplayerid() const {
+  return ownerplayerid_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_REWARD_PICKED::ownerplayerid() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_REWARD_PICKED.ownerPlayerId)
+  return _internal_ownerplayerid();
+}
+inline void S_RUNE_REWARD_PICKED::_internal_set_ownerplayerid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  ownerplayerid_ = value;
+}
+inline void S_RUNE_REWARD_PICKED::set_ownerplayerid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_ownerplayerid(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_REWARD_PICKED.ownerPlayerId)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

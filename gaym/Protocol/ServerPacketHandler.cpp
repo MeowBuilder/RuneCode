@@ -522,3 +522,67 @@ bool Handle_S_ROOM_START(PacketSessionRef& session, Protocol::S_ROOM_START& pkt)
 
     return true;
 }
+
+bool Handle_S_ROOM_REWARD_SPAWN(PacketSessionRef& session, Protocol::S_ROOM_REWARD_SPAWN& pkt)
+{
+    uint32 stageIndex = pkt.stageindex();
+    uint32 roomIndex = pkt.roomindex();
+
+    DirectX::XMFLOAT3 portalPos(
+        pkt.portalx(),
+        pkt.portaly(),
+        pkt.portalz()
+    );
+
+    std::vector<NetworkRewardRuneObjectInfo> runeObjects;
+    runeObjects.reserve(pkt.runeobjects_size());
+
+    for (int i = 0; i < pkt.runeobjects_size(); ++i)
+    {
+        const Protocol::RewardRuneObjectInfo& src = pkt.runeobjects(i);
+
+        NetworkRewardRuneObjectInfo info;
+        info.ownerPlayerId = src.ownerplayerid();
+        info.pos = DirectX::XMFLOAT3(src.x(), src.y(), src.z());
+
+        runeObjects.push_back(info);
+    }
+
+    char buf[256];
+    sprintf_s(buf,
+        "[Network] S_ROOM_REWARD_SPAWN received: stage=%u room=%u portal=(%.2f, %.2f, %.2f) runeCount=%d",
+        stageIndex,
+        roomIndex,
+        portalPos.x,
+        portalPos.y,
+        portalPos.z,
+        static_cast<int>(runeObjects.size()));
+    WriteNetworkLog(buf);
+
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr)
+    {
+        pNetMgr->QueueRoomRewardSpawn(stageIndex, roomIndex, portalPos, runeObjects);
+    }
+
+    return true;
+}
+
+bool Handle_S_RUNE_REWARD_PICKED(PacketSessionRef& session, Protocol::S_RUNE_REWARD_PICKED& pkt)
+{
+    uint64 ownerPlayerId = pkt.ownerplayerid();
+
+    char buf[160];
+    sprintf_s(buf,
+        "[Network] S_RUNE_REWARD_PICKED received: ownerPlayerId=%llu",
+        ownerPlayerId);
+    WriteNetworkLog(buf);
+
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr)
+    {
+        pNetMgr->QueueRuneRewardPicked(ownerPlayerId);
+    }
+
+    return true;
+}

@@ -2281,6 +2281,15 @@ void Scene::SelectRune(int choice)
         }
     }
 
+    // 온라인 모드에서는 룬 선택 완료를 서버에 알린다.
+    // 서버는 S_RUNE_REWARD_PICKED를 브로드캐스트하고,
+    // 모든 클라가 해당 플레이어의 룬 오브젝트를 같이 숨긴다.
+    if (NetworkManager* pNet = NetworkManager::GetInstance())
+    {
+        if (pNet->IsConnected())
+            pNet->SendRuneRewardPick();
+    }
+
     // Deactivate and hide the drop item
     pDropComp->SetActive(false);
     m_pCurrentDropItem->GetTransform()->SetPosition(0.0f, -1000.0f, 0.0f);
@@ -2360,6 +2369,15 @@ void Scene::SelectSkillSlot(SkillSlot slot, int runeSlotIndex)
                 m_sSelectedRuneId.c_str(), slotNames[static_cast<int>(slot)], runeSlotIndex + 1);
             OutputDebugString(buffer);
         }
+    }
+
+    // 온라인 모드에서는 룬 선택 완료를 서버에 알린다.
+    // 서버는 S_RUNE_REWARD_PICKED를 브로드캐스트하고,
+    // 모든 클라가 해당 플레이어의 룬 오브젝트를 같이 숨긴다.
+    if (NetworkManager* pNet = NetworkManager::GetInstance())
+    {
+        if (pNet->IsConnected())
+            pNet->SendRuneRewardPick();
     }
 
     // Deactivate and hide the drop item

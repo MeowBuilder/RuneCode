@@ -44,14 +44,31 @@ void CRoom::ClearPortalCube()
     {
         if (auto* pVFX = m_pScene->GetVFXManager())
         {
-            if (m_nPortalCubeRingVFXId    >= 0) pVFX->Stop(m_nPortalCubeRingVFXId);
+            if (m_nPortalCubeRingVFXId >= 0) pVFX->Stop(m_nPortalCubeRingVFXId);
             if (m_nPortalCubeSuctionVFXId >= 0) pVFX->Stop(m_nPortalCubeSuctionVFXId);
-            if (m_nPortalCubeBeamVFXId    >= 0) pVFX->Stop(m_nPortalCubeBeamVFXId);
+            if (m_nPortalCubeBeamVFXId >= 0) pVFX->Stop(m_nPortalCubeBeamVFXId);
         }
-        m_nPortalCubeRingVFXId    = -1;
+
+        m_nPortalCubeRingVFXId = -1;
         m_nPortalCubeSuctionVFXId = -1;
-        m_nPortalCubeBeamVFXId    = -1;
+        m_nPortalCubeBeamVFXId = -1;
     }
+
+    // 포탈 GameObject도 화면 밖으로 숨긴다.
+    // m_vGameObjects에서 즉시 삭제하지 않는 이유는 프레임 중 삭제로 인한 iterator/렌더 큐 충돌을 피하기 위함이다.
+    if (m_pPortalCube)
+    {
+        if (auto* pInteractable = m_pPortalCube->GetComponent<InteractableComponent>())
+        {
+            pInteractable->Hide();
+        }
+        else if (auto* pTransform = m_pPortalCube->GetTransform())
+        {
+            XMFLOAT3 pos = pTransform->GetPosition();
+            pTransform->SetPosition(pos.x, -1000.0f, pos.z);
+        }
+    }
+
     m_fPortalCubeRingRespawnTimer = 0.0f;
     m_pPortalCube = nullptr;
 }
@@ -532,7 +549,10 @@ void CRoom::TrySpawnNextWave(float dt)
 
 void CRoom::SpawnDropItem()
 {
-    if (m_pDropItem) return;  // Already spawned
+    // 이미 로컬 플레이어가 상호작용할 룬 오브젝트가 있으면 중복 생성하지 않는다.
+    if (m_pDropItem)
+        return;
+
     if (!m_pScene)
     {
         OutputDebugString(L"[Room] Cannot spawn drop - no Scene pointer\n");
@@ -541,75 +561,233 @@ void CRoom::SpawnDropItem()
 
     OutputDebugString(L"[Room] Spawning drop item...\n");
 
-    // Spawn at player's position
+    // 오프라인용 기존 룬 드랍 위치
+    // 온라인에서는 서버가 S_ROOM_REWARD_SPAWN으로 위치를 내려주므로
+    // 이 함수가 아니라 SpawnRewardRuneObjectAt(ownerPlayerId, spawnPos)를 사용한다.
     XMFLOAT3 spawnPos = XMFLOAT3(0.0f, 1.5f, 0.0f);
+
     if (m_pPlayerTarget)
     {
         spawnPos = m_pPlayerTarget->GetTransform()->GetPosition();
-        spawnPos.y += 1.5f;  // Float slightly above the floor (player's actual Y)
+        spawnPos.y += 1.5f;  // 바닥보다 살짝 위에 떠 있도록 보정
     }
 
-    // Create drop item as a room object
-    m_pDropItem = m_pScene->CreateGameObject(Dx12App::GetInstance()->GetDevice(),
-                                              Dx12App::GetInstance()->GetCommandList());
-
-    if (!m_pDropItem)
-    {
-        OutputDebugString(L"[Room] Failed to create drop item GameObject\n");
-        return;
-    }
-
-    // Set position and scale
-    m_pDropItem->GetTransform()->SetPosition(spawnPos.x, spawnPos.y, spawnPos.z);
-    m_pDropItem->GetTransform()->SetScale(1.5f, 1.5f, 1.5f);
-
-    // Create white cube mesh
-    CubeMesh* pCubeMesh = new CubeMesh(Dx12App::GetInstance()->GetDevice(),
-                                        Dx12App::GetInstance()->GetCommandList(),
-                                        1.0f, 1.0f, 1.0f);
-    m_pDropItem->SetMesh(pCubeMesh);
-
-    // Add RenderComponent for visibility
-    m_pDropItem->AddComponent<RenderComponent>()->SetMesh(pCubeMesh);
-
-    // Add DropItemComponent first — 룬 생성 후 등급을 알 수 있음
-    DropItemComponent* pDropComp = m_pDropItem->AddComponent<DropItemComponent>();
-
-    // 드랍 룬의 최고 등급에 따라 픽업 색상 결정
-    XMFLOAT4 gc = DropItemComponent::GetGradeColor(pDropComp->GetHighestGrade());
-    MATERIAL gradeMaterial;
-    gradeMaterial.m_cAmbient  = XMFLOAT4(gc.x * 0.25f, gc.y * 0.25f, gc.z * 0.25f, 1.f);
-    gradeMaterial.m_cDiffuse  = gc;
-    gradeMaterial.m_cSpecular = XMFLOAT4(1.0f, 1.0f, 1.0f, 64.0f);
-    gradeMaterial.m_cEmissive = XMFLOAT4(gc.x * 0.6f,  gc.y * 0.6f,  gc.z * 0.6f,  1.f);
-    m_pDropItem->SetMaterial(gradeMaterial);
+    // ownerPlayerId가 0이면 오프라인 드랍으로 간주한다.
+    // 실제 생성, 메시, 머티리얼, DropItemComponent 추가는 SpawnRewardRuneObjectAt에서 공통 처리한다.
+    SpawnRewardRuneObjectAt(0, spawnPos);
 
     OutputDebugString(L"[Room] Drop item spawned successfully!\n");
 }
 
+void CRoom::SpawnRewardRuneObjectAt(uint64 ownerPlayerId, const XMFLOAT3& spawnPos)
+{
+    if (!m_pScene)
+    {
+        OutputDebugString(L"[Room] Cannot spawn reward rune object - no Scene pointer\n");
+        return;
+    }
+
+    // 같은 owner의 룬 오브젝트가 이미 있으면 기존 오브젝트를 숨기고 새로 만든다.
+    auto existingIt = m_mapRewardRuneObjects.find(ownerPlayerId);
+    if (existingIt != m_mapRewardRuneObjects.end() && existingIt->second)
+    {
+        GameObject* pOld = existingIt->second;
+
+        if (auto* pOldDrop = pOld->GetComponent<DropItemComponent>())
+            pOldDrop->SetActive(false);
+
+        if (auto* pOldTransform = pOld->GetTransform())
+            pOldTransform->SetPosition(0.0f, -1000.0f, 0.0f);
+
+        m_mapRewardRuneObjects.erase(existingIt);
+    }
+
+    // 룬 오브젝트 생성
+    GameObject* pRuneObject = m_pScene->CreateGameObject(
+        Dx12App::GetInstance()->GetDevice(),
+        Dx12App::GetInstance()->GetCommandList());
+
+    if (!pRuneObject)
+    {
+        OutputDebugString(L"[Room] Failed to create reward rune object\n");
+        return;
+    }
+
+    // 위치 및 크기 설정
+    pRuneObject->GetTransform()->SetPosition(spawnPos.x, spawnPos.y, spawnPos.z);
+    pRuneObject->GetTransform()->SetScale(1.5f, 1.5f, 1.5f);
+
+    // 룬 오브젝트 비주얼은 기존 DropItem과 동일하게 큐브를 사용한다.
+    // 나중에 클라에서 별도 룬 장착 오브젝트 메쉬가 생기면 이 부분만 교체하면 된다.
+    CubeMesh* pCubeMesh = new CubeMesh(
+        Dx12App::GetInstance()->GetDevice(),
+        Dx12App::GetInstance()->GetCommandList(),
+        1.0f, 1.0f, 1.0f);
+
+    pRuneObject->SetMesh(pCubeMesh);
+    pRuneObject->AddComponent<RenderComponent>()->SetMesh(pCubeMesh);
+
+    // DropItemComponent 생성 시점에 룬 3개가 랜덤 생성된다.
+    // 현재 단계에서는 위치 동기화만 처리하고, 룬 랜덤 결과 동기화는 다음 단계에서 서버 권위로 옮긴다.
+    DropItemComponent* pDropComp = pRuneObject->AddComponent<DropItemComponent>();
+
+    // 서버가 지정한 보상 위치 높이를 기준으로 떠 있도록 고정한다.
+    pDropComp->SetFloatingBaseY(spawnPos.y);
+
+    // 룬 최고 등급에 따라 색상 적용
+    XMFLOAT4 gc = DropItemComponent::GetGradeColor(pDropComp->GetHighestGrade());
+
+    MATERIAL gradeMaterial;
+    gradeMaterial.m_cAmbient = XMFLOAT4(gc.x * 0.25f, gc.y * 0.25f, gc.z * 0.25f, 1.0f);
+    gradeMaterial.m_cDiffuse = gc;
+    gradeMaterial.m_cSpecular = XMFLOAT4(1.0f, 1.0f, 1.0f, 64.0f);
+    gradeMaterial.m_cEmissive = XMFLOAT4(gc.x * 0.6f, gc.y * 0.6f, gc.z * 0.6f, 1.0f);
+    pRuneObject->SetMaterial(gradeMaterial);
+
+    m_mapRewardRuneObjects[ownerPlayerId] = pRuneObject;
+
+    // ownerPlayerId가 0이면 오프라인 드랍으로 간주한다.
+    // 온라인에서는 내 playerId와 ownerPlayerId가 같은 오브젝트만 기존 룬 선택 UI 대상으로 등록한다.
+    bool bMine = (ownerPlayerId == 0);
+
+    NetworkManager* pNet = NetworkManager::GetInstance();
+    if (pNet && pNet->IsConnected())
+    {
+        bMine = (pNet->GetLocalPlayerId() == ownerPlayerId);
+    }
+
+    if (bMine)
+        m_pDropItem = pRuneObject;
+
+    wchar_t buffer[192];
+    swprintf_s(buffer,
+        L"[Room] Reward rune object spawned. owner=%llu mine=%d pos=(%.2f, %.2f, %.2f)\n",
+        ownerPlayerId,
+        bMine ? 1 : 0,
+        spawnPos.x,
+        spawnPos.y,
+        spawnPos.z);
+    OutputDebugString(buffer);
+}
+
+void CRoom::ClearDropItem()
+{
+    if (!m_pDropItem)
+        return;
+
+    // 현재 로컬 플레이어가 사용한 룬 오브젝트를 비활성화하고 화면 밖으로 숨긴다.
+    if (auto* pDropComp = m_pDropItem->GetComponent<DropItemComponent>())
+        pDropComp->SetActive(false);
+
+    if (auto* pTransform = m_pDropItem->GetTransform())
+        pTransform->SetPosition(0.0f, -1000.0f, 0.0f);
+
+    // map에서도 같은 포인터를 찾아 제거한다.
+    for (auto it = m_mapRewardRuneObjects.begin(); it != m_mapRewardRuneObjects.end(); )
+    {
+        if (it->second == m_pDropItem)
+            it = m_mapRewardRuneObjects.erase(it);
+        else
+            ++it;
+    }
+
+    m_pDropItem = nullptr;
+}
+
+void CRoom::ClearRewardRuneObjects()
+{
+    // 방 클리어 보상 룬 오브젝트 전체를 비활성화하고 화면 밖으로 숨긴다.
+    // m_vGameObjects에서 즉시 삭제하지 않는 이유는 렌더/업데이트 중 삭제 충돌을 피하기 위함이다.
+    for (auto& entry : m_mapRewardRuneObjects)
+    {
+        GameObject* pRuneObject = entry.second;
+        if (!pRuneObject)
+            continue;
+
+        if (auto* pDropComp = pRuneObject->GetComponent<DropItemComponent>())
+            pDropComp->SetActive(false);
+
+        if (auto* pTransform = pRuneObject->GetTransform())
+            pTransform->SetPosition(0.0f, -1000.0f, 0.0f);
+    }
+
+    m_mapRewardRuneObjects.clear();
+    m_pDropItem = nullptr;
+}
+
+void CRoom::HideRewardRuneObject(uint64 ownerPlayerId)
+{
+    auto it = m_mapRewardRuneObjects.find(ownerPlayerId);
+    if (it == m_mapRewardRuneObjects.end())
+        return;
+
+    GameObject* pRuneObject = it->second;
+    if (!pRuneObject)
+    {
+        m_mapRewardRuneObjects.erase(it);
+        return;
+    }
+
+    // 해당 플레이어의 룬 오브젝트를 비활성화하고 화면 밖으로 숨긴다.
+    if (auto* pDropComp = pRuneObject->GetComponent<DropItemComponent>())
+        pDropComp->SetActive(false);
+
+    if (auto* pTransform = pRuneObject->GetTransform())
+        pTransform->SetPosition(0.0f, -1000.0f, 0.0f);
+
+    // 이 오브젝트가 내 현재 상호작용 대상이면 로컬 참조도 정리한다.
+    if (m_pDropItem == pRuneObject)
+        m_pDropItem = nullptr;
+
+    m_mapRewardRuneObjects.erase(it);
+
+    wchar_t buffer[128];
+    swprintf_s(buffer,
+        L"[Room] Reward rune object hidden. owner=%llu\n",
+        ownerPlayerId);
+    OutputDebugString(buffer);
+}
+
 void CRoom::SpawnPortalCube()
 {
-    if (m_pPortalCube) return;  // Already spawned
     if (!m_pScene)
     {
         OutputDebugString(L"[Room] Cannot spawn portal - no Scene pointer\n");
         return;
     }
 
-    OutputDebugString(L"[Room] Spawning portal cube...\n");
-
-    // Spawn at player's position + Z offset (so it doesn't overlap with drop item)
+    // 오프라인용 기존 포탈 위치
+    // 온라인에서는 서버가 S_ROOM_REWARD_SPAWN으로 공통 포탈 위치를 내려주므로
+    // 이 함수가 아니라 SpawnPortalCubeAt(serverPortalPos)를 사용한다.
     XMFLOAT3 spawnPos = XMFLOAT3(0.0f, 1.5f, 5.0f);
+
     if (m_pPlayerTarget)
     {
         spawnPos = m_pPlayerTarget->GetTransform()->GetPosition();
-        spawnPos.y += 1.5f;  // Float slightly above the floor (player's actual Y)
-        spawnPos.z += 5.0f;  // Offset in Z to avoid overlapping with drop item
+        spawnPos.y += 1.5f;  // 바닥보다 살짝 위에 떠 있도록 보정
+        spawnPos.z += 5.0f;  // 기존 오프라인 방식 유지: 플레이어 앞쪽에 포탈 생성
     }
 
+    SpawnPortalCubeAt(spawnPos);
+}
+
+void CRoom::SpawnPortalCubeAt(const XMFLOAT3& spawnPos)
+{
+    if (m_pPortalCube)
+        return;  // Already spawned
+
+    if (!m_pScene)
+    {
+        OutputDebugString(L"[Room] Cannot spawn portal - no Scene pointer\n");
+        return;
+    }
+
+    OutputDebugString(L"[Room] Spawning portal cube at reward position...\n");
+
     // Create portal cube as a room object
-    m_pPortalCube = m_pScene->CreateGameObject(Dx12App::GetInstance()->GetDevice(),
-                                                Dx12App::GetInstance()->GetCommandList());
+    m_pPortalCube = m_pScene->CreateGameObject(
+        Dx12App::GetInstance()->GetDevice(),
+        Dx12App::GetInstance()->GetCommandList());
 
     if (!m_pPortalCube)
     {
@@ -617,21 +795,24 @@ void CRoom::SpawnPortalCube()
         return;
     }
 
-    // 포탈 비주얼 — 바닥 마법진. 반경 9u (시작방 베이스 크기 매칭). 베이스 표면 위에 깔리도록 y=1.5.
+    // 포탈 비주얼 — 바닥 마법진.
+    // 온라인에서는 서버가 계산한 플레이어들 중앙 위치에 공통 포탈 1개만 생성한다.
     m_pPortalCube->GetTransform()->SetPosition(spawnPos.x, spawnPos.y, spawnPos.z);
     m_pPortalCube->GetTransform()->SetScale(9.0f, 9.0f, 9.0f);
     m_pPortalCube->GetTransform()->SetRotation(0.0f, 0.0f, 0.0f);
 
     // 채워진 disc (innerRadius=0) — 포탈 표면
-    RingMesh* pPortalDisc = new RingMesh(Dx12App::GetInstance()->GetDevice(),
-                                          Dx12App::GetInstance()->GetCommandList(),
-                                          1.0f, 0.0f, 64);
+    RingMesh* pPortalDisc = new RingMesh(
+        Dx12App::GetInstance()->GetDevice(),
+        Dx12App::GetInstance()->GetCommandList(),
+        1.0f, 0.0f, 64);
+
     m_pPortalCube->SetMesh(pPortalDisc);
 
     // 포탈 머티리얼 — fbm 와류로 두 보라 톤을 부드럽게 섞음 (디지털 듀얼톤 회피)
     MATERIAL portalMat;
-    portalMat.m_cAmbient  = XMFLOAT4(0.00f, 0.00f, 0.00f, 1.0f);
-    portalMat.m_cDiffuse  = XMFLOAT4(0.40f, 0.20f, 0.85f, 1.0f);   // 딥 바이올렛 (외곽 림)
+    portalMat.m_cAmbient = XMFLOAT4(0.00f, 0.00f, 0.00f, 1.0f);
+    portalMat.m_cDiffuse = XMFLOAT4(0.40f, 0.20f, 0.85f, 1.0f);   // 딥 바이올렛 (외곽 림)
     portalMat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
     portalMat.m_cEmissive = XMFLOAT4(1.00f, 0.75f, 0.95f, 1.0f);   // 라벤더-핑크 (코어)
     m_pPortalCube->SetMaterial(portalMat);
@@ -644,6 +825,7 @@ void CRoom::SpawnPortalCube()
     pInteractable->SetPromptText(L"[F] Enter Portal");
     pInteractable->SetInteractionDistance(7.0f); // 세로 disc 반경 만큼 여유
     pInteractable->DisablePhysics();             // 중력/bobbing OFF — Scene 이 위치 직접 결정
+
     pInteractable->SetOnInteract([this](InteractableComponent* pComp) {
         if (!m_pScene)
             return;
@@ -659,9 +841,9 @@ void CRoom::SpawnPortalCube()
             // 오프라인 폴백
             m_pScene->TransitionToNextRoom();
         }
-    });
+        });
 
-    OutputDebugString(L"[Room] Portal cube spawned successfully!\n");
+    OutputDebugString(L"[Room] Portal cube spawned successfully at reward position!\n");
 }
 
 void CRoom::InitLavaGeyserManager(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList,
