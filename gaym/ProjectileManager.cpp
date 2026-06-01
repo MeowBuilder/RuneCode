@@ -358,32 +358,93 @@ void ProjectileManager::Update(float deltaTime)
             continue;
         }
 
-        // 유도: 가장 가까운 적 방향으로 방향 벡터를 서서히 회전
+        // 유도: 서버가 지정한 네트워크 몬스터가 있으면 그 대상을 우선 추적한다.
+//      네트워크 타겟이 없을 때만 기존 로컬 Room 적 탐색 방식으로 fallback한다.
         if (projectile.isHoming && projectile.isPlayerProjectile && m_pScene)
         {
-            CRoom* pRoom = m_pScene->GetCurrentRoom();
-            if (pRoom)
+            bool hasHomingTarget = false;
+            XMFLOAT3 bestPos = projectile.position;
+
+            // 1. 서버가 선택한 targetMonsterId가 있으면 네트워크 몬스터 맵에서 찾는다.
+            if (projectile.useNetworkHomingTarget && projectile.networkHomingTargetMonsterId != 0)
             {
-                float bestDist = FLT_MAX;
-                XMFLOAT3 bestPos = projectile.position;
-                for (const auto& obj : pRoom->GetGameObjects())
+                NetworkManager* pNetMgr = NetworkManager::GetInstance();
+
+                if (pNetMgr)
                 {
-                    if (!obj) continue;
-                    EnemyComponent* pEnemy = obj->GetComponent<EnemyComponent>();
-                    if (!pEnemy || pEnemy->IsDead()) continue;
-                    XMFLOAT3 ePos = obj->GetTransform()->GetPosition();
-                    XMVECTOR diff = XMLoadFloat3(&ePos) - XMLoadFloat3(&projectile.position);
-                    float d = XMVectorGetX(XMVector3Length(diff));
-                    if (d < bestDist) { bestDist = d; bestPos = ePos; }
+                    GameObject* pTargetMonster = pNetMgr->GetServerMonster(projectile.networkHomingTargetMonsterId);
+
+                    if (pTargetMonster && pTargetMonster->GetTransform())
+                    {
+                        bestPos = pTargetMonster->GetTransform()->GetPosition();
+                        bestPos.y += 3.0f;
+                        hasHomingTarget = true;
+                    }
                 }
-                if (bestDist < FLT_MAX)
+
+                // 몬스터 오브젝트를 못 찾으면 서버가 보내준 마지막 좌표를 fallback으로 사용한다.
+                if (!hasHomingTarget)
                 {
-                    XMVECTOR cur = XMLoadFloat3(&projectile.direction);
-                    XMVECTOR toTarget = XMVector3Normalize(
-                        XMLoadFloat3(&bestPos) - XMLoadFloat3(&projectile.position));
-                    constexpr float TURN_SPEED = 3.5f; // rad/s
+                    bestPos = projectile.networkHomingTargetPos;
+                    hasHomingTarget = true;
+                }
+            }
+
+            // 2. 네트워크 유도 타겟이 없으면 기존 로컬 몬스터 탐색 로직을 사용한다.
+            if (!hasHomingTarget)
+            {
+                CRoom* pRoom = m_pScene->GetCurrentRoom();
+
+                if (pRoom)
+                {
+                    float bestDist = FLT_MAX;
+
+                    for (const auto& obj : pRoom->GetGameObjects())
+                    {
+                        if (!obj)
+                            continue;
+
+                        EnemyComponent* pEnemy = obj->GetComponent<EnemyComponent>();
+
+                        if (!pEnemy || pEnemy->IsDead())
+                            continue;
+
+                        TransformComponent* pEnemyTransform = obj->GetTransform();
+
+                        if (!pEnemyTransform)
+                            continue;
+
+                        XMFLOAT3 ePos = pEnemyTransform->GetPosition();
+                        XMVECTOR diff = XMLoadFloat3(&ePos) - XMLoadFloat3(&projectile.position);
+                        float d = XMVectorGetX(XMVector3Length(diff));
+
+                        if (d < bestDist)
+                        {
+                            bestDist = d;
+                            bestPos = ePos;
+                            hasHomingTarget = true;
+                        }
+                    }
+                }
+            }
+
+            // 3. 최종 타겟 방향으로 투사체 방향을 서서히 보정한다.
+            if (hasHomingTarget)
+            {
+                XMVECTOR cur = XMLoadFloat3(&projectile.direction);
+                XMVECTOR toTargetVec = XMLoadFloat3(&bestPos) - XMLoadFloat3(&projectile.position);
+
+                float lenSq = XMVectorGetX(XMVector3LengthSq(toTargetVec));
+
+                if (lenSq > 0.0001f)
+                {
+                    XMVECTOR toTarget = XMVector3Normalize(toTargetVec);
+
+                    constexpr float TURN_SPEED = 12.0f;
+
                     XMVECTOR newDir = XMVector3Normalize(
                         cur + toTarget * (TURN_SPEED * deltaTime));
+
                     XMStoreFloat3(&projectile.direction, newDir);
                 }
             }
@@ -964,4 +1025,65 @@ void ProjectileManager::SpawnExplosionParticles(const XMFLOAT3& position, Elemen
     // 폭발 파티클은 플레이어 슬롯에 스폰 (적도 터질 때 visible)
     m_pVFXManager->SpawnLightLayer(position, XMFLOAT3(0, 1, 0), layer, /*isPlayer*/true);
 
+}
+
+bool ProjectileManager::AttachNetworkHomingTarget(SkillSlot skillSlot, const XMFLOAT3& originPos, uint64 targetMonsterId, const XMFLOAT3& targetPos)
+{
+    // 1. 서버 패킷은 스킬 발사 직후 도착한다.
+    //    따라서 최근 생성된 활성 플레이어 투사체 중에서
+    //    origin 위치와 skillSlot이 가장 가까운 것을 찾아 유도 타겟을 붙인다.
+    constexpr float MATCH_XZ_RADIUS = 18.0f;
+    constexpr float MATCH_XZ_RADIUS_SQ = MATCH_XZ_RADIUS * MATCH_XZ_RADIUS;
+
+    Projectile* pBestProjectile = nullptr;
+    float bestDistSq = MATCH_XZ_RADIUS_SQ;
+
+    for (auto it = m_Projectiles.rbegin(); it != m_Projectiles.rend(); ++it)
+    {
+        Projectile& projectile = *it;
+
+        if (!projectile.isActive)
+            continue;
+
+        if (!projectile.isPlayerProjectile)
+            continue;
+
+        if (skillSlot != SkillSlot::Count && projectile.skillSlot != skillSlot)
+            continue;
+
+        float dx = projectile.position.x - originPos.x;
+        float dz = projectile.position.z - originPos.z;
+        float distSq = dx * dx + dz * dz;
+
+        if (distSq <= bestDistSq)
+        {
+            bestDistSq = distSq;
+            pBestProjectile = &projectile;
+        }
+    }
+
+    if (pBestProjectile == nullptr)
+    {
+        OutputDebugString(L"[ProjectileManager] AttachNetworkHomingTarget failed: no matching projectile\n");
+        return false;
+    }
+
+    // 2. 서버가 선택한 몬스터 ID를 투사체에 저장한다.
+    //    이후 Update에서 NetworkManager::GetServerMonster()로 매 프레임 실제 위치를 따라간다.
+    pBestProjectile->isHoming = true;
+    pBestProjectile->useNetworkHomingTarget = true;
+    pBestProjectile->networkHomingTargetMonsterId = targetMonsterId;
+    pBestProjectile->networkHomingTargetPos = targetPos;
+
+    wchar_t buffer[256];
+    swprintf_s(buffer, 256,
+        L"[ProjectileManager] AttachNetworkHomingTarget success: skillSlot=%d targetMonsterId=%llu origin=(%.1f, %.1f, %.1f)\n",
+        static_cast<int>(skillSlot),
+        targetMonsterId,
+        originPos.x,
+        originPos.y,
+        originPos.z);
+
+    OutputDebugString(buffer);
+    return true;
 }

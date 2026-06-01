@@ -489,7 +489,8 @@ struct S_ROOM_STARTDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT S_ROOM_STARTDefaultTypeInternal _S_ROOM_START_default_instance_;
 constexpr RewardRuneObjectInfo::RewardRuneObjectInfo(
   ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
-  : ownerplayerid_(uint64_t{0u})
+  : runeids_()
+  , ownerplayerid_(uint64_t{0u})
   , x_(0)
   , y_(0)
   , z_(0){}
@@ -542,8 +543,60 @@ struct S_RUNE_REWARD_PICKEDDefaultTypeInternal {
   };
 };
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT S_RUNE_REWARD_PICKEDDefaultTypeInternal _S_RUNE_REWARD_PICKED_default_instance_;
+constexpr C_RUNE_EQUIP::C_RUNE_EQUIP(
+  ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
+  : rewardoptionindex_(0u)
+  , skillslot_(0u)
+  , runeslotindex_(0u){}
+struct C_RUNE_EQUIPDefaultTypeInternal {
+  constexpr C_RUNE_EQUIPDefaultTypeInternal()
+    : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
+  ~C_RUNE_EQUIPDefaultTypeInternal() {}
+  union {
+    C_RUNE_EQUIP _instance;
+  };
+};
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT C_RUNE_EQUIPDefaultTypeInternal _C_RUNE_EQUIP_default_instance_;
+constexpr S_RUNE_EQUIP::S_RUNE_EQUIP(
+  ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
+  : runeid_(&::PROTOBUF_NAMESPACE_ID::internal::fixed_address_empty_string)
+  , playerid_(uint64_t{0u})
+  , skillslot_(0u)
+  , runeslotindex_(0u)
+  , stackcount_(0u){}
+struct S_RUNE_EQUIPDefaultTypeInternal {
+  constexpr S_RUNE_EQUIPDefaultTypeInternal()
+    : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
+  ~S_RUNE_EQUIPDefaultTypeInternal() {}
+  union {
+    S_RUNE_EQUIP _instance;
+  };
+};
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT S_RUNE_EQUIPDefaultTypeInternal _S_RUNE_EQUIP_default_instance_;
+constexpr S_RUNE_HOMING_TARGET::S_RUNE_HOMING_TARGET(
+  ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
+  : playerid_(uint64_t{0u})
+  , skillslot_(0)
+  , skilltype_(0)
+
+  , targetmonsterid_(uint64_t{0u})
+  , targetx_(0)
+  , targety_(0)
+  , targetz_(0)
+  , originx_(0)
+  , originy_(0)
+  , originz_(0){}
+struct S_RUNE_HOMING_TARGETDefaultTypeInternal {
+  constexpr S_RUNE_HOMING_TARGETDefaultTypeInternal()
+    : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
+  ~S_RUNE_HOMING_TARGETDefaultTypeInternal() {}
+  union {
+    S_RUNE_HOMING_TARGET _instance;
+  };
+};
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT S_RUNE_HOMING_TARGETDefaultTypeInternal _S_RUNE_HOMING_TARGET_default_instance_;
 }  // namespace Protocol
-static ::PROTOBUF_NAMESPACE_ID::Metadata file_level_metadata_Protocol_2eproto[35];
+static ::PROTOBUF_NAMESPACE_ID::Metadata file_level_metadata_Protocol_2eproto[38];
 static constexpr ::PROTOBUF_NAMESPACE_ID::EnumDescriptor const** file_level_enum_descriptors_Protocol_2eproto = nullptr;
 static constexpr ::PROTOBUF_NAMESPACE_ID::ServiceDescriptor const** file_level_service_descriptors_Protocol_2eproto = nullptr;
 
@@ -835,6 +888,7 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_Protocol_2eproto::offsets[] PR
   PROTOBUF_FIELD_OFFSET(::Protocol::RewardRuneObjectInfo, x_),
   PROTOBUF_FIELD_OFFSET(::Protocol::RewardRuneObjectInfo, y_),
   PROTOBUF_FIELD_OFFSET(::Protocol::RewardRuneObjectInfo, z_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::RewardRuneObjectInfo, runeids_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_REWARD_SPAWN, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -857,6 +911,39 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_Protocol_2eproto::offsets[] PR
   ~0u,  // no _oneof_case_
   ~0u,  // no _weak_field_map_
   PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_REWARD_PICKED, ownerplayerid_),
+  ~0u,  // no _has_bits_
+  PROTOBUF_FIELD_OFFSET(::Protocol::C_RUNE_EQUIP, _internal_metadata_),
+  ~0u,  // no _extensions_
+  ~0u,  // no _oneof_case_
+  ~0u,  // no _weak_field_map_
+  PROTOBUF_FIELD_OFFSET(::Protocol::C_RUNE_EQUIP, rewardoptionindex_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::C_RUNE_EQUIP, skillslot_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::C_RUNE_EQUIP, runeslotindex_),
+  ~0u,  // no _has_bits_
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_EQUIP, _internal_metadata_),
+  ~0u,  // no _extensions_
+  ~0u,  // no _oneof_case_
+  ~0u,  // no _weak_field_map_
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_EQUIP, playerid_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_EQUIP, skillslot_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_EQUIP, runeslotindex_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_EQUIP, runeid_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_EQUIP, stackcount_),
+  ~0u,  // no _has_bits_
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_HOMING_TARGET, _internal_metadata_),
+  ~0u,  // no _extensions_
+  ~0u,  // no _oneof_case_
+  ~0u,  // no _weak_field_map_
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_HOMING_TARGET, playerid_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_HOMING_TARGET, skillslot_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_HOMING_TARGET, skilltype_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_HOMING_TARGET, targetmonsterid_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_HOMING_TARGET, targetx_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_HOMING_TARGET, targety_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_HOMING_TARGET, targetz_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_HOMING_TARGET, originx_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_HOMING_TARGET, originy_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_RUNE_HOMING_TARGET, originz_),
 };
 static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, sizeof(::Protocol::C_LOGIN)},
@@ -891,9 +978,12 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOB
   { 259, -1, sizeof(::Protocol::S_PLAYER_ACTION)},
   { 272, -1, sizeof(::Protocol::S_ROOM_START)},
   { 278, -1, sizeof(::Protocol::RewardRuneObjectInfo)},
-  { 287, -1, sizeof(::Protocol::S_ROOM_REWARD_SPAWN)},
-  { 298, -1, sizeof(::Protocol::C_RUNE_REWARD_PICK)},
-  { 303, -1, sizeof(::Protocol::S_RUNE_REWARD_PICKED)},
+  { 288, -1, sizeof(::Protocol::S_ROOM_REWARD_SPAWN)},
+  { 299, -1, sizeof(::Protocol::C_RUNE_REWARD_PICK)},
+  { 304, -1, sizeof(::Protocol::S_RUNE_REWARD_PICKED)},
+  { 310, -1, sizeof(::Protocol::C_RUNE_EQUIP)},
+  { 318, -1, sizeof(::Protocol::S_RUNE_EQUIP)},
+  { 328, -1, sizeof(::Protocol::S_RUNE_HOMING_TARGET)},
 };
 
 static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] = {
@@ -932,6 +1022,9 @@ static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] =
   reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::Protocol::_S_ROOM_REWARD_SPAWN_default_instance_),
   reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::Protocol::_C_RUNE_REWARD_PICK_default_instance_),
   reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::Protocol::_S_RUNE_REWARD_PICKED_default_instance_),
+  reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::Protocol::_C_RUNE_EQUIP_default_instance_),
+  reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::Protocol::_S_RUNE_EQUIP_default_instance_),
+  reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::Protocol::_S_RUNE_HOMING_TARGET_default_instance_),
 };
 
 const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) =
@@ -1003,15 +1096,26 @@ const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABL
   "ionType\030\002 \001(\r\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\t\n\001z"
   "\030\005 \001(\002\022\014\n\004dirX\030\006 \001(\002\022\014\n\004dirY\030\007 \001(\002\022\014\n\004di"
   "rZ\030\010 \001(\002\"\'\n\014S_ROOM_START\022\027\n\017starterplaye"
-  "rid\030\001 \001(\004\"N\n\024RewardRuneObjectInfo\022\025\n\rown"
+  "rid\030\001 \001(\004\"_\n\024RewardRuneObjectInfo\022\025\n\rown"
   "erPlayerId\030\001 \001(\004\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t"
-  "\n\001z\030\004 \001(\002\"\244\001\n\023S_ROOM_REWARD_SPAWN\022\022\n\nsta"
-  "geIndex\030\001 \001(\r\022\021\n\troomIndex\030\002 \001(\r\022\017\n\007port"
-  "alX\030\003 \001(\002\022\017\n\007portalY\030\004 \001(\002\022\017\n\007portalZ\030\005 "
-  "\001(\002\0223\n\013runeObjects\030\006 \003(\0132\036.Protocol.Rewa"
-  "rdRuneObjectInfo\"\024\n\022C_RUNE_REWARD_PICK\"-"
-  "\n\024S_RUNE_REWARD_PICKED\022\025\n\rownerPlayerId\030"
-  "\001 \001(\004b\006proto3"
+  "\n\001z\030\004 \001(\002\022\017\n\007runeIds\030\005 \003(\t\"\244\001\n\023S_ROOM_RE"
+  "WARD_SPAWN\022\022\n\nstageIndex\030\001 \001(\r\022\021\n\troomIn"
+  "dex\030\002 \001(\r\022\017\n\007portalX\030\003 \001(\002\022\017\n\007portalY\030\004 "
+  "\001(\002\022\017\n\007portalZ\030\005 \001(\002\0223\n\013runeObjects\030\006 \003("
+  "\0132\036.Protocol.RewardRuneObjectInfo\"\024\n\022C_R"
+  "UNE_REWARD_PICK\"-\n\024S_RUNE_REWARD_PICKED\022"
+  "\025\n\rownerPlayerId\030\001 \001(\004\"S\n\014C_RUNE_EQUIP\022\031"
+  "\n\021rewardOptionIndex\030\001 \001(\r\022\021\n\tskillSlot\030\002"
+  " \001(\r\022\025\n\rruneSlotIndex\030\003 \001(\r\"n\n\014S_RUNE_EQ"
+  "UIP\022\020\n\010playerId\030\001 \001(\004\022\021\n\tskillSlot\030\002 \001(\r"
+  "\022\025\n\rruneSlotIndex\030\003 \001(\r\022\016\n\006runeId\030\004 \001(\t\022"
+  "\022\n\nstackCount\030\005 \001(\r\"\342\001\n\024S_RUNE_HOMING_TA"
+  "RGET\022\020\n\010playerId\030\001 \001(\004\022\021\n\tskillSlot\030\002 \001("
+  "\005\022&\n\tskillType\030\003 \001(\0162\023.Protocol.SkillTyp"
+  "e\022\027\n\017targetMonsterId\030\004 \001(\004\022\017\n\007targetX\030\005 "
+  "\001(\002\022\017\n\007targetY\030\006 \001(\002\022\017\n\007targetZ\030\007 \001(\002\022\017\n"
+  "\007originX\030\010 \001(\002\022\017\n\007originY\030\t \001(\002\022\017\n\007origi"
+  "nZ\030\n \001(\002b\006proto3"
   ;
 static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor_table_Protocol_2eproto_deps[2] = {
   &::descriptor_table_Enum_2eproto,
@@ -1019,8 +1123,8 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor
 };
 static ::PROTOBUF_NAMESPACE_ID::internal::once_flag descriptor_table_Protocol_2eproto_once;
 const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_Protocol_2eproto = {
-  false, false, 3053, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
-  &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 35,
+  false, false, 3496, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
+  &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 38,
   schemas, file_default_instances, TableStruct_Protocol_2eproto::offsets,
   file_level_metadata_Protocol_2eproto, file_level_enum_descriptors_Protocol_2eproto, file_level_service_descriptors_Protocol_2eproto,
 };
@@ -9215,13 +9319,15 @@ class RewardRuneObjectInfo::_Internal {
 };
 
 RewardRuneObjectInfo::RewardRuneObjectInfo(::PROTOBUF_NAMESPACE_ID::Arena* arena)
-  : ::PROTOBUF_NAMESPACE_ID::Message(arena) {
+  : ::PROTOBUF_NAMESPACE_ID::Message(arena),
+  runeids_(arena) {
   SharedCtor();
   RegisterArenaDtor(arena);
   // @@protoc_insertion_point(arena_constructor:Protocol.RewardRuneObjectInfo)
 }
 RewardRuneObjectInfo::RewardRuneObjectInfo(const RewardRuneObjectInfo& from)
-  : ::PROTOBUF_NAMESPACE_ID::Message() {
+  : ::PROTOBUF_NAMESPACE_ID::Message(),
+      runeids_(from.runeids_) {
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
   ::memcpy(&ownerplayerid_, &from.ownerplayerid_,
     static_cast<size_t>(reinterpret_cast<char*>(&z_) -
@@ -9262,6 +9368,7 @@ void RewardRuneObjectInfo::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  runeids_.Clear();
   ::memset(&ownerplayerid_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&z_) -
       reinterpret_cast<char*>(&ownerplayerid_)) + sizeof(z_));
@@ -9300,6 +9407,20 @@ const char* RewardRuneObjectInfo::_InternalParse(const char* ptr, ::PROTOBUF_NAM
         if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 37)) {
           z_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
           ptr += sizeof(float);
+        } else goto handle_unusual;
+        continue;
+      // repeated string runeIds = 5;
+      case 5:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 42)) {
+          ptr -= 1;
+          do {
+            ptr += 1;
+            auto str = _internal_add_runeids();
+            ptr = ::PROTOBUF_NAMESPACE_ID::internal::InlineGreedyStringParser(str, ptr, ctx);
+            CHK_(::PROTOBUF_NAMESPACE_ID::internal::VerifyUTF8(str, "Protocol.RewardRuneObjectInfo.runeIds"));
+            CHK_(ptr);
+            if (!ctx->DataAvailable(ptr)) break;
+          } while (::PROTOBUF_NAMESPACE_ID::internal::ExpectTag<42>(ptr));
         } else goto handle_unusual;
         continue;
       default: {
@@ -9355,6 +9476,16 @@ failure:
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(4, this->_internal_z(), target);
   }
 
+  // repeated string runeIds = 5;
+  for (int i = 0, n = this->_internal_runeids_size(); i < n; i++) {
+    const auto& s = this->_internal_runeids(i);
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      s.data(), static_cast<int>(s.length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "Protocol.RewardRuneObjectInfo.runeIds");
+    target = stream->WriteString(5, s, target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -9370,6 +9501,14 @@ size_t RewardRuneObjectInfo::ByteSizeLong() const {
   ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
+
+  // repeated string runeIds = 5;
+  total_size += 1 *
+      ::PROTOBUF_NAMESPACE_ID::internal::FromIntSize(runeids_.size());
+  for (int i = 0, n = runeids_.size(); i < n; i++) {
+    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+      runeids_.Get(i));
+  }
 
   // uint64 ownerPlayerId = 1;
   if (this->ownerplayerid() != 0) {
@@ -9424,6 +9563,7 @@ void RewardRuneObjectInfo::MergeFrom(const RewardRuneObjectInfo& from) {
   ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  runeids_.MergeFrom(from.runeids_);
   if (from.ownerplayerid() != 0) {
     _internal_set_ownerplayerid(from._internal_ownerplayerid());
   }
@@ -9459,6 +9599,7 @@ bool RewardRuneObjectInfo::IsInitialized() const {
 void RewardRuneObjectInfo::InternalSwap(RewardRuneObjectInfo* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  runeids_.InternalSwap(&other->runeids_);
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
       PROTOBUF_FIELD_OFFSET(RewardRuneObjectInfo, z_)
       + sizeof(RewardRuneObjectInfo::z_)
@@ -10141,6 +10282,965 @@ void S_RUNE_REWARD_PICKED::InternalSwap(S_RUNE_REWARD_PICKED* other) {
       file_level_metadata_Protocol_2eproto[34]);
 }
 
+// ===================================================================
+
+class C_RUNE_EQUIP::_Internal {
+ public:
+};
+
+C_RUNE_EQUIP::C_RUNE_EQUIP(::PROTOBUF_NAMESPACE_ID::Arena* arena)
+  : ::PROTOBUF_NAMESPACE_ID::Message(arena) {
+  SharedCtor();
+  RegisterArenaDtor(arena);
+  // @@protoc_insertion_point(arena_constructor:Protocol.C_RUNE_EQUIP)
+}
+C_RUNE_EQUIP::C_RUNE_EQUIP(const C_RUNE_EQUIP& from)
+  : ::PROTOBUF_NAMESPACE_ID::Message() {
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  ::memcpy(&rewardoptionindex_, &from.rewardoptionindex_,
+    static_cast<size_t>(reinterpret_cast<char*>(&runeslotindex_) -
+    reinterpret_cast<char*>(&rewardoptionindex_)) + sizeof(runeslotindex_));
+  // @@protoc_insertion_point(copy_constructor:Protocol.C_RUNE_EQUIP)
+}
+
+void C_RUNE_EQUIP::SharedCtor() {
+::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
+    reinterpret_cast<char*>(&rewardoptionindex_) - reinterpret_cast<char*>(this)),
+    0, static_cast<size_t>(reinterpret_cast<char*>(&runeslotindex_) -
+    reinterpret_cast<char*>(&rewardoptionindex_)) + sizeof(runeslotindex_));
+}
+
+C_RUNE_EQUIP::~C_RUNE_EQUIP() {
+  // @@protoc_insertion_point(destructor:Protocol.C_RUNE_EQUIP)
+  SharedDtor();
+  _internal_metadata_.Delete<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+void C_RUNE_EQUIP::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
+}
+
+void C_RUNE_EQUIP::ArenaDtor(void* object) {
+  C_RUNE_EQUIP* _this = reinterpret_cast< C_RUNE_EQUIP* >(object);
+  (void)_this;
+}
+void C_RUNE_EQUIP::RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena*) {
+}
+void C_RUNE_EQUIP::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+
+void C_RUNE_EQUIP::Clear() {
+// @@protoc_insertion_point(message_clear_start:Protocol.C_RUNE_EQUIP)
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  ::memset(&rewardoptionindex_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&runeslotindex_) -
+      reinterpret_cast<char*>(&rewardoptionindex_)) + sizeof(runeslotindex_));
+  _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+const char* C_RUNE_EQUIP::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) {
+#define CHK_(x) if (PROTOBUF_PREDICT_FALSE(!(x))) goto failure
+  while (!ctx->Done(&ptr)) {
+    ::PROTOBUF_NAMESPACE_ID::uint32 tag;
+    ptr = ::PROTOBUF_NAMESPACE_ID::internal::ReadTag(ptr, &tag);
+    switch (tag >> 3) {
+      // uint32 rewardOptionIndex = 1;
+      case 1:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 8)) {
+          rewardoptionindex_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // uint32 skillSlot = 2;
+      case 2:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 16)) {
+          skillslot_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // uint32 runeSlotIndex = 3;
+      case 3:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 24)) {
+          runeslotindex_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      default: {
+      handle_unusual:
+        if ((tag == 0) || ((tag & 7) == 4)) {
+          CHK_(ptr);
+          ctx->SetLastTag(tag);
+          goto success;
+        }
+        ptr = UnknownFieldParse(tag,
+            _internal_metadata_.mutable_unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(),
+            ptr, ctx);
+        CHK_(ptr != nullptr);
+        continue;
+      }
+    }  // switch
+  }  // while
+success:
+  return ptr;
+failure:
+  ptr = nullptr;
+  goto success;
+#undef CHK_
+}
+
+::PROTOBUF_NAMESPACE_ID::uint8* C_RUNE_EQUIP::_InternalSerialize(
+    ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:Protocol.C_RUNE_EQUIP)
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // uint32 rewardOptionIndex = 1;
+  if (this->rewardoptionindex() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt32ToArray(1, this->_internal_rewardoptionindex(), target);
+  }
+
+  // uint32 skillSlot = 2;
+  if (this->skillslot() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt32ToArray(2, this->_internal_skillslot(), target);
+  }
+
+  // uint32 runeSlotIndex = 3;
+  if (this->runeslotindex() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt32ToArray(3, this->_internal_runeslotindex(), target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
+        _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:Protocol.C_RUNE_EQUIP)
+  return target;
+}
+
+size_t C_RUNE_EQUIP::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:Protocol.C_RUNE_EQUIP)
+  size_t total_size = 0;
+
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // uint32 rewardOptionIndex = 1;
+  if (this->rewardoptionindex() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt32Size(
+        this->_internal_rewardoptionindex());
+  }
+
+  // uint32 skillSlot = 2;
+  if (this->skillslot() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt32Size(
+        this->_internal_skillslot());
+  }
+
+  // uint32 runeSlotIndex = 3;
+  if (this->runeslotindex() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt32Size(
+        this->_internal_runeslotindex());
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    return ::PROTOBUF_NAMESPACE_ID::internal::ComputeUnknownFieldsSize(
+        _internal_metadata_, total_size, &_cached_size_);
+  }
+  int cached_size = ::PROTOBUF_NAMESPACE_ID::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void C_RUNE_EQUIP::MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
+// @@protoc_insertion_point(generalized_merge_from_start:Protocol.C_RUNE_EQUIP)
+  GOOGLE_DCHECK_NE(&from, this);
+  const C_RUNE_EQUIP* source =
+      ::PROTOBUF_NAMESPACE_ID::DynamicCastToGenerated<C_RUNE_EQUIP>(
+          &from);
+  if (source == nullptr) {
+  // @@protoc_insertion_point(generalized_merge_from_cast_fail:Protocol.C_RUNE_EQUIP)
+    ::PROTOBUF_NAMESPACE_ID::internal::ReflectionOps::Merge(from, this);
+  } else {
+  // @@protoc_insertion_point(generalized_merge_from_cast_success:Protocol.C_RUNE_EQUIP)
+    MergeFrom(*source);
+  }
+}
+
+void C_RUNE_EQUIP::MergeFrom(const C_RUNE_EQUIP& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:Protocol.C_RUNE_EQUIP)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.rewardoptionindex() != 0) {
+    _internal_set_rewardoptionindex(from._internal_rewardoptionindex());
+  }
+  if (from.skillslot() != 0) {
+    _internal_set_skillslot(from._internal_skillslot());
+  }
+  if (from.runeslotindex() != 0) {
+    _internal_set_runeslotindex(from._internal_runeslotindex());
+  }
+}
+
+void C_RUNE_EQUIP::CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
+// @@protoc_insertion_point(generalized_copy_from_start:Protocol.C_RUNE_EQUIP)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void C_RUNE_EQUIP::CopyFrom(const C_RUNE_EQUIP& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:Protocol.C_RUNE_EQUIP)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool C_RUNE_EQUIP::IsInitialized() const {
+  return true;
+}
+
+void C_RUNE_EQUIP::InternalSwap(C_RUNE_EQUIP* other) {
+  using std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(C_RUNE_EQUIP, runeslotindex_)
+      + sizeof(C_RUNE_EQUIP::runeslotindex_)
+      - PROTOBUF_FIELD_OFFSET(C_RUNE_EQUIP, rewardoptionindex_)>(
+          reinterpret_cast<char*>(&rewardoptionindex_),
+          reinterpret_cast<char*>(&other->rewardoptionindex_));
+}
+
+::PROTOBUF_NAMESPACE_ID::Metadata C_RUNE_EQUIP::GetMetadata() const {
+  return ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(
+      &descriptor_table_Protocol_2eproto_getter, &descriptor_table_Protocol_2eproto_once,
+      file_level_metadata_Protocol_2eproto[35]);
+}
+
+// ===================================================================
+
+class S_RUNE_EQUIP::_Internal {
+ public:
+};
+
+S_RUNE_EQUIP::S_RUNE_EQUIP(::PROTOBUF_NAMESPACE_ID::Arena* arena)
+  : ::PROTOBUF_NAMESPACE_ID::Message(arena) {
+  SharedCtor();
+  RegisterArenaDtor(arena);
+  // @@protoc_insertion_point(arena_constructor:Protocol.S_RUNE_EQUIP)
+}
+S_RUNE_EQUIP::S_RUNE_EQUIP(const S_RUNE_EQUIP& from)
+  : ::PROTOBUF_NAMESPACE_ID::Message() {
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  runeid_.UnsafeSetDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
+  if (!from._internal_runeid().empty()) {
+    runeid_.Set(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, from._internal_runeid(), 
+      GetArenaForAllocation());
+  }
+  ::memcpy(&playerid_, &from.playerid_,
+    static_cast<size_t>(reinterpret_cast<char*>(&stackcount_) -
+    reinterpret_cast<char*>(&playerid_)) + sizeof(stackcount_));
+  // @@protoc_insertion_point(copy_constructor:Protocol.S_RUNE_EQUIP)
+}
+
+void S_RUNE_EQUIP::SharedCtor() {
+runeid_.UnsafeSetDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
+::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
+    reinterpret_cast<char*>(&playerid_) - reinterpret_cast<char*>(this)),
+    0, static_cast<size_t>(reinterpret_cast<char*>(&stackcount_) -
+    reinterpret_cast<char*>(&playerid_)) + sizeof(stackcount_));
+}
+
+S_RUNE_EQUIP::~S_RUNE_EQUIP() {
+  // @@protoc_insertion_point(destructor:Protocol.S_RUNE_EQUIP)
+  SharedDtor();
+  _internal_metadata_.Delete<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+void S_RUNE_EQUIP::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
+  runeid_.DestroyNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
+}
+
+void S_RUNE_EQUIP::ArenaDtor(void* object) {
+  S_RUNE_EQUIP* _this = reinterpret_cast< S_RUNE_EQUIP* >(object);
+  (void)_this;
+}
+void S_RUNE_EQUIP::RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena*) {
+}
+void S_RUNE_EQUIP::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+
+void S_RUNE_EQUIP::Clear() {
+// @@protoc_insertion_point(message_clear_start:Protocol.S_RUNE_EQUIP)
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  runeid_.ClearToEmpty();
+  ::memset(&playerid_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&stackcount_) -
+      reinterpret_cast<char*>(&playerid_)) + sizeof(stackcount_));
+  _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+const char* S_RUNE_EQUIP::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) {
+#define CHK_(x) if (PROTOBUF_PREDICT_FALSE(!(x))) goto failure
+  while (!ctx->Done(&ptr)) {
+    ::PROTOBUF_NAMESPACE_ID::uint32 tag;
+    ptr = ::PROTOBUF_NAMESPACE_ID::internal::ReadTag(ptr, &tag);
+    switch (tag >> 3) {
+      // uint64 playerId = 1;
+      case 1:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 8)) {
+          playerid_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // uint32 skillSlot = 2;
+      case 2:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 16)) {
+          skillslot_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // uint32 runeSlotIndex = 3;
+      case 3:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 24)) {
+          runeslotindex_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // string runeId = 4;
+      case 4:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 34)) {
+          auto str = _internal_mutable_runeid();
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(::PROTOBUF_NAMESPACE_ID::internal::VerifyUTF8(str, "Protocol.S_RUNE_EQUIP.runeId"));
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // uint32 stackCount = 5;
+      case 5:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 40)) {
+          stackcount_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      default: {
+      handle_unusual:
+        if ((tag == 0) || ((tag & 7) == 4)) {
+          CHK_(ptr);
+          ctx->SetLastTag(tag);
+          goto success;
+        }
+        ptr = UnknownFieldParse(tag,
+            _internal_metadata_.mutable_unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(),
+            ptr, ctx);
+        CHK_(ptr != nullptr);
+        continue;
+      }
+    }  // switch
+  }  // while
+success:
+  return ptr;
+failure:
+  ptr = nullptr;
+  goto success;
+#undef CHK_
+}
+
+::PROTOBUF_NAMESPACE_ID::uint8* S_RUNE_EQUIP::_InternalSerialize(
+    ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:Protocol.S_RUNE_EQUIP)
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // uint64 playerId = 1;
+  if (this->playerid() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(1, this->_internal_playerid(), target);
+  }
+
+  // uint32 skillSlot = 2;
+  if (this->skillslot() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt32ToArray(2, this->_internal_skillslot(), target);
+  }
+
+  // uint32 runeSlotIndex = 3;
+  if (this->runeslotindex() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt32ToArray(3, this->_internal_runeslotindex(), target);
+  }
+
+  // string runeId = 4;
+  if (!this->runeid().empty()) {
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      this->_internal_runeid().data(), static_cast<int>(this->_internal_runeid().length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "Protocol.S_RUNE_EQUIP.runeId");
+    target = stream->WriteStringMaybeAliased(
+        4, this->_internal_runeid(), target);
+  }
+
+  // uint32 stackCount = 5;
+  if (this->stackcount() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt32ToArray(5, this->_internal_stackcount(), target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
+        _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:Protocol.S_RUNE_EQUIP)
+  return target;
+}
+
+size_t S_RUNE_EQUIP::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:Protocol.S_RUNE_EQUIP)
+  size_t total_size = 0;
+
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // string runeId = 4;
+  if (!this->runeid().empty()) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+        this->_internal_runeid());
+  }
+
+  // uint64 playerId = 1;
+  if (this->playerid() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64Size(
+        this->_internal_playerid());
+  }
+
+  // uint32 skillSlot = 2;
+  if (this->skillslot() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt32Size(
+        this->_internal_skillslot());
+  }
+
+  // uint32 runeSlotIndex = 3;
+  if (this->runeslotindex() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt32Size(
+        this->_internal_runeslotindex());
+  }
+
+  // uint32 stackCount = 5;
+  if (this->stackcount() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt32Size(
+        this->_internal_stackcount());
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    return ::PROTOBUF_NAMESPACE_ID::internal::ComputeUnknownFieldsSize(
+        _internal_metadata_, total_size, &_cached_size_);
+  }
+  int cached_size = ::PROTOBUF_NAMESPACE_ID::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void S_RUNE_EQUIP::MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
+// @@protoc_insertion_point(generalized_merge_from_start:Protocol.S_RUNE_EQUIP)
+  GOOGLE_DCHECK_NE(&from, this);
+  const S_RUNE_EQUIP* source =
+      ::PROTOBUF_NAMESPACE_ID::DynamicCastToGenerated<S_RUNE_EQUIP>(
+          &from);
+  if (source == nullptr) {
+  // @@protoc_insertion_point(generalized_merge_from_cast_fail:Protocol.S_RUNE_EQUIP)
+    ::PROTOBUF_NAMESPACE_ID::internal::ReflectionOps::Merge(from, this);
+  } else {
+  // @@protoc_insertion_point(generalized_merge_from_cast_success:Protocol.S_RUNE_EQUIP)
+    MergeFrom(*source);
+  }
+}
+
+void S_RUNE_EQUIP::MergeFrom(const S_RUNE_EQUIP& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:Protocol.S_RUNE_EQUIP)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (!from.runeid().empty()) {
+    _internal_set_runeid(from._internal_runeid());
+  }
+  if (from.playerid() != 0) {
+    _internal_set_playerid(from._internal_playerid());
+  }
+  if (from.skillslot() != 0) {
+    _internal_set_skillslot(from._internal_skillslot());
+  }
+  if (from.runeslotindex() != 0) {
+    _internal_set_runeslotindex(from._internal_runeslotindex());
+  }
+  if (from.stackcount() != 0) {
+    _internal_set_stackcount(from._internal_stackcount());
+  }
+}
+
+void S_RUNE_EQUIP::CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
+// @@protoc_insertion_point(generalized_copy_from_start:Protocol.S_RUNE_EQUIP)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void S_RUNE_EQUIP::CopyFrom(const S_RUNE_EQUIP& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:Protocol.S_RUNE_EQUIP)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool S_RUNE_EQUIP::IsInitialized() const {
+  return true;
+}
+
+void S_RUNE_EQUIP::InternalSwap(S_RUNE_EQUIP* other) {
+  using std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(),
+      &runeid_, GetArenaForAllocation(),
+      &other->runeid_, other->GetArenaForAllocation()
+  );
+  ::PROTOBUF_NAMESPACE_ID::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(S_RUNE_EQUIP, stackcount_)
+      + sizeof(S_RUNE_EQUIP::stackcount_)
+      - PROTOBUF_FIELD_OFFSET(S_RUNE_EQUIP, playerid_)>(
+          reinterpret_cast<char*>(&playerid_),
+          reinterpret_cast<char*>(&other->playerid_));
+}
+
+::PROTOBUF_NAMESPACE_ID::Metadata S_RUNE_EQUIP::GetMetadata() const {
+  return ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(
+      &descriptor_table_Protocol_2eproto_getter, &descriptor_table_Protocol_2eproto_once,
+      file_level_metadata_Protocol_2eproto[36]);
+}
+
+// ===================================================================
+
+class S_RUNE_HOMING_TARGET::_Internal {
+ public:
+};
+
+S_RUNE_HOMING_TARGET::S_RUNE_HOMING_TARGET(::PROTOBUF_NAMESPACE_ID::Arena* arena)
+  : ::PROTOBUF_NAMESPACE_ID::Message(arena) {
+  SharedCtor();
+  RegisterArenaDtor(arena);
+  // @@protoc_insertion_point(arena_constructor:Protocol.S_RUNE_HOMING_TARGET)
+}
+S_RUNE_HOMING_TARGET::S_RUNE_HOMING_TARGET(const S_RUNE_HOMING_TARGET& from)
+  : ::PROTOBUF_NAMESPACE_ID::Message() {
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  ::memcpy(&playerid_, &from.playerid_,
+    static_cast<size_t>(reinterpret_cast<char*>(&originz_) -
+    reinterpret_cast<char*>(&playerid_)) + sizeof(originz_));
+  // @@protoc_insertion_point(copy_constructor:Protocol.S_RUNE_HOMING_TARGET)
+}
+
+void S_RUNE_HOMING_TARGET::SharedCtor() {
+::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
+    reinterpret_cast<char*>(&playerid_) - reinterpret_cast<char*>(this)),
+    0, static_cast<size_t>(reinterpret_cast<char*>(&originz_) -
+    reinterpret_cast<char*>(&playerid_)) + sizeof(originz_));
+}
+
+S_RUNE_HOMING_TARGET::~S_RUNE_HOMING_TARGET() {
+  // @@protoc_insertion_point(destructor:Protocol.S_RUNE_HOMING_TARGET)
+  SharedDtor();
+  _internal_metadata_.Delete<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+void S_RUNE_HOMING_TARGET::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
+}
+
+void S_RUNE_HOMING_TARGET::ArenaDtor(void* object) {
+  S_RUNE_HOMING_TARGET* _this = reinterpret_cast< S_RUNE_HOMING_TARGET* >(object);
+  (void)_this;
+}
+void S_RUNE_HOMING_TARGET::RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena*) {
+}
+void S_RUNE_HOMING_TARGET::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+
+void S_RUNE_HOMING_TARGET::Clear() {
+// @@protoc_insertion_point(message_clear_start:Protocol.S_RUNE_HOMING_TARGET)
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  ::memset(&playerid_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&originz_) -
+      reinterpret_cast<char*>(&playerid_)) + sizeof(originz_));
+  _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+const char* S_RUNE_HOMING_TARGET::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) {
+#define CHK_(x) if (PROTOBUF_PREDICT_FALSE(!(x))) goto failure
+  while (!ctx->Done(&ptr)) {
+    ::PROTOBUF_NAMESPACE_ID::uint32 tag;
+    ptr = ::PROTOBUF_NAMESPACE_ID::internal::ReadTag(ptr, &tag);
+    switch (tag >> 3) {
+      // uint64 playerId = 1;
+      case 1:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 8)) {
+          playerid_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // int32 skillSlot = 2;
+      case 2:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 16)) {
+          skillslot_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // .Protocol.SkillType skillType = 3;
+      case 3:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 24)) {
+          ::PROTOBUF_NAMESPACE_ID::uint64 val = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+          _internal_set_skilltype(static_cast<::Protocol::SkillType>(val));
+        } else goto handle_unusual;
+        continue;
+      // uint64 targetMonsterId = 4;
+      case 4:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 32)) {
+          targetmonsterid_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // float targetX = 5;
+      case 5:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 45)) {
+          targetx_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else goto handle_unusual;
+        continue;
+      // float targetY = 6;
+      case 6:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 53)) {
+          targety_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else goto handle_unusual;
+        continue;
+      // float targetZ = 7;
+      case 7:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 61)) {
+          targetz_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else goto handle_unusual;
+        continue;
+      // float originX = 8;
+      case 8:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 69)) {
+          originx_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else goto handle_unusual;
+        continue;
+      // float originY = 9;
+      case 9:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 77)) {
+          originy_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else goto handle_unusual;
+        continue;
+      // float originZ = 10;
+      case 10:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 85)) {
+          originz_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else goto handle_unusual;
+        continue;
+      default: {
+      handle_unusual:
+        if ((tag == 0) || ((tag & 7) == 4)) {
+          CHK_(ptr);
+          ctx->SetLastTag(tag);
+          goto success;
+        }
+        ptr = UnknownFieldParse(tag,
+            _internal_metadata_.mutable_unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(),
+            ptr, ctx);
+        CHK_(ptr != nullptr);
+        continue;
+      }
+    }  // switch
+  }  // while
+success:
+  return ptr;
+failure:
+  ptr = nullptr;
+  goto success;
+#undef CHK_
+}
+
+::PROTOBUF_NAMESPACE_ID::uint8* S_RUNE_HOMING_TARGET::_InternalSerialize(
+    ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:Protocol.S_RUNE_HOMING_TARGET)
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // uint64 playerId = 1;
+  if (this->playerid() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(1, this->_internal_playerid(), target);
+  }
+
+  // int32 skillSlot = 2;
+  if (this->skillslot() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteInt32ToArray(2, this->_internal_skillslot(), target);
+  }
+
+  // .Protocol.SkillType skillType = 3;
+  if (this->skilltype() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteEnumToArray(
+      3, this->_internal_skilltype(), target);
+  }
+
+  // uint64 targetMonsterId = 4;
+  if (this->targetmonsterid() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(4, this->_internal_targetmonsterid(), target);
+  }
+
+  // float targetX = 5;
+  if (!(this->targetx() <= 0 && this->targetx() >= 0)) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(5, this->_internal_targetx(), target);
+  }
+
+  // float targetY = 6;
+  if (!(this->targety() <= 0 && this->targety() >= 0)) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(6, this->_internal_targety(), target);
+  }
+
+  // float targetZ = 7;
+  if (!(this->targetz() <= 0 && this->targetz() >= 0)) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(7, this->_internal_targetz(), target);
+  }
+
+  // float originX = 8;
+  if (!(this->originx() <= 0 && this->originx() >= 0)) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(8, this->_internal_originx(), target);
+  }
+
+  // float originY = 9;
+  if (!(this->originy() <= 0 && this->originy() >= 0)) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(9, this->_internal_originy(), target);
+  }
+
+  // float originZ = 10;
+  if (!(this->originz() <= 0 && this->originz() >= 0)) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(10, this->_internal_originz(), target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
+        _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:Protocol.S_RUNE_HOMING_TARGET)
+  return target;
+}
+
+size_t S_RUNE_HOMING_TARGET::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:Protocol.S_RUNE_HOMING_TARGET)
+  size_t total_size = 0;
+
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // uint64 playerId = 1;
+  if (this->playerid() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64Size(
+        this->_internal_playerid());
+  }
+
+  // int32 skillSlot = 2;
+  if (this->skillslot() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::Int32Size(
+        this->_internal_skillslot());
+  }
+
+  // .Protocol.SkillType skillType = 3;
+  if (this->skilltype() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::EnumSize(this->_internal_skilltype());
+  }
+
+  // uint64 targetMonsterId = 4;
+  if (this->targetmonsterid() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64Size(
+        this->_internal_targetmonsterid());
+  }
+
+  // float targetX = 5;
+  if (!(this->targetx() <= 0 && this->targetx() >= 0)) {
+    total_size += 1 + 4;
+  }
+
+  // float targetY = 6;
+  if (!(this->targety() <= 0 && this->targety() >= 0)) {
+    total_size += 1 + 4;
+  }
+
+  // float targetZ = 7;
+  if (!(this->targetz() <= 0 && this->targetz() >= 0)) {
+    total_size += 1 + 4;
+  }
+
+  // float originX = 8;
+  if (!(this->originx() <= 0 && this->originx() >= 0)) {
+    total_size += 1 + 4;
+  }
+
+  // float originY = 9;
+  if (!(this->originy() <= 0 && this->originy() >= 0)) {
+    total_size += 1 + 4;
+  }
+
+  // float originZ = 10;
+  if (!(this->originz() <= 0 && this->originz() >= 0)) {
+    total_size += 1 + 4;
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    return ::PROTOBUF_NAMESPACE_ID::internal::ComputeUnknownFieldsSize(
+        _internal_metadata_, total_size, &_cached_size_);
+  }
+  int cached_size = ::PROTOBUF_NAMESPACE_ID::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void S_RUNE_HOMING_TARGET::MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
+// @@protoc_insertion_point(generalized_merge_from_start:Protocol.S_RUNE_HOMING_TARGET)
+  GOOGLE_DCHECK_NE(&from, this);
+  const S_RUNE_HOMING_TARGET* source =
+      ::PROTOBUF_NAMESPACE_ID::DynamicCastToGenerated<S_RUNE_HOMING_TARGET>(
+          &from);
+  if (source == nullptr) {
+  // @@protoc_insertion_point(generalized_merge_from_cast_fail:Protocol.S_RUNE_HOMING_TARGET)
+    ::PROTOBUF_NAMESPACE_ID::internal::ReflectionOps::Merge(from, this);
+  } else {
+  // @@protoc_insertion_point(generalized_merge_from_cast_success:Protocol.S_RUNE_HOMING_TARGET)
+    MergeFrom(*source);
+  }
+}
+
+void S_RUNE_HOMING_TARGET::MergeFrom(const S_RUNE_HOMING_TARGET& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:Protocol.S_RUNE_HOMING_TARGET)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.playerid() != 0) {
+    _internal_set_playerid(from._internal_playerid());
+  }
+  if (from.skillslot() != 0) {
+    _internal_set_skillslot(from._internal_skillslot());
+  }
+  if (from.skilltype() != 0) {
+    _internal_set_skilltype(from._internal_skilltype());
+  }
+  if (from.targetmonsterid() != 0) {
+    _internal_set_targetmonsterid(from._internal_targetmonsterid());
+  }
+  if (!(from.targetx() <= 0 && from.targetx() >= 0)) {
+    _internal_set_targetx(from._internal_targetx());
+  }
+  if (!(from.targety() <= 0 && from.targety() >= 0)) {
+    _internal_set_targety(from._internal_targety());
+  }
+  if (!(from.targetz() <= 0 && from.targetz() >= 0)) {
+    _internal_set_targetz(from._internal_targetz());
+  }
+  if (!(from.originx() <= 0 && from.originx() >= 0)) {
+    _internal_set_originx(from._internal_originx());
+  }
+  if (!(from.originy() <= 0 && from.originy() >= 0)) {
+    _internal_set_originy(from._internal_originy());
+  }
+  if (!(from.originz() <= 0 && from.originz() >= 0)) {
+    _internal_set_originz(from._internal_originz());
+  }
+}
+
+void S_RUNE_HOMING_TARGET::CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
+// @@protoc_insertion_point(generalized_copy_from_start:Protocol.S_RUNE_HOMING_TARGET)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+void S_RUNE_HOMING_TARGET::CopyFrom(const S_RUNE_HOMING_TARGET& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:Protocol.S_RUNE_HOMING_TARGET)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool S_RUNE_HOMING_TARGET::IsInitialized() const {
+  return true;
+}
+
+void S_RUNE_HOMING_TARGET::InternalSwap(S_RUNE_HOMING_TARGET* other) {
+  using std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(S_RUNE_HOMING_TARGET, originz_)
+      + sizeof(S_RUNE_HOMING_TARGET::originz_)
+      - PROTOBUF_FIELD_OFFSET(S_RUNE_HOMING_TARGET, playerid_)>(
+          reinterpret_cast<char*>(&playerid_),
+          reinterpret_cast<char*>(&other->playerid_));
+}
+
+::PROTOBUF_NAMESPACE_ID::Metadata S_RUNE_HOMING_TARGET::GetMetadata() const {
+  return ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(
+      &descriptor_table_Protocol_2eproto_getter, &descriptor_table_Protocol_2eproto_once,
+      file_level_metadata_Protocol_2eproto[37]);
+}
+
 // @@protoc_insertion_point(namespace_scope)
 }  // namespace Protocol
 PROTOBUF_NAMESPACE_OPEN
@@ -10248,6 +11348,15 @@ template<> PROTOBUF_NOINLINE ::Protocol::C_RUNE_REWARD_PICK* Arena::CreateMaybeM
 }
 template<> PROTOBUF_NOINLINE ::Protocol::S_RUNE_REWARD_PICKED* Arena::CreateMaybeMessage< ::Protocol::S_RUNE_REWARD_PICKED >(Arena* arena) {
   return Arena::CreateMessageInternal< ::Protocol::S_RUNE_REWARD_PICKED >(arena);
+}
+template<> PROTOBUF_NOINLINE ::Protocol::C_RUNE_EQUIP* Arena::CreateMaybeMessage< ::Protocol::C_RUNE_EQUIP >(Arena* arena) {
+  return Arena::CreateMessageInternal< ::Protocol::C_RUNE_EQUIP >(arena);
+}
+template<> PROTOBUF_NOINLINE ::Protocol::S_RUNE_EQUIP* Arena::CreateMaybeMessage< ::Protocol::S_RUNE_EQUIP >(Arena* arena) {
+  return Arena::CreateMessageInternal< ::Protocol::S_RUNE_EQUIP >(arena);
+}
+template<> PROTOBUF_NOINLINE ::Protocol::S_RUNE_HOMING_TARGET* Arena::CreateMaybeMessage< ::Protocol::S_RUNE_HOMING_TARGET >(Arena* arena) {
+  return Arena::CreateMessageInternal< ::Protocol::S_RUNE_HOMING_TARGET >(arena);
 }
 PROTOBUF_NAMESPACE_CLOSE
 

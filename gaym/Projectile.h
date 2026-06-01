@@ -53,6 +53,11 @@ struct Projectile
     int   spawnOnHitCount = 0;      // 반향: 적중 시 주변 적으로 추가 투사체 생성
     SkillSlot skillSlot   = SkillSlot::Count; // 적중 시 onHit 훅 호출용 슬롯 정보
 
+    // 네트워크 유도 룬 타겟 정보
+    bool useNetworkHomingTarget = false;
+    uint64 networkHomingTargetMonsterId = 0;
+    XMFLOAT3 networkHomingTargetPos = { 0.0f, 0.0f, 0.0f };
+
     // 관통 히트 추적 — 이미 맞은 적은 재타격하지 않음
     std::unordered_set<EnemyComponent*> piercedEnemies;
 

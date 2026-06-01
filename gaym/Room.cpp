@@ -581,6 +581,14 @@ void CRoom::SpawnDropItem()
 
 void CRoom::SpawnRewardRuneObjectAt(uint64 ownerPlayerId, const XMFLOAT3& spawnPos)
 {
+    // 오프라인/기존 호출용 wrapper
+    // runeIds가 비어 있으면 DropItemComponent의 기존 랜덤 생성 결과를 그대로 사용한다.
+    std::array<std::string, 3> emptyRuneIds = { "", "", "" };
+    SpawnRewardRuneObjectAt(ownerPlayerId, spawnPos, emptyRuneIds);
+}
+
+void CRoom::SpawnRewardRuneObjectAt(uint64 ownerPlayerId, const XMFLOAT3& spawnPos, const std::array<std::string, 3>& runeIds)
+{
     if (!m_pScene)
     {
         OutputDebugString(L"[Room] Cannot spawn reward rune object - no Scene pointer\n");
@@ -627,14 +635,30 @@ void CRoom::SpawnRewardRuneObjectAt(uint64 ownerPlayerId, const XMFLOAT3& spawnP
     pRuneObject->SetMesh(pCubeMesh);
     pRuneObject->AddComponent<RenderComponent>()->SetMesh(pCubeMesh);
 
-    // DropItemComponent 생성 시점에 룬 3개가 랜덤 생성된다.
-    // 현재 단계에서는 위치 동기화만 처리하고, 룬 랜덤 결과 동기화는 다음 단계에서 서버 권위로 옮긴다.
+    // DropItemComponent 생성 시 기본 랜덤 룬이 한 번 생성된다.
+    // 네트워크 모드에서는 아래에서 서버가 내려준 룬 선택지로 덮어쓴다.
     DropItemComponent* pDropComp = pRuneObject->AddComponent<DropItemComponent>();
 
+    // DropItemComponent의 기본 중력은 y=0까지 떨어뜨리므로,
     // 서버가 지정한 보상 위치 높이를 기준으로 떠 있도록 고정한다.
     pDropComp->SetFloatingBaseY(spawnPos.y);
 
+    // 서버가 룬 3개를 내려준 경우, 클라 랜덤 결과를 서버 값으로 덮어쓴다.
+    // 이렇게 해야 모든 클라이언트에서 같은 룬 선택지가 보인다.
+    if (!runeIds[0].empty() && !runeIds[1].empty() && !runeIds[2].empty())
+    {
+        std::array<EquippedRune, 3> serverOptions;
+        for (int i = 0; i < 3; ++i)
+        {
+            serverOptions[i].runeId = runeIds[i];
+            serverOptions[i].stackCount = 1;
+        }
+
+        pDropComp->SetRuneOptions(serverOptions);
+    }
+
     // 룬 최고 등급에 따라 색상 적용
+    // 서버 룬 선택지를 적용한 뒤 GetHighestGrade()를 호출해야 색상도 서버 룬 기준으로 맞는다.
     XMFLOAT4 gc = DropItemComponent::GetGradeColor(pDropComp->GetHighestGrade());
 
     MATERIAL gradeMaterial;
@@ -659,14 +683,17 @@ void CRoom::SpawnRewardRuneObjectAt(uint64 ownerPlayerId, const XMFLOAT3& spawnP
     if (bMine)
         m_pDropItem = pRuneObject;
 
-    wchar_t buffer[192];
+    wchar_t buffer[256];
     swprintf_s(buffer,
-        L"[Room] Reward rune object spawned. owner=%llu mine=%d pos=(%.2f, %.2f, %.2f)\n",
+        L"[Room] Reward rune object spawned. owner=%llu mine=%d pos=(%.2f, %.2f, %.2f) runes=(%hs, %hs, %hs)\n",
         ownerPlayerId,
         bMine ? 1 : 0,
         spawnPos.x,
         spawnPos.y,
-        spawnPos.z);
+        spawnPos.z,
+        runeIds[0].c_str(),
+        runeIds[1].c_str(),
+        runeIds[2].c_str());
     OutputDebugString(buffer);
 }
 

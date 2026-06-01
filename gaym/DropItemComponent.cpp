@@ -107,6 +107,19 @@ EquippedRune DropItemComponent::GetRuneOption(int index) const
     return m_RuneOptions[index];
 }
 
+void DropItemComponent::SetRuneOptions(const std::array<EquippedRune, 3>& options)
+{
+    // 서버가 결정한 룬 선택지로 덮어쓴다.
+    m_RuneOptions = options;
+
+    wchar_t buffer[256];
+    swprintf_s(buffer, L"[Drop] Server rune options applied: [1] %hs, [2] %hs, [3] %hs\n",
+        m_RuneOptions[0].runeId.c_str(),
+        m_RuneOptions[1].runeId.c_str(),
+        m_RuneOptions[2].runeId.c_str());
+    OutputDebugString(buffer);
+}
+
 RuneGrade DropItemComponent::GetHighestGrade() const
 {
     RuneGrade highest = RuneGrade::Normal;

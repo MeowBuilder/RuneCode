@@ -2310,6 +2310,7 @@ void Scene::CancelDropInteraction()
     m_eDropState = DropInteractionState::None;
     m_pCurrentDropItem = nullptr;
     m_sSelectedRuneId.clear();
+    m_nSelectedRuneOptionIndex = -1;
     OutputDebugString(L"[Scene] Drop interaction cancelled\n");
 }
 
@@ -2334,13 +2335,18 @@ void Scene::SelectRuneByClick(int runeIndex)
         return;
     }
 
-    // Store selected rune ID and move to skill selection state
+    // Store selected rune ID and selected option index, then move to skill selection state.
+    // 서버에는 runeId를 직접 보내지 않고 rewardOptionIndex만 보낸다.
     EquippedRune selected = pDropComp->GetRuneOption(runeIndex);
     m_sSelectedRuneId = selected.runeId;
+    m_nSelectedRuneOptionIndex = runeIndex;
     m_eDropState = DropInteractionState::SelectingSkill;
 
-    wchar_t buffer[128];
-    swprintf_s(buffer, L"[Scene] Rune clicked: %hs - Now select skill slot\n", m_sSelectedRuneId.c_str());
+    wchar_t buffer[160];
+    swprintf_s(buffer,
+        L"[Scene] Rune clicked: index=%d rune=%hs - Now select skill slot\n",
+        runeIndex,
+        m_sSelectedRuneId.c_str());
     OutputDebugString(buffer);
 }
 
@@ -2371,13 +2377,21 @@ void Scene::SelectSkillSlot(SkillSlot slot, int runeSlotIndex)
         }
     }
 
-    // 온라인 모드에서는 룬 선택 완료를 서버에 알린다.
-    // 서버는 S_RUNE_REWARD_PICKED를 브로드캐스트하고,
-    // 모든 클라가 해당 플레이어의 룬 오브젝트를 같이 숨긴다.
+    // 온라인 모드에서는 룬 장착 요청을 서버에 보낸다.
+    // 클라는 runeId를 직접 보내지 않고, 이번 보상 3개 중 몇 번째를 골랐는지만 보낸다.
+    // 서버는 pendingRewardRunes[rewardOptionIndex]로 실제 runeId를 검증한 뒤 장착/DB 저장한다.
     if (NetworkManager* pNet = NetworkManager::GetInstance())
     {
         if (pNet->IsConnected())
-            pNet->SendRuneRewardPick();
+        {
+            if (m_nSelectedRuneOptionIndex >= 0 && m_nSelectedRuneOptionIndex < 3)
+            {
+                pNet->SendRuneEquip(
+                    static_cast<uint32>(m_nSelectedRuneOptionIndex),
+                    static_cast<uint32>(slot),
+                    static_cast<uint32>(runeSlotIndex));
+            }
+        }
     }
 
     // Deactivate and hide the drop item
@@ -2398,6 +2412,7 @@ void Scene::SelectSkillSlot(SkillSlot slot, int runeSlotIndex)
     // Reset state
     m_pCurrentDropItem = nullptr;
     m_sSelectedRuneId.clear();
+    m_nSelectedRuneOptionIndex = -1;
     m_eDropState = DropInteractionState::None;
 }
 

@@ -11,6 +11,7 @@
 #include "FluidSkillVFXManager.h"
 #include "EffectRegistry.h"
 #include "SkillTypes.h"
+#include "SkillComponent.h"
 #include "ProjectileManager.h"
 #include "PlayerComponent.h"
 #include "Camera.h"
@@ -556,6 +557,18 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             ProcessRuneRewardPicked(pScene, cmd.playerId);
             break;
 
+        case NetworkCommand::RuneEquip:
+            ProcessRuneEquip(pScene, cmd.playerId, cmd.runeSkillSlot, cmd.runeSlotIndex, cmd.runeId, cmd.runeStackCount);
+            break;
+
+        case NetworkCommand::RuneHomingTarget:
+            ProcessRuneHomingTarget(
+                pScene,cmd.playerId,cmd.runeHomingSkillSlot,cmd.runeHomingSkillType,cmd.runeHomingTargetMonsterId,
+                DirectX::XMFLOAT3(cmd.runeHomingTargetX,cmd.runeHomingTargetY,cmd.runeHomingTargetZ),
+                DirectX::XMFLOAT3(cmd.runeHomingOriginX,cmd.runeHomingOriginY,cmd.runeHomingOriginZ)
+            );
+            break;
+
         case NetworkCommand::BossEvent:
             ProcessBossEvent(pScene, cmd.monsterId, cmd.bossEventType, cmd.phaseIndex);
             break;
@@ -745,6 +758,30 @@ void NetworkManager::SendRuneRewardPick()
     m_pSession->Send(sendBuffer);
 
     WriteNetworkLog("[Network] C_RUNE_REWARD_PICK sent");
+}
+
+// 룬 장착 요청
+void NetworkManager::SendRuneEquip(uint32 rewardOptionIndex, uint32 skillSlot, uint32 runeSlotIndex)
+{
+    if (!m_bConnected || !m_pSession)
+        return;
+
+    Protocol::C_RUNE_EQUIP pkt;
+    pkt.set_rewardoptionindex(rewardOptionIndex);
+    pkt.set_skillslot(skillSlot);
+    pkt.set_runeslotindex(runeSlotIndex);
+
+	// 서버에 룬 장착 요청 패킷 전송
+    auto sendBuffer = ServerPacketHandler::MakeSendBuffer(pkt);
+    m_pSession->Send(sendBuffer);
+
+    char buf[160];
+    sprintf_s(buf,
+        "[Network] C_RUNE_EQUIP sent: rewardOptionIndex=%u skillSlot=%u runeSlotIndex=%u",
+        rewardOptionIndex,
+        skillSlot,
+        runeSlotIndex);
+    WriteNetworkLog(buf);
 }
 
 void NetworkManager::SendDebugKillAll()
@@ -4817,6 +4854,55 @@ void NetworkManager::QueueRuneRewardPicked(uint64 ownerPlayerId)
     m_vCommandQueue.push_back(cmd);
 }
 
+void NetworkManager::QueueRuneEquip(uint64 playerId, uint32 skillSlot, uint32 runeSlotIndex, const std::string& runeId, uint32 stackCount)
+{
+    std::lock_guard<std::mutex> lock(m_queueMutex);
+
+    NetworkCommandData cmd{};
+    cmd.type = NetworkCommand::RuneEquip;
+    cmd.playerId = playerId;
+    cmd.runeSkillSlot = skillSlot;
+    cmd.runeSlotIndex = runeSlotIndex;
+    cmd.runeId = runeId;
+    cmd.runeStackCount = stackCount;
+
+    m_vCommandQueue.push_back(cmd);
+}
+
+void NetworkManager::QueueRuneHomingTarget(uint64 playerId, int32 skillSlot, int32 skillType, uint64 targetMonsterId, const DirectX::XMFLOAT3& targetPos, const DirectX::XMFLOAT3& originPos)
+{
+    NetworkCommandData cmd{};
+    cmd.type = NetworkCommand::RuneHomingTarget;
+    cmd.playerId = playerId;
+
+    cmd.runeHomingSkillSlot = skillSlot;
+    cmd.runeHomingSkillType = skillType;
+    cmd.runeHomingTargetMonsterId = targetMonsterId;
+
+    cmd.runeHomingTargetX = targetPos.x;
+    cmd.runeHomingTargetY = targetPos.y;
+    cmd.runeHomingTargetZ = targetPos.z;
+
+    cmd.runeHomingOriginX = originPos.x;
+    cmd.runeHomingOriginY = originPos.y;
+    cmd.runeHomingOriginZ = originPos.z;
+
+    {
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        m_vCommandQueue.push_back(cmd);
+    }
+
+    char buf[256];
+    sprintf_s(buf,
+        "[Network] QueueRuneHomingTarget: playerId=%llu skillSlot=%d skillType=%d targetMonsterId=%llu",
+        playerId,
+        skillSlot,
+        skillType,
+        targetMonsterId);
+
+    WriteNetworkLog(buf);
+}
+
 void NetworkManager::QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 phaseIndex)
 {
     std::lock_guard<std::mutex> lock(m_queueMutex);
@@ -5821,10 +5907,10 @@ void NetworkManager::ProcessRoomRewardSpawn(Scene* pScene, uint32 stageIndex, ui
     // 서버가 계산한 공통 위치에 포탈 1개 생성
     pRoom->SpawnPortalCubeAt(portalPos);
 
-    // 서버가 계산한 각 플레이어 앞 위치에 룬 오브젝트 생성
+    // 서버가 계산한 각 플레이어 앞 위치와 서버가 결정한 룬 3개를 함께 적용한다.
     for (const auto& info : runeObjects)
     {
-        pRoom->SpawnRewardRuneObjectAt(info.ownerPlayerId, info.pos);
+        pRoom->SpawnRewardRuneObjectAt(info.ownerPlayerId, info.pos, info.runeIds);
     }
 
     char buf[256];
@@ -5857,6 +5943,127 @@ void NetworkManager::ProcessRuneRewardPicked(Scene* pScene, uint64 ownerPlayerId
         "[Network] RuneRewardPicked applied: ownerPlayerId=%llu",
         ownerPlayerId);
     WriteNetworkLog(buf);
+}
+
+void NetworkManager::ProcessRuneEquip(Scene* pScene, uint64 playerId, uint32 skillSlot, uint32 runeSlotIndex, const std::string& runeId, uint32 stackCount)
+{
+    if (!pScene)
+        return;
+
+    if (skillSlot >= static_cast<uint32>(SkillSlot::Count))
+        return;
+
+    if (runeSlotIndex >= RUNES_PER_SKILL)
+        return;
+
+    GameObject* pTargetPlayer = nullptr;
+
+    // 내 플레이어면 로컬 플레이어에 적용
+    if (playerId == GetLocalPlayerId())
+    {
+        pTargetPlayer = pScene->GetPlayer();
+    }
+    else
+    {
+        auto it = m_mapRemotePlayers.find(playerId);
+        if (it != m_mapRemotePlayers.end())
+            pTargetPlayer = it->second;
+    }
+
+	// 해당 플레이어의 SkillComponent에 룬 장착 정보 적용
+    if (pTargetPlayer)
+    {
+        SkillComponent* pSkill = pTargetPlayer->GetComponent<SkillComponent>();
+        if (pSkill)
+        {
+            pSkill->SetRuneSlot(
+                static_cast<SkillSlot>(skillSlot),
+                static_cast<int>(runeSlotIndex),
+                runeId,
+                static_cast<int>(stackCount));
+        }
+    }
+
+    char buf[256];
+    sprintf_s(buf,
+        "[Network] RuneEquip applied: playerId=%llu skillSlot=%u runeSlotIndex=%u runeId=%s stack=%u",
+        playerId,
+        skillSlot,
+        runeSlotIndex,
+        runeId.c_str(),
+        stackCount);
+    WriteNetworkLog(buf);
+}
+
+void NetworkManager::ProcessRuneHomingTarget(Scene* pScene, uint64 playerId, int32 skillSlot, int32 skillType, uint64 targetMonsterId, const DirectX::XMFLOAT3& targetPos, const DirectX::XMFLOAT3& originPos)
+{
+    // 1. 서버가 선택한 유도 타겟 몬스터를 클라 오브젝트 맵에서 찾는다.
+    GameObject* pTargetMonster = GetServerMonster(targetMonsterId);
+
+    char buf[384];
+    sprintf_s(buf,
+        "[Network] ProcessRuneHomingTarget: playerId=%llu skillSlot=%d skillType=%d targetMonsterId=%llu hasMonster=%d target=(%.2f, %.2f, %.2f) origin=(%.2f, %.2f, %.2f)",
+        playerId,
+        skillSlot,
+        skillType,
+        targetMonsterId,
+        pTargetMonster ? 1 : 0,
+        targetPos.x,
+        targetPos.y,
+        targetPos.z,
+        originPos.x,
+        originPos.y,
+        originPos.z);
+
+    WriteNetworkLog(buf);
+
+    if (!pScene)
+        return;
+
+    ProjectileManager* pProjectileManager = pScene->GetProjectileManager();
+
+    if (!pProjectileManager)
+        return;
+
+    // 2. 서버의 skillSlot 값을 클라 SkillSlot enum으로 변환한다.
+    SkillSlot clientSkillSlot = SkillSlot::Count;
+
+    switch (skillSlot)
+    {
+    case 0:
+        clientSkillSlot = SkillSlot::Q;
+        break;
+    case 1:
+        clientSkillSlot = SkillSlot::E;
+        break;
+    case 2:
+        clientSkillSlot = SkillSlot::R;
+        break;
+    case 3:
+        clientSkillSlot = SkillSlot::RightClick;
+        break;
+    default:
+        clientSkillSlot = SkillSlot::Count;
+        break;
+    }
+
+    // 3. 최근 발사된 해당 스킬 투사체에 서버 유도 타겟을 붙인다.
+    bool attached = pProjectileManager->AttachNetworkHomingTarget(
+        clientSkillSlot,
+        originPos,
+        targetMonsterId,
+        targetPos
+    );
+
+    char attachBuf[256];
+    sprintf_s(attachBuf,
+        "[Network] RuneHomingTarget attach projectile: playerId=%llu skillSlot=%d targetMonsterId=%llu attached=%d",
+        playerId,
+        skillSlot,
+        targetMonsterId,
+        attached ? 1 : 0);
+
+    WriteNetworkLog(attachBuf);
 }
 
 void NetworkManager::ProcessMonsterDespawn(Scene* pScene, uint64 monsterId)

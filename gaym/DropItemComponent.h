@@ -21,6 +21,9 @@ public:
     // Get the rune options
     const std::array<EquippedRune, 3>& GetRuneOptions() const { return m_RuneOptions; }
     EquippedRune GetRuneOption(int index) const;
+    
+    // 서버가 내려준 룬 3개로 선택지를 덮어쓴다.
+    void SetRuneOptions(const std::array<EquippedRune, 3>& options);
 
     // Check if drop is active (can be picked up)
     bool IsActive() const { return m_bIsActive; }

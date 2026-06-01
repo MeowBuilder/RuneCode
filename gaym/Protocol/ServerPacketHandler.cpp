@@ -545,6 +545,13 @@ bool Handle_S_ROOM_REWARD_SPAWN(PacketSessionRef& session, Protocol::S_ROOM_REWA
         info.ownerPlayerId = src.ownerplayerid();
         info.pos = DirectX::XMFLOAT3(src.x(), src.y(), src.z());
 
+        // 서버가 내려준 룬 3개를 큐 데이터에 복사한다.
+        // 3개보다 적게 오면 빈 문자열로 남기고, 클라 생성부에서 fallback 처리한다.
+        for (int r = 0; r < src.runeids_size() && r < 3; ++r)
+        {
+            info.runeIds[r] = src.runeids(r);
+        }
+
         runeObjects.push_back(info);
     }
 
@@ -582,6 +589,87 @@ bool Handle_S_RUNE_REWARD_PICKED(PacketSessionRef& session, Protocol::S_RUNE_REW
     if (pNetMgr)
     {
         pNetMgr->QueueRuneRewardPicked(ownerPlayerId);
+    }
+
+    return true;
+}
+
+bool Handle_S_RUNE_EQUIP(PacketSessionRef& session, Protocol::S_RUNE_EQUIP& pkt)
+{
+    uint64 playerId = pkt.playerid();
+    uint32 skillSlot = pkt.skillslot();
+    uint32 runeSlotIndex = pkt.runeslotindex();
+    std::string runeId = pkt.runeid();
+    uint32 stackCount = pkt.stackcount();
+
+    char buf[256];
+    sprintf_s(buf,
+        "[Network] S_RUNE_EQUIP received: playerId=%llu skillSlot=%u runeSlotIndex=%u runeId=%s stack=%u",
+        playerId,
+        skillSlot,
+        runeSlotIndex,
+        runeId.c_str(),
+        stackCount);
+    WriteNetworkLog(buf);
+
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr)
+    {
+        pNetMgr->QueueRuneEquip(
+            playerId,
+            skillSlot,
+            runeSlotIndex,
+            runeId,
+            stackCount);
+    }
+
+    return true;
+}
+
+bool Handle_S_RUNE_HOMING_TARGET(PacketSessionRef& session, Protocol::S_RUNE_HOMING_TARGET& pkt)
+{
+    uint64 playerId = pkt.playerid();
+    int32 skillSlot = pkt.skillslot();
+    int32 skillType = static_cast<int32>(pkt.skilltype());
+    uint64 targetMonsterId = pkt.targetmonsterid();
+
+    DirectX::XMFLOAT3 targetPos(
+        pkt.targetx(),
+        pkt.targety(),
+        pkt.targetz()
+    );
+
+    DirectX::XMFLOAT3 originPos(
+        pkt.originx(),
+        pkt.originy(),
+        pkt.originz()
+    );
+
+    char buf[256];
+    sprintf_s(buf,
+        "[Network] S_RUNE_HOMING_TARGET received: playerId=%llu skillSlot=%d skillType=%d targetMonsterId=%llu target=(%.2f, %.2f, %.2f)",
+        playerId,
+        skillSlot,
+        skillType,
+        targetMonsterId,
+        targetPos.x,
+        targetPos.y,
+        targetPos.z);
+
+    WriteNetworkLog(buf);
+
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+
+    if (pNetMgr)
+    {
+        pNetMgr->QueueRuneHomingTarget(
+            playerId,
+            skillSlot,
+            skillType,
+            targetMonsterId,
+            targetPos,
+            originPos
+        );
     }
 
     return true;

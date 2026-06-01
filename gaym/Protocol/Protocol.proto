@@ -4,282 +4,60 @@ package Protocol;
 import "Enum.proto";
 import "Struct.proto";
 
-message C_LOGIN // 클라 -> 서버 로그인 요청 패킷
+message C_LOGIN // Ŭ�� -> ���� �α��� ��û ��Ŷ
 {
+
 }
 
-message S_LOGIN // 서버 -> 클라 로그인 결과 패킷
+message S_LOGIN // ���� -> Ŭ�� �α��� ��� ��Ŷ
 {
 	bool success = 1;
-	repeated Player players = 2; // 보유 캐릭터 목록
+	repeated Player players = 2; // ���̵� �߱� ��
 }
 
-message C_ENTER_GAME // 클라 -> 서버 게임 입장 요청 패킷
+message C_ENTER_GAME // Ŭ�� -> ���� ���� ���� ��û ��Ŷ
 {
 	uint64 playerIndex = 1;
 }
 
-message S_ENTER_GAME // 서버 -> 클라 게임 입장 결과 패킷
+message S_ENTER_GAME // ���� -> Ŭ�� ���� ���� ���� ���� ��Ŷ
 {
 	bool success = 1;
 	uint64 playerId = 2;
 }
 
-message C_CHAT // 클라 -> 서버 채팅 전송 패킷
+message C_CHAT // Ŭ�� -> ���� ä�� ������ ��Ŷ
 {
 	string msg = 1;
 }
 
-message S_CHAT // 서버 -> 클라 채팅 브로드캐스트 패킷
+message S_CHAT // ���� -> Ŭ�� ä�� �Ѹ��� ��Ŷ
 {
 	uint64 playerId = 1;
 	string msg = 2;
 }
 
-message S_SPAWN // 서버 -> 클라 플레이어 스폰 알림 패킷
+message S_SPAWN // ���� -> Ŭ�� �÷��̾� ���� ��û ��Ŷ
 {
 	Player player = 1;
 }
 
-message S_DESPAWN // 서버 -> 클라 플레이어 디스폰 알림 패킷
+message S_DESPAWN // ���� -> Ŭ�� �÷��̾� ���� ��û ��Ŷ
 {
 	uint64 playerId = 1;
 }
 
-message C_MOVE // 클라 -> 서버 이동 요청 패킷
+message C_MOVE // Ŭ�� -> ���� �̵� ��û ��Ŷ
 {
-	float x = 1;     // 현재 위치 X
-	float y = 2;     // 현재 위치 Y
-	float z = 3;     // 현재 위치 Z
-	float dirX = 4;  // 바라보는 방향 X
-	float dirY = 5;  // 바라보는 방향 Y
-	float dirZ = 6;  // 바라보는 방향 Z
+	float x = 1;
+	float y = 2;
+	float z = 3;
 }
 
-message S_MOVE // 서버 -> 클라 플레이어 이동 알림 패킷
+message S_MOVE // ���� -> Ŭ�� �÷��̾� �̵� �˸� ��Ŷ
 {
 	uint64 playerId = 1;
-	float x = 2;     // 이동 후 현재 위치 X
-	float y = 3;     // 이동 후 현재 위치 Y
-	float z = 4;     // 이동 후 현재 위치 Z
-	float dirX = 5;  // 바라보는 방향 X
-	float dirY = 6;  // 바라보는 방향 Y
-	float dirZ = 7;  // 바라보는 방향 Z
-}
-
-message C_SKILL // 클라 -> 서버 스킬 사용 요청 패킷
-{
-	SkillType skillType = 1; // 스킬 종류
-	float x = 2;             // 스킬 사용 위치 X
-	float y = 3;             // 스킬 사용 위치 Y
-	float z = 4;             // 스킬 사용 위치 Z
-	float dirX = 5;          // 스킬 사용 방향 X
-	float dirY = 6;          // 스킬 사용 방향 Y
-	float dirZ = 7;          // 스킬 사용 방향 Z
-}
-
-message S_SKILL // 서버 -> 클라 스킬 사용 알림 패킷
-{
-	uint64 playerId = 1;      // 스킬을 사용한 플레이어 ID
-	SkillType skillType = 2; // 스킬 종류
-	float x = 3;              // 스킬 사용 위치 X
-	float y = 4;              // 스킬 사용 위치 Y
-	float z = 5;              // 스킬 사용 위치 Z
-	float dirX = 6;           // 스킬 사용 방향 X
-	float dirY = 7;           // 스킬 사용 방향 Y
-	float dirZ = 8;           // 스킬 사용 방향 Z
-}
-
-message C_PORTAL_INTERACT // 클라 -> 서버 포탈 상호작용 요청 패킷
-{
-}
-
-message C_TORCH_INTERACT // 클라 -> 서버 횃불/전투 시작 오브젝트 상호작용 요청 패킷
-{
-}
-
-message S_ROOM_TRANSITION // 서버 -> 클라 방 전환 알림 패킷
-{
-	uint32 stageIndex = 1; // 현재 스테이지 번호
-	uint32 roomIndex = 2;  // 현재 방 번호
-	bool isBossRoom = 3;   // 보스방 여부
-	string mapId = 4;      // 클라가 로드할 맵 ID
-}
-
-message MonsterInfo // 서버 -> 클라 몬스터 기본 정보
-{
-	uint64 monsterId = 1;   // 몬스터 고유 ID
-	uint32 monsterType = 2; // 몬스터 타입
-	float x = 3;            // 몬스터 위치 X
-	float y = 4;            // 몬스터 위치 Y
-	float z = 5;            // 몬스터 위치 Z
-	float yaw = 6;          // 몬스터가 바라보는 회전값
-	float hp = 7;           // 몬스터 HP
-	bool isBoss = 8;        // 보스 여부
-	uint32 stageIndex = 9;  // 현재 스테이지 번호(1=Fire, 2=Water, 3=Earth, 4=Grass) / 클라 몬스터 색상·머티리얼 변경용
-	uint32 attackType = 10; // 몬스터 공격 패턴
-	uint32 visualType = 11; // 클라 외형 프리셋
-}
-
-message S_MONSTER_SPAWN // 서버 -> 클라 몬스터 스폰 알림 패킷
-{
-	MonsterInfo monster = 1; // 스폰할 몬스터 정보
-}
-
-message S_MONSTER_MOVE // 서버 -> 클라 몬스터 이동 알림 패킷
-{
-	uint64 monsterId = 1; // 이동한 몬스터 ID
-	float x = 2;          // 현재 위치 X
-	float y = 3;          // 현재 위치 Y
-	float z = 4;          // 현재 위치 Z
-	float yaw = 5;        // 현재 바라보는 회전값
-}
-
-message S_MONSTER_DESPAWN // 서버 -> 클라 몬스터 디스폰 알림 패킷
-{
-	uint64 monsterId = 1; // 디스폰할 몬스터 ID
-}
-
-message S_MONSTER_ATTACK // 서버 -> 클라 몬스터 공격 알림 패킷
-{
-	uint64 monsterId = 1;      // 공격한 몬스터 ID
-	uint64 targetPlayerId = 2; // 공격 대상 플레이어 ID
-	uint32 attackType = 3;     // 공격 타입
-	float x = 4;               // 공격 시작 시 몬스터 위치 X
-	float y = 5;               // 공격 시작 시 몬스터 위치 Y
-	float z = 6;               // 공격 시작 시 몬스터 위치 Z
-	float yaw = 7;             // 공격 시작 시 몬스터가 바라보는 회전값
-	float windupSec = 8;       // 공격 준비 시간(초), 없으면 0
-	repeated AttackEffectPosition effectPositions = 9; // 공격 이펙트 생성 위치 목록
-	uint32 effectOption = 10; // 공격 이펙트 옵션값
-}
-
-message S_PLAYER_DAMAGE // 서버 -> 클라 플레이어 피격/데미지 알림 패킷
-{
-	uint64 playerId = 1;          // 피해를 받은 플레이어 ID
-	float damage = 2;             // 받은 데미지
-	float currentHp = 3;          // 데미지 적용 후 현재 HP
-	bool isDead = 4;              // 사망 여부
-	uint64 attackerMonsterId = 5; // 공격한 몬스터 ID
-}
-
-message C_PLAYER_ATTACK // 클라 -> 서버 플레이어 공격 판정 요청 패킷
-{
-	SkillType skillType = 1; // 스킬 종류
-	float x = 2;             // 공격 시작 위치 X
-	float y = 3;             // 공격 시작 위치 Y
-	float z = 4;             // 공격 시작 위치 Z
-	float dirX = 5;          // 공격 방향 X
-	float dirY = 6;          // 공격 방향 Y
-	float dirZ = 7;          // 공격 방향 Z
-	float targetX = 8;       // 타겟 좌표 X
-	float targetY = 9;       // 타겟 좌표 Y
-	float targetZ = 10;      // 타겟 좌표 Z
-}
-
-message S_MONSTER_DAMAGE // 서버 -> 클라 몬스터 피격/사망 알림 패킷
-{
-	uint64 monsterId = 1;        // 피해를 받은 몬스터 ID
-	float damage = 2;            // 받은 데미지
-	float currentHp = 3;         // 데미지 적용 후 현재 HP
-	bool isDead = 4;             // 사망 여부
-	uint64 attackerPlayerId = 5; // 공격한 플레이어 ID
-	SkillType skillType = 6;     // 사용한 스킬 종류
-}
-
-message S_ROOM_CLEARED // 서버 -> 클라 방 클리어 알림 패킷
-{
-	uint32 stageIndex = 1; // 클리어된 스테이지 번호
-	uint32 roomIndex = 2;  // 클리어된 방 번호
-}
-
-message S_BOSS_EVENT // 서버 -> 클라 보스 이벤트/컷씬 알림 패킷
-{
-	uint64 monsterId = 1;          // 이벤트 대상 보스 몬스터 ID
-	BossEventType eventType = 2;   // 보스 이벤트 종류
-	uint32 phaseIndex = 3;         // 전환할 페이즈 번호, 인트로/사망이면 0
-}
-
-message C_BOSS_CUTSCENE_END // 클라 -> 서버 보스 컷신 종료 알림 패킷
-{
-	uint64 monsterId = 1;        // 컷신이 끝난 보스 몬스터 ID
-	BossEventType eventType = 2; // 어떤 보스 이벤트 컷신이 끝났는지
-	uint32 phaseIndex = 3;       // 페이즈 번호
-}
-
-message S_MONSTER_STAGGER // 서버 -> 클라 몬스터 기절/그로기 알림 패킷
-{
-	uint64 monsterId = 1; // 기절한 몬스터 ID
-	float duration = 2;   // 기절 지속 시간(초)
-}
-
-message S_MAP_TORNADO_EVENT // 서버 -> 클라 맵 토네이도 이벤트 알림 패킷
-{
-	uint32 eventType = 1; // 토네이도 이벤트 타입, 1=Warning 시작
-	float x = 2;          // 토네이도 생성 위치 X
-	float y = 3;          // 토네이도 생성 위치 Y
-	float z = 4;          // 토네이도 생성 위치 Z
-	float warningSec = 5; // 경고 시간(초)
-	float activeSec = 6;  // 토네이도 지속 시간(초)
-}
-
-message C_PLAYER_ACTION // 클라 -> 서버 플레이어 연출 액션 요청 패킷
-{
-	uint32 actionType = 1; // 1=대쉬 망토 펄럭임, 2=포탈 Intro Fly
-
-	float x = 2;           // 액션 기준 위치 X
-	float y = 3;           // 액션 기준 위치 Y
-	float z = 4;           // 액션 기준 위치 Z
-
-	float dirX = 5;        // 액션 기준 방향 X
-	float dirY = 6;        // 액션 기준 방향 Y
-	float dirZ = 7;        // 액션 기준 방향 Z
-}
-
-message S_PLAYER_ACTION // 서버 -> 클라 플레이어 연출 액션 브로드캐스트 패킷
-{
-	uint64 playerId = 1;   // 액션을 시작한 플레이어 ID
-	uint32 actionType = 2; // 1=대쉬 망토 펄럭임, 2=포탈 Intro Fly
-
-	float x = 3;           // 액션 기준 위치 X
-	float y = 4;           // 액션 기준 위치 Y
-	float z = 5;           // 액션 기준 위치 Z
-
-	float dirX = 6;        // 액션 기준 방향 X
-	float dirY = 7;        // 액션 기준 방향 Y
-	float dirZ = 8;        // 액션 기준 방향 Z
-}
-
-message S_ROOM_START // 서버 -> 클라 방 시작 알림 패킷
-{
-    uint64 starterplayerid = 1; // 방을 시작한 플레이어 ID 
-}
-
-message RewardRuneObjectInfo // 서버 -> 클라 룬 보상 오브젝트 위치 정보
-{
-	uint64 ownerPlayerId = 1; // 이 룬 오브젝트의 주인 플레이어 ID
-	float x = 2;             // 룬 오브젝트 위치 X
-	float y = 3;             // 룬 오브젝트 위치 Y
-	float z = 4;             // 룬 오브젝트 위치 Z
-}
-
-message S_ROOM_REWARD_SPAWN // 서버 -> 클라 방 클리어 보상 오브젝트 생성 알림 패킷
-{
-	uint32 stageIndex = 1; // 보상이 생성된 스테이지 번호
-	uint32 roomIndex = 2;  // 보상이 생성된 방 번호
-
-	float portalX = 3;    // 공통 포탈 위치 X
-	float portalY = 4;    // 공통 포탈 위치 Y
-	float portalZ = 5;    // 공통 포탈 위치 Z
-
-	repeated RewardRuneObjectInfo runeObjects = 6; // 플레이어별 룬 오브젝트 위치 목록
-}
-
-message C_RUNE_REWARD_PICK // 클라 -> 서버 룬 보상 선택 완료 알림 패킷
-{
-}
-
-message S_RUNE_REWARD_PICKED // 서버 -> 클라 특정 플레이어의 룬 보상 선택 완료 알림 패킷
-{
-    uint64 ownerPlayerId = 1; // 룬 오브젝트를 제거할 플레이어 ID
+	float x = 2;
+	float y = 3;
+	float z = 4;
 }

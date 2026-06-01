@@ -48,7 +48,7 @@ struct TableStruct_Protocol_2eproto {
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::AuxiliaryParseTableField aux[]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
-  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[35]
+  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[38]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::FieldMetadata field_metadata[];
   static const ::PROTOBUF_NAMESPACE_ID::internal::SerializationTable serialization_table[];
@@ -80,6 +80,9 @@ extern C_PLAYER_ATTACKDefaultTypeInternal _C_PLAYER_ATTACK_default_instance_;
 class C_PORTAL_INTERACT;
 struct C_PORTAL_INTERACTDefaultTypeInternal;
 extern C_PORTAL_INTERACTDefaultTypeInternal _C_PORTAL_INTERACT_default_instance_;
+class C_RUNE_EQUIP;
+struct C_RUNE_EQUIPDefaultTypeInternal;
+extern C_RUNE_EQUIPDefaultTypeInternal _C_RUNE_EQUIP_default_instance_;
 class C_RUNE_REWARD_PICK;
 struct C_RUNE_REWARD_PICKDefaultTypeInternal;
 extern C_RUNE_REWARD_PICKDefaultTypeInternal _C_RUNE_REWARD_PICK_default_instance_;
@@ -152,6 +155,12 @@ extern S_ROOM_STARTDefaultTypeInternal _S_ROOM_START_default_instance_;
 class S_ROOM_TRANSITION;
 struct S_ROOM_TRANSITIONDefaultTypeInternal;
 extern S_ROOM_TRANSITIONDefaultTypeInternal _S_ROOM_TRANSITION_default_instance_;
+class S_RUNE_EQUIP;
+struct S_RUNE_EQUIPDefaultTypeInternal;
+extern S_RUNE_EQUIPDefaultTypeInternal _S_RUNE_EQUIP_default_instance_;
+class S_RUNE_HOMING_TARGET;
+struct S_RUNE_HOMING_TARGETDefaultTypeInternal;
+extern S_RUNE_HOMING_TARGETDefaultTypeInternal _S_RUNE_HOMING_TARGET_default_instance_;
 class S_RUNE_REWARD_PICKED;
 struct S_RUNE_REWARD_PICKEDDefaultTypeInternal;
 extern S_RUNE_REWARD_PICKEDDefaultTypeInternal _S_RUNE_REWARD_PICKED_default_instance_;
@@ -171,6 +180,7 @@ template<> ::Protocol::C_MOVE* Arena::CreateMaybeMessage<::Protocol::C_MOVE>(Are
 template<> ::Protocol::C_PLAYER_ACTION* Arena::CreateMaybeMessage<::Protocol::C_PLAYER_ACTION>(Arena*);
 template<> ::Protocol::C_PLAYER_ATTACK* Arena::CreateMaybeMessage<::Protocol::C_PLAYER_ATTACK>(Arena*);
 template<> ::Protocol::C_PORTAL_INTERACT* Arena::CreateMaybeMessage<::Protocol::C_PORTAL_INTERACT>(Arena*);
+template<> ::Protocol::C_RUNE_EQUIP* Arena::CreateMaybeMessage<::Protocol::C_RUNE_EQUIP>(Arena*);
 template<> ::Protocol::C_RUNE_REWARD_PICK* Arena::CreateMaybeMessage<::Protocol::C_RUNE_REWARD_PICK>(Arena*);
 template<> ::Protocol::C_SKILL* Arena::CreateMaybeMessage<::Protocol::C_SKILL>(Arena*);
 template<> ::Protocol::C_TORCH_INTERACT* Arena::CreateMaybeMessage<::Protocol::C_TORCH_INTERACT>(Arena*);
@@ -195,6 +205,8 @@ template<> ::Protocol::S_ROOM_CLEARED* Arena::CreateMaybeMessage<::Protocol::S_R
 template<> ::Protocol::S_ROOM_REWARD_SPAWN* Arena::CreateMaybeMessage<::Protocol::S_ROOM_REWARD_SPAWN>(Arena*);
 template<> ::Protocol::S_ROOM_START* Arena::CreateMaybeMessage<::Protocol::S_ROOM_START>(Arena*);
 template<> ::Protocol::S_ROOM_TRANSITION* Arena::CreateMaybeMessage<::Protocol::S_ROOM_TRANSITION>(Arena*);
+template<> ::Protocol::S_RUNE_EQUIP* Arena::CreateMaybeMessage<::Protocol::S_RUNE_EQUIP>(Arena*);
+template<> ::Protocol::S_RUNE_HOMING_TARGET* Arena::CreateMaybeMessage<::Protocol::S_RUNE_HOMING_TARGET>(Arena*);
 template<> ::Protocol::S_RUNE_REWARD_PICKED* Arena::CreateMaybeMessage<::Protocol::S_RUNE_REWARD_PICKED>(Arena*);
 template<> ::Protocol::S_SKILL* Arena::CreateMaybeMessage<::Protocol::S_SKILL>(Arena*);
 template<> ::Protocol::S_SPAWN* Arena::CreateMaybeMessage<::Protocol::S_SPAWN>(Arena*);
@@ -5460,11 +5472,36 @@ class RewardRuneObjectInfo final :
   // accessors -------------------------------------------------------
 
   enum : int {
+    kRuneIdsFieldNumber = 5,
     kOwnerPlayerIdFieldNumber = 1,
     kXFieldNumber = 2,
     kYFieldNumber = 3,
     kZFieldNumber = 4,
   };
+  // repeated string runeIds = 5;
+  int runeids_size() const;
+  private:
+  int _internal_runeids_size() const;
+  public:
+  void clear_runeids();
+  const std::string& runeids(int index) const;
+  std::string* mutable_runeids(int index);
+  void set_runeids(int index, const std::string& value);
+  void set_runeids(int index, std::string&& value);
+  void set_runeids(int index, const char* value);
+  void set_runeids(int index, const char* value, size_t size);
+  std::string* add_runeids();
+  void add_runeids(const std::string& value);
+  void add_runeids(std::string&& value);
+  void add_runeids(const char* value);
+  void add_runeids(const char* value, size_t size);
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>& runeids() const;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>* mutable_runeids();
+  private:
+  const std::string& _internal_runeids(int index) const;
+  std::string* _internal_add_runeids();
+  public:
+
   // uint64 ownerPlayerId = 1;
   void clear_ownerplayerid();
   ::PROTOBUF_NAMESPACE_ID::uint64 ownerplayerid() const;
@@ -5508,6 +5545,7 @@ class RewardRuneObjectInfo final :
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string> runeids_;
   ::PROTOBUF_NAMESPACE_ID::uint64 ownerplayerid_;
   float x_;
   float y_;
@@ -5959,6 +5997,572 @@ class S_RUNE_REWARD_PICKED final :
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   ::PROTOBUF_NAMESPACE_ID::uint64 ownerplayerid_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_Protocol_2eproto;
+};
+// -------------------------------------------------------------------
+
+class C_RUNE_EQUIP final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.C_RUNE_EQUIP) */ {
+ public:
+  inline C_RUNE_EQUIP() : C_RUNE_EQUIP(nullptr) {}
+  ~C_RUNE_EQUIP() override;
+  explicit constexpr C_RUNE_EQUIP(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  C_RUNE_EQUIP(const C_RUNE_EQUIP& from);
+  C_RUNE_EQUIP(C_RUNE_EQUIP&& from) noexcept
+    : C_RUNE_EQUIP() {
+    *this = ::std::move(from);
+  }
+
+  inline C_RUNE_EQUIP& operator=(const C_RUNE_EQUIP& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline C_RUNE_EQUIP& operator=(C_RUNE_EQUIP&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const C_RUNE_EQUIP& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const C_RUNE_EQUIP* internal_default_instance() {
+    return reinterpret_cast<const C_RUNE_EQUIP*>(
+               &_C_RUNE_EQUIP_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    35;
+
+  friend void swap(C_RUNE_EQUIP& a, C_RUNE_EQUIP& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(C_RUNE_EQUIP* other) {
+    if (other == this) return;
+    if (GetOwningArena() == other->GetOwningArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(C_RUNE_EQUIP* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline C_RUNE_EQUIP* New() const final {
+    return new C_RUNE_EQUIP();
+  }
+
+  C_RUNE_EQUIP* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<C_RUNE_EQUIP>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const C_RUNE_EQUIP& from);
+  void MergeFrom(const C_RUNE_EQUIP& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(C_RUNE_EQUIP* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.C_RUNE_EQUIP";
+  }
+  protected:
+  explicit C_RUNE_EQUIP(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kRewardOptionIndexFieldNumber = 1,
+    kSkillSlotFieldNumber = 2,
+    kRuneSlotIndexFieldNumber = 3,
+  };
+  // uint32 rewardOptionIndex = 1;
+  void clear_rewardoptionindex();
+  ::PROTOBUF_NAMESPACE_ID::uint32 rewardoptionindex() const;
+  void set_rewardoptionindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_rewardoptionindex() const;
+  void _internal_set_rewardoptionindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
+  // uint32 skillSlot = 2;
+  void clear_skillslot();
+  ::PROTOBUF_NAMESPACE_ID::uint32 skillslot() const;
+  void set_skillslot(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_skillslot() const;
+  void _internal_set_skillslot(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
+  // uint32 runeSlotIndex = 3;
+  void clear_runeslotindex();
+  ::PROTOBUF_NAMESPACE_ID::uint32 runeslotindex() const;
+  void set_runeslotindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_runeslotindex() const;
+  void _internal_set_runeslotindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.C_RUNE_EQUIP)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 rewardoptionindex_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 skillslot_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 runeslotindex_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_Protocol_2eproto;
+};
+// -------------------------------------------------------------------
+
+class S_RUNE_EQUIP final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_RUNE_EQUIP) */ {
+ public:
+  inline S_RUNE_EQUIP() : S_RUNE_EQUIP(nullptr) {}
+  ~S_RUNE_EQUIP() override;
+  explicit constexpr S_RUNE_EQUIP(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_RUNE_EQUIP(const S_RUNE_EQUIP& from);
+  S_RUNE_EQUIP(S_RUNE_EQUIP&& from) noexcept
+    : S_RUNE_EQUIP() {
+    *this = ::std::move(from);
+  }
+
+  inline S_RUNE_EQUIP& operator=(const S_RUNE_EQUIP& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_RUNE_EQUIP& operator=(S_RUNE_EQUIP&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_RUNE_EQUIP& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_RUNE_EQUIP* internal_default_instance() {
+    return reinterpret_cast<const S_RUNE_EQUIP*>(
+               &_S_RUNE_EQUIP_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    36;
+
+  friend void swap(S_RUNE_EQUIP& a, S_RUNE_EQUIP& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_RUNE_EQUIP* other) {
+    if (other == this) return;
+    if (GetOwningArena() == other->GetOwningArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_RUNE_EQUIP* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline S_RUNE_EQUIP* New() const final {
+    return new S_RUNE_EQUIP();
+  }
+
+  S_RUNE_EQUIP* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<S_RUNE_EQUIP>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const S_RUNE_EQUIP& from);
+  void MergeFrom(const S_RUNE_EQUIP& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_RUNE_EQUIP* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_RUNE_EQUIP";
+  }
+  protected:
+  explicit S_RUNE_EQUIP(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kRuneIdFieldNumber = 4,
+    kPlayerIdFieldNumber = 1,
+    kSkillSlotFieldNumber = 2,
+    kRuneSlotIndexFieldNumber = 3,
+    kStackCountFieldNumber = 5,
+  };
+  // string runeId = 4;
+  void clear_runeid();
+  const std::string& runeid() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_runeid(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_runeid();
+  PROTOBUF_FUTURE_MUST_USE_RESULT std::string* release_runeid();
+  void set_allocated_runeid(std::string* runeid);
+  private:
+  const std::string& _internal_runeid() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_runeid(const std::string& value);
+  std::string* _internal_mutable_runeid();
+  public:
+
+  // uint64 playerId = 1;
+  void clear_playerid();
+  ::PROTOBUF_NAMESPACE_ID::uint64 playerid() const;
+  void set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_playerid() const;
+  void _internal_set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
+  // uint32 skillSlot = 2;
+  void clear_skillslot();
+  ::PROTOBUF_NAMESPACE_ID::uint32 skillslot() const;
+  void set_skillslot(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_skillslot() const;
+  void _internal_set_skillslot(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
+  // uint32 runeSlotIndex = 3;
+  void clear_runeslotindex();
+  ::PROTOBUF_NAMESPACE_ID::uint32 runeslotindex() const;
+  void set_runeslotindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_runeslotindex() const;
+  void _internal_set_runeslotindex(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
+  // uint32 stackCount = 5;
+  void clear_stackcount();
+  ::PROTOBUF_NAMESPACE_ID::uint32 stackcount() const;
+  void set_stackcount(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_stackcount() const;
+  void _internal_set_stackcount(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_RUNE_EQUIP)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr runeid_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 playerid_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 skillslot_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 runeslotindex_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 stackcount_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_Protocol_2eproto;
+};
+// -------------------------------------------------------------------
+
+class S_RUNE_HOMING_TARGET final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_RUNE_HOMING_TARGET) */ {
+ public:
+  inline S_RUNE_HOMING_TARGET() : S_RUNE_HOMING_TARGET(nullptr) {}
+  ~S_RUNE_HOMING_TARGET() override;
+  explicit constexpr S_RUNE_HOMING_TARGET(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_RUNE_HOMING_TARGET(const S_RUNE_HOMING_TARGET& from);
+  S_RUNE_HOMING_TARGET(S_RUNE_HOMING_TARGET&& from) noexcept
+    : S_RUNE_HOMING_TARGET() {
+    *this = ::std::move(from);
+  }
+
+  inline S_RUNE_HOMING_TARGET& operator=(const S_RUNE_HOMING_TARGET& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_RUNE_HOMING_TARGET& operator=(S_RUNE_HOMING_TARGET&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_RUNE_HOMING_TARGET& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_RUNE_HOMING_TARGET* internal_default_instance() {
+    return reinterpret_cast<const S_RUNE_HOMING_TARGET*>(
+               &_S_RUNE_HOMING_TARGET_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    37;
+
+  friend void swap(S_RUNE_HOMING_TARGET& a, S_RUNE_HOMING_TARGET& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_RUNE_HOMING_TARGET* other) {
+    if (other == this) return;
+    if (GetOwningArena() == other->GetOwningArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_RUNE_HOMING_TARGET* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline S_RUNE_HOMING_TARGET* New() const final {
+    return new S_RUNE_HOMING_TARGET();
+  }
+
+  S_RUNE_HOMING_TARGET* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<S_RUNE_HOMING_TARGET>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const S_RUNE_HOMING_TARGET& from);
+  void MergeFrom(const S_RUNE_HOMING_TARGET& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_RUNE_HOMING_TARGET* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_RUNE_HOMING_TARGET";
+  }
+  protected:
+  explicit S_RUNE_HOMING_TARGET(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kPlayerIdFieldNumber = 1,
+    kSkillSlotFieldNumber = 2,
+    kSkillTypeFieldNumber = 3,
+    kTargetMonsterIdFieldNumber = 4,
+    kTargetXFieldNumber = 5,
+    kTargetYFieldNumber = 6,
+    kTargetZFieldNumber = 7,
+    kOriginXFieldNumber = 8,
+    kOriginYFieldNumber = 9,
+    kOriginZFieldNumber = 10,
+  };
+  // uint64 playerId = 1;
+  void clear_playerid();
+  ::PROTOBUF_NAMESPACE_ID::uint64 playerid() const;
+  void set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_playerid() const;
+  void _internal_set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
+  // int32 skillSlot = 2;
+  void clear_skillslot();
+  ::PROTOBUF_NAMESPACE_ID::int32 skillslot() const;
+  void set_skillslot(::PROTOBUF_NAMESPACE_ID::int32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::int32 _internal_skillslot() const;
+  void _internal_set_skillslot(::PROTOBUF_NAMESPACE_ID::int32 value);
+  public:
+
+  // .Protocol.SkillType skillType = 3;
+  void clear_skilltype();
+  ::Protocol::SkillType skilltype() const;
+  void set_skilltype(::Protocol::SkillType value);
+  private:
+  ::Protocol::SkillType _internal_skilltype() const;
+  void _internal_set_skilltype(::Protocol::SkillType value);
+  public:
+
+  // uint64 targetMonsterId = 4;
+  void clear_targetmonsterid();
+  ::PROTOBUF_NAMESPACE_ID::uint64 targetmonsterid() const;
+  void set_targetmonsterid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_targetmonsterid() const;
+  void _internal_set_targetmonsterid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
+  // float targetX = 5;
+  void clear_targetx();
+  float targetx() const;
+  void set_targetx(float value);
+  private:
+  float _internal_targetx() const;
+  void _internal_set_targetx(float value);
+  public:
+
+  // float targetY = 6;
+  void clear_targety();
+  float targety() const;
+  void set_targety(float value);
+  private:
+  float _internal_targety() const;
+  void _internal_set_targety(float value);
+  public:
+
+  // float targetZ = 7;
+  void clear_targetz();
+  float targetz() const;
+  void set_targetz(float value);
+  private:
+  float _internal_targetz() const;
+  void _internal_set_targetz(float value);
+  public:
+
+  // float originX = 8;
+  void clear_originx();
+  float originx() const;
+  void set_originx(float value);
+  private:
+  float _internal_originx() const;
+  void _internal_set_originx(float value);
+  public:
+
+  // float originY = 9;
+  void clear_originy();
+  float originy() const;
+  void set_originy(float value);
+  private:
+  float _internal_originy() const;
+  void _internal_set_originy(float value);
+  public:
+
+  // float originZ = 10;
+  void clear_originz();
+  float originz() const;
+  void set_originz(float value);
+  private:
+  float _internal_originz() const;
+  void _internal_set_originz(float value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_RUNE_HOMING_TARGET)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 playerid_;
+  ::PROTOBUF_NAMESPACE_ID::int32 skillslot_;
+  int skilltype_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 targetmonsterid_;
+  float targetx_;
+  float targety_;
+  float targetz_;
+  float originx_;
+  float originy_;
+  float originz_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -8866,6 +9470,80 @@ inline void RewardRuneObjectInfo::set_z(float value) {
   // @@protoc_insertion_point(field_set:Protocol.RewardRuneObjectInfo.z)
 }
 
+// repeated string runeIds = 5;
+inline int RewardRuneObjectInfo::_internal_runeids_size() const {
+  return runeids_.size();
+}
+inline int RewardRuneObjectInfo::runeids_size() const {
+  return _internal_runeids_size();
+}
+inline void RewardRuneObjectInfo::clear_runeids() {
+  runeids_.Clear();
+}
+inline std::string* RewardRuneObjectInfo::add_runeids() {
+  // @@protoc_insertion_point(field_add_mutable:Protocol.RewardRuneObjectInfo.runeIds)
+  return _internal_add_runeids();
+}
+inline const std::string& RewardRuneObjectInfo::_internal_runeids(int index) const {
+  return runeids_.Get(index);
+}
+inline const std::string& RewardRuneObjectInfo::runeids(int index) const {
+  // @@protoc_insertion_point(field_get:Protocol.RewardRuneObjectInfo.runeIds)
+  return _internal_runeids(index);
+}
+inline std::string* RewardRuneObjectInfo::mutable_runeids(int index) {
+  // @@protoc_insertion_point(field_mutable:Protocol.RewardRuneObjectInfo.runeIds)
+  return runeids_.Mutable(index);
+}
+inline void RewardRuneObjectInfo::set_runeids(int index, const std::string& value) {
+  // @@protoc_insertion_point(field_set:Protocol.RewardRuneObjectInfo.runeIds)
+  runeids_.Mutable(index)->assign(value);
+}
+inline void RewardRuneObjectInfo::set_runeids(int index, std::string&& value) {
+  // @@protoc_insertion_point(field_set:Protocol.RewardRuneObjectInfo.runeIds)
+  runeids_.Mutable(index)->assign(std::move(value));
+}
+inline void RewardRuneObjectInfo::set_runeids(int index, const char* value) {
+  GOOGLE_DCHECK(value != nullptr);
+  runeids_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:Protocol.RewardRuneObjectInfo.runeIds)
+}
+inline void RewardRuneObjectInfo::set_runeids(int index, const char* value, size_t size) {
+  runeids_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:Protocol.RewardRuneObjectInfo.runeIds)
+}
+inline std::string* RewardRuneObjectInfo::_internal_add_runeids() {
+  return runeids_.Add();
+}
+inline void RewardRuneObjectInfo::add_runeids(const std::string& value) {
+  runeids_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:Protocol.RewardRuneObjectInfo.runeIds)
+}
+inline void RewardRuneObjectInfo::add_runeids(std::string&& value) {
+  runeids_.Add(std::move(value));
+  // @@protoc_insertion_point(field_add:Protocol.RewardRuneObjectInfo.runeIds)
+}
+inline void RewardRuneObjectInfo::add_runeids(const char* value) {
+  GOOGLE_DCHECK(value != nullptr);
+  runeids_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:Protocol.RewardRuneObjectInfo.runeIds)
+}
+inline void RewardRuneObjectInfo::add_runeids(const char* value, size_t size) {
+  runeids_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:Protocol.RewardRuneObjectInfo.runeIds)
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>&
+RewardRuneObjectInfo::runeids() const {
+  // @@protoc_insertion_point(field_list:Protocol.RewardRuneObjectInfo.runeIds)
+  return runeids_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>*
+RewardRuneObjectInfo::mutable_runeids() {
+  // @@protoc_insertion_point(field_mutable_list:Protocol.RewardRuneObjectInfo.runeIds)
+  return &runeids_;
+}
+
 // -------------------------------------------------------------------
 
 // S_ROOM_REWARD_SPAWN
@@ -9037,9 +9715,412 @@ inline void S_RUNE_REWARD_PICKED::set_ownerplayerid(::PROTOBUF_NAMESPACE_ID::uin
   // @@protoc_insertion_point(field_set:Protocol.S_RUNE_REWARD_PICKED.ownerPlayerId)
 }
 
+// -------------------------------------------------------------------
+
+// C_RUNE_EQUIP
+
+// uint32 rewardOptionIndex = 1;
+inline void C_RUNE_EQUIP::clear_rewardoptionindex() {
+  rewardoptionindex_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 C_RUNE_EQUIP::_internal_rewardoptionindex() const {
+  return rewardoptionindex_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 C_RUNE_EQUIP::rewardoptionindex() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_RUNE_EQUIP.rewardOptionIndex)
+  return _internal_rewardoptionindex();
+}
+inline void C_RUNE_EQUIP::_internal_set_rewardoptionindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  rewardoptionindex_ = value;
+}
+inline void C_RUNE_EQUIP::set_rewardoptionindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_rewardoptionindex(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_RUNE_EQUIP.rewardOptionIndex)
+}
+
+// uint32 skillSlot = 2;
+inline void C_RUNE_EQUIP::clear_skillslot() {
+  skillslot_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 C_RUNE_EQUIP::_internal_skillslot() const {
+  return skillslot_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 C_RUNE_EQUIP::skillslot() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_RUNE_EQUIP.skillSlot)
+  return _internal_skillslot();
+}
+inline void C_RUNE_EQUIP::_internal_set_skillslot(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  skillslot_ = value;
+}
+inline void C_RUNE_EQUIP::set_skillslot(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_skillslot(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_RUNE_EQUIP.skillSlot)
+}
+
+// uint32 runeSlotIndex = 3;
+inline void C_RUNE_EQUIP::clear_runeslotindex() {
+  runeslotindex_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 C_RUNE_EQUIP::_internal_runeslotindex() const {
+  return runeslotindex_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 C_RUNE_EQUIP::runeslotindex() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_RUNE_EQUIP.runeSlotIndex)
+  return _internal_runeslotindex();
+}
+inline void C_RUNE_EQUIP::_internal_set_runeslotindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  runeslotindex_ = value;
+}
+inline void C_RUNE_EQUIP::set_runeslotindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_runeslotindex(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_RUNE_EQUIP.runeSlotIndex)
+}
+
+// -------------------------------------------------------------------
+
+// S_RUNE_EQUIP
+
+// uint64 playerId = 1;
+inline void S_RUNE_EQUIP::clear_playerid() {
+  playerid_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_EQUIP::_internal_playerid() const {
+  return playerid_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_EQUIP::playerid() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_EQUIP.playerId)
+  return _internal_playerid();
+}
+inline void S_RUNE_EQUIP::_internal_set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  playerid_ = value;
+}
+inline void S_RUNE_EQUIP::set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_playerid(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_EQUIP.playerId)
+}
+
+// uint32 skillSlot = 2;
+inline void S_RUNE_EQUIP::clear_skillslot() {
+  skillslot_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_RUNE_EQUIP::_internal_skillslot() const {
+  return skillslot_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_RUNE_EQUIP::skillslot() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_EQUIP.skillSlot)
+  return _internal_skillslot();
+}
+inline void S_RUNE_EQUIP::_internal_set_skillslot(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  skillslot_ = value;
+}
+inline void S_RUNE_EQUIP::set_skillslot(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_skillslot(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_EQUIP.skillSlot)
+}
+
+// uint32 runeSlotIndex = 3;
+inline void S_RUNE_EQUIP::clear_runeslotindex() {
+  runeslotindex_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_RUNE_EQUIP::_internal_runeslotindex() const {
+  return runeslotindex_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_RUNE_EQUIP::runeslotindex() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_EQUIP.runeSlotIndex)
+  return _internal_runeslotindex();
+}
+inline void S_RUNE_EQUIP::_internal_set_runeslotindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  runeslotindex_ = value;
+}
+inline void S_RUNE_EQUIP::set_runeslotindex(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_runeslotindex(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_EQUIP.runeSlotIndex)
+}
+
+// string runeId = 4;
+inline void S_RUNE_EQUIP::clear_runeid() {
+  runeid_.ClearToEmpty();
+}
+inline const std::string& S_RUNE_EQUIP::runeid() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_EQUIP.runeId)
+  return _internal_runeid();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void S_RUNE_EQUIP::set_runeid(ArgT0&& arg0, ArgT... args) {
+ 
+ runeid_.Set(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_EQUIP.runeId)
+}
+inline std::string* S_RUNE_EQUIP::mutable_runeid() {
+  // @@protoc_insertion_point(field_mutable:Protocol.S_RUNE_EQUIP.runeId)
+  return _internal_mutable_runeid();
+}
+inline const std::string& S_RUNE_EQUIP::_internal_runeid() const {
+  return runeid_.Get();
+}
+inline void S_RUNE_EQUIP::_internal_set_runeid(const std::string& value) {
+  
+  runeid_.Set(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, value, GetArenaForAllocation());
+}
+inline std::string* S_RUNE_EQUIP::_internal_mutable_runeid() {
+  
+  return runeid_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
+}
+inline std::string* S_RUNE_EQUIP::release_runeid() {
+  // @@protoc_insertion_point(field_release:Protocol.S_RUNE_EQUIP.runeId)
+  return runeid_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
+}
+inline void S_RUNE_EQUIP::set_allocated_runeid(std::string* runeid) {
+  if (runeid != nullptr) {
+    
+  } else {
+    
+  }
+  runeid_.SetAllocated(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), runeid,
+      GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set_allocated:Protocol.S_RUNE_EQUIP.runeId)
+}
+
+// uint32 stackCount = 5;
+inline void S_RUNE_EQUIP::clear_stackcount() {
+  stackcount_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_RUNE_EQUIP::_internal_stackcount() const {
+  return stackcount_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_RUNE_EQUIP::stackcount() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_EQUIP.stackCount)
+  return _internal_stackcount();
+}
+inline void S_RUNE_EQUIP::_internal_set_stackcount(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  stackcount_ = value;
+}
+inline void S_RUNE_EQUIP::set_stackcount(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_stackcount(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_EQUIP.stackCount)
+}
+
+// -------------------------------------------------------------------
+
+// S_RUNE_HOMING_TARGET
+
+// uint64 playerId = 1;
+inline void S_RUNE_HOMING_TARGET::clear_playerid() {
+  playerid_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_HOMING_TARGET::_internal_playerid() const {
+  return playerid_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_HOMING_TARGET::playerid() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_HOMING_TARGET.playerId)
+  return _internal_playerid();
+}
+inline void S_RUNE_HOMING_TARGET::_internal_set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  playerid_ = value;
+}
+inline void S_RUNE_HOMING_TARGET::set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_playerid(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_HOMING_TARGET.playerId)
+}
+
+// int32 skillSlot = 2;
+inline void S_RUNE_HOMING_TARGET::clear_skillslot() {
+  skillslot_ = 0;
+}
+inline ::PROTOBUF_NAMESPACE_ID::int32 S_RUNE_HOMING_TARGET::_internal_skillslot() const {
+  return skillslot_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::int32 S_RUNE_HOMING_TARGET::skillslot() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_HOMING_TARGET.skillSlot)
+  return _internal_skillslot();
+}
+inline void S_RUNE_HOMING_TARGET::_internal_set_skillslot(::PROTOBUF_NAMESPACE_ID::int32 value) {
+  
+  skillslot_ = value;
+}
+inline void S_RUNE_HOMING_TARGET::set_skillslot(::PROTOBUF_NAMESPACE_ID::int32 value) {
+  _internal_set_skillslot(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_HOMING_TARGET.skillSlot)
+}
+
+// .Protocol.SkillType skillType = 3;
+inline void S_RUNE_HOMING_TARGET::clear_skilltype() {
+  skilltype_ = 0;
+}
+inline ::Protocol::SkillType S_RUNE_HOMING_TARGET::_internal_skilltype() const {
+  return static_cast< ::Protocol::SkillType >(skilltype_);
+}
+inline ::Protocol::SkillType S_RUNE_HOMING_TARGET::skilltype() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_HOMING_TARGET.skillType)
+  return _internal_skilltype();
+}
+inline void S_RUNE_HOMING_TARGET::_internal_set_skilltype(::Protocol::SkillType value) {
+  
+  skilltype_ = value;
+}
+inline void S_RUNE_HOMING_TARGET::set_skilltype(::Protocol::SkillType value) {
+  _internal_set_skilltype(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_HOMING_TARGET.skillType)
+}
+
+// uint64 targetMonsterId = 4;
+inline void S_RUNE_HOMING_TARGET::clear_targetmonsterid() {
+  targetmonsterid_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_HOMING_TARGET::_internal_targetmonsterid() const {
+  return targetmonsterid_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_HOMING_TARGET::targetmonsterid() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_HOMING_TARGET.targetMonsterId)
+  return _internal_targetmonsterid();
+}
+inline void S_RUNE_HOMING_TARGET::_internal_set_targetmonsterid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  targetmonsterid_ = value;
+}
+inline void S_RUNE_HOMING_TARGET::set_targetmonsterid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_targetmonsterid(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_HOMING_TARGET.targetMonsterId)
+}
+
+// float targetX = 5;
+inline void S_RUNE_HOMING_TARGET::clear_targetx() {
+  targetx_ = 0;
+}
+inline float S_RUNE_HOMING_TARGET::_internal_targetx() const {
+  return targetx_;
+}
+inline float S_RUNE_HOMING_TARGET::targetx() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_HOMING_TARGET.targetX)
+  return _internal_targetx();
+}
+inline void S_RUNE_HOMING_TARGET::_internal_set_targetx(float value) {
+  
+  targetx_ = value;
+}
+inline void S_RUNE_HOMING_TARGET::set_targetx(float value) {
+  _internal_set_targetx(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_HOMING_TARGET.targetX)
+}
+
+// float targetY = 6;
+inline void S_RUNE_HOMING_TARGET::clear_targety() {
+  targety_ = 0;
+}
+inline float S_RUNE_HOMING_TARGET::_internal_targety() const {
+  return targety_;
+}
+inline float S_RUNE_HOMING_TARGET::targety() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_HOMING_TARGET.targetY)
+  return _internal_targety();
+}
+inline void S_RUNE_HOMING_TARGET::_internal_set_targety(float value) {
+  
+  targety_ = value;
+}
+inline void S_RUNE_HOMING_TARGET::set_targety(float value) {
+  _internal_set_targety(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_HOMING_TARGET.targetY)
+}
+
+// float targetZ = 7;
+inline void S_RUNE_HOMING_TARGET::clear_targetz() {
+  targetz_ = 0;
+}
+inline float S_RUNE_HOMING_TARGET::_internal_targetz() const {
+  return targetz_;
+}
+inline float S_RUNE_HOMING_TARGET::targetz() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_HOMING_TARGET.targetZ)
+  return _internal_targetz();
+}
+inline void S_RUNE_HOMING_TARGET::_internal_set_targetz(float value) {
+  
+  targetz_ = value;
+}
+inline void S_RUNE_HOMING_TARGET::set_targetz(float value) {
+  _internal_set_targetz(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_HOMING_TARGET.targetZ)
+}
+
+// float originX = 8;
+inline void S_RUNE_HOMING_TARGET::clear_originx() {
+  originx_ = 0;
+}
+inline float S_RUNE_HOMING_TARGET::_internal_originx() const {
+  return originx_;
+}
+inline float S_RUNE_HOMING_TARGET::originx() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_HOMING_TARGET.originX)
+  return _internal_originx();
+}
+inline void S_RUNE_HOMING_TARGET::_internal_set_originx(float value) {
+  
+  originx_ = value;
+}
+inline void S_RUNE_HOMING_TARGET::set_originx(float value) {
+  _internal_set_originx(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_HOMING_TARGET.originX)
+}
+
+// float originY = 9;
+inline void S_RUNE_HOMING_TARGET::clear_originy() {
+  originy_ = 0;
+}
+inline float S_RUNE_HOMING_TARGET::_internal_originy() const {
+  return originy_;
+}
+inline float S_RUNE_HOMING_TARGET::originy() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_HOMING_TARGET.originY)
+  return _internal_originy();
+}
+inline void S_RUNE_HOMING_TARGET::_internal_set_originy(float value) {
+  
+  originy_ = value;
+}
+inline void S_RUNE_HOMING_TARGET::set_originy(float value) {
+  _internal_set_originy(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_HOMING_TARGET.originY)
+}
+
+// float originZ = 10;
+inline void S_RUNE_HOMING_TARGET::clear_originz() {
+  originz_ = 0;
+}
+inline float S_RUNE_HOMING_TARGET::_internal_originz() const {
+  return originz_;
+}
+inline float S_RUNE_HOMING_TARGET::originz() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_HOMING_TARGET.originZ)
+  return _internal_originz();
+}
+inline void S_RUNE_HOMING_TARGET::_internal_set_originz(float value) {
+  
+  originz_ = value;
+}
+inline void S_RUNE_HOMING_TARGET::set_originz(float value) {
+  _internal_set_originz(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_HOMING_TARGET.originZ)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

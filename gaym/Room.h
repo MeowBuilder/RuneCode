@@ -3,6 +3,7 @@
 #include "GameObject.h"
 #include "EnemySpawnData.h"
 #include <unordered_map>
+#include <array>
 
 class EnemyComponent;
 class EnemySpawner;
@@ -68,6 +69,7 @@ public:
     Scene* GetScene() const { return m_pScene; }
     void SpawnDropItem(); // 오프라인용 기존 룬 드랍 생성
     void SpawnRewardRuneObjectAt(uint64 ownerPlayerId, const XMFLOAT3& spawnPos); // 온라인/서버 보상용 룬 오브젝트 생성
+    void SpawnRewardRuneObjectAt(uint64 ownerPlayerId, const XMFLOAT3& spawnPos, const std::array<std::string, 3>& runeIds); // 서버가 내려준 룬 선택지 3개를 포함해서 룬 오브젝트 생성
     GameObject* GetDropItem() const { return m_pDropItem; }
     bool HasDropItem() const { return m_pDropItem != nullptr; }
     void ClearDropItem(); // 현재 로컬 플레이어가 상호작용 중인 룬 오브젝트를 숨긴다.

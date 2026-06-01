@@ -422,11 +422,12 @@ private:
     GameObject* m_pCurrentDropItem = nullptr;  // The drop we're interacting with
     float m_fDropInteractionDistance = 5.0f;
     std::string m_sSelectedRuneId;  // Selected rune ID waiting for skill slot assignment ("" = none)
+    int m_nSelectedRuneOptionIndex = -1; // 이번 보상 룬 3개 중 선택한 번호: 0~2
 
     // ── Map pool ──────────────────────────────────────────────────────────────
     // Add map JSON paths here. TransitionToNextRoom picks one at random.
     std::vector<std::string> m_vMapPool;
-    std::string              m_strCurrentMap;   // Path of the currently loaded map
+    std::string              m_strCurrentMap;    // Path of the currently loaded map
     std::string              m_strBossMap;       // Path of the boss room JSON (from rooms.json "bossRoom")
     int                      m_nCurrentPoolIndex = 0; // Index into m_vMapPool for 9/0 nav
 

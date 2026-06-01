@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <mutex>
 #include <vector>
+#include <array>
 #include <DirectXMath.h>
 #include "SkillTypes.h"   // ElementType (PendingMonsterVFX)
 #include "IAttackBehavior.h" // 네트워크 Golem AttackBehavior 보관용
@@ -34,8 +35,11 @@ struct NetworkPlayerInfo
 // 방 클리어 보상 룬 오브젝트 정보
 struct NetworkRewardRuneObjectInfo
 {
-    uint64 ownerPlayerId = 0;
+    int64 ownerPlayerId = 0;
     DirectX::XMFLOAT3 pos = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
+
+    // 서버가 결정한 룬 선택지 3개
+    std::array<std::string, 3> runeIds = { "", "", "" };
 };
 
 // 플레이어 연출 액션 타입
@@ -67,7 +71,9 @@ enum class NetworkCommand
 	MapTornadoEvent,
     RoomStart,
     RoomRewardSpawn,
-    RuneRewardPicked
+    RuneRewardPicked,
+    RuneEquip,
+    RuneHomingTarget
 };
 
 // 네트워크 명령 구조체
@@ -130,6 +136,25 @@ struct NetworkCommandData
     float rewardPortalY = 0.0f;
     float rewardPortalZ = 0.0f;
     std::vector<NetworkRewardRuneObjectInfo> rewardRuneObjects;
+
+    // 룬 장착 결과 필드
+    uint32 runeSkillSlot = 0;
+    uint32 runeSlotIndex = 0;
+    uint32 runeStackCount = 1;
+    std::string runeId;
+
+    // 룬 유도 타겟 연출 필드
+    int32 runeHomingSkillSlot = 0;
+    int32 runeHomingSkillType = 0;
+    uint64 runeHomingTargetMonsterId = 0;
+
+    float runeHomingTargetX = 0.0f;
+    float runeHomingTargetY = 0.0f;
+    float runeHomingTargetZ = 0.0f;
+
+    float runeHomingOriginX = 0.0f;
+    float runeHomingOriginY = 0.0f;
+    float runeHomingOriginZ = 0.0f;
 };
 
 // =============================================================================
@@ -198,6 +223,9 @@ public:
     // 룬 보상 획득 전송
     void SendRuneRewardPick();
 
+    // 룬 장착 요청 전송
+    void SendRuneEquip(uint32 rewardOptionIndex, uint32 skillSlot, uint32 runeSlotIndex);
+
     // 플레이어 공격(히트 판정 요청) 전송 — 서버가 히트 판정 후 S_MONSTER_DAMAGE 브로드캐스트
     void SendPlayerAttack(int skillType,
                           float x, float y, float z,
@@ -253,6 +281,12 @@ public:
 
 	// 룬 보상 획득 큐잉
     void QueueRuneRewardPicked(uint64 ownerPlayerId);
+
+	// 룬 장착 큐잉
+    void QueueRuneEquip(uint64 playerId, uint32 skillSlot, uint32 runeSlotIndex, const std::string& runeId, uint32 stackCount);
+
+    // 룬 유도 타겟 큐잉
+    void QueueRuneHomingTarget(uint64 playerId, int32 skillSlot, int32 skillType, uint64 targetMonsterId, const DirectX::XMFLOAT3& targetPos, const DirectX::XMFLOAT3& originPos);
 
     // 보스 이벤트 (인트로/페이즈 전환/사망 컷씬)
     void QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 phaseIndex);
@@ -341,6 +375,8 @@ private:
     void ProcessRoomStart(Scene* pScene, uint64 starterPlayerId);
     void ProcessRoomRewardSpawn(Scene* pScene, uint32 stageIndex, uint32 roomIndex, const DirectX::XMFLOAT3& portalPos, const std::vector<NetworkRewardRuneObjectInfo>& runeObjects);
     void ProcessRuneRewardPicked(Scene* pScene, uint64 ownerPlayerId);
+    void ProcessRuneEquip(Scene* pScene, uint64 playerId, uint32 skillSlot, uint32 runeSlotIndex, const std::string& runeId, uint32 stackCount);
+    void ProcessRuneHomingTarget(Scene* pScene, uint64 playerId, int32 skillSlot, int32 skillType, uint64 targetMonsterId, const DirectX::XMFLOAT3& targetPos, const DirectX::XMFLOAT3& originPos);
     void ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 eventType, uint32 phaseIndex);
     void ProcessMonsterStagger(uint64 monsterId, float duration);
 
