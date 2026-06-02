@@ -82,7 +82,8 @@ cbuffer cbPass : register(b1)
 
     // Stage theme: 0=Fire, 1=Water, 2=Earth, 3=Grass — drives caustics/fog
     // g_ToonEnabled: 0=original Phong, 1=Genshin-style cel shading (F7 toggle)
-    int g_StageTheme; int g_ToonEnabled; int _themePad2; int _themePad3;
+    // g_StormStrength: Earth 모래폭풍 강도 0~1 — CPU envelope (attack-release)
+    int g_StageTheme; int g_ToonEnabled; float g_StormStrength; int _themePad3;
 };
 
 Texture2D gAlbedoMap    : register(t0);
@@ -400,31 +401,39 @@ PS_INPUT VS(VS_INPUT input)
 
     // === Grass sway: 끝 큰 폭으로 흔들림 (방향성 바람 + gust) ===
     // bIsGrass=1: world space 위치 + UV.y(0=뿌리, 1=끝)에 큐빅 가중 → 뿌리 고정, 끝 큰 호 그리며 휨
+    // 주의: GrassClumpMesh 는 per-blade ID 없음 → worldPos 기반 spatial 함수만 사용 가능.
+    //   intra-blade 변동 = 도형 찢어짐. 따라서 swayPhase 공간 주파수는 보수적으로,
+    //   "군무 방지" 는 클럼프 스케일 (~5u) 에서 desync 되는 저주파 gust 로 처리.
     if (bIsGrass)
     {
-        // 베이스 잔물결: 3옥타브 합성 + per-blade 위상 차 → 인접 잎도 다르게 흔들림
-        float swayPhase = g_Time * 2.3f + worldPos.x * 1.10f + worldPos.z * 1.40f;
+        // 베이스 잔물결: 3옥타브 합성 + 공간 위상 (intra-blade 안 깨지는 수준).
+        //   x/z 계수 1.6/1.9 — 원본 1.10/1.40 보다 살짝 높아 인접 블레이드 desync 강화.
+        //   너무 높이면(>3) 블레이드 폭 안에서 sin 한 cycle 다 돌아 도형 망가짐.
+        float swayPhase = g_Time * 2.3f + worldPos.x * 1.60f + worldPos.z * 1.90f;
         float baseSway = sin(swayPhase) * 0.90f
                        + sin(swayPhase * 1.7f + 0.7f) * 0.40f
                        + sin(swayPhase * 3.1f + 1.3f) * 0.20f;
 
-        // 1차 gust: 빠르게 변하는 바람 강도 (0~1)
-        float gust1Phase = g_Time * 0.65f + worldPos.x * 0.06f + worldPos.z * 0.04f;
+        // 1차 gust: 클럼프 스케일 (~5u) 에서 desync. 인접 클럼프 다른 강도로 부풀기/잠잠.
+        //   공간 주파수 0.55/0.45 — 0.6~0.7u 블레이드 폭에서는 거의 동일값 (안 깨짐).
+        float gust1Phase = g_Time * 0.65f + worldPos.x * 0.55f + worldPos.z * 0.45f;
         float gust1 = sin(gust1Phase) * 0.5f + 0.5f;
-        // 2차 weather: 매우 느린 modulation
-        float gust2Phase = g_Time * 0.22f + worldPos.x * 0.02f;
+        // 2차 weather: 느린 modulation.
+        float gust2Phase = g_Time * 0.22f + worldPos.x * 0.18f + worldPos.z * 0.12f;
         float gust2 = sin(gust2Phase) * 0.5f + 0.5f;
-        float gust = gust1 * (0.40f + 0.70f * gust2);  // baseline 0.30 → 0.40 평소도 좀 더 흔들
+        float gust = gust1 * (0.40f + 0.70f * gust2);
         float gustPeak = gust * gust;
 
-        // 방향성 wind push — 더 강하게. 평소 0.55, 폭풍 시 2.5 (이전 0.25 / 1.35)
-        float windPush = 0.55f + gustPeak * 1.95f;
+        // 방향성 wind push — peak 진폭 완화 (1.95 → 1.20). "확 꺾이는" 인상 해소.
+        float windPush = 0.45f + gustPeak * 1.20f;
 
-        // 잔물결 진폭 — 이전 0.30+0.50*gust → 0.50+0.80*gust
-        float oscAmp = 0.50f + 0.80f * gust;
+        // 잔물결 진폭
+        float oscAmp = 0.45f + 0.75f * gust;
 
         float swayAmount = baseSway * oscAmp + windPush;
-        float heightF = input.uv.y * input.uv.y;       // 제곱: 곡선 휨
+        // 곡선 smoothstep — uv.y^2 가속 곡선보다 중앙부 부드럽게 위로.
+        float t = input.uv.y;
+        float heightF = t * t * (3.0f - 2.0f * t);
         worldPos.x += swayAmount * heightF;
         worldPos.z += swayAmount * 0.4f * heightF;
     }
@@ -729,11 +738,11 @@ float4 PS(PS_INPUT input) : SV_TARGET
     float4 albedoColor;
     if (bIsGrass)
     {
-        // 절차적 풀: 단일 신선 녹 팔레트 + 뿌리 그늘 + tip 라이트림.
+        // 절차적 풀: 순수 초록 팔레트 (R/B 낮춰 노란/라임끼 제거) + 뿌리 그늘 + tip 라이트림.
         float t = input.uv.y;
-        float3 freshBase = float3(0.14f, 0.36f, 0.09f);  // 짙은 풀색 (그늘진 뿌리 톤)
-        float3 freshTip  = float3(0.58f, 0.92f, 0.30f);  // 밝은 라임 그린
-        // 블레이드별 미세 hue 변동 — ±5%
+        float3 freshBase = float3(0.06f, 0.30f, 0.08f);  // 짙은 순초록 (뿌리)
+        float3 freshTip  = float3(0.22f, 0.85f, 0.25f);  // 밝은 초록 (R/B 동률, 라임끼 X)
+        // 블레이드별 미세 hue 변동 — ±5% (초록 채널만)
         float vSeed = sin(input.worldPosition.x * 1.73f + input.worldPosition.z * 2.41f) * 0.05f;
         float3 grassRGB = lerp(freshBase, freshTip, t);
         grassRGB.g += vSeed;
@@ -742,10 +751,9 @@ float4 PS(PS_INPUT input) : SV_TARGET
         float rootShadow = smoothstep(0.18f, 0.0f, t);
         grassRGB *= lerp(1.0f, 0.65f, rootShadow);
 
-        // (b) Tip 라이트림 — t>0.85 영역에만 옅게 (이전 0.78 / 강도 22% 였던 거 → 더 자연스럽게).
-        //     노란빛 톤 줄이고 화이트-라임 쪽으로.
+        // (b) Tip 라이트림 — 초록 림 (이전 노란빛 0.08, 0.10, 0.04 → 순초록 0.04, 0.12, 0.05).
         float tipRim = smoothstep(0.85f, 1.0f, t);
-        grassRGB += float3(0.08f, 0.10f, 0.04f) * tipRim;
+        grassRGB += float3(0.04f, 0.12f, 0.05f) * tipRim;
 
         albedoColor = float4(saturate(grassRGB), 1.0f);
     }
@@ -1100,10 +1108,22 @@ float4 PS(PS_INPUT input) : SV_TARGET
     }
 
     // ── Stage-themed environment: Earth (rocky-desert: sun-baked + sand ripple + heat haze) ──
+    //   기본은 맑게 (옅은 dust + 약한 tone shift). g_StormStrength (0~1) 가 1 로 차면
+    //   모래폭풍 — fog/dust 강해지고, 톤 amber-orange, vignette 살짝, ripple wobble 증폭.
     if (g_StageTheme == 2)
     {
         float upFacing = saturate(normal.y);
         float camDistE = distance(g_CameraPosition, input.worldPosition);
+        float storm    = saturate(g_StormStrength);
+
+        // ── Storm density: 시간축 gust pulse 만 (공간 노이즈는 격자 노출 → 사용 X) ──
+        //   sharp attack-decay 두 옥타브 합성 → 짧은 강풍 + 긴 호흡 결합, "파도 도착" 펄스.
+        //   spatial 변동은 아래 screen-space sand streak 으로 표현 (world geo 무관).
+        float _phaseA = frac(g_Time * 0.55f);              // 1.8s 주기
+        float _phaseB = frac(g_Time * 0.28f + 0.37f);      // 3.6s 주기 (느린 호흡)
+        float _gustA  = exp(-_phaseA * 2.6f);
+        float _gustB  = exp(-_phaseB * 1.4f);
+        float densityMul = lerp(0.75f, 1.45f, saturate(_gustA * 0.55f + _gustB * 0.55f));
 
         // 지면 셰이딩(워밍·ripple·heat haze)은 환경 지오메트리에만.
         // 캐릭터에는 fog/tint만 입혀서 분위기에 녹게 한다.
@@ -1116,8 +1136,10 @@ float4 PS(PS_INPUT input) : SV_TARGET
                 finalColor.rgb += float3(0.080f, 0.045f, 0.008f) * slopeMul;
 
                 // 절차적 모래 리플 — 골에 부드러운 음영 (wind-blown sand)
+                // storm 시 wobble 증폭 (모래가 강하게 휘날리는 느낌).
                 float ripple = SandRipple(input.worldPosition.xz, g_Time);
-                finalColor.rgb *= lerp(1.0f, 0.82f, ripple * slopeMul * 0.55f);
+                float rippleStrength = lerp(0.55f, 0.95f, storm);
+                finalColor.rgb *= lerp(1.0f, 0.82f, ripple * slopeMul * rippleStrength);
             }
 
             // (b) Heat haze — 멀리 픽셀 밝기를 sin파로 미세 진동 → 아지랑이.
@@ -1127,22 +1149,58 @@ float4 PS(PS_INPUT input) : SV_TARGET
             float hazeWobble = sin(input.worldPosition.y * 2.5f
                                  + g_Time * 3.4f
                                  + input.worldPosition.x * 0.30f) * 0.5f + 0.5f;
-            finalColor.rgb *= 1.0f + (hazeWobble - 0.5f) * 0.10f * hazeRange;
+            float hazeAmp = lerp(0.10f, 0.22f, storm);
+            finalColor.rgb *= 1.0f + (hazeWobble - 0.5f) * hazeAmp * hazeRange;
         }
 
-        // (c) 거리 fog 2단 — 근거리 모래색 dust + 원거리 푸른 distance haze.
-        //     캐릭터에도 동일 적용 → 환경과의 시각 일관성.
-        float fogNear = saturate((camDistE - 14.0f) / 35.0f);
-        float3 fogColorNear = float3(0.85f, 0.70f, 0.48f);
-        finalColor.rgb = lerp(finalColor.rgb, fogColorNear, fogNear * 0.40f);
+        // (c) 거리 fog 2단 — 폭풍 시 실루엣만 보이도록 카메라 0u 부터 폭주.
+        //     near 시작 0u → 가까운 캐릭터부터 잠식, range 8u → 매우 가파른 wall.
+        //     peak 강도 1.15 (densityMul 거의 100% 통과) → 거의 풀 amber 잠김.
+        float fogNear = saturate((camDistE - lerp(12.0f, 0.0f, storm)) / lerp(30.0f, 8.0f, storm));
+        float3 fogColorNearBase  = float3(0.85f, 0.70f, 0.48f);
+        float3 fogColorNearStorm = float3(0.85f, 0.45f, 0.14f);
+        float3 fogColorNear      = lerp(fogColorNearBase, fogColorNearStorm, storm);
+        float  fogNearMean       = lerp(0.18f, 1.15f, storm);
+        float  fogNearStrength   = fogNearMean * lerp(1.0f, densityMul, storm);
+        finalColor.rgb = lerp(finalColor.rgb, fogColorNear, saturate(fogNear * fogNearStrength));
 
-        float fogFar = saturate((camDistE - 45.0f) / 50.0f);
-        float3 fogColorFar = float3(0.55f, 0.65f, 0.78f);
-        finalColor.rgb = lerp(finalColor.rgb, fogColorFar, fogFar * 0.55f);
+        float fogFar = saturate((camDistE - lerp(38.0f, 12.0f, storm)) / lerp(45.0f, 18.0f, storm));
+        float3 fogColorFar = lerp(float3(0.55f, 0.65f, 0.78f),
+                                  float3(0.60f, 0.36f, 0.18f), storm);
+        float  fogFarStrength = lerp(0.30f, 1.10f, storm) * lerp(1.0f, densityMul, storm * 0.6f);
+        finalColor.rgb = lerp(finalColor.rgb, fogColorFar, saturate(fogFar * fogFarStrength));
 
-        // (d) 따뜻한 톤 시프트 — sun-baked 분위기 (R↑, B↓)
-        float3 tinted_e = finalColor.rgb * float3(1.10f, 1.02f, 0.92f);
-        finalColor.rgb = lerp(finalColor.rgb, tinted_e, 0.65f);
+        // (d) 따뜻한 톤 시프트 — sun-baked 분위기. storm 시 rusty orange (덜 핑크빛).
+        float3 tintBase  = float3(1.08f, 1.03f, 0.95f);
+        float3 tintStorm = float3(1.22f, 0.82f, 0.52f);
+        float3 tintMul   = lerp(tintBase, tintStorm, storm);
+        float3 tinted_e  = finalColor.rgb * tintMul;
+        float  tintBlend = lerp(0.40f, 0.65f, storm);
+        finalColor.rgb = lerp(finalColor.rgb, tinted_e, tintBlend);
+
+        // (e) 폭풍 peak 시 모든 픽셀에 amber 흡수 — 실루엣 만 보이는 수준.
+        //     near fog 만으로는 가까운 캐릭터 윤곽 살아남음 → 거리 무관 강제 amber lerp.
+        //     0.45 흡수: 색 정보 절반 손실, 실루엣은 유지 (완전 흡수는 형체 사라짐).
+        if (storm > 0.0f)
+        {
+            float3 stormAbsorb = float3(0.74f, 0.42f, 0.18f);
+            finalColor.rgb = lerp(finalColor.rgb, stormAbsorb, storm * 0.45f);
+
+            // (f) 미세 grain — per-pixel hash + fast wind scroll.
+            //     모양 인지 안 될 만큼 작은 픽셀 클러스터에 ±작은 휘도 변동.
+            //     "탁한 공기 + 흩날리는 모래" 느낌만 부여, 형태(원/네모) 0.
+            //     ±3% 명도 흔들기라 격자 못 인지, scroll 로 wind 방향 흐름만 감지.
+            float2 wind2D  = float2(-1.0f, -0.35f);
+            float2 grainP  = (input.position.xy + wind2D * g_Time * 80.0f) * 0.5f;
+            float  gh1     = _hash12(floor(grainP));
+            float  gh2     = _hash12(floor(grainP * 0.42f) + 7.1f);
+            float  grain   = (gh1 - 0.5f) * 0.55f + (gh2 - 0.5f) * 0.45f;
+            finalColor.rgb *= 1.0f + grain * storm * 0.06f;
+
+            // (g) gust pulse — 강풍 시 전체 휘도 펄스.
+            float gustPunch = max(_gustA, _gustB);
+            finalColor.rgb *= 1.0f + gustPunch * storm * 0.10f;
+        }
     }
 
     // ── Stage-themed environment: Fire (lava-crack glow on upward surfaces) ──
@@ -1163,13 +1221,15 @@ float4 PS(PS_INPUT input) : SV_TARGET
 
             // (b) 셀별 부드러운 타일 배경 — 유기적 블롭, 옅은 주황 톤.
             float tileMask = LavaTileMask(input.worldPosition.xz);
-            finalColor.rgb += float3(0.15f, 0.060f, 0.012f) * tileMask * slopeMul;
+            finalColor.rgb += float3(0.10f, 0.040f, 0.008f) * tileMask * slopeMul;
 
             // (c) 균열 라인 — 모든 위치에서 그어짐, 타일 위에 살짝 더 진함.
+            //   누적 가산 + contrast 통과 시 bloom threshold(0.96) 초과로 흰빛 번짐 → 강도/색 모두 하향.
+            //   crackColor red 0.75 (was 0.95) — 피크 자체를 1.0 미만 안전 영역으로.
             float cracks = LavaCrackLines(input.worldPosition.xz, g_Time);
-            float3 crackColor = float3(0.95f, 0.40f, 0.08f);
+            float3 crackColor = float3(0.75f, 0.32f, 0.06f);
             float crackBoost = 0.55f + 0.45f * tileMask;
-            finalColor.rgb += crackColor * cracks * crackBoost * slopeMul * 0.40f;
+            finalColor.rgb += crackColor * cracks * crackBoost * slopeMul * 0.18f;
         }
     }
 
@@ -1199,14 +1259,14 @@ float4 PS(PS_INPUT input) : SV_TARGET
     // cel boundary on flat lit surfaces. A global saturation+contrast bump on
     // toon mode makes the difference visible everywhere, not just on shadow
     // boundaries.
-    // 채도 분리 폴라리티 — 일반방 알록달록 해소를 위해 캐릭터까지 약하게 desat.
-    //   적 텍스처들이 이미 강한 원색이라 부스트하면 다중 적 동시 등장 시 노이즈 폭증.
-    //   - 캐릭터 sat 0.92× (환경과 동일) → 한 톤으로 정돈, 분리감은 rim/emit 으로 처리.
-    //   - 환경 sat 0.90× (살짝 더 desat) → 캐릭터가 약 2% 더 vivid 한 미세 분리만 유지.
+    // 채도 분리 폴라리티 — 환경 desat 로 캐릭터 부상.
+    //   0.65 는 불맵 라바 가산 발광이 hue 죽으면서 펠-화이트, 물맵은 청색 hue 죽어 다크 케이브화.
+    //   contrast 1.10× 가 양극단 증폭 (밝은 곳 더 밝게, 어두운 곳 더 어둡게) 문제 가속.
+    //   → sat 0.78 (14% 갭 — 인지 가능, hue 보존), contrast 환경도 1.03 으로 완화.
     if (g_ToonEnabled != 0)
     {
-        float satBoost  = (bIsSkinned != 0) ? 0.92f : 0.90f;
-        float contBoost = (bIsSkinned != 0) ? 1.05f : 1.10f;
+        float satBoost  = (bIsSkinned != 0) ? 0.92f : 0.78f;
+        float contBoost = (bIsSkinned != 0) ? 1.05f : 1.03f;
         float lum = dot(finalColor.rgb, float3(0.299f, 0.587f, 0.114f));
         finalColor.rgb = lerp(float3(lum, lum, lum), finalColor.rgb, satBoost);
         // max() (not saturate) preserves HDR > 1 so bloom still picks up

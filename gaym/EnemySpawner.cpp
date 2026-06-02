@@ -1476,9 +1476,20 @@ void EnemySpawner::LoadTextureToHierarchy(GameObject* pGameObject, const std::st
 
         // diffuse 에 tint 곱해 텍스처 위에 카테고리 색을 입힘.
         // tint == (1,1,1,1) 이면 기존 동작과 동일.
+        // 카테고리 풀채도 틴트 × 텍스처 풀채도 = 이중 채도 → 다중 적 동시 등장 시 무지개감.
+        // → diffuse 만 neutral grey(0.70) 쪽으로 mute (0.55 비중). 카테고리 identity 유지 +
+        //   텍스처 채도와 곱해질 때 과도한 발색 억제. ambient 는 원본 유지 (어두운 영역 보존).
+        const XMFLOAT3 kNeutralGrey = { 0.70f, 0.70f, 0.70f };
+        const float    kTintBlend   = 0.55f;
+        XMFLOAT4 mutedTint = {
+            kNeutralGrey.x + (tint.x - kNeutralGrey.x) * kTintBlend,
+            kNeutralGrey.y + (tint.y - kNeutralGrey.y) * kTintBlend,
+            kNeutralGrey.z + (tint.z - kNeutralGrey.z) * kTintBlend,
+            tint.w
+        };
         MATERIAL material;
         material.m_cAmbient = XMFLOAT4(tint.x * 0.3f, tint.y * 0.3f, tint.z * 0.3f, 1.0f);
-        material.m_cDiffuse = tint;
+        material.m_cDiffuse = mutedTint;
         material.m_cSpecular = XMFLOAT4(0.3f, 0.3f, 0.3f, 32.0f);
         material.m_cEmissive = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
         pGameObject->SetMaterial(material);

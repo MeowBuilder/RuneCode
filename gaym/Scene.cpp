@@ -661,6 +661,48 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     // LOD 용 전역 프레임 카운터 — AnimationComponent 의 phase offset 분산에 사용
     AnimationComponent::TickGlobalFrame();
 
+    // ── Sandstorm (Earth) — 로컬 cycleTimer 가 주기적으로 TriggerSandstorm 호출 ──
+    //   서버 권위화 후 이 블록 전체 삭제 + 패킷 수신 시 TriggerSandstorm() 만 남김.
+    if (m_eCurrentTheme == StageTheme::Earth)
+    {
+        if (!m_bSandstormActive)
+        {
+            m_fSandstormCycleTimer += deltaTime;
+            if (m_fSandstormCycleTimer >= kSandstormCycleSec)
+                TriggerSandstorm(kSandstormDefaultSec);
+        }
+        else
+        {
+            m_fSandstormPhaseTimer += deltaTime;
+            const float ramp = kSandstormRampSec;
+            const float dur  = m_fSandstormDuration;
+            const float t    = m_fSandstormPhaseTimer;
+            auto sstep = [](float a, float b, float x) {
+                float u = std::clamp((x - a) / (b - a), 0.0f, 1.0f);
+                return u * u * (3.0f - 2.0f * u);
+            };
+            // attack-release envelope: smoothstep ramp in, plateau, smoothstep ramp out.
+            float attack  = (ramp > 0.0f) ? sstep(0.0f, ramp, t) : 1.0f;
+            float release = (ramp > 0.0f) ? (1.0f - sstep(dur - ramp, dur, t)) : 1.0f;
+            m_fSandstormStrength = std::clamp(attack * release, 0.0f, 1.0f);
+            if (t >= dur)
+            {
+                m_bSandstormActive    = false;
+                m_fSandstormStrength  = 0.0f;
+                m_fSandstormPhaseTimer = 0.0f;
+                m_fSandstormCycleTimer = 0.0f;
+            }
+        }
+    }
+    else if (m_fSandstormStrength != 0.0f || m_bSandstormActive)
+    {
+        // Earth 외 테마로 전환 시 상태 깨끗하게 reset.
+        m_bSandstormActive     = false;
+        m_fSandstormStrength   = 0.0f;
+        m_fSandstormCycleTimer = 0.0f;
+        m_fSandstormPhaseTimer = 0.0f;
+    }
+
     // ── InteractionCube 포탈 회오리 VFX 관리 ──────────────────────────────────
     //   큐브가 활성(보임) 동안 Demon_Tornado 회오리를 큐브 위치에 매 프레임 추적.
     //   인터랙트되어 Hide 되면 stop. 다시 Show 되면 재 spawn.
@@ -1407,6 +1449,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     // 스테이지 테마 (셰이더 caustics/fog 분기용)
     m_pcbMappedPass->m_nStageTheme = static_cast<int>(m_eCurrentTheme);
     m_pcbMappedPass->m_nToonEnabled = m_bToonEnabled ? 1 : 0;
+    m_pcbMappedPass->m_fStormStrength = m_fSandstormStrength;
 
     // Update SpotLight parameters based on player position
     if (m_pPlayerGameObject)
@@ -4466,23 +4509,19 @@ void Scene::SetupWindAmbient(const BoundingBox& roomBB)
         ID3D12GraphicsCommandList* pCmd = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetCommandList() : nullptr;
         if (pDev && pCmd && !m_vShaders.empty())
         {
-            // 갈대밭 컨셉: 큰 영역에 dense 군집 + 듬성듬성 보조 군집 → 자연스럽게 펼쳐진 풀밭
+            // 갈대밭 컨셉: floor tile 위에만 군집 배치 — 맵 바깥 ring fill 은 제거.
             // ── 풀 클럼프 배치 전략 ────────────────────────────────────────────
             //   tile 그룹: floor tile 위 (walkable, 플레이어가 지나갈 수 있는 영역)
-            //   ring 그룹: 방 바깥 ring (시각 fill — 맵 경계 너머 허전함 해소)
             const int kTileClumpCount = 14;
-            const int kRingClumpCount = 10;
+            const int kRingClumpCount = 0;   // 맵 바깥 fill 비활성 — 사용자 요청
             const int kClumpCount = kTileClumpCount + kRingClumpCount;
             struct ClumpCfg { int nBlades; float fRadius; };
             ClumpCfg cfgs[kClumpCount] = {
-                // === Tile 그룹 (14개) — walkable 영역, 밀도 있게 ===
+                // === Tile 그룹 — walkable 영역 ===
                 { 55, 6.0f }, { 60, 6.2f }, { 50, 5.8f }, { 55, 6.0f },
                 { 48, 5.5f }, { 52, 5.8f }, { 45, 5.2f }, { 50, 5.5f },
                 { 30, 4.0f }, { 32, 4.0f }, { 28, 3.8f }, { 30, 3.8f },
                 { 26, 3.5f }, { 28, 3.5f },
-                // === Ring 그룹 (10개) — 맵 바깥 시각 fill, 더 크게 ===
-                { 80, 8.0f }, { 85, 8.5f }, { 75, 7.5f }, { 80, 8.0f }, { 70, 7.0f },
-                { 75, 7.5f }, { 80, 8.0f }, { 70, 7.0f }, { 75, 7.5f }, { 80, 8.0f },
             };
 
             // ── (1) Tile 그룹 좌표 수집: 맵 JSON 의 floor tile 만, 스폰 근처 제외 ──
@@ -4708,6 +4747,19 @@ void Scene::StartNetworkMapTornadoEvent(const DirectX::XMFLOAT3& pos, float warn
 //   Earth — 갈-회색 (0.10, 0.08, 0.06)
 //   Grass — 청록 새벽빛 (0.45, 0.62, 0.55) 바람 컨셉
 // ────────────────────────────────────────────────────────────────────────────
+// ── Sandstorm 진입점 ──────────────────────────────────────────────────────────
+//   서버 권위화 후: 모래폭풍 broadcast 패킷 수신 시 이 함수만 호출하면 envelope 자동 진행.
+//   현재는 Scene::Update 의 cycleTimer 가 자동 트리거.
+void Scene::TriggerSandstorm(float duration)
+{
+    if (duration <= 0.0f) duration = kSandstormDefaultSec;
+    m_bSandstormActive     = true;
+    m_fSandstormDuration   = duration;
+    m_fSandstormPhaseTimer = 0.0f;
+    m_fSandstormStrength   = 0.0f;
+    m_fSandstormCycleTimer = 0.0f;
+}
+
 void Scene::ApplyThemeSkyColor()
 {
     auto* pApp = Dx12App::GetInstance();

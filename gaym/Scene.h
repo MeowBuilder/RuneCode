@@ -114,7 +114,8 @@ struct PassConstants
 
     // 스테이지 테마: 0=Fire, 1=Water, 2=Earth, 3=Grass — 셰이더에서 caustics/fog 결정
     // m_nToonEnabled: 0=원본 Phong, 1=원신풍 셀 셰이딩 (F7로 토글)
-    int m_nStageTheme; int m_nToonEnabled; int m_nThemePad2; int m_nThemePad3;
+    // m_fStormStrength: Earth 테마 모래폭풍 강도 0~1 (CPU 가 envelope 계산해서 전달)
+    int m_nStageTheme; int m_nToonEnabled; float m_fStormStrength; int m_nThemePad3;
 };
 
 // Include TorchSystem after PassConstants is defined (avoid circular include)
@@ -157,6 +158,13 @@ public:
     TorchSystem* GetTorchSystem() { return m_pTorchSystem.get(); }
     GameObject* GetPlayer() const { return m_pPlayerGameObject; }
     StageTheme  GetCurrentTheme() const { return m_eCurrentTheme; }
+
+    // ── Sandstorm (Earth theme) ─────────────────────────────────────────────
+    //   서버 권위화 시 패킷 수신 시 TriggerSandstorm(duration) 호출. 현재는 로컬 타이머 자동 발생.
+    //   GetStormStrength() 는 매 프레임 envelope (attack-release) 결과 0~1. 셰이더 g_StormStrength 로 푸시.
+    void  TriggerSandstorm(float duration);
+    bool  IsSandstormActive()  const { return m_bSandstormActive; }
+    float GetSandstormStrength() const { return m_fSandstormStrength; }
     std::vector<GameObject*> GetAllPlayers() const;  // 로컬 + 원격 플레이어 목록 반환
     void RegisterPlayersToEnemy(class EnemyComponent* pEnemy);  // 적에게 플레이어 등록
     Shader* GetDefaultShader() const { return m_vShaders.empty() ? nullptr : m_vShaders[0].get(); }
@@ -285,6 +293,18 @@ private:
 	bool m_bUseNetworkTornadoEvent = false;      // 네트워크 맵 토네이도 이벤트 사용 여부 
     StageTheme m_eLastAppliedTheme = StageTheme::Fire;  // sky color 변경 감지용
     StageTheme m_eCurrentTheme = StageTheme::Fire; // 현재 스테이지 테마
+
+    // ── Sandstorm state (Earth theme) ───────────────────────────────────────
+    //   서버 권위화 대비: TriggerSandstorm() 가 패킷-드리븐 진입점. 로컬 cycleTimer 가 임시 트리거.
+    //   envelope: attack 1.5s → 지속 (duration-3s) → release 1.5s. 활성 끝나면 m_bSandstormActive=false.
+    float m_fSandstormCycleTimer  = 0.0f;   // 다음 폭풍까지 경과 (Earth 진입 시 0 으로 reset)
+    float m_fSandstormPhaseTimer  = 0.0f;   // 활성 중 경과
+    float m_fSandstormDuration    = 0.0f;   // 현재 활성 폭풍 총 지속 시간
+    float m_fSandstormStrength    = 0.0f;   // 셰이더에 push 할 0~1 envelope
+    bool  m_bSandstormActive      = false;
+    static constexpr float kSandstormCycleSec   = 35.0f;  // 다음 폭풍 간격
+    static constexpr float kSandstormDefaultSec = 8.0f;   // 기본 폭풍 지속 (램프 길이 늘리면서 함께 증가)
+    static constexpr float kSandstormRampSec    = 2.5f;   // attack=release ramp — 너무 빠르면 binary 함
     bool m_bToonEnabled = true;  // F7로 토글: 원신풍 셀 셰이딩 (기본 ON)
     GameObject* m_pLavaPlane = nullptr; // 용암 바닥 평면
     GameObject* m_pWaterPlane = nullptr; // 물 바닥 평면
