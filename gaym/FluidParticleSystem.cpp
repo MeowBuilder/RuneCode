@@ -82,35 +82,85 @@ static const char* g_FluidShaderCode = R"(
         { 1.0f, 0.0f }
     };
 
-    FluidVSOut VS_Fluid(uint vertId : SV_VertexID, uint instId : SV_InstanceID)
+    // 빌보드 회전 + 모양 인덱스 패킹: VS 에서 instId hash → PS 로 전달.
+    //   FluidVSOut 의 color.a 는 원본 알파가 필요해 따로 못 씀 → uv 의 z 슬롯 (X/Y 한 채널 추가 X)
+    //   를 못 쓰므로 color.rgb 강도 유지 + alpha 보존 위해 별도 채널 필요.
+    //   해결: FluidVSOut 에 uint shapeId 추가 (TEXCOORD1, nointerpolation).
+    struct FluidVSOutEx
+    {
+        float4 pos      : SV_POSITION;
+        float4 color    : COLOR0;
+        float2 uv       : TEXCOORD0;
+        nointerpolation uint shapeId : TEXCOORD1;
+    };
+
+    FluidVSOutEx VS_Fluid(uint vertId : SV_VertexID, uint instId : SV_InstanceID)
     {
         FluidParticleData p = gParticles[instId];
 
         float2 offset = kOffsets[vertId];
         float2 uv     = kUVs[vertId];
 
-        float3 worldPos = p.position
-            + gCameraRight * offset.x * p.size
-            + gCameraUp    * offset.y * p.size;
+        // Hash instId → 회전각 + shape index. 각 파티클 독립적으로 다양한 모양/방향.
+        uint h     = instId * 2654435761u;
+        uint shape = (h >> 13) & 0x3;                     // 0~3: 원/잎/마름모/줄기
+        float ang  = (float)((h >> 4) & 0xFF) / 255.0f * 6.28318530718f;
+        float ca   = cos(ang);
+        float sa   = sin(ang);
+        float2 rotOff = float2(offset.x * ca - offset.y * sa,
+                               offset.x * sa + offset.y * ca);
 
-        FluidVSOut output;
-        output.pos   = mul(float4(worldPos, 1.0f), gViewProj);
-        output.color = p.color;
-        output.uv    = uv;
+        float3 worldPos = p.position
+            + gCameraRight * rotOff.x * p.size
+            + gCameraUp    * rotOff.y * p.size;
+
+        FluidVSOutEx output;
+        output.pos     = mul(float4(worldPos, 1.0f), gViewProj);
+        output.color   = p.color;
+        output.uv      = uv;
+        output.shapeId = shape;
         return output;
     }
 
-    float4 PS_Fluid(FluidVSOut input) : SV_TARGET
+    // 모양별 마스크 함수.
+    float _shape_circle(float2 c) {
+        float d = length(c);
+        return 1.0f - smoothstep(0.4f, 1.0f, d);
+    }
+    float _shape_leaf(float2 c) {
+        // Vesica piscis (두 원 교집합) → 잎 모양, 양쪽 끝 뾰족.
+        float d1 = length(c - float2(0.0f,  0.55f)) - 0.78f;
+        float d2 = length(c + float2(0.0f,  0.55f)) - 0.78f;
+        float dL = max(d1, d2);
+        return 1.0f - smoothstep(-0.15f, 0.05f, dL);
+    }
+    float _shape_diamond(float2 c) {
+        float d = abs(c.x) + abs(c.y);
+        return 1.0f - smoothstep(0.55f, 1.05f, d);
+    }
+    float _shape_streak(float2 c) {
+        // 가로 긴 좁은 타원 — 모션 블러 줄기.
+        float2 e = float2(c.x * 0.55f, c.y * 2.6f);
+        float d = length(e);
+        return 1.0f - smoothstep(0.45f, 1.0f, d);
+    }
+
+    float4 PS_Fluid(FluidVSOutEx input) : SV_TARGET
     {
         // UV to [-1, 1]
         float2 centered = input.uv * 2.0f - 1.0f;
-        float  d        = length(centered);
 
-        // Soft disc alpha - 더 부드럽게 처리하여 경계면 검은 선 방지
-        float alpha = 1.0f - smoothstep(0.4f, 1.0f, d);
+        // 모양 분기 — VS 에서 결정된 shapeId.
+        float alpha;
+        if      (input.shapeId == 0) alpha = _shape_circle(centered);
+        else if (input.shapeId == 1) alpha = _shape_leaf(centered);
+        else if (input.shapeId == 2) alpha = _shape_diamond(centered);
+        else                          alpha = _shape_streak(centered);
+
         clip(alpha - 0.01f);
 
-        // Inner glow boost - 중심부를 더 밝게 하여 겹쳐도 화염처럼 보이게
+        // Inner glow boost — 중심부 더 밝게 (기존 룩 유지).
+        float d = length(centered);
         float glow = 1.0f - d;
         float3 col = input.color.rgb * (1.0f + glow * 1.5f);
 

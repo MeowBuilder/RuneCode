@@ -703,6 +703,45 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         m_fSandstormPhaseTimer = 0.0f;
     }
 
+    // ── Wind gust (Grass) — Sandstorm 과 동일 패턴 ──
+    if (m_eCurrentTheme == StageTheme::Grass)
+    {
+        if (!m_bWindGustActive)
+        {
+            m_fWindGustCycleTimer += deltaTime;
+            if (m_fWindGustCycleTimer >= kWindGustCycleSec)
+                TriggerWindGust(kWindGustDefaultSec);
+        }
+        else
+        {
+            m_fWindGustPhaseTimer += deltaTime;
+            const float ramp = kWindGustRampSec;
+            const float dur  = m_fWindGustDuration;
+            const float t    = m_fWindGustPhaseTimer;
+            auto sstep = [](float a, float b, float x) {
+                float u = std::clamp((x - a) / (b - a), 0.0f, 1.0f);
+                return u * u * (3.0f - 2.0f * u);
+            };
+            float attack  = (ramp > 0.0f) ? sstep(0.0f, ramp, t) : 1.0f;
+            float release = (ramp > 0.0f) ? (1.0f - sstep(dur - ramp, dur, t)) : 1.0f;
+            m_fWindGustStrength = std::clamp(attack * release, 0.0f, 1.0f);
+            if (t >= dur)
+            {
+                m_bWindGustActive    = false;
+                m_fWindGustStrength  = 0.0f;
+                m_fWindGustPhaseTimer = 0.0f;
+                m_fWindGustCycleTimer = 0.0f;
+            }
+        }
+    }
+    else if (m_fWindGustStrength != 0.0f || m_bWindGustActive)
+    {
+        m_bWindGustActive     = false;
+        m_fWindGustStrength   = 0.0f;
+        m_fWindGustCycleTimer = 0.0f;
+        m_fWindGustPhaseTimer = 0.0f;
+    }
+
     // ── InteractionCube 포탈 회오리 VFX 관리 ──────────────────────────────────
     //   큐브가 활성(보임) 동안 Demon_Tornado 회오리를 큐브 위치에 매 프레임 추적.
     //   인터랙트되어 Hide 되면 stop. 다시 Show 되면 재 spawn.
@@ -1450,6 +1489,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     m_pcbMappedPass->m_nStageTheme = static_cast<int>(m_eCurrentTheme);
     m_pcbMappedPass->m_nToonEnabled = m_bToonEnabled ? 1 : 0;
     m_pcbMappedPass->m_fStormStrength = m_fSandstormStrength;
+    m_pcbMappedPass->m_fGustStrength  = m_fWindGustStrength;
 
     // Update SpotLight parameters based on player position
     if (m_pPlayerGameObject)
@@ -2789,6 +2829,7 @@ void Scene::TransitionToRoomByIndex(int index)
 void Scene::TransitionToBossRoom()
 {
     OutputDebugString(L"[Scene] ========== BOSS ROOM ==========\n");
+    if (!IsReadyForTransition()) return;
 
     if (m_pPlayerGameObject)
     {
@@ -2906,7 +2947,8 @@ void Scene::TransitionToBossRoom()
                     // Camera cinematic: wide-angle shot looking up at the sky where dragon appears
                     XMFLOAT3 landPos = dragonPos;
                     landPos.y = 0.0f;
-                    m_pCamera->StartCinematic(landPos, 55.0f, 15.0f, 180.0f);
+                    if (m_pCamera)
+                        m_pCamera->StartCinematic(landPos, 55.0f, 15.0f, 180.0f);
                     m_pDragonIntroEnemy = pEnemy;
                     m_eLastDragonPhase = BossIntroPhase::None;
                 }
@@ -3121,6 +3163,7 @@ void Scene::RegisterPlayersToEnemy(EnemyComponent* pEnemy)
 void Scene::TransitionToWaterStage(int roomIndex)
 {
     OutputDebugString(L"[Scene] ========== WATER STAGE ==========\n");
+    if (!IsReadyForTransition()) return;
 
     // ── 0. 플레이어 Y 복원 (이전 스테이지에서 리프트 됐을 가능성 방어)
     //    MapLoader가 playerSpawn 정의하면 이후 덮어씀
@@ -3542,6 +3585,7 @@ void Scene::TransitionToWaterStage(int roomIndex)
 void Scene::TransitionToWaterBossRoom()
 {
     OutputDebugString(L"[Scene] ========== WATER BOSS ROOM (KRAKEN) ==========\n");
+    if (!IsReadyForTransition()) return;
 
     // 플레이어 Y 복원 (이전 리프트 상태 방어)
     if (m_pPlayerGameObject)
@@ -3881,6 +3925,7 @@ bool Scene::IsNetworkKrakenCutsceneTarget(uint64 monsterId) const
 void Scene::TransitionToEarthStage(int roomIndex)
 {
     OutputDebugString(L"[Scene] ========== EARTH STAGE ==========\n");
+    if (!IsReadyForTransition()) return;
 
     if (m_pPlayerGameObject)
     {
@@ -3974,6 +4019,7 @@ void Scene::TransitionToEarthStage(int roomIndex)
 void Scene::TransitionToGrassStage(int roomIndex)
 {
     OutputDebugString(L"[Scene] ========== GRASS STAGE ==========\n");
+    if (!IsReadyForTransition()) return;
 
     if (m_pPlayerGameObject)
     {
@@ -4060,6 +4106,7 @@ void Scene::TransitionToGrassStage(int roomIndex)
 void Scene::TransitionToEarthBossRoom()
 {
     OutputDebugString(L"[Scene] ========== EARTH BOSS ROOM (GOLEM) ==========\n");
+    if (!IsReadyForTransition()) return;
 
     if (m_pPlayerGameObject)
     {
@@ -4156,6 +4203,7 @@ void Scene::TransitionToEarthBossRoom()
 void Scene::TransitionToGrassBossRoom()
 {
     OutputDebugString(L"[Scene] ========== GRASS BOSS ROOM (DEMON) ==========\n");
+    if (!IsReadyForTransition()) return;
 
     // 이전 비행 테스트 상태(F6 등) 초기화
     if (m_pPlayerGameObject)
@@ -4747,6 +4795,20 @@ void Scene::StartNetworkMapTornadoEvent(const DirectX::XMFLOAT3& pos, float warn
 //   Earth — 갈-회색 (0.10, 0.08, 0.06)
 //   Grass — 청록 새벽빛 (0.45, 0.62, 0.55) 바람 컨셉
 // ────────────────────────────────────────────────────────────────────────────
+// ── 전환 prerequisite 가드 ────────────────────────────────────────────────────
+//   다른 PC 의 오프라인 모드 + 디버그 키(B/N)/네트워크 패킷 으로 맵 전환 시,
+//   Scene::Init 의 셰이더/메쉬 로드가 완료되기 전 TransitionTo* 가 호출되면 크래시.
+//   PC 환경(HDD 속도, GPU mem, 빌드 시점 timing) 차이로 개발 PC 는 통과, 다른 PC 는 실패.
+bool Scene::IsReadyForTransition() const
+{
+    if (m_vShaders.empty())
+    {
+        OutputDebugString(L"[Scene] Transition skipped — shaders not initialized yet\n");
+        return false;
+    }
+    return true;
+}
+
 // ── Sandstorm 진입점 ──────────────────────────────────────────────────────────
 //   서버 권위화 후: 모래폭풍 broadcast 패킷 수신 시 이 함수만 호출하면 envelope 자동 진행.
 //   현재는 Scene::Update 의 cycleTimer 가 자동 트리거.
@@ -4758,6 +4820,17 @@ void Scene::TriggerSandstorm(float duration)
     m_fSandstormPhaseTimer = 0.0f;
     m_fSandstormStrength   = 0.0f;
     m_fSandstormCycleTimer = 0.0f;
+}
+
+// ── Wind gust 진입점 (Grass) — Sandstorm 과 동일 패턴 ──────────────────────────
+void Scene::TriggerWindGust(float duration)
+{
+    if (duration <= 0.0f) duration = kWindGustDefaultSec;
+    m_bWindGustActive     = true;
+    m_fWindGustDuration   = duration;
+    m_fWindGustPhaseTimer = 0.0f;
+    m_fWindGustStrength   = 0.0f;
+    m_fWindGustCycleTimer = 0.0f;
 }
 
 void Scene::ApplyThemeSkyColor()

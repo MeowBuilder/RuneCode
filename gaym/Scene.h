@@ -114,8 +114,8 @@ struct PassConstants
 
     // 스테이지 테마: 0=Fire, 1=Water, 2=Earth, 3=Grass — 셰이더에서 caustics/fog 결정
     // m_nToonEnabled: 0=원본 Phong, 1=원신풍 셀 셰이딩 (F7로 토글)
-    // m_fStormStrength: Earth 테마 모래폭풍 강도 0~1 (CPU 가 envelope 계산해서 전달)
-    int m_nStageTheme; int m_nToonEnabled; float m_fStormStrength; int m_nThemePad3;
+    // m_fStormStrength: Earth 모래폭풍 강도 0~1, m_fGustStrength: Grass 돌풍 강도 0~1
+    int m_nStageTheme; int m_nToonEnabled; float m_fStormStrength; float m_fGustStrength;
 };
 
 // Include TorchSystem after PassConstants is defined (avoid circular include)
@@ -159,12 +159,24 @@ public:
     GameObject* GetPlayer() const { return m_pPlayerGameObject; }
     StageTheme  GetCurrentTheme() const { return m_eCurrentTheme; }
 
+    // ── 전환 prerequisite 가드 ─────────────────────────────────────────────
+    //   디버그 키(B, N) / 네트워크 매니저가 Scene::Init 완료 전 TransitionTo* 호출 시
+    //   m_vShaders[0]->ClearRenderComponents() 등에서 nullptr 디레퍼런스 → 크래시.
+    //   모든 TransitionTo* 시작에 호출되어 prerequisite 미충족 시 안전하게 리턴.
+    bool IsReadyForTransition() const;
+
     // ── Sandstorm (Earth theme) ─────────────────────────────────────────────
     //   서버 권위화 시 패킷 수신 시 TriggerSandstorm(duration) 호출. 현재는 로컬 타이머 자동 발생.
     //   GetStormStrength() 는 매 프레임 envelope (attack-release) 결과 0~1. 셰이더 g_StormStrength 로 푸시.
     void  TriggerSandstorm(float duration);
     bool  IsSandstormActive()  const { return m_bSandstormActive; }
     float GetSandstormStrength() const { return m_fSandstormStrength; }
+
+    // ── Wind Gust (Grass theme) ─────────────────────────────────────────────
+    //   Sandstorm 과 동일 패턴 — 서버 패킷 마이그레이션 호환.
+    void  TriggerWindGust(float duration);
+    bool  IsWindGustActive()  const { return m_bWindGustActive; }
+    float GetWindGustStrength() const { return m_fWindGustStrength; }
     std::vector<GameObject*> GetAllPlayers() const;  // 로컬 + 원격 플레이어 목록 반환
     void RegisterPlayersToEnemy(class EnemyComponent* pEnemy);  // 적에게 플레이어 등록
     Shader* GetDefaultShader() const { return m_vShaders.empty() ? nullptr : m_vShaders[0].get(); }
@@ -305,6 +317,16 @@ private:
     static constexpr float kSandstormCycleSec   = 35.0f;  // 다음 폭풍 간격
     static constexpr float kSandstormDefaultSec = 8.0f;   // 기본 폭풍 지속 (램프 길이 늘리면서 함께 증가)
     static constexpr float kSandstormRampSec    = 2.5f;   // attack=release ramp — 너무 빠르면 binary 함
+
+    // ── Wind gust state (Grass theme) — Sandstorm 과 동일 패턴 ─────────────
+    float m_fWindGustCycleTimer  = 0.0f;
+    float m_fWindGustPhaseTimer  = 0.0f;
+    float m_fWindGustDuration    = 0.0f;
+    float m_fWindGustStrength    = 0.0f;
+    bool  m_bWindGustActive      = false;
+    static constexpr float kWindGustCycleSec   = 30.0f;
+    static constexpr float kWindGustDefaultSec = 5.0f;
+    static constexpr float kWindGustRampSec    = 1.5f;
     bool m_bToonEnabled = true;  // F7로 토글: 원신풍 셀 셰이딩 (기본 ON)
     GameObject* m_pLavaPlane = nullptr; // 용암 바닥 평면
     GameObject* m_pWaterPlane = nullptr; // 물 바닥 평면
