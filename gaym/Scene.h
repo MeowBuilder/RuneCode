@@ -22,6 +22,7 @@
 #include "ScreenSpaceFluid.h" // Screen-Space Fluid Renderer
 #include "DebugRenderer.h" // Added DebugRenderer include
 #include "Terrain.h"       // Decorative terrain
+#include "DecalManager.h"  // 지면 데칼 (회전 마법진 등)
 
 struct ID3D12Device;
 struct ID3D12GraphicsCommandList;
@@ -142,6 +143,7 @@ public:
     CRoom* GetCurrentRoom() const { return m_pCurrentRoom; } // Added getter for current room
     void SetCurrentRoom(CRoom* pRoom) { m_pCurrentRoom = pRoom; }
     ProjectileManager* GetProjectileManager() { return m_pProjectileManager.get(); }
+    DecalManager*      GetDecalManager()      { return m_pDecalManager.get(); }
     // 통합 VFX 파사드: 신규 코드는 이 API만 사용한다.
     VFXManager* GetVFXManager() { return m_pVFXManager.get(); }
 
@@ -471,6 +473,9 @@ private:
 
     // Torch System (flickering lights and flame billboards)
     std::unique_ptr<TorchSystem> m_pTorchSystem;
+
+    // Ground Decal Manager (회전 마법진, 스코치 마크 등)
+    std::unique_ptr<DecalManager> m_pDecalManager;
 
     // Decorative terrain (장식용, 충돌 없음)
     std::unique_ptr<Terrain> m_pTerrain;

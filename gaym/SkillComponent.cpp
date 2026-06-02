@@ -126,6 +126,24 @@ void SkillComponent::Update(float deltaTime)
         }
     }
 
+    // R 스킬 지연 발동 처리 (마법진 reveal 완료 후 실제 스킬 발사)
+    for (auto& dc : m_delayedCasts)
+        dc.timeRemain -= deltaTime;
+
+    m_delayedCasts.erase(
+        std::remove_if(m_delayedCasts.begin(), m_delayedCasts.end(),
+            [&](DelayedCast& dc) -> bool
+            {
+                if (dc.timeRemain > 0.f) return false;
+                // 상태를 Ready로 되돌려 ExecuteWithActivationType 통과
+                m_SkillStates[dc.skillIndex] = SkillState::Ready;
+                m_bRSkillExecuting = true;
+                ExecuteWithActivationType(dc.slot, dc.target);
+                m_bRSkillExecuting = false;
+                return true;
+            }),
+        m_delayedCasts.end());
+
     // Update charge timer
     if (m_bIsCharging)
     {
@@ -1026,12 +1044,15 @@ void SkillComponent::SpawnPlaceTrap(size_t skillIndex, const XMFLOAT3& pos, floa
     ElementType elem = m_Skills[skillIndex]->GetSkillData().element;
     FluidElementColor ec = FluidElementColors::Get(elem);
 
+    auto* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
+    DecalManager* pDecal = pScene ? pScene->GetDecalManager() : nullptr;
+
     // 기존 함정 제거 (한 슬롯 1개 유지)
     for (auto& t : m_placeQueue)
     {
         if (t.skillIndex == skillIndex)
         {
-            if (t.spriteSlot >= 0) VFXSpriteManager::Get().Stop(t.spriteSlot);
+            if (t.spriteSlot >= 0 && pDecal) pDecal->Stop(t.spriteSlot);
             t.spriteSlot = -1;
         }
     }
@@ -1040,8 +1061,9 @@ void SkillComponent::SpawnPlaceTrap(size_t skillIndex, const XMFLOAT3& pos, floa
             [skillIndex](const PlacedTrap& t){ return t.skillIndex == skillIndex; }),
         m_placeQueue.end());
 
-    int spriteSlot = VFXSpriteManager::Get().Spawn(
-        "star_08", groundPos, 110.f, 30.f, ec.coreColor, 1.2f);
+    int spriteSlot = pDecal
+        ? pDecal->Spawn(DecalTexture::Star08, groundPos, 8.f, 0.f, 30.f, ec.coreColor, 1.2f)
+        : -1;
 
     m_placeQueue.push_back({ skillIndex, mult, groundPos, spriteSlot, 3.0f, playerTrig, windGate });
     OutputDebugString(L"[Skill] PlacedTrap spawned\n");
@@ -1049,7 +1071,12 @@ void SkillComponent::SpawnPlaceTrap(size_t skillIndex, const XMFLOAT3& pos, floa
 
 void SkillComponent::FirePlacedTrap(PlacedTrap& trap, const XMFLOAT3& currentTargetPos)
 {
-    if (trap.spriteSlot >= 0) { VFXSpriteManager::Get().Stop(trap.spriteSlot); trap.spriteSlot = -1; }
+    if (trap.spriteSlot >= 0)
+    {
+        auto* pScene2 = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
+        if (pScene2 && pScene2->GetDecalManager()) pScene2->GetDecalManager()->Stop(trap.spriteSlot);
+        trap.spriteSlot = -1;
+    }
     if (trap.skillIndex >= m_Skills.size() || !m_Skills[trap.skillIndex]) return;
 
     m_currentChargeRatio    = 0.f;
@@ -1226,6 +1253,27 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
 
     if (m_SkillStates[index] != SkillState::Ready)
     {
+        return;
+    }
+
+    // R 스킬 발동 시 마법진 연출 후 지연 발동
+    if (slot == SkillSlot::R && !m_bRSkillExecuting && m_pOwner && m_pOwner->GetTransform())
+    {
+        constexpr float kRevealDuration = 0.6f;
+
+        auto* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
+        if (pScene && pScene->GetDecalManager())
+        {
+            XMFLOAT3 feetPos = m_pOwner->GetTransform()->GetPosition();
+            ElementType elem = m_Skills[index] ? m_Skills[index]->GetSkillData().element : ElementType::None;
+            FluidElementColor ec = FluidElementColors::Get(elem);
+            pScene->GetDecalManager()->Spawn(
+                DecalTexture::MagicCircle, feetPos, 12.f, 0.f, 3.5f, ec.coreColor, 2.0f, kRevealDuration);
+        }
+
+        // 실제 발동은 reveal 완료 후
+        m_delayedCasts.push_back({ slot, index, targetPosition, kRevealDuration });
+        m_SkillStates[index] = SkillState::Casting;
         return;
     }
 

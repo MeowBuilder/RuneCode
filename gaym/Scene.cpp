@@ -59,6 +59,7 @@ Scene::Scene()
     m_pSSF                 = std::make_unique<ScreenSpaceFluid>();
     m_pDebugRenderer = std::make_unique<DebugRenderer>();
     m_pTorchSystem = std::make_unique<TorchSystem>();
+    m_pDecalManager = std::make_unique<DecalManager>();
 }
 
 Scene::~Scene()
@@ -309,6 +310,14 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
     m_nNextDescriptorIndex += 64;
     m_pProjectileManager->Init(this, pDevice, pCommandList, m_pDescriptorHeap.get(), nProjectileDescriptorStart);
     OutputDebugString(L"[Scene] Projectile system initialized\n");
+
+    // Decal Manager (32 CB slots + 텍스처 SRV)
+    m_pDecalManager->Init(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex, pShader.get());
+    m_pDecalManager->LoadTexture(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
+        DecalTexture::MagicCircle, L"Assets/Textures/VFX/MagicCircle.png");
+    m_pDecalManager->LoadTexture(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
+        DecalTexture::Star08, L"Assets/Textures/VFX/star_08.png");
+    OutputDebugString(L"[Scene] DecalManager initialized\n");
 
     // Debug Renderer (no descriptors)
     m_pDebugRenderer->Init(pDevice, pCommandList);
@@ -1506,6 +1515,9 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     if (m_pVFXManager)
         m_pVFXManager->Update(deltaTime);
 
+    if (m_pDecalManager)
+        m_pDecalManager->Update(deltaTime);
+
     // 디버그 wind VFX 영구 재스폰 — 90s 마다 자동 재시작 (sub_wind 페이즈 99s 직전)
     //   m_bInBossRoom 일 때만 동작. 보스방 벗어나면 정리.
     if (m_bInBossRoom && m_pVFXManager && m_nDebugWindVFXId >= 0)
@@ -1845,6 +1857,12 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
     if (m_pProjectileManager)
     {
         m_pProjectileManager->Render(pCommandList);
+    }
+
+    // Render ground decals (회전 마법진 등 — 투명 패스, 바닥에 눕힌 쿼드)
+    if (m_pDecalManager)
+    {
+        m_pDecalManager->Render(pCommandList, GetPassCBVAddress());
     }
 
     // Render skill geometry meshes (e.g. meteor rock)

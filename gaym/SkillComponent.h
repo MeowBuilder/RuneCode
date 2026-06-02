@@ -211,6 +211,16 @@ private:
     struct DeferredEcho { size_t index; float mult; float timer; int decalSlot = -1; EnemyComponent* pTarget = nullptr; };
     std::vector<DeferredEcho> m_echoQueue;
 
+    // R 스킬 지연 발동 (마법진 reveal 완료 후 실제 스킬 발사)
+    struct DelayedCast {
+        SkillSlot         slot;
+        size_t            skillIndex;
+        DirectX::XMFLOAT3 target;
+        float             timeRemain;
+    };
+    std::vector<DelayedCast> m_delayedCasts;
+    bool m_bRSkillExecuting = false; // 지연 후 재진입 시 마법진 재생성 방지
+
     // 설치 룬 함정 큐 (TRF_DEP: 바닥 표식 → 트리거 시 스킬 발동)
     struct PlacedTrap {
         size_t    skillIndex;

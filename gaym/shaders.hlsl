@@ -784,6 +784,14 @@ float4 PS(PS_INPUT input) : SV_TARGET
             float edgeFade = smoothstep(0.0f, 0.12f, v) * smoothstep(1.0f, 0.88f, v);
             decalA *= edgeFade;
         }
+        else
+        {
+            // 중앙부터 바깥으로 펼쳐지는 reveal 효과
+            // g_HitFlash = reveal radius (0=완전숨김, 1.2=완전표시, 10=clip없음)
+            float normDist = length(input.uv - float2(0.5f, 0.5f)) * 2.0f;
+            float revealMask = saturate((g_HitFlash - normDist) / 0.15f);
+            decalA *= revealMask;
+        }
         return float4(decalRGB, decalA);
     }
 
