@@ -674,3 +674,44 @@ bool Handle_S_RUNE_HOMING_TARGET(PacketSessionRef& session, Protocol::S_RUNE_HOM
 
     return true;
 }
+
+bool Handle_S_RUNE_TRIGGER(PacketSessionRef& session, Protocol::S_RUNE_TRIGGER& pkt)
+{
+    uint64 playerId = pkt.playerid();
+    int32 skillSlot = pkt.skillslot();
+    int32 skillType = static_cast<int32>(pkt.skilltype());
+
+    std::string runeId = pkt.runeid();
+    int32 triggerType = static_cast<int32>(pkt.triggertype());
+
+    uint64 targetMonsterId = pkt.targetmonsterid();
+    uint64 targetPlayerId = pkt.targetplayerid();
+    uint64 objectId = pkt.objectid();
+
+    float x = pkt.x();
+    float y = pkt.y();
+    float z = pkt.z();
+
+    float value1 = pkt.value1();
+    float value2 = pkt.value2();
+
+    char buf[512];
+    sprintf_s(buf,
+        "[Network] S_RUNE_TRIGGER received: playerId=%llu skillSlot=%d skillType=%d runeId=%s triggerType=%d targetMonsterId=%llu targetPlayerId=%llu objectId=%llu pos=(%.2f, %.2f, %.2f) value1=%.2f value2=%.2f",
+        playerId,
+        skillSlot,
+        skillType,
+        runeId.c_str(),
+        triggerType,
+        targetMonsterId,
+        targetPlayerId,
+        objectId,
+        x, y, z,
+        value1,
+        value2
+    );
+
+    WriteNetworkLog(buf);
+
+    return true;
+}

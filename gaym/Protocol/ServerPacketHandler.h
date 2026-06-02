@@ -45,6 +45,7 @@ enum : uint16
 	PKT_C_RUNE_EQUIP = 1034,
 	PKT_S_RUNE_EQUIP = 1035,
 	PKT_S_RUNE_HOMING_TARGET = 1036,
+	PKT_S_RUNE_TRIGGER = 1037,
 };
 
 // Custom Handlers
@@ -73,6 +74,7 @@ bool Handle_S_ROOM_REWARD_SPAWN(PacketSessionRef& session, Protocol::S_ROOM_REWA
 bool Handle_S_RUNE_REWARD_PICKED(PacketSessionRef& session, Protocol::S_RUNE_REWARD_PICKED& pkt);
 bool Handle_S_RUNE_EQUIP(PacketSessionRef& session, Protocol::S_RUNE_EQUIP& pkt);
 bool Handle_S_RUNE_HOMING_TARGET(PacketSessionRef& session, Protocol::S_RUNE_HOMING_TARGET& pkt);
+bool Handle_S_RUNE_TRIGGER(PacketSessionRef& session, Protocol::S_RUNE_TRIGGER& pkt);
 
 class ServerPacketHandler
 {
@@ -105,6 +107,7 @@ public:
 		GPacketHandler[PKT_S_RUNE_REWARD_PICKED] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_RUNE_REWARD_PICKED>(Handle_S_RUNE_REWARD_PICKED, session, buffer, len); };
 		GPacketHandler[PKT_S_RUNE_EQUIP] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_RUNE_EQUIP>(Handle_S_RUNE_EQUIP, session, buffer, len); };
 		GPacketHandler[PKT_S_RUNE_HOMING_TARGET] = [](PacketSessionRef& session, BYTE* buffer, int32 len) { return HandlePacket<Protocol::S_RUNE_HOMING_TARGET>(Handle_S_RUNE_HOMING_TARGET, session, buffer, len); };
+		GPacketHandler[PKT_S_RUNE_TRIGGER] = [](PacketSessionRef& session, BYTE* buffer, int32 len) {return HandlePacket<Protocol::S_RUNE_TRIGGER>(Handle_S_RUNE_TRIGGER, session, buffer, len); };
 	}
 
 	static bool HandlePacket(PacketSessionRef& session, BYTE* buffer, int32 len)

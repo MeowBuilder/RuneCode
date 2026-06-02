@@ -440,7 +440,7 @@ void ProjectileManager::Update(float deltaTime)
                 {
                     XMVECTOR toTarget = XMVector3Normalize(toTargetVec);
 
-                    constexpr float TURN_SPEED = 12.0f;
+                    constexpr float TURN_SPEED = 20.0f;
 
                     XMVECTOR newDir = XMVector3Normalize(
                         cur + toTarget * (TURN_SPEED * deltaTime));

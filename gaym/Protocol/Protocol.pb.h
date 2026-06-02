@@ -30,6 +30,7 @@
 #include <google/protobuf/message.h>
 #include <google/protobuf/repeated_field.h>  // IWYU pragma: export
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
+#include <google/protobuf/generated_enum_reflection.h>
 #include <google/protobuf/unknown_field_set.h>
 #include "Enum.pb.h"
 #include "Struct.pb.h"
@@ -48,7 +49,7 @@ struct TableStruct_Protocol_2eproto {
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::AuxiliaryParseTableField aux[]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
-  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[38]
+  static const ::PROTOBUF_NAMESPACE_ID::internal::ParseTable schema[39]
     PROTOBUF_SECTION_VARIABLE(protodesc_cold);
   static const ::PROTOBUF_NAMESPACE_ID::internal::FieldMetadata field_metadata[];
   static const ::PROTOBUF_NAMESPACE_ID::internal::SerializationTable serialization_table[];
@@ -164,6 +165,9 @@ extern S_RUNE_HOMING_TARGETDefaultTypeInternal _S_RUNE_HOMING_TARGET_default_ins
 class S_RUNE_REWARD_PICKED;
 struct S_RUNE_REWARD_PICKEDDefaultTypeInternal;
 extern S_RUNE_REWARD_PICKEDDefaultTypeInternal _S_RUNE_REWARD_PICKED_default_instance_;
+class S_RUNE_TRIGGER;
+struct S_RUNE_TRIGGERDefaultTypeInternal;
+extern S_RUNE_TRIGGERDefaultTypeInternal _S_RUNE_TRIGGER_default_instance_;
 class S_SKILL;
 struct S_SKILLDefaultTypeInternal;
 extern S_SKILLDefaultTypeInternal _S_SKILL_default_instance_;
@@ -208,11 +212,51 @@ template<> ::Protocol::S_ROOM_TRANSITION* Arena::CreateMaybeMessage<::Protocol::
 template<> ::Protocol::S_RUNE_EQUIP* Arena::CreateMaybeMessage<::Protocol::S_RUNE_EQUIP>(Arena*);
 template<> ::Protocol::S_RUNE_HOMING_TARGET* Arena::CreateMaybeMessage<::Protocol::S_RUNE_HOMING_TARGET>(Arena*);
 template<> ::Protocol::S_RUNE_REWARD_PICKED* Arena::CreateMaybeMessage<::Protocol::S_RUNE_REWARD_PICKED>(Arena*);
+template<> ::Protocol::S_RUNE_TRIGGER* Arena::CreateMaybeMessage<::Protocol::S_RUNE_TRIGGER>(Arena*);
 template<> ::Protocol::S_SKILL* Arena::CreateMaybeMessage<::Protocol::S_SKILL>(Arena*);
 template<> ::Protocol::S_SPAWN* Arena::CreateMaybeMessage<::Protocol::S_SPAWN>(Arena*);
 PROTOBUF_NAMESPACE_CLOSE
 namespace Protocol {
 
+enum RuneTriggerType : int {
+  RUNE_TRIGGER_NONE = 0,
+  RUNE_TRIGGER_PROC = 1,
+  RUNE_TRIGGER_EXEC_KILL = 2,
+  RUNE_TRIGGER_LIFESTEAL = 3,
+  RUNE_TRIGGER_SHIELD = 4,
+  RUNE_TRIGGER_ECHO_SCHEDULE = 10,
+  RUNE_TRIGGER_ECHO_FIRE = 11,
+  RUNE_TRIGGER_TRAP_SPAWN = 20,
+  RUNE_TRIGGER_TRAP_FIRE = 21,
+  RUNE_TRIGGER_TRAP_REMOVE = 22,
+  RUNE_TRIGGER_VENGEANCE_READY = 30,
+  RUNE_TRIGGER_VENGEANCE_CONSUME = 31,
+  RUNE_TRIGGER_OVERHEAT_READY = 40,
+  RUNE_TRIGGER_OVERHEAT_CONSUME = 41,
+  RUNE_TRIGGER_COOLDOWN_REDUCE = 50,
+  RUNE_TRIGGER_COOLDOWN_RESET = 51,
+  RuneTriggerType_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<::PROTOBUF_NAMESPACE_ID::int32>::min(),
+  RuneTriggerType_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<::PROTOBUF_NAMESPACE_ID::int32>::max()
+};
+bool RuneTriggerType_IsValid(int value);
+constexpr RuneTriggerType RuneTriggerType_MIN = RUNE_TRIGGER_NONE;
+constexpr RuneTriggerType RuneTriggerType_MAX = RUNE_TRIGGER_COOLDOWN_RESET;
+constexpr int RuneTriggerType_ARRAYSIZE = RuneTriggerType_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* RuneTriggerType_descriptor();
+template<typename T>
+inline const std::string& RuneTriggerType_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, RuneTriggerType>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function RuneTriggerType_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    RuneTriggerType_descriptor(), enum_t_value);
+}
+inline bool RuneTriggerType_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, RuneTriggerType* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<RuneTriggerType>(
+    RuneTriggerType_descriptor(), name, value);
+}
 // ===================================================================
 
 class C_LOGIN final :
@@ -6566,6 +6610,308 @@ class S_RUNE_HOMING_TARGET final :
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
+// -------------------------------------------------------------------
+
+class S_RUNE_TRIGGER final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:Protocol.S_RUNE_TRIGGER) */ {
+ public:
+  inline S_RUNE_TRIGGER() : S_RUNE_TRIGGER(nullptr) {}
+  ~S_RUNE_TRIGGER() override;
+  explicit constexpr S_RUNE_TRIGGER(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  S_RUNE_TRIGGER(const S_RUNE_TRIGGER& from);
+  S_RUNE_TRIGGER(S_RUNE_TRIGGER&& from) noexcept
+    : S_RUNE_TRIGGER() {
+    *this = ::std::move(from);
+  }
+
+  inline S_RUNE_TRIGGER& operator=(const S_RUNE_TRIGGER& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline S_RUNE_TRIGGER& operator=(S_RUNE_TRIGGER&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const S_RUNE_TRIGGER& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const S_RUNE_TRIGGER* internal_default_instance() {
+    return reinterpret_cast<const S_RUNE_TRIGGER*>(
+               &_S_RUNE_TRIGGER_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    38;
+
+  friend void swap(S_RUNE_TRIGGER& a, S_RUNE_TRIGGER& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(S_RUNE_TRIGGER* other) {
+    if (other == this) return;
+    if (GetOwningArena() == other->GetOwningArena()) {
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(S_RUNE_TRIGGER* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline S_RUNE_TRIGGER* New() const final {
+    return new S_RUNE_TRIGGER();
+  }
+
+  S_RUNE_TRIGGER* New(::PROTOBUF_NAMESPACE_ID::Arena* arena) const final {
+    return CreateMaybeMessage<S_RUNE_TRIGGER>(arena);
+  }
+  void CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void MergeFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) final;
+  void CopyFrom(const S_RUNE_TRIGGER& from);
+  void MergeFrom(const S_RUNE_TRIGGER& from);
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  ::PROTOBUF_NAMESPACE_ID::uint8* _InternalSerialize(
+      ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(S_RUNE_TRIGGER* other);
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "Protocol.S_RUNE_TRIGGER";
+  }
+  protected:
+  explicit S_RUNE_TRIGGER(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  private:
+  static void ArenaDtor(void* object);
+  inline void RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena* arena);
+  public:
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kRuneIdFieldNumber = 4,
+    kPlayerIdFieldNumber = 1,
+    kSkillSlotFieldNumber = 2,
+    kSkillTypeFieldNumber = 3,
+    kTargetMonsterIdFieldNumber = 6,
+    kTargetPlayerIdFieldNumber = 7,
+    kTriggerTypeFieldNumber = 5,
+    kXFieldNumber = 9,
+    kObjectIdFieldNumber = 8,
+    kYFieldNumber = 10,
+    kZFieldNumber = 11,
+    kDirXFieldNumber = 12,
+    kDirYFieldNumber = 13,
+    kDirZFieldNumber = 14,
+    kValue1FieldNumber = 15,
+    kValue2FieldNumber = 16,
+  };
+  // string runeId = 4;
+  void clear_runeid();
+  const std::string& runeid() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_runeid(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_runeid();
+  PROTOBUF_FUTURE_MUST_USE_RESULT std::string* release_runeid();
+  void set_allocated_runeid(std::string* runeid);
+  private:
+  const std::string& _internal_runeid() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_runeid(const std::string& value);
+  std::string* _internal_mutable_runeid();
+  public:
+
+  // uint64 playerId = 1;
+  void clear_playerid();
+  ::PROTOBUF_NAMESPACE_ID::uint64 playerid() const;
+  void set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_playerid() const;
+  void _internal_set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
+  // int32 skillSlot = 2;
+  void clear_skillslot();
+  ::PROTOBUF_NAMESPACE_ID::int32 skillslot() const;
+  void set_skillslot(::PROTOBUF_NAMESPACE_ID::int32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::int32 _internal_skillslot() const;
+  void _internal_set_skillslot(::PROTOBUF_NAMESPACE_ID::int32 value);
+  public:
+
+  // .Protocol.SkillType skillType = 3;
+  void clear_skilltype();
+  ::Protocol::SkillType skilltype() const;
+  void set_skilltype(::Protocol::SkillType value);
+  private:
+  ::Protocol::SkillType _internal_skilltype() const;
+  void _internal_set_skilltype(::Protocol::SkillType value);
+  public:
+
+  // uint64 targetMonsterId = 6;
+  void clear_targetmonsterid();
+  ::PROTOBUF_NAMESPACE_ID::uint64 targetmonsterid() const;
+  void set_targetmonsterid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_targetmonsterid() const;
+  void _internal_set_targetmonsterid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
+  // uint64 targetPlayerId = 7;
+  void clear_targetplayerid();
+  ::PROTOBUF_NAMESPACE_ID::uint64 targetplayerid() const;
+  void set_targetplayerid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_targetplayerid() const;
+  void _internal_set_targetplayerid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
+  // .Protocol.RuneTriggerType triggerType = 5;
+  void clear_triggertype();
+  ::Protocol::RuneTriggerType triggertype() const;
+  void set_triggertype(::Protocol::RuneTriggerType value);
+  private:
+  ::Protocol::RuneTriggerType _internal_triggertype() const;
+  void _internal_set_triggertype(::Protocol::RuneTriggerType value);
+  public:
+
+  // float x = 9;
+  void clear_x();
+  float x() const;
+  void set_x(float value);
+  private:
+  float _internal_x() const;
+  void _internal_set_x(float value);
+  public:
+
+  // uint64 objectId = 8;
+  void clear_objectid();
+  ::PROTOBUF_NAMESPACE_ID::uint64 objectid() const;
+  void set_objectid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint64 _internal_objectid() const;
+  void _internal_set_objectid(::PROTOBUF_NAMESPACE_ID::uint64 value);
+  public:
+
+  // float y = 10;
+  void clear_y();
+  float y() const;
+  void set_y(float value);
+  private:
+  float _internal_y() const;
+  void _internal_set_y(float value);
+  public:
+
+  // float z = 11;
+  void clear_z();
+  float z() const;
+  void set_z(float value);
+  private:
+  float _internal_z() const;
+  void _internal_set_z(float value);
+  public:
+
+  // float dirX = 12;
+  void clear_dirx();
+  float dirx() const;
+  void set_dirx(float value);
+  private:
+  float _internal_dirx() const;
+  void _internal_set_dirx(float value);
+  public:
+
+  // float dirY = 13;
+  void clear_diry();
+  float diry() const;
+  void set_diry(float value);
+  private:
+  float _internal_diry() const;
+  void _internal_set_diry(float value);
+  public:
+
+  // float dirZ = 14;
+  void clear_dirz();
+  float dirz() const;
+  void set_dirz(float value);
+  private:
+  float _internal_dirz() const;
+  void _internal_set_dirz(float value);
+  public:
+
+  // float value1 = 15;
+  void clear_value1();
+  float value1() const;
+  void set_value1(float value);
+  private:
+  float _internal_value1() const;
+  void _internal_set_value1(float value);
+  public:
+
+  // float value2 = 16;
+  void clear_value2();
+  float value2() const;
+  void set_value2(float value);
+  private:
+  float _internal_value2() const;
+  void _internal_set_value2(float value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:Protocol.S_RUNE_TRIGGER)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr runeid_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 playerid_;
+  ::PROTOBUF_NAMESPACE_ID::int32 skillslot_;
+  int skilltype_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 targetmonsterid_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 targetplayerid_;
+  int triggertype_;
+  float x_;
+  ::PROTOBUF_NAMESPACE_ID::uint64 objectid_;
+  float y_;
+  float z_;
+  float dirx_;
+  float diry_;
+  float dirz_;
+  float value1_;
+  float value2_;
+  mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  friend struct ::TableStruct_Protocol_2eproto;
+};
 // ===================================================================
 
 
@@ -10112,9 +10458,360 @@ inline void S_RUNE_HOMING_TARGET::set_originz(float value) {
   // @@protoc_insertion_point(field_set:Protocol.S_RUNE_HOMING_TARGET.originZ)
 }
 
+// -------------------------------------------------------------------
+
+// S_RUNE_TRIGGER
+
+// uint64 playerId = 1;
+inline void S_RUNE_TRIGGER::clear_playerid() {
+  playerid_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_TRIGGER::_internal_playerid() const {
+  return playerid_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_TRIGGER::playerid() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.playerId)
+  return _internal_playerid();
+}
+inline void S_RUNE_TRIGGER::_internal_set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  playerid_ = value;
+}
+inline void S_RUNE_TRIGGER::set_playerid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_playerid(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.playerId)
+}
+
+// int32 skillSlot = 2;
+inline void S_RUNE_TRIGGER::clear_skillslot() {
+  skillslot_ = 0;
+}
+inline ::PROTOBUF_NAMESPACE_ID::int32 S_RUNE_TRIGGER::_internal_skillslot() const {
+  return skillslot_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::int32 S_RUNE_TRIGGER::skillslot() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.skillSlot)
+  return _internal_skillslot();
+}
+inline void S_RUNE_TRIGGER::_internal_set_skillslot(::PROTOBUF_NAMESPACE_ID::int32 value) {
+  
+  skillslot_ = value;
+}
+inline void S_RUNE_TRIGGER::set_skillslot(::PROTOBUF_NAMESPACE_ID::int32 value) {
+  _internal_set_skillslot(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.skillSlot)
+}
+
+// .Protocol.SkillType skillType = 3;
+inline void S_RUNE_TRIGGER::clear_skilltype() {
+  skilltype_ = 0;
+}
+inline ::Protocol::SkillType S_RUNE_TRIGGER::_internal_skilltype() const {
+  return static_cast< ::Protocol::SkillType >(skilltype_);
+}
+inline ::Protocol::SkillType S_RUNE_TRIGGER::skilltype() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.skillType)
+  return _internal_skilltype();
+}
+inline void S_RUNE_TRIGGER::_internal_set_skilltype(::Protocol::SkillType value) {
+  
+  skilltype_ = value;
+}
+inline void S_RUNE_TRIGGER::set_skilltype(::Protocol::SkillType value) {
+  _internal_set_skilltype(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.skillType)
+}
+
+// string runeId = 4;
+inline void S_RUNE_TRIGGER::clear_runeid() {
+  runeid_.ClearToEmpty();
+}
+inline const std::string& S_RUNE_TRIGGER::runeid() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.runeId)
+  return _internal_runeid();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void S_RUNE_TRIGGER::set_runeid(ArgT0&& arg0, ArgT... args) {
+ 
+ runeid_.Set(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.runeId)
+}
+inline std::string* S_RUNE_TRIGGER::mutable_runeid() {
+  // @@protoc_insertion_point(field_mutable:Protocol.S_RUNE_TRIGGER.runeId)
+  return _internal_mutable_runeid();
+}
+inline const std::string& S_RUNE_TRIGGER::_internal_runeid() const {
+  return runeid_.Get();
+}
+inline void S_RUNE_TRIGGER::_internal_set_runeid(const std::string& value) {
+  
+  runeid_.Set(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, value, GetArenaForAllocation());
+}
+inline std::string* S_RUNE_TRIGGER::_internal_mutable_runeid() {
+  
+  return runeid_.Mutable(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, GetArenaForAllocation());
+}
+inline std::string* S_RUNE_TRIGGER::release_runeid() {
+  // @@protoc_insertion_point(field_release:Protocol.S_RUNE_TRIGGER.runeId)
+  return runeid_.Release(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), GetArenaForAllocation());
+}
+inline void S_RUNE_TRIGGER::set_allocated_runeid(std::string* runeid) {
+  if (runeid != nullptr) {
+    
+  } else {
+    
+  }
+  runeid_.SetAllocated(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), runeid,
+      GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set_allocated:Protocol.S_RUNE_TRIGGER.runeId)
+}
+
+// .Protocol.RuneTriggerType triggerType = 5;
+inline void S_RUNE_TRIGGER::clear_triggertype() {
+  triggertype_ = 0;
+}
+inline ::Protocol::RuneTriggerType S_RUNE_TRIGGER::_internal_triggertype() const {
+  return static_cast< ::Protocol::RuneTriggerType >(triggertype_);
+}
+inline ::Protocol::RuneTriggerType S_RUNE_TRIGGER::triggertype() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.triggerType)
+  return _internal_triggertype();
+}
+inline void S_RUNE_TRIGGER::_internal_set_triggertype(::Protocol::RuneTriggerType value) {
+  
+  triggertype_ = value;
+}
+inline void S_RUNE_TRIGGER::set_triggertype(::Protocol::RuneTriggerType value) {
+  _internal_set_triggertype(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.triggerType)
+}
+
+// uint64 targetMonsterId = 6;
+inline void S_RUNE_TRIGGER::clear_targetmonsterid() {
+  targetmonsterid_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_TRIGGER::_internal_targetmonsterid() const {
+  return targetmonsterid_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_TRIGGER::targetmonsterid() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.targetMonsterId)
+  return _internal_targetmonsterid();
+}
+inline void S_RUNE_TRIGGER::_internal_set_targetmonsterid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  targetmonsterid_ = value;
+}
+inline void S_RUNE_TRIGGER::set_targetmonsterid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_targetmonsterid(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.targetMonsterId)
+}
+
+// uint64 targetPlayerId = 7;
+inline void S_RUNE_TRIGGER::clear_targetplayerid() {
+  targetplayerid_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_TRIGGER::_internal_targetplayerid() const {
+  return targetplayerid_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_TRIGGER::targetplayerid() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.targetPlayerId)
+  return _internal_targetplayerid();
+}
+inline void S_RUNE_TRIGGER::_internal_set_targetplayerid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  targetplayerid_ = value;
+}
+inline void S_RUNE_TRIGGER::set_targetplayerid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_targetplayerid(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.targetPlayerId)
+}
+
+// uint64 objectId = 8;
+inline void S_RUNE_TRIGGER::clear_objectid() {
+  objectid_ = uint64_t{0u};
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_TRIGGER::_internal_objectid() const {
+  return objectid_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint64 S_RUNE_TRIGGER::objectid() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.objectId)
+  return _internal_objectid();
+}
+inline void S_RUNE_TRIGGER::_internal_set_objectid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  
+  objectid_ = value;
+}
+inline void S_RUNE_TRIGGER::set_objectid(::PROTOBUF_NAMESPACE_ID::uint64 value) {
+  _internal_set_objectid(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.objectId)
+}
+
+// float x = 9;
+inline void S_RUNE_TRIGGER::clear_x() {
+  x_ = 0;
+}
+inline float S_RUNE_TRIGGER::_internal_x() const {
+  return x_;
+}
+inline float S_RUNE_TRIGGER::x() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.x)
+  return _internal_x();
+}
+inline void S_RUNE_TRIGGER::_internal_set_x(float value) {
+  
+  x_ = value;
+}
+inline void S_RUNE_TRIGGER::set_x(float value) {
+  _internal_set_x(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.x)
+}
+
+// float y = 10;
+inline void S_RUNE_TRIGGER::clear_y() {
+  y_ = 0;
+}
+inline float S_RUNE_TRIGGER::_internal_y() const {
+  return y_;
+}
+inline float S_RUNE_TRIGGER::y() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.y)
+  return _internal_y();
+}
+inline void S_RUNE_TRIGGER::_internal_set_y(float value) {
+  
+  y_ = value;
+}
+inline void S_RUNE_TRIGGER::set_y(float value) {
+  _internal_set_y(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.y)
+}
+
+// float z = 11;
+inline void S_RUNE_TRIGGER::clear_z() {
+  z_ = 0;
+}
+inline float S_RUNE_TRIGGER::_internal_z() const {
+  return z_;
+}
+inline float S_RUNE_TRIGGER::z() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.z)
+  return _internal_z();
+}
+inline void S_RUNE_TRIGGER::_internal_set_z(float value) {
+  
+  z_ = value;
+}
+inline void S_RUNE_TRIGGER::set_z(float value) {
+  _internal_set_z(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.z)
+}
+
+// float dirX = 12;
+inline void S_RUNE_TRIGGER::clear_dirx() {
+  dirx_ = 0;
+}
+inline float S_RUNE_TRIGGER::_internal_dirx() const {
+  return dirx_;
+}
+inline float S_RUNE_TRIGGER::dirx() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.dirX)
+  return _internal_dirx();
+}
+inline void S_RUNE_TRIGGER::_internal_set_dirx(float value) {
+  
+  dirx_ = value;
+}
+inline void S_RUNE_TRIGGER::set_dirx(float value) {
+  _internal_set_dirx(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.dirX)
+}
+
+// float dirY = 13;
+inline void S_RUNE_TRIGGER::clear_diry() {
+  diry_ = 0;
+}
+inline float S_RUNE_TRIGGER::_internal_diry() const {
+  return diry_;
+}
+inline float S_RUNE_TRIGGER::diry() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.dirY)
+  return _internal_diry();
+}
+inline void S_RUNE_TRIGGER::_internal_set_diry(float value) {
+  
+  diry_ = value;
+}
+inline void S_RUNE_TRIGGER::set_diry(float value) {
+  _internal_set_diry(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.dirY)
+}
+
+// float dirZ = 14;
+inline void S_RUNE_TRIGGER::clear_dirz() {
+  dirz_ = 0;
+}
+inline float S_RUNE_TRIGGER::_internal_dirz() const {
+  return dirz_;
+}
+inline float S_RUNE_TRIGGER::dirz() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.dirZ)
+  return _internal_dirz();
+}
+inline void S_RUNE_TRIGGER::_internal_set_dirz(float value) {
+  
+  dirz_ = value;
+}
+inline void S_RUNE_TRIGGER::set_dirz(float value) {
+  _internal_set_dirz(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.dirZ)
+}
+
+// float value1 = 15;
+inline void S_RUNE_TRIGGER::clear_value1() {
+  value1_ = 0;
+}
+inline float S_RUNE_TRIGGER::_internal_value1() const {
+  return value1_;
+}
+inline float S_RUNE_TRIGGER::value1() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.value1)
+  return _internal_value1();
+}
+inline void S_RUNE_TRIGGER::_internal_set_value1(float value) {
+  
+  value1_ = value;
+}
+inline void S_RUNE_TRIGGER::set_value1(float value) {
+  _internal_set_value1(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.value1)
+}
+
+// float value2 = 16;
+inline void S_RUNE_TRIGGER::clear_value2() {
+  value2_ = 0;
+}
+inline float S_RUNE_TRIGGER::_internal_value2() const {
+  return value2_;
+}
+inline float S_RUNE_TRIGGER::value2() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_RUNE_TRIGGER.value2)
+  return _internal_value2();
+}
+inline void S_RUNE_TRIGGER::_internal_set_value2(float value) {
+  
+  value2_ = value;
+}
+inline void S_RUNE_TRIGGER::set_value2(float value) {
+  _internal_set_value2(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_RUNE_TRIGGER.value2)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
@@ -10193,6 +10890,16 @@ inline void S_RUNE_HOMING_TARGET::set_originz(float value) {
 // @@protoc_insertion_point(namespace_scope)
 
 }  // namespace Protocol
+
+PROTOBUF_NAMESPACE_OPEN
+
+template <> struct is_proto_enum< ::Protocol::RuneTriggerType> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::RuneTriggerType>() {
+  return ::Protocol::RuneTriggerType_descriptor();
+}
+
+PROTOBUF_NAMESPACE_CLOSE
 
 // @@protoc_insertion_point(global_scope)
 
