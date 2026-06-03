@@ -1976,6 +1976,12 @@ void Dx12App::UpdateNetwork(float deltaTime)
     // 원격 플레이어 VFX 타임아웃 체크
     m_pNetworkManager->CheckRemotePlayerVFXTimeout(m_pScene.get(), deltaTime);
 
+    // 활성화 룬(차지/증강) VFX 가 원격 플레이어 발 아래 따라가도록 위치 추적
+    m_pNetworkManager->UpdateRemoteActivationRuneVFX(m_pScene.get());
+
+    // 궤도 룬(TRF_ORB) deferred 발사 큐 tick
+    m_pNetworkManager->UpdatePendingOrbitals(m_pScene.get(), deltaTime);
+
     // 서버 몬스터 idle 전환 체크
     m_pNetworkManager->CheckServerMonsterIdle(deltaTime);
 

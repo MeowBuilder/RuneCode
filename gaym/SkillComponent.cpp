@@ -295,6 +295,7 @@ void SkillComponent::Update(float deltaTime)
         if (m_fChannelTime >= m_fChannelDuration)
         {
             OutputDebugString(L"[Skill] Channel complete!\n");
+            NotifyActionNet(PLAYER_ACTION_CHANNEL_END, m_ActiveSkillSlot);
             m_bIsChanneling = false;
             m_fChannelTime = 0.0f;
             m_fChannelTickAccum = 0.0f;
@@ -329,6 +330,7 @@ void SkillComponent::Update(float deltaTime)
             m_bIsEnhanced = false;
             m_fEnhanceTimer = 0.0f;
             OutputDebugString(L"[Skill] Enhancement expired\n");
+            NotifyActionNet(PLAYER_ACTION_ENHANCE_END, SkillSlot::Count);
         }
     }
 
@@ -521,6 +523,7 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
                     m_bIsEnhanced = false;
                     m_fEnhanceTimer = 0.0f;
                     OutputDebugString(L"[Skill] Enhancement consumed with Charge!\n");
+                    NotifyActionNet(PLAYER_ACTION_ENHANCE_END, static_cast<SkillSlot>(index));
                 }
 
                 wchar_t buffer[128];
@@ -546,6 +549,12 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
 
                 // Start cooldown (cooldownMult 룬 적용)
                 m_CooldownTimers[index] = GetEffectiveCooldown(index);
+
+                // 차지 발사 시점에 서버로 SendSkill — ExecuteWithActivationType 의 SendSkill 은
+                //   press 시점에 호출되면 원격 클라가 차지 buildup 없이 즉시 발사로 보이므로 release 에서 처리.
+                //   설치+차지 콤보는 PLACE_SPAWN 으로 이미 알렸으니 SendSkill skip.
+                if (!combo.hasPlace)
+                    SendSkillNet(m_ChargingSlot, targetPos);
             }
 
             size_t relIdx = static_cast<size_t>(m_ChargingSlot);
@@ -555,9 +564,11 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
                 m_chargeGatherVFXIds[relIdx] = -1;
             }
             m_chargeScaleSteps[relIdx] = 0;
+            SkillSlot endedSlot = m_ChargingSlot;
             m_bIsCharging = false;
             m_fChargeTime = 0.0f;
             m_ChargingSlot = SkillSlot::Count;
+            NotifyActionNet(PLAYER_ACTION_CHARGE_END, endedSlot);
         }
         return;  // Don't process other inputs while charging
     }
@@ -574,6 +585,7 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
         {
             // Key released - stop channeling
             OutputDebugString(L"[Skill] Channel interrupted\n");
+            NotifyActionNet(PLAYER_ACTION_CHANNEL_END, m_ActiveSkillSlot);
             m_bIsChanneling = false;
             m_fChannelTime = 0.0f;
             m_fChannelTickAccum = 0.0f;
@@ -690,6 +702,24 @@ float SkillComponent::GetEffectiveCooldown(size_t slotIndex) const
     ActivationType defType = m_Skills[slotIndex]->GetSkillData().activationType;
     SkillStats stats = BuildSkillStats(static_cast<SkillSlot>(slotIndex), defType);
     return base * stats.cooldownMult;
+}
+
+void SkillComponent::NotifyActionNet(uint32_t actionType, SkillSlot slot, float extraY)
+{
+    NetworkManager* pNet = NetworkManager::GetInstance();
+    if (!pNet || !pNet->IsConnected()) return;
+    if (!m_pOwner || !m_pOwner->GetTransform()) return;
+    DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+    pNet->SendPlayerAction(actionType, pos.x, pos.y, pos.z,
+                            static_cast<float>(slot), extraY, 0.f);
+}
+
+void SkillComponent::NotifyActionNetAt(uint32_t actionType, SkillSlot slot, const DirectX::XMFLOAT3& pos, float extraY)
+{
+    NetworkManager* pNet = NetworkManager::GetInstance();
+    if (!pNet || !pNet->IsConnected()) return;
+    pNet->SendPlayerAction(actionType, pos.x, pos.y, pos.z,
+                            static_cast<float>(slot), extraY, 0.f);
 }
 
 void SkillComponent::ResetCooldown(SkillSlot slot)
@@ -1105,10 +1135,13 @@ void SkillComponent::SpawnPlaceTrap(size_t skillIndex, const XMFLOAT3& pos, floa
 
     m_placeQueue.push_back({ skillIndex, mult, groundPos, spriteSlot, 3.0f, playerTrig, windGate });
     OutputDebugString(L"[Skill] PlacedTrap spawned\n");
+    NotifyActionNetAt(PLAYER_ACTION_PLACE_SPAWN, static_cast<SkillSlot>(skillIndex), groundPos);
 }
 
 void SkillComponent::FirePlacedTrap(PlacedTrap& trap, const XMFLOAT3& currentTargetPos)
 {
+    NotifyActionNetAt(PLAYER_ACTION_PLACE_FIRE, static_cast<SkillSlot>(trap.skillIndex), trap.worldPos);
+
     if (trap.spriteSlot >= 0)
     {
         auto* pScene2 = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
@@ -1334,6 +1367,7 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
         m_ChargingSlot = slot;
         m_ChargeTargetPosition = targetPosition;
         m_SkillStates[index] = SkillState::Casting;
+        NotifyActionNet(PLAYER_ACTION_CHARGE_BEGIN, slot);
         m_Skills[index]->OnChargeBegin(m_pOwner);
         m_chargeScaleSteps[index] = 0;
         SpawnChargeGatherVFX(0);
@@ -1351,6 +1385,7 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
         m_SkillStates[index] = SkillState::Casting;
         m_Skills[index]->OnChannelBegin(m_pOwner, targetPosition);
         OutputDebugString(L"[Skill] Channeling started... Hold to continue\n");
+        NotifyActionNet(PLAYER_ACTION_CHANNEL_BEGIN, slot);
 
         if (cat == SkillCategory::Projectile || defaultType == ActivationType::Channel)
         {
@@ -1363,6 +1398,7 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
                 tickMult *= m_fEnhanceMultiplier;
                 m_bIsEnhanced = false;
                 m_fEnhanceTimer = 0.0f;
+                NotifyActionNet(PLAYER_ACTION_ENHANCE_END, static_cast<SkillSlot>(index));
             }
 
             // 메아리: 채널/빔 스킬은 발동 시작 시 여기서 한 번만 등록
@@ -1395,6 +1431,7 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
                 damageMultiplier *= m_fEnhanceMultiplier;
                 m_bIsEnhanced = false;
                 m_fEnhanceTimer = 0.0f;
+                NotifyActionNet(PLAYER_ACTION_ENHANCE_END, static_cast<SkillSlot>(index));
             }
             m_currentChargeRatio    = 0.f;
             m_bCurrentIsChannelTick = false;
@@ -1411,6 +1448,7 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
         m_fEnhanceTimer = m_fEnhanceDuration;
         m_SkillStates[index] = SkillState::Casting;
         m_ActiveSkillSlot = slot;
+        NotifyActionNet(PLAYER_ACTION_ENHANCE_BEGIN, slot, m_fEnhanceDuration);
 
         m_currentChargeRatio    = 0.f;
         m_bCurrentIsChannelTick = false;
@@ -1433,6 +1471,7 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
             m_bIsEnhanced = false;
             m_fEnhanceTimer = 0.0f;
             OutputDebugString(L"[Skill] Enhancement consumed! 2x damage!\n");
+            NotifyActionNet(PLAYER_ACTION_ENHANCE_END, static_cast<SkillSlot>(index));
         }
 
         m_currentChargeRatio    = 0.f;
@@ -1454,56 +1493,54 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
     }
 
     // 네트워크로 스킬 전송
+    //   설치 룬: PLACE_SPAWN 액션을 이미 보냈으므로 SendSkill 까지 보내면 원격이 일반 투사체도 함께 spawn (이중 발사).
+    //   차지 룬: press 시점에 SendSkill 보내면 원격이 차지 buildup 없이 즉시 발사 VFX 를 그림.
+    //            차지 발사는 release 시점에 ProcessSkillInput 의 charge 종료 블록에서 SendSkillNet 가 처리.
+    if (combo.hasPlace || combo.hasCharge)
+        return;
+
+    SendSkillNet(slot, targetPosition);
+}
+
+void SkillComponent::SendSkillNet(SkillSlot slot, const DirectX::XMFLOAT3& targetPosition)
+{
     NetworkManager* pNetMgr = NetworkManager::GetInstance();
-    if (pNetMgr && pNetMgr->IsConnected())
+    if (!pNetMgr || !pNetMgr->IsConnected()) return;
+    if (!m_pOwner) return;
+
+    int skillType = 0;
+    switch (slot)
     {
-        // 스킬 슬롯을 Protocol::SkillType으로 변환
-        int skillType = 0;
-        switch (slot)
-        {
-        case SkillSlot::Q:          skillType = 1; break; // SKILL_TYPE_Q
-        case SkillSlot::E:          skillType = 2; break; // SKILL_TYPE_E
-        case SkillSlot::R:          skillType = 3; break; // SKILL_TYPE_R
-        case SkillSlot::RightClick: skillType = 4; break; // SKILL_TYPE_MOUSE_RIGHT
-        default:                    skillType = 0; break;
-        }
-
-        // 플레이어 위치와 방향 가져오기
-        TransformComponent* pTransform = m_pOwner->GetTransform();
-        if (pTransform)
-        {
-            const DirectX::XMFLOAT3& pos = pTransform->GetPosition();
-            DirectX::XMVECTOR lookVec = pTransform->GetLook();
-            DirectX::XMFLOAT3 lookDir;
-            DirectX::XMStoreFloat3(&lookDir, lookVec);
-
-            // R 스킬 + Water Q/E(WaterPuddle/Vortex) 는 target 위치가 visual 본질.
-            // dirX/Y/Z 슬롯을 absolute target 좌표로 재활용 (수신 측이 element 보고 해석).
-            ElementType elem = ElementType::None;
-            if (auto* pc = m_pOwner->GetComponent<PlayerComponent>())
-                elem = pc->GetElementType();
-            bool sendTarget =
-                (slot == SkillSlot::R) ||
-                (elem == ElementType::Water && (slot == SkillSlot::Q || slot == SkillSlot::E));
-
-            if (sendTarget)
-            {
-                pNetMgr->SendSkill(skillType, pos.x, pos.y, pos.z,
-                    targetPosition.x, targetPosition.y, targetPosition.z);
-            }
-            else
-            {
-                pNetMgr->SendSkill(skillType, pos.x, pos.y, pos.z, lookDir.x, lookDir.y, lookDir.z);
-            }
-
-            // 서버 히트 판정 요청 — C_PLAYER_ATTACK.
-            // 서버는 target 좌표 기준 반경 판정 (Q=6, E=8, R=10, 우클릭=5).
-            // Q/E/우클릭 모두 마우스로 조준해서 쓰는 원거리 스킬이므로, 조준 월드 좌표(targetPosition)를
-            // target 으로 쓰는 게 R 과 동일하게 가장 자연스러움. 플레이어가 조준한 지점 반경 내 몬스터가 맞는다.
-            pNetMgr->SendPlayerAttack(skillType,
-                pos.x, pos.y, pos.z,
-                lookDir.x, lookDir.y, lookDir.z,
-                targetPosition.x, targetPosition.y, targetPosition.z);
-        }
+    case SkillSlot::Q:          skillType = 1; break; // SKILL_TYPE_Q
+    case SkillSlot::E:          skillType = 2; break; // SKILL_TYPE_E
+    case SkillSlot::R:          skillType = 3; break; // SKILL_TYPE_R
+    case SkillSlot::RightClick: skillType = 4; break; // SKILL_TYPE_MOUSE_RIGHT
+    default:                    return;
     }
+
+    TransformComponent* pTransform = m_pOwner->GetTransform();
+    if (!pTransform) return;
+
+    const DirectX::XMFLOAT3& pos = pTransform->GetPosition();
+    DirectX::XMVECTOR lookVec = pTransform->GetLook();
+    DirectX::XMFLOAT3 lookDir;
+    DirectX::XMStoreFloat3(&lookDir, lookVec);
+
+    ElementType elem = ElementType::None;
+    if (auto* pc = m_pOwner->GetComponent<PlayerComponent>())
+        elem = pc->GetElementType();
+    bool sendTarget =
+        (slot == SkillSlot::R) ||
+        (elem == ElementType::Water && (slot == SkillSlot::Q || slot == SkillSlot::E));
+
+    if (sendTarget)
+        pNetMgr->SendSkill(skillType, pos.x, pos.y, pos.z,
+                            targetPosition.x, targetPosition.y, targetPosition.z);
+    else
+        pNetMgr->SendSkill(skillType, pos.x, pos.y, pos.z, lookDir.x, lookDir.y, lookDir.z);
+
+    pNetMgr->SendPlayerAttack(skillType,
+        pos.x, pos.y, pos.z,
+        lookDir.x, lookDir.y, lookDir.z,
+        targetPosition.x, targetPosition.y, targetPosition.z);
 }

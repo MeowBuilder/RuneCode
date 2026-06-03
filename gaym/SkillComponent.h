@@ -210,6 +210,17 @@ private:
     // 무한 룬(ABY_INF) Casting 중 reset 요청 보류 — Casting 종료 후 GetEffectiveCooldown 으로 덮어써지지 않도록 Update 끝에서 소비
     std::array<bool, static_cast<size_t>(SkillSlot::Count)> m_pendingCooldownReset{};
 
+    // 활성화 룬(차지/증강/설치) 상태 전이를 다른 클라에 알리는 헬퍼. NetworkManager::IsConnected() 일 때만 전송.
+    //   actionType: PLAYER_ACTION_CHARGE_BEGIN/END, ENHANCE_BEGIN/END, PLACE_SPAWN/FIRE
+    //   slot: skillSlot (4 = SkillSlot::Count 는 슬롯 불명 sentinel)
+    //   extraY: ENHANCE_BEGIN duration 등 보조값
+    void NotifyActionNet(uint32_t actionType, SkillSlot slot, float extraY = 0.f);
+    void NotifyActionNetAt(uint32_t actionType, SkillSlot slot, const DirectX::XMFLOAT3& pos, float extraY = 0.f);
+
+    // 스킬 시전을 서버에 전송 (SendSkill + SendPlayerAttack) — ExecuteWithActivationType 평시 경로와
+    //   charge release 경로 양쪽에서 호출되도록 추출.
+    void SendSkillNet(SkillSlot slot, const DirectX::XMFLOAT3& targetPosition);
+
     // 메아리 지연 큐 (ABY_ECO: 2초 후 가장 가까운 적을 향해 50% 재발동)
     struct DeferredEcho { size_t index; float mult; float timer; int decalSlot = -1; EnemyComponent* pTarget = nullptr; };
     std::vector<DeferredEcho> m_echoQueue;

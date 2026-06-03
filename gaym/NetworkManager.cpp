@@ -12,6 +12,8 @@
 #include "EffectRegistry.h"
 #include "SkillTypes.h"
 #include "SkillComponent.h"
+#include "ISkillBehavior.h"
+#include "SkillData.h"
 #include "ProjectileManager.h"
 #include "PlayerComponent.h"
 #include "Camera.h"
@@ -382,6 +384,9 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
 {
     if (!pScene || !pDevice || !pCommandList)
         return;
+
+    // 네트워크 시간 누적 — 채널 throttle 등 비교용
+    m_fNetworkAccumulatedTime += deltaTime;
 
     // 이번 Update에서 방 전환이 처리됐는지 확인
     // 같은 프레임에 TorchInteract까지 보내지 않기 위한 방어
@@ -1552,6 +1557,19 @@ void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
         ApplyNetworkPlayerMaterial(pRemotePlayer, GetNetworkPlayerColor(remoteElement));
     }
 
+    // 원격 플레이어용 SkillComponent — m_Skills 는 비워두고 m_SkillRunes 만 사용.
+    //   ProcessRuneEquip 가 SetRuneSlot 으로 룬을 저장하고, ProcessSkill 이 BuildSkillStats 로
+    //   원소 색상/runeFlags 를 가져온다. 실제 스킬 실행은 서버 권위라 m_Skills 없어도 됨.
+    bool bHadSkill = (pRemotePlayer->GetComponent<SkillComponent>() != nullptr);
+    if (!bHadSkill)
+        pRemotePlayer->AddComponent<SkillComponent>();
+    bool bAfter = (pRemotePlayer->GetComponent<SkillComponent>() != nullptr);
+    {
+        char skbuf[160];
+        sprintf_s(skbuf, "[RuneDiag] Spawn playerId=%llu hadSkill=%d after=%d", playerId, bHadSkill ? 1 : 0, bAfter ? 1 : 0);
+        WriteNetworkLog(skbuf);
+    }
+
     // 컴포넌트 초기화 (AnimationComponent::BuildBoneCache 포함)
     pRemotePlayer->Init(pDevice, pCommandList);
 
@@ -1950,6 +1968,20 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
     if (it == m_mapRemotePlayers.end())
         return;
 
+    // 채널 중인 원격 플레이어 — 5Hz tick 전부 VFX spawn 하면 부하 누적 → 0.33초(3Hz) 로 throttle.
+    // 단 E 스킬(skillType=2)은 본래 채널 빔(FireBeam/WaterVortex)이라 TrackEffect 로만 갱신되므로
+    //   throttle 하면 state.lastUpdateTime reset 이 안 돼 maxIdleTime(0.2초) 초과로 빔이 끊긴다. 제외.
+    if (skillType != 2 && m_setRemoteChannelingPlayers.find(playerId) != m_setRemoteChannelingPlayers.end())
+    {
+        auto lastIt = m_mapRemoteChannelLastSpawnTime.find(playerId);
+        if (lastIt != m_mapRemoteChannelLastSpawnTime.end())
+        {
+            if (m_fNetworkAccumulatedTime - lastIt->second < 0.33f)
+                return; // 같은 플레이어 채널 spawn 너무 잦음 — skip
+        }
+        m_mapRemoteChannelLastSpawnTime[playerId] = m_fNetworkAccumulatedTime;
+    }
+
     GameObject* pRemotePlayer = it->second;
     TransformComponent* pTransform = pRemotePlayer->GetTransform();
     if (pTransform)
@@ -1970,7 +2002,10 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
 
     // 스킬 애니메이션 재생 (현재 플레이어 모델은 Attack1만 지원)
     AnimationComponent* pAnim = pRemotePlayer->GetComponent<AnimationComponent>();
-    if (pAnim)
+    // 채널 룬 활성 중에는 매 tick 마다 Attack1 을 재시작하면 0.2초마다 끊겨 보이고 렉처럼 느껴진다.
+    // CHANNEL_BEGIN/END 가 별도 채널 anim 을 깔아두므로 ProcessSkill 단계에서는 anim 갱신 skip.
+    bool bChanneling = (m_setRemoteChannelingPlayers.find(playerId) != m_setRemoteChannelingPlayers.end());
+    if (pAnim && !bChanneling)
     {
         // 스킬 애니메이션은 한 번만 재생 (루프 X), forceRestart=true로 연속 공격 시에도 재시작
         pAnim->CrossFade("Attack1", 0.1f, false, true);
@@ -2012,6 +2047,9 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
     //   Charge/Channel/Enhance/Split/Place 활성화 룬의 RegisterRuneMod 가 자동 적용된다.
     //   (예: WaveSlash + Enhance → 파티클 강화 mod, FireBeam + Channel → 채널 mod 등)
     uint32_t remoteRuneFlags = RUNE_NONE;
+    // 속성 변환 룬 (FIR_1/WAT_1/WND_1/ERT_1 등) — elementSet 첫 원소가 캐릭터 기본 원소와 다르면
+    // 그 색상으로 effect 를 재칠한다. (오프라인의 Behavior 별 ApplyElementToEffectDef 와 동일)
+    ElementType visualElementOverride = ElementType::None;
     {
         SkillSlot remoteSlot = SkillSlot::Count;
         switch (skillType)
@@ -2028,6 +2066,35 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
             {
                 RuneCombo combo = pRemoteSkill->GetRuneCombo(remoteSlot);
                 remoteRuneFlags = ToRuneFlags(combo);
+
+                ActivationType defType = ActivationType::Instant;
+                if (auto* sk = pRemoteSkill->GetSkill(remoteSlot))
+                    defType = sk->GetSkillData().activationType;
+                SkillStats stats = pRemoteSkill->BuildSkillStats(remoteSlot, defType);
+                // L04 randomElementOnCast 는 매 호출 RNG → 서버/클라 desync 위험이라 elementSet/elementOverride 만 사용.
+                // elementSet 은 장착된 원소 룬으로 결정적이라 안전.
+                // 비교 가드 제거: cached remoteElement 가 잘못된 값(맵 미등록 등) 일 때도 override 가 무효화되는 문제 방지.
+                //   같은 원소면 ApplyElementToEffectDef 가 효과 동일 → 안전.
+                if (!stats.elementSet.empty())
+                    visualElementOverride = stats.elementSet[0];
+                else if (stats.elementOverride.has_value() && !stats.randomElementOnCast)
+                    visualElementOverride = *stats.elementOverride;
+
+                // 어떤 룬이 실제 등록돼 있는지 직접 dump
+                {
+                    char rbuf[400];
+                    sprintf_s(rbuf,
+                        "[RuneDiag] ProcessSkill playerId=%llu skillType=%d cachedElem=%d setSize=%zu set0=%d override=%d randEl=%d r0=%s r1=%s r2=%s",
+                        playerId, skillType, (int)remoteElement,
+                        stats.elementSet.size(),
+                        stats.elementSet.empty() ? -1 : (int)stats.elementSet[0],
+                        (int)visualElementOverride,
+                        stats.randomElementOnCast ? 1 : 0,
+                        pRemoteSkill->GetRuneSlot(remoteSlot, 0).runeId.c_str(),
+                        pRemoteSkill->GetRuneSlot(remoteSlot, 1).runeId.c_str(),
+                        pRemoteSkill->GetRuneSlot(remoteSlot, 2).runeId.c_str());
+                    WriteNetworkLog(rbuf);
+                }
             }
         }
     }
@@ -2036,6 +2103,8 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
     {
         if (!pVFXManager) return -1;
         EffectDef def = EffectRegistry::Get().GetEffect(effectName, remoteRuneFlags);
+        if (visualElementOverride != ElementType::None)
+            ApplyElementToEffectDef(def, visualElementOverride);
         return pVFXManager->SpawnEffectDef(origin, dir, def, true);
     };
 
@@ -2302,19 +2371,110 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
             projOrigin.y,
             projOrigin.z + horizontalDir.z * 50.0f);
 
+        // 원소 변경 룬(FIR_1/WAT_1/...) 시: visualElementOverride 가 cached remoteElement 를 대체.
+        //   SpawnProjectile 은 element 인자로 색을 결정하므로, 여기서 변환된 element 를 사용해야
+        //   다른 클라 화면에 색이 정상 반영된다.
+        ElementType projElement = (visualElementOverride != ElementType::None)
+            ? visualElementOverride : remoteElement;
+
         // Wind RC (WindShot) 만 관통 — WindShotBehavior.cpp:53 과 일치.
         // 나머지 (Fire/Water/Earth RC) 는 첫 충돌에 폭발 (오프라인과 동일).
-        bool isPiercing = (remoteElement == ElementType::Wind);
+        // 관통 판정도 변환된 element 기준으로 (원소 변환 시 isPiercing 도 따라감)
+        bool isPiercing = (projElement == ElementType::Wind);
 
+        // 룬 분기 (HasRuneEquipped 로 직접 체크 — RuneCombo 에 해당 필드가 없음)
+        SkillComponent* pRemoteSkill = pRemotePlayer->GetComponent<SkillComponent>();
+        bool bOrb = pRemoteSkill && pRemoteSkill->HasRuneEquipped(SkillSlot::RightClick, "TRF_ORB");
+        bool bMlt = pRemoteSkill && pRemoteSkill->HasRuneEquipped(SkillSlot::RightClick, "TRF_MLT");
+        const bool bSplit = (remoteRuneFlags & RUNE_SPLIT) != 0;
+
+        // 부채꼴 N개 타겟 생성 (가운데 + 좌/우 ±15도)
+        auto buildFanTargets = [&](int count) -> std::vector<XMFLOAT3>
+        {
+            std::vector<XMFLOAT3> out;
+            if (count <= 1) { out.push_back(projTarget); return out; }
+            constexpr float DEG = 15.0f;
+            for (int i = 0; i < count; ++i)
+            {
+                float t = (count == 1) ? 0.f : (float(i) - float(count - 1) * 0.5f); // -..0..+
+                float angleDeg = t * DEG / std::max(1.f, float(count - 1) * 0.5f);
+                float rad = DirectX::XMConvertToRadians(angleDeg);
+                float cs = cosf(rad), sn = sinf(rad);
+                XMFLOAT3 d(horizontalDir.x * cs - horizontalDir.z * sn, 0.f,
+                            horizontalDir.x * sn + horizontalDir.z * cs);
+                out.push_back(XMFLOAT3(projOrigin.x + d.x * 50.0f, projOrigin.y, projOrigin.z + d.z * 50.0f));
+            }
+            return out;
+        };
+
+        // 궤도(TRF_ORB): 즉시 spawn 대신 0.5초 공전 visual 후 deferred. ORB 가 가장 강력하므로 우선 적용.
+        if (bOrb)
+        {
+            int orbVfxId = -1;
+            if (pVFXManager && EffectRegistry::Get().HasEffect("sub_orbital_halo"))
+            {
+                EffectDef def = EffectRegistry::Get().GetEffect("sub_orbital_halo");
+                ApplyElementToEffectDef(def, projElement);
+                orbVfxId = pVFXManager->SpawnEffectDef(projOrigin, XMFLOAT3(0,1,0), def, false);
+            }
+
+            int count = bMlt ? 3 : 1;
+            auto tgts = buildFanTargets(count);
+            for (auto& t : tgts)
+            {
+                PendingOrbitalProjectile p;
+                p.origin = projOrigin;
+                p.target = t;
+                p.speed = speed; p.radius = radius; p.explosionRadius = explosionRadius;
+                p.scale = scale; p.element = projElement; p.owner = pRemotePlayer;
+                p.isPiercing = isPiercing;
+                p.orbVfxId = (&t == &tgts.front()) ? orbVfxId : -1;
+                p.delay = 0.5f;
+                m_vPendingOrbitals.push_back(p);
+            }
+            break;
+        }
+
+        if (bMlt)
+        {
+            auto tgts = buildFanTargets(3);
+            for (auto& t : tgts)
+            {
+                pProjManager->SpawnProjectile(
+                    projOrigin, t, 0.0f, speed, radius, explosionRadius,
+                    projElement, pRemotePlayer, true, scale,
+                    RuneCombo{}, 0.0f, 100.0f, isPiercing);
+            }
+            break;
+        }
+
+        if (bSplit)
+        {
+            XMFLOAT3 right = XMFLOAT3(-horizontalDir.z, 0.0f, horizontalDir.x);
+            constexpr float SPREAD = 1.5f;
+            XMFLOAT3 t1(projTarget.x + right.x * SPREAD, projTarget.y, projTarget.z + right.z * SPREAD);
+            XMFLOAT3 t2(projTarget.x - right.x * SPREAD, projTarget.y, projTarget.z - right.z * SPREAD);
+            pProjManager->SpawnProjectile(
+                projOrigin, t1, 0.0f, speed, radius, explosionRadius,
+                projElement, pRemotePlayer, true, scale,
+                RuneCombo{}, 0.0f, 100.0f, isPiercing);
+            pProjManager->SpawnProjectile(
+                projOrigin, t2, 0.0f, speed, radius, explosionRadius,
+                projElement, pRemotePlayer, true, scale,
+                RuneCombo{}, 0.0f, 100.0f, isPiercing);
+            break;
+        }
+
+        // 일반 — 1발
         pProjManager->SpawnProjectile(
             projOrigin, projTarget,
-            0.0f,                       // damage=0 — 서버 권위 (실제 데미지는 S_MONSTER_DAMAGE 로 적용)
+            0.0f,
             speed, radius, explosionRadius,
-            remoteElement, pRemotePlayer,
-            /*isPlayerProjectile*/true, scale,
+            projElement, pRemotePlayer,
+            true, scale,
             RuneCombo{}, 0.0f,
-            /*maxDistance*/100.0f,
-            /*isPiercing*/isPiercing
+            100.0f,
+            isPiercing
         );
         break;
     }
@@ -2405,9 +2565,253 @@ void NetworkManager::ProcessPlayerAction(Scene* pScene, uint64 playerId, uint32 
         break;
     }
 
+    case PLAYER_ACTION_CHARGE_BEGIN:
+    {
+        // 진단용 — 패킷이 도달했음을 NetworkLog 에서 확인 가능하게 한다.
+        {
+            char dbg[128];
+            sprintf_s(dbg, "[Network] CHARGE_BEGIN remote playerId=%llu pos=(%.1f, %.1f, %.1f)", playerId, x, y, z);
+            WriteNetworkLog(dbg);
+        }
+        FluidSkillVFXManager* pVFX = pScene ? pScene->GetFluidVFXManager() : nullptr;
+        if (!pVFX) break;
+        auto itPrev = m_mapRemoteChargeVFXId.find(playerId);
+        if (itPrev != m_mapRemoteChargeVFXId.end() && itPrev->second >= 0)
+            pVFX->StopEffect(itPrev->second);
+        if (!EffectRegistry::Get().HasEffect("charge_gather"))
+            break;
+
+        ElementType elem = GetPlayerElement(playerId);
+
+        EffectDef def = EffectRegistry::Get().GetEffect("charge_gather");
+        // 잘 보이도록 2x 스케일/파티클 (단계 추적 어려워 큰 단계 고정).
+        for (auto& l : def.layers)
+        {
+            l.sizeScale    *= 2.0f;
+            l.particleCount = static_cast<int>(l.particleCount * 1.5f);
+        }
+        if (elem != ElementType::None)
+            ApplyElementToEffectDef(def, elem);
+
+        // 발 위치 그대로가 아니라 살짝 띄워 가슴 높이로 — 카메라 각도에서 가려지지 않게.
+        DirectX::XMFLOAT3 pos(x, y + 1.5f, z);
+        DirectX::XMFLOAT3 up(0.f, 1.f, 0.f);
+        int vfxId = pVFX->SpawnEffectDef(pos, up, def, false);
+        m_mapRemoteChargeVFXId[playerId] = vfxId;
+
+        if (EffectRegistry::Get().HasEffect("charge_pulse"))
+        {
+            EffectDef pulseDef = EffectRegistry::Get().GetEffect("charge_pulse");
+            if (elem != ElementType::None)
+                ApplyElementToEffectDef(pulseDef, elem);
+            pVFX->SpawnEffectDef(pos, up, pulseDef, true);
+        }
+        break;
+    }
+
+    case PLAYER_ACTION_CHARGE_END:
+    {
+        FluidSkillVFXManager* pVFX = pScene ? pScene->GetFluidVFXManager() : nullptr;
+        if (!pVFX) break;
+        auto it = m_mapRemoteChargeVFXId.find(playerId);
+        if (it != m_mapRemoteChargeVFXId.end())
+        {
+            if (it->second >= 0) pVFX->StopEffect(it->second);
+            m_mapRemoteChargeVFXId.erase(it);
+        }
+        break;
+    }
+
+    case PLAYER_ACTION_ENHANCE_BEGIN:
+    {
+        FluidSkillVFXManager* pVFX = pScene ? pScene->GetFluidVFXManager() : nullptr;
+        if (!pVFX) break;
+        auto it = m_mapRemoteEnhanceVFXId.find(playerId);
+        if (it != m_mapRemoteEnhanceVFXId.end() && it->second >= 0)
+            pVFX->StopEffect(it->second);
+        if (!EffectRegistry::Get().HasEffect("charge_gather"))
+            break;
+        EffectDef def = EffectRegistry::Get().GetEffect("charge_gather");
+        for (auto& l : def.layers)
+        {
+            l.overrideColors = true;
+            l.coreColor = { 1.0f, 0.9f, 0.3f, 1.0f };
+            l.edgeColor = { 1.0f, 0.55f, 0.1f, 0.9f };
+        }
+        DirectX::XMFLOAT3 pos(x, y, z);
+        DirectX::XMFLOAT3 up(0.f, 1.f, 0.f);
+        int vfxId = pVFX->SpawnEffectDef(pos, up, def, false);
+        m_mapRemoteEnhanceVFXId[playerId] = vfxId;
+        float duration = dirY > 0.f ? dirY : 5.0f;
+        if (vfxId >= 0)
+            m_vTimedVFXKills.push_back({ vfxId, duration });
+        break;
+    }
+
+    case PLAYER_ACTION_ENHANCE_END:
+    {
+        FluidSkillVFXManager* pVFX = pScene ? pScene->GetFluidVFXManager() : nullptr;
+        if (!pVFX) break;
+        auto it = m_mapRemoteEnhanceVFXId.find(playerId);
+        if (it != m_mapRemoteEnhanceVFXId.end())
+        {
+            if (it->second >= 0) pVFX->StopEffect(it->second);
+            m_mapRemoteEnhanceVFXId.erase(it);
+        }
+        break;
+    }
+
+    case PLAYER_ACTION_PLACE_SPAWN:
+    {
+        DecalManager* pDecals = pScene ? pScene->GetDecalManager() : nullptr;
+        if (!pDecals) break;
+
+        int slotIdx = static_cast<int>(dirX);
+        if (slotIdx < 0 || slotIdx >= 4) slotIdx = 0;
+
+        // 같은 슬롯에 이미 설치 데칼이 있으면 stop 후 새로 spawn (로컬 SpawnPlaceTrap 과 동일 패턴)
+        auto [itDecal, inserted] = m_mapRemotePlaceDecalIds.try_emplace(playerId);
+        if (inserted) itDecal->second.fill(-1);
+        auto& slotArr = itDecal->second;
+        if (slotArr[slotIdx] >= 0)
+        {
+            pDecals->Stop(slotArr[slotIdx]);
+            slotArr[slotIdx] = -1;
+        }
+
+        ElementType elem = ElementType::Fire;
+        auto eIt = m_mapRemotePlayerElement.find(playerId);
+        if (eIt != m_mapRemotePlayerElement.end()) elem = eIt->second;
+        DirectX::XMFLOAT4 color(1.f, 0.7f, 0.3f, 1.f);
+        switch (elem)
+        {
+        case ElementType::Fire:  color = { 1.0f, 0.5f, 0.2f, 1.0f }; break;
+        case ElementType::Water: color = { 0.4f, 0.7f, 1.0f, 1.0f }; break;
+        case ElementType::Wind:  color = { 0.7f, 1.0f, 0.8f, 1.0f }; break;
+        case ElementType::Earth: color = { 0.7f, 0.5f, 0.3f, 1.0f }; break;
+        default: break;
+        }
+        int decalId = pDecals->Spawn(DecalTexture::Star08, DirectX::XMFLOAT3(x, y, z),
+                                      8.0f, 0.f, 30.0f, color, 1.2f);
+        slotArr[slotIdx] = decalId;
+        break;
+    }
+
+    case PLAYER_ACTION_PLACE_FIRE:
+    {
+        int slot = static_cast<int>(dirX);
+        if (slot < 0 || slot >= 4) slot = 0;
+        int skillType = slot + 1; // SkillSlot Q=0/E=1/R=2/RC=3 → skillType 1/2/3/4
+
+        // 해당 슬롯 데칼 정리 (트랩 발동 후 잔류 방지)
+        if (DecalManager* pDecals = pScene ? pScene->GetDecalManager() : nullptr)
+        {
+            auto it = m_mapRemotePlaceDecalIds.find(playerId);
+            if (it != m_mapRemotePlaceDecalIds.end() && it->second[slot] >= 0)
+            {
+                pDecals->Stop(it->second[slot]);
+                it->second[slot] = -1;
+            }
+        }
+
+        ElementType elem = ElementType::Fire;
+        auto eIt = m_mapRemotePlayerElement.find(playerId);
+        if (eIt != m_mapRemotePlayerElement.end()) elem = eIt->second;
+        SpawnEchoSkillVFX(pScene, skillType, elem, DirectX::XMFLOAT3(x, y, z));
+        break;
+    }
+
+    case PLAYER_ACTION_CHANNEL_BEGIN:
+    {
+        // 채널 활성 set 에 추가 — ProcessSkill 가 매 tick 마다 Attack1 CrossFade 재호출 안 하도록
+        m_setRemoteChannelingPlayers.insert(playerId);
+        // 시작 시점에 Attack1 한 번 깔아두기 — 채널 끝날 때까지 유지
+        if (auto* pAnim = pRemotePlayer->GetComponent<AnimationComponent>())
+            pAnim->CrossFade("Attack1", 0.1f, true /*loop*/, true /*restart*/);
+        break;
+    }
+
+    case PLAYER_ACTION_CHANNEL_END:
+    {
+        m_setRemoteChannelingPlayers.erase(playerId);
+        // 종료 시 idle 로 자연 전환되도록 CheckRemotePlayerIdle 이 처리한다.
+        // 여기서 명시적으로 Idle 로 페이드해주면 깔끔하다.
+        if (auto* pAnim = pRemotePlayer->GetComponent<AnimationComponent>())
+            pAnim->CrossFade("Idle", 0.15f, true /*loop*/, false);
+        break;
+    }
+
     default:
         break;
     }
+}
+
+void NetworkManager::UpdatePendingOrbitals(Scene* pScene, float deltaTime)
+{
+    if (!pScene || m_vPendingOrbitals.empty()) return;
+    FluidSkillVFXManager* pVFX = pScene->GetFluidVFXManager();
+    ProjectileManager*    pPM  = pScene->GetProjectileManager();
+    if (!pPM) return;
+
+    for (auto it = m_vPendingOrbitals.begin(); it != m_vPendingOrbitals.end(); )
+    {
+        it->delay -= deltaTime;
+        if (it->delay <= 0.f)
+        {
+            // 공전 visual 정리 (첫 발에만 orbVfxId 가 붙어있음)
+            if (pVFX && it->orbVfxId >= 0)
+                pVFX->StopEffect(it->orbVfxId);
+            pPM->SpawnProjectile(
+                it->origin, it->target, 0.0f,
+                it->speed, it->radius, it->explosionRadius,
+                it->element, it->owner,
+                /*isPlayerProjectile*/true, it->scale,
+                RuneCombo{}, 0.0f,
+                /*maxDistance*/100.0f,
+                /*isPiercing*/it->isPiercing);
+            it = m_vPendingOrbitals.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
+void NetworkManager::UpdateRemoteActivationRuneVFX(Scene* pScene)
+{
+    if (!pScene) return;
+    FluidSkillVFXManager* pVFX = pScene->GetFluidVFXManager();
+    if (!pVFX) return;
+
+    DirectX::XMFLOAT3 up(0.f, 1.f, 0.f);
+
+    auto trackOne = [&](std::unordered_map<uint64, int>& vfxMap)
+    {
+        for (auto it = vfxMap.begin(); it != vfxMap.end(); )
+        {
+            uint64 pid = it->first;
+            int vfxId = it->second;
+
+            auto playerIt = m_mapRemotePlayers.find(pid);
+            if (playerIt == m_mapRemotePlayers.end() || !playerIt->second)
+            {
+                if (vfxId >= 0) pVFX->StopEffect(vfxId);
+                it = vfxMap.erase(it);
+                continue;
+            }
+            if (auto* t = playerIt->second->GetTransform())
+            {
+                DirectX::XMFLOAT3 pos = t->GetPosition();
+                pos.y += 1.5f; // PLAYER_ACTION_CHARGE_BEGIN/ENHANCE_BEGIN 의 spawn pos 와 동일하게
+                pVFX->TrackEffect(vfxId, pos, up);
+            }
+            ++it;
+        }
+    };
+
+    trackOne(m_mapRemoteChargeVFXId);
+    trackOne(m_mapRemoteEnhanceVFXId);
 }
 
 // =============================================================================
@@ -6042,17 +6446,22 @@ void NetworkManager::ProcessRuneEquip(Scene* pScene, uint64 playerId, uint32 ski
     }
 
 	// 해당 플레이어의 SkillComponent에 룬 장착 정보 적용
-    if (pTargetPlayer)
+    SkillComponent* pSkill = pTargetPlayer ? pTargetPlayer->GetComponent<SkillComponent>() : nullptr;
+    if (pSkill)
     {
-        SkillComponent* pSkill = pTargetPlayer->GetComponent<SkillComponent>();
-        if (pSkill)
-        {
-            pSkill->SetRuneSlot(
-                static_cast<SkillSlot>(skillSlot),
-                static_cast<int>(runeSlotIndex),
-                runeId,
-                static_cast<int>(stackCount));
-        }
+        pSkill->SetRuneSlot(
+            static_cast<SkillSlot>(skillSlot),
+            static_cast<int>(runeSlotIndex),
+            runeId,
+            static_cast<int>(stackCount));
+    }
+    {
+        char rbuf[256];
+        sprintf_s(rbuf,
+            "[RuneDiag] RuneEquip playerId=%llu slot=%u idx=%u rune=%s targetFound=%d skillComp=%d (mapSize=%zu)",
+            playerId, skillSlot, runeSlotIndex, runeId.c_str(),
+            pTargetPlayer ? 1 : 0, pSkill ? 1 : 0, m_mapRemotePlayers.size());
+        WriteNetworkLog(rbuf);
     }
 
     char buf[256];
