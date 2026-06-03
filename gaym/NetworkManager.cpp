@@ -16,6 +16,7 @@
 #include "PlayerComponent.h"
 #include "Camera.h"
 #include "DamageNumberManager.h"
+#include "DecalManager.h"
 #include "Room.h"
 #include "EnemySpawner.h"
 #include "EnemyComponent.h"
@@ -566,6 +567,22 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
                 pScene,cmd.playerId,cmd.runeHomingSkillSlot,cmd.runeHomingSkillType,cmd.runeHomingTargetMonsterId,
                 DirectX::XMFLOAT3(cmd.runeHomingTargetX,cmd.runeHomingTargetY,cmd.runeHomingTargetZ),
                 DirectX::XMFLOAT3(cmd.runeHomingOriginX,cmd.runeHomingOriginY,cmd.runeHomingOriginZ)
+            );
+            break;
+
+        case NetworkCommand::RuneTrigger:
+            ProcessRuneTrigger(
+                pScene,
+                cmd.playerId,
+                cmd.runeTriggerSkillSlot,
+                cmd.runeTriggerSkillType,
+                cmd.runeId,
+                cmd.runeTriggerType,
+                cmd.runeTriggerTargetMonsterId,
+                cmd.runeTriggerTargetPlayerId,
+                DirectX::XMFLOAT3(cmd.x, cmd.y, cmd.z),
+                cmd.runeTriggerValue1,
+                cmd.runeTriggerValue2
             );
             break;
 
@@ -1989,10 +2006,36 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
             remoteElement = eIt->second;
     }
 
+    // ── 원격 플레이어가 장착한 룬으로부터 시각 modifier 산출 ──────────────────
+    //   ProcessRuneEquip 가 S_RUNE_EQUIP 수신 시 원격 SkillComponent 에 룬을 등록해두므로,
+    //   그 컴포넌트의 RuneCombo 를 그대로 EffectRegistry::GetEffect 에 넘기면
+    //   Charge/Channel/Enhance/Split/Place 활성화 룬의 RegisterRuneMod 가 자동 적용된다.
+    //   (예: WaveSlash + Enhance → 파티클 강화 mod, FireBeam + Channel → 채널 mod 등)
+    uint32_t remoteRuneFlags = RUNE_NONE;
+    {
+        SkillSlot remoteSlot = SkillSlot::Count;
+        switch (skillType)
+        {
+        case 1: remoteSlot = SkillSlot::Q;          break;
+        case 2: remoteSlot = SkillSlot::E;          break;
+        case 3: remoteSlot = SkillSlot::R;          break;
+        case 4: remoteSlot = SkillSlot::RightClick; break;
+        default: break;
+        }
+        if (remoteSlot != SkillSlot::Count)
+        {
+            if (SkillComponent* pRemoteSkill = pRemotePlayer->GetComponent<SkillComponent>())
+            {
+                RuneCombo combo = pRemoteSkill->GetRuneCombo(remoteSlot);
+                remoteRuneFlags = ToRuneFlags(combo);
+            }
+        }
+    }
+
     auto spawnOneShot = [&](const char* effectName, const XMFLOAT3& origin, const XMFLOAT3& dir) -> int
     {
         if (!pVFXManager) return -1;
-        EffectDef def = EffectRegistry::Get().GetEffect(effectName, RUNE_NONE);
+        EffectDef def = EffectRegistry::Get().GetEffect(effectName, remoteRuneFlags);
         return pVFXManager->SpawnEffectDef(origin, dir, def, true);
     };
 
@@ -4903,6 +4946,34 @@ void NetworkManager::QueueRuneHomingTarget(uint64 playerId, int32 skillSlot, int
     WriteNetworkLog(buf);
 }
 
+void NetworkManager::QueueRuneTrigger(uint64 playerId, int32 skillSlot, int32 skillType,
+                                      const std::string& runeId, int32 triggerType,
+                                      uint64 targetMonsterId, uint64 targetPlayerId,
+                                      const DirectX::XMFLOAT3& pos, float value1, float value2)
+{
+    NetworkCommandData cmd{};
+    cmd.type = NetworkCommand::RuneTrigger;
+    cmd.playerId = playerId;
+    cmd.runeId = runeId;
+
+    cmd.x = pos.x;
+    cmd.y = pos.y;
+    cmd.z = pos.z;
+
+    cmd.runeTriggerSkillSlot       = skillSlot;
+    cmd.runeTriggerSkillType       = skillType;
+    cmd.runeTriggerType            = triggerType;
+    cmd.runeTriggerTargetMonsterId = targetMonsterId;
+    cmd.runeTriggerTargetPlayerId  = targetPlayerId;
+    cmd.runeTriggerValue1          = value1;
+    cmd.runeTriggerValue2          = value2;
+
+    {
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        m_vCommandQueue.push_back(cmd);
+    }
+}
+
 void NetworkManager::QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 phaseIndex)
 {
     std::lock_guard<std::mutex> lock(m_queueMutex);
@@ -6064,6 +6135,342 @@ void NetworkManager::ProcessRuneHomingTarget(Scene* pScene, uint64 playerId, int
         attached ? 1 : 0);
 
     WriteNetworkLog(attachBuf);
+}
+
+// ─── ProcessRuneTrigger ─────────────────────────────────────────────────────
+//   서버에서 권위 룬 발동이 결정될 때마다 S_RUNE_TRIGGER 가 전달된다.
+//   클라는 데미지/회복/보호막 등 숫자를 다시 계산하지 않고 서버 값(value1/value2)을
+//   그대로 UI/VFX 에 반영한다. 룬 별 분기는 runeId 기준.
+void NetworkManager::ProcessRuneTrigger(Scene* pScene,
+                                        uint64 playerId, int32 skillSlot, int32 skillType,
+                                        const std::string& runeId, int32 triggerType,
+                                        uint64 targetMonsterId, uint64 targetPlayerId,
+                                        const DirectX::XMFLOAT3& pos, float value1, float value2)
+{
+    if (!pScene)
+        return;
+
+    // 대상 플레이어 GameObject 조회 (룬 효과는 playerId 또는 targetPlayerId 기준)
+    auto FindPlayer = [&](uint64 id) -> GameObject*
+    {
+        if (id == 0) return nullptr;
+        if (id == GetLocalPlayerId())
+            return pScene->GetPlayer();
+        auto it = m_mapRemotePlayers.find(id);
+        if (it != m_mapRemotePlayers.end())
+            return it->second;
+        return nullptr;
+    };
+
+    GameObject* pCaster = FindPlayer(playerId);
+    GameObject* pTargetPlayer = (targetPlayerId != 0) ? FindPlayer(targetPlayerId) : nullptr;
+
+    // 룬 효과 표시 기준 위치 — targetPlayer/caster 의 transform 우선, fallback 으로 packet pos
+    auto GetDisplayPos = [&](GameObject* pObj) -> DirectX::XMFLOAT3
+    {
+        if (pObj)
+        {
+            if (auto* t = pObj->GetComponent<TransformComponent>())
+            {
+                DirectX::XMFLOAT3 p = t->GetPosition();
+                p.y += 2.0f; // 머리 위쪽
+                return p;
+            }
+        }
+        return DirectX::XMFLOAT3(pos.x, pos.y + 1.5f, pos.z);
+    };
+
+    const bool bLocalCaster = (playerId == GetLocalPlayerId());
+    DecalManager* pDecals = pScene->GetDecalManager();
+
+    // ─── ABY_INF: 무한 룬 — 적중 시 확률 발동, 해당 skillSlot 쿨다운 즉시 초기화 ──
+    if (runeId == "ABY_INF")
+    {
+        if (bLocalCaster && pCaster)
+        {
+            if (SkillComponent* pSkill = pCaster->GetComponent<SkillComponent>())
+            {
+                if (skillSlot >= 0 && skillSlot < static_cast<int32>(SkillSlot::Count))
+                {
+                    pSkill->ResetCooldown(static_cast<SkillSlot>(skillSlot));
+                }
+            }
+        }
+        // 본인/원격 모두 발동 텍스트
+        DamageNumberManager::Get().AddText(
+            GetDisplayPos(pCaster), L"INFINITE!",
+            DirectX::XMFLOAT4(1.0f, 0.95f, 0.4f, 1.0f));
+        return;
+    }
+
+    // ─── ABY_VMP: 흡혈 — value1 회복량, value2 회복 후 HP ────────────────────────
+    if (runeId == "ABY_VMP")
+    {
+        if (bLocalCaster && pCaster)
+        {
+            if (PlayerComponent* pPlayer = pCaster->GetComponent<PlayerComponent>())
+            {
+                pPlayer->SetCurrentHP(value2);
+            }
+        }
+        wchar_t buf[32];
+        swprintf_s(buf, L"+%.0f HP", value1);
+        DamageNumberManager::Get().AddText(
+            GetDisplayPos(pCaster), buf,
+            DirectX::XMFLOAT4(0.4f, 1.0f, 0.4f, 1.0f));
+        return;
+    }
+
+    // ─── ABY_SHD: 보호막 — value1 생성/흡수량, value2 현재 보호막 ────────────────
+    if (runeId == "ABY_SHD")
+    {
+        if (bLocalCaster && pCaster)
+        {
+            if (PlayerComponent* pPlayer = pCaster->GetComponent<PlayerComponent>())
+            {
+                pPlayer->SetShield(value2);
+            }
+        }
+        wchar_t buf[32];
+        swprintf_s(buf, L"+%.0f SHIELD", value1);
+        DamageNumberManager::Get().AddText(
+            GetDisplayPos(pCaster), buf,
+            DirectX::XMFLOAT4(0.5f, 0.85f, 1.0f, 1.0f));
+        return;
+    }
+
+    // ─── ABY_RVG: 보복 — value1 비율, value2 최종 데미지 ─────────────────────────
+    if (runeId == "ABY_RVG")
+    {
+        DamageNumberManager::Get().AddText(
+            GetDisplayPos(pCaster), L"REVENGE!",
+            DirectX::XMFLOAT4(1.0f, 0.55f, 0.2f, 1.0f));
+        return;
+    }
+
+    // ─── ABY_OVL: 과열 — value1 비율, value2 최종 데미지 ─────────────────────────
+    if (runeId == "ABY_OVL")
+    {
+        DamageNumberManager::Get().AddText(
+            GetDisplayPos(pCaster), L"OVERHEAT!",
+            DirectX::XMFLOAT4(1.0f, 0.4f, 0.15f, 1.0f));
+        return;
+    }
+
+    // ─── ABY_EXC: 처형자 — HP30%↓ 몬스터에 +50% 데미지. 처형 킬 마커. ────────────
+    if (runeId == "ABY_EXC")
+    {
+        GameObject* pMonster = GetServerMonster(targetMonsterId);
+        DirectX::XMFLOAT3 markPos = pos;
+        if (pMonster)
+        {
+            if (auto* t = pMonster->GetComponent<TransformComponent>())
+            {
+                markPos = t->GetPosition();
+                markPos.y += 0.05f;
+            }
+        }
+        if (pDecals)
+        {
+            pDecals->Spawn(
+                DecalTexture::Skull, markPos,
+                2.5f, 0.0f, 1.5f,
+                DirectX::XMFLOAT4(1.0f, 0.3f, 0.3f, 1.0f));
+        }
+        DirectX::XMFLOAT3 textPos = markPos;
+        textPos.y += 1.5f;
+        DamageNumberManager::Get().AddText(
+            textPos, L"EXECUTE!",
+            DirectX::XMFLOAT4(1.0f, 0.25f, 0.25f, 1.0f));
+        return;
+    }
+
+    // ─── ABY_ECO: 메아리 — ECHO_SCHEDULE(예약 마법진) / ECHO_FIRE(실제 추가타) ────
+    //   triggerType 10 = ECHO_SCHEDULE, 11 = ECHO_FIRE
+    if (runeId == "ABY_ECO")
+    {
+        // 발동 위치: targetMonster 우선 → packet pos fallback
+        GameObject* pMonster = GetServerMonster(targetMonsterId);
+        DirectX::XMFLOAT3 ringPos = pos;
+        if (pMonster)
+        {
+            if (auto* t = pMonster->GetComponent<TransformComponent>())
+            {
+                ringPos = t->GetPosition();
+                ringPos.y += 0.05f;
+            }
+        }
+
+        if (triggerType == 11 /* ECHO_FIRE */)
+        {
+            // 실제 추가타 — 원본 스킬 VFX 50% 스케일 + 임팩트 데칼 + 데미지 텍스트
+            //   시전자 SkillComponent 의 룬 콤보까지 적용하여 Charge/Enhance/Channel 시각 모디파이어 반영
+            ElementType casterElem = GetPlayerElement(playerId);
+            uint32_t casterRuneFlags = RUNE_NONE;
+            if (pCaster)
+            {
+                SkillSlot echoSlot = SkillSlot::Count;
+                switch (skillSlot)
+                {
+                case 0: echoSlot = SkillSlot::Q;          break;
+                case 1: echoSlot = SkillSlot::E;          break;
+                case 2: echoSlot = SkillSlot::R;          break;
+                case 3: echoSlot = SkillSlot::RightClick; break;
+                default: break;
+                }
+                if (echoSlot != SkillSlot::Count)
+                {
+                    if (SkillComponent* pCasterSkill = pCaster->GetComponent<SkillComponent>())
+                    {
+                        RuneCombo combo = pCasterSkill->GetRuneCombo(echoSlot);
+                        casterRuneFlags = ToRuneFlags(combo);
+                    }
+                }
+            }
+            SpawnEchoSkillVFX(pScene, skillType, casterElem, ringPos, casterRuneFlags);
+
+            if (pDecals)
+            {
+                pDecals->Spawn(
+                    DecalTexture::Magic2, ringPos,
+                    3.0f, 0.0f, 0.8f,
+                    DirectX::XMFLOAT4(0.7f, 0.5f, 1.0f, 1.0f));
+            }
+            DirectX::XMFLOAT3 textPos = ringPos;
+            textPos.y += 1.5f;
+            wchar_t buf[32];
+            swprintf_s(buf, L"ECHO %.0f", value2);
+            DamageNumberManager::Get().AddText(
+                textPos, buf,
+                DirectX::XMFLOAT4(0.85f, 0.6f, 1.0f, 1.0f));
+        }
+        else
+        {
+            // 예약 마법진 (회전) — 2초 lifetime, 발 아래 표시. 발동 시각 임팩트는 ECHO_FIRE 가 따로 옴.
+            if (pDecals)
+            {
+                pDecals->Spawn(
+                    DecalTexture::Magic3, ringPos,
+                    3.5f, 0.0f, 2.0f,
+                    DirectX::XMFLOAT4(0.7f, 0.5f, 1.0f, 1.0f),
+                    DirectX::XM_PI /* rotateSpeed rad/s */,
+                    0.3f /* revealDuration */);
+            }
+        }
+        return;
+    }
+
+    // 그 외 룬은 서버가 패시브로 처리하므로 별도 클라 표시 없음 (ABY_RES 등)
+}
+
+ElementType NetworkManager::GetPlayerElement(uint64 playerId) const
+{
+    if (playerId == m_nLocalPlayerId.load())
+    {
+        Dx12App* pApp = Dx12App::GetInstance();
+        Scene* pScene = pApp ? pApp->GetScene() : nullptr;
+        if (pScene)
+        {
+            if (GameObject* pPlayer = pScene->GetPlayer())
+            {
+                if (auto* pc = pPlayer->GetComponent<PlayerComponent>())
+                    return pc->GetElementType();
+            }
+        }
+        return ElementType::Water;
+    }
+    auto it = m_mapRemotePlayerElement.find(playerId);
+    if (it != m_mapRemotePlayerElement.end())
+        return it->second;
+    return ElementType::Water;
+}
+
+void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType element, const DirectX::XMFLOAT3& pos, uint32_t runeFlags)
+{
+    if (!pScene) return;
+    FluidSkillVFXManager* pVFXManager = pScene->GetFluidVFXManager();
+    if (!pVFXManager) return;
+
+    using DirectX::XMFLOAT3;
+    XMFLOAT3 up   = XMFLOAT3(0.0f, 1.0f, 0.0f);
+    XMFLOAT3 down = XMFLOAT3(0.0f, -1.0f, 0.0f);
+    XMFLOAT3 head = XMFLOAT3(pos.x, pos.y + 2.0f, pos.z);
+
+    auto spawnScaled = [&](const char* effectName, const XMFLOAT3& origin, const XMFLOAT3& dir)
+    {
+        EffectDef def = EffectRegistry::Get().GetEffect(effectName, runeFlags);
+        // 에코는 원본의 50% 위력 — 시각 스케일도 50% 로 축소
+        for (auto& l : def.layers)
+            l.sizeScale *= 0.5f;
+        pVFXManager->SpawnEffectDef(origin, dir, def, true);
+    };
+
+    switch (skillType)
+    {
+    case 1: // Q
+        switch (element)
+        {
+        case ElementType::Fire:  spawnScaled("Q_WaveSlash",   head, up); break;
+        case ElementType::Water:
+            spawnScaled("Q_WaterFall",   XMFLOAT3(pos.x, pos.y + 5.5f, pos.z), down);
+            spawnScaled("Q_WaterPuddle", XMFLOAT3(pos.x, pos.y + 2.5f, pos.z), down);
+            break;
+        case ElementType::Wind:  spawnScaled("Q_WindCutter",  head, up); break;
+        case ElementType::Earth: spawnScaled("Q_StoneSpike",  pos,  up); break;
+        default: break;
+        }
+        break;
+
+    case 2: // E
+        switch (element)
+        {
+        case ElementType::Fire:
+            spawnScaled("E_FireBeam_Core",  head, up);
+            spawnScaled("E_FireBeam_Burst", head, up);
+            break;
+        case ElementType::Water:
+            spawnScaled("E_WaterVortex", XMFLOAT3(pos.x, pos.y + 3.0f, pos.z), up);
+            break;
+        case ElementType::Wind:
+            spawnScaled("E_GaleRush_Burst", pos, up);
+            spawnScaled("E_GaleRush_Ring",  pos, up);
+            break;
+        case ElementType::Earth:
+            spawnScaled("E_EarthArmor_Burst", pos, up);
+            spawnScaled("E_EarthArmor_Aura",  pos, up);
+            break;
+        default: break;
+        }
+        break;
+
+    case 3: // R
+        switch (element)
+        {
+        case ElementType::Fire:
+            spawnScaled("R_MeteorImpact",     pos, up);
+            spawnScaled("R_MeteorGroundFire", pos, up);
+            break;
+        case ElementType::Water:
+            spawnScaled("R_TidalWave",      pos, up);
+            spawnScaled("R_TidalWave_Foam", pos, up);
+            break;
+        case ElementType::Wind:
+            spawnScaled("R_TornadoPlayer", pos, up);
+            break;
+        case ElementType::Earth:
+            spawnScaled("R_Earthquake_Burst", pos, up);
+            spawnScaled("R_Earthquake_Ring",  pos, up);
+            break;
+        default: break;
+        }
+        break;
+
+    case 4: // RC — 단발 임팩트
+        spawnScaled("R_MeteorSmallImpact", pos, up);
+        break;
+
+    default: break;
+    }
 }
 
 void NetworkManager::ProcessMonsterDespawn(Scene* pScene, uint64 monsterId)

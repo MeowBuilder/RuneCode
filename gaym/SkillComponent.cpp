@@ -124,6 +124,15 @@ void SkillComponent::Update(float deltaTime)
                 }
             }
         }
+
+        // 무한 룬 Pending reset 소비 — Casting 끝나서 Cooldown 으로 전환된 직후 즉시 Ready 로
+        if (m_pendingCooldownReset[i] && m_SkillStates[i] != SkillState::Casting)
+        {
+            m_CooldownTimers[i] = 0.0f;
+            if (m_SkillStates[i] == SkillState::Cooldown)
+                m_SkillStates[i] = SkillState::Ready;
+            m_pendingCooldownReset[i] = false;
+        }
     }
 
     // R 스킬 지연 발동 처리 (마법진 reveal 완료 후 실제 스킬 발사)
@@ -686,11 +695,21 @@ float SkillComponent::GetEffectiveCooldown(size_t slotIndex) const
 void SkillComponent::ResetCooldown(SkillSlot slot)
 {
     size_t index = static_cast<size_t>(slot);
-    if (index < m_CooldownTimers.size())
+    if (index >= m_CooldownTimers.size()) return;
+
+    m_CooldownTimers[index] = 0.0f;
+
+    if (index < m_SkillStates.size())
     {
-        m_CooldownTimers[index] = 0.0f;
-        if (index < m_SkillStates.size() && m_SkillStates[index] == SkillState::Cooldown)
+        if (m_SkillStates[index] == SkillState::Cooldown)
+        {
             m_SkillStates[index] = SkillState::Ready;
+        }
+        else if (m_SkillStates[index] == SkillState::Casting)
+        {
+            // Casting 종료 후 라인 345/298 에서 timer=GetEffectiveCooldown 으로 덮어써지는 것을 막기 위해 pending 플래그
+            m_pendingCooldownReset[index] = true;
+        }
     }
 }
 
@@ -923,6 +942,25 @@ SkillStats SkillComponent::BuildSkillStats(SkillSlot skill, ActivationType defau
             ElementType::Earth, ElementType::Wind
         };
         stats.elementOverride = elements[dist(rng)];
+    }
+
+    // ── 멀티 게이트 ─────────────────────────────────────────────────────────
+    //   서버 연결 시 룬 발동은 전적으로 서버 권위. 클라가 독립적으로 onCast/onHit 훅,
+    //   RNG 기반 트리거(INF/ECO), 카운터 기반 트리거(OVL), 피격 응답(RVG)을 굴리면
+    //   서버와 desync 가 나거나 이중 발동된다.
+    //   → 트리거 계열 필드만 zero 화. damageMult/cooldownMult/activationType/elementSet
+    //     /subVFXIds 등은 시각·입력 동작에 필요하므로 유지.
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr && pNetMgr->IsConnected())
+    {
+        stats.onCastHooks.clear();
+        stats.onHitHooks.clear();
+        stats.cdResetChance   = 0.f;  // ABY_INF
+        stats.lifestealRatio  = 0.f;  // ABY_VMP
+        stats.execDamageBonus = 0.f;  // ABY_EXC
+        stats.revengeBonus    = 0.f;  // ABY_RVG
+        stats.overheatBonus   = 0.f;  // ABY_OVL
+        stats.echoOnCast      = false; // ABY_ECO
     }
 
     return stats;

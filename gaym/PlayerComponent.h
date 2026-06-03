@@ -37,6 +37,7 @@ public:
 
     // 보호막 시스템 (보호막 룬 L07)
     void  AddShield(float amount);
+    void  SetShield(float amount); // 네트워크 권위 — clamp [0, MAX_SHIELD]
     float GetShield() const { return m_fShield; }
     float GetShieldRatio() const { return m_fShield / MAX_SHIELD; }
 

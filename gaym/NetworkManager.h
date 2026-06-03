@@ -73,7 +73,8 @@ enum class NetworkCommand
     RoomRewardSpawn,
     RuneRewardPicked,
     RuneEquip,
-    RuneHomingTarget
+    RuneHomingTarget,
+    RuneTrigger
 };
 
 // 네트워크 명령 구조체
@@ -155,6 +156,15 @@ struct NetworkCommandData
     float runeHomingOriginX = 0.0f;
     float runeHomingOriginY = 0.0f;
     float runeHomingOriginZ = 0.0f;
+
+    // S_RUNE_TRIGGER 필드 (runeId 는 위 공용 필드 재사용, x/y/z 도 재사용)
+    int32  runeTriggerSkillSlot       = -1;
+    int32  runeTriggerSkillType       = 0;
+    int32  runeTriggerType            = 0;
+    uint64 runeTriggerTargetMonsterId = 0;
+    uint64 runeTriggerTargetPlayerId  = 0;
+    float  runeTriggerValue1          = 0.0f;
+    float  runeTriggerValue2          = 0.0f;
 };
 
 // =============================================================================
@@ -288,6 +298,12 @@ public:
     // 룬 유도 타겟 큐잉
     void QueueRuneHomingTarget(uint64 playerId, int32 skillSlot, int32 skillType, uint64 targetMonsterId, const DirectX::XMFLOAT3& targetPos, const DirectX::XMFLOAT3& originPos);
 
+    // 룬 발동(S_RUNE_TRIGGER) 큐잉 — 서버 권위 룬 결과를 클라 시각화에 전달
+    void QueueRuneTrigger(uint64 playerId, int32 skillSlot, int32 skillType,
+                          const std::string& runeId, int32 triggerType,
+                          uint64 targetMonsterId, uint64 targetPlayerId,
+                          const DirectX::XMFLOAT3& pos, float value1, float value2);
+
     // 보스 이벤트 (인트로/페이즈 전환/사망 컷씬)
     void QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 phaseIndex);
 
@@ -377,6 +393,18 @@ private:
     void ProcessRuneRewardPicked(Scene* pScene, uint64 ownerPlayerId);
     void ProcessRuneEquip(Scene* pScene, uint64 playerId, uint32 skillSlot, uint32 runeSlotIndex, const std::string& runeId, uint32 stackCount);
     void ProcessRuneHomingTarget(Scene* pScene, uint64 playerId, int32 skillSlot, int32 skillType, uint64 targetMonsterId, const DirectX::XMFLOAT3& targetPos, const DirectX::XMFLOAT3& originPos);
+    void ProcessRuneTrigger(Scene* pScene,
+                            uint64 playerId, int32 skillSlot, int32 skillType,
+                            const std::string& runeId, int32 triggerType,
+                            uint64 targetMonsterId, uint64 targetPlayerId,
+                            const DirectX::XMFLOAT3& pos, float value1, float value2);
+
+    // 메아리(ABY_ECO) ECHO_FIRE 시 원본 스킬 시각을 echo 위치에 50% 스케일로 재생
+    void SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType element,
+                           const DirectX::XMFLOAT3& pos, uint32_t runeFlags = 0);
+
+    // playerId 기준 원소 조회 — local 은 PlayerComponent, remote 는 m_mapRemotePlayerElement
+    ElementType GetPlayerElement(uint64 playerId) const;
     void ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 eventType, uint32 phaseIndex);
     void ProcessMonsterStagger(uint64 monsterId, float duration);
 
