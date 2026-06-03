@@ -118,13 +118,19 @@ private:
     // Health Bar UI
     std::unique_ptr<HealthBarUI> m_pHealthBarUI;
 
-    // VFX 스프라이트 텍스처 (힙 슬롯 4: magic_03, 5: skull, 6: star_08)
+    // VFX 스프라이트 텍스처 (힙 슬롯 4: magic_03, 5: skull, 6: star_08, 7: twirl_01, 8: flame_04, 9: flare_01)
     ComPtr<ID3D12Resource> m_pMagicDecalTex;
     ComPtr<ID3D12Resource> m_pMagicDecalUpload;
     ComPtr<ID3D12Resource> m_pSkullTex;
     ComPtr<ID3D12Resource> m_pSkullUpload;
     ComPtr<ID3D12Resource> m_pStarTex;
     ComPtr<ID3D12Resource> m_pStarUpload;
+    ComPtr<ID3D12Resource> m_pTwirlTex;
+    ComPtr<ID3D12Resource> m_pTwirlUpload;
+    ComPtr<ID3D12Resource> m_pFlameTex;
+    ComPtr<ID3D12Resource> m_pFlameUpload;
+    ComPtr<ID3D12Resource> m_pFlareTex;
+    ComPtr<ID3D12Resource> m_pFlareUpload;
 
     // Bloom post-process (owns HDR scene RT + blur chain + tonemap composite)
     std::unique_ptr<BloomPostProcess> m_pBloom;

@@ -1102,12 +1102,12 @@ void Dx12App::InitializeText()
 
     // 폰트용 디스크립터 힙 생성
     //   [0] 폰트, [1] HP바 base, [2] HP바 fill, [3] 캐릭터선택 흰픽셀
-    //   [4] VFX magic_03, [5] VFX skull, [6] VFX star_08
+    //   [4] VFX magic_03, [5] VFX skull, [6] VFX star_08, [7] VFX twirl_01, [8] VFX fire_01, [9] VFX flare_01
     m_fontDescriptorHeap = std::make_unique<DirectX::DescriptorHeap>(
         m_pd3dDevice.Get(),
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-        7
+        10
     );
 
     // 리소스 업로드 배치
@@ -1213,6 +1213,9 @@ void Dx12App::InitializeText()
         loadVFXTex(L"Assets/Textures/VFX/magic_03.png",   m_pMagicDecalTex, m_pMagicDecalUpload, 4, "magic3");
         loadVFXTex(L"Assets/Textures/VFX/human-skull.png", m_pSkullTex,      m_pSkullUpload,      5, "skull");
         loadVFXTex(L"Assets/Textures/VFX/star_08.png",     m_pStarTex,       m_pStarUpload,       6, "star_08");
+        loadVFXTex(L"Assets/Textures/VFX/twirl_01.png",    m_pTwirlTex,      m_pTwirlUpload,      7, "twirl1");
+        loadVFXTex(L"Assets/Textures/VFX/fire_01.png",     m_pFlameTex,      m_pFlameUpload,      8, "fire1");
+        loadVFXTex(L"Assets/Textures/VFX/flare_01.png",    m_pFlareTex,      m_pFlareUpload,      9, "flare1");
     }
     CHECK_HR(m_pd3dCommandList->Close());
     ID3D12CommandList* vfxCmdLists[] = { m_pd3dCommandList.Get() };

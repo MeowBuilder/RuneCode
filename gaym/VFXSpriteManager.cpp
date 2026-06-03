@@ -17,7 +17,7 @@ void VFXSpriteManager::RegisterTex(const std::string& id, D3D12_GPU_DESCRIPTOR_H
 
 int VFXSpriteManager::Spawn(const std::string& texId, const XMFLOAT3& worldPos,
                              float screenSize, float lifetime, XMFLOAT4 color,
-                             float rotateSpeed, VFXSpriteAnim anim)
+                             float rotateSpeed, VFXSpriteAnim anim, float initialRotation)
 {
     int slot = -1;
     for (int i = 0; i < MAX_ENTRIES; ++i)
@@ -33,7 +33,7 @@ int VFXSpriteManager::Spawn(const std::string& texId, const XMFLOAT3& worldPos,
     e.lifeMax   = lifetime;
     e.lifeRemain= lifetime;
     e.color     = color;
-    e.rotAngle  = 0.f;
+    e.rotAngle  = initialRotation;
     e.rotSpeed  = rotateSpeed;
     e.anim      = anim;
     e.active    = true;

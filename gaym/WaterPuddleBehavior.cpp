@@ -272,6 +272,7 @@ void WaterPuddleBehavior::TickChannelPuddles(float deltaTime)
             if (bDoTick)
             {
                 pEnemy->TakeDamage(dotDmg, false, HasExecRune(m_pCaster));
+                NotifyHit(m_pCaster, ep);
                 if (m_pCaster) {
                     auto* pSC = m_pCaster->GetComponent<SkillComponent>();
                     if (pSC && m_slot != SkillSlot::Count) {
@@ -346,6 +347,7 @@ void WaterPuddleBehavior::TickPuddle(float deltaTime)
         if (bDoTick)
         {
             pEnemy->TakeDamage(ApplyExecBonus(dotDmg, pEnemy, m_pCaster), false, HasExecRune(m_pCaster));
+            NotifyHit(m_pCaster, ep);
             if (m_pCaster) {
                 auto* pSC = m_pCaster->GetComponent<SkillComponent>();
                 if (pSC && m_slot != SkillSlot::Count) {

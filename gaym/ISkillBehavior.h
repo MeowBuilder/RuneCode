@@ -102,6 +102,9 @@ protected:
     // bExecRune이 false거나 HP >= 30%면 dmg 그대로 반환.
     float ApplyExecBonus(float dmg, EnemyComponent* pEnemy, GameObject* caster) const;
 
+    // 적 적중 시 무한 룬 트리거 헬퍼 (모든 플레이어 스킬 Behavior에서 사용)
+    void NotifyHit(GameObject* caster, const DirectX::XMFLOAT3& hitPos) const;
+
     // 원소 타입에 맞는 서브 VFX 이름 반환 (차지/강화 공용)
     static const char* SubVFXName(ElementType e)
     {

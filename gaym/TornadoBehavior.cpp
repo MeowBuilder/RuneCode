@@ -192,6 +192,7 @@ void TornadoBehavior::DamageEnemiesNearby(float dt)
         if (dist > DMG_RADIUS) continue;
 
         pEnemy->TakeDamage(ApplyExecBonus(dmg, pEnemy, m_pCaster), false, HasExecRune(m_pCaster));
+        NotifyHit(m_pCaster, ep);
 
         if (m_pCaster) {
             auto* pSC = m_pCaster->GetComponent<SkillComponent>();

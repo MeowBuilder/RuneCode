@@ -7,6 +7,7 @@
 #include <memory>
 #include <array>
 #include <set>
+#include <vector>
 
 class ISkillBehavior;
 class InputSystem;
@@ -53,6 +54,9 @@ public:
 
     // 무한 룬: 쿨다운 즉시 초기화
     void ResetCooldown(SkillSlot slot);
+
+    // 오프라인: 무한 룬(ABY_INF) RNG 롤 → 성공 시 ResetCooldown + VFX
+    void TryTriggerInfiniteRune(SkillSlot slot, const DirectX::XMFLOAT3& hitPos);
     // 시간 역행 룬: 쿨다운 seconds 초 감소
     void ReduceCooldown(SkillSlot slot, float seconds);
 
@@ -209,6 +213,23 @@ private:
 
     // 무한 룬(ABY_INF) Casting 중 reset 요청 보류 — Casting 종료 후 GetEffectiveCooldown 으로 덮어써지지 않도록 Update 끝에서 소비
     std::array<bool, static_cast<size_t>(SkillSlot::Count)> m_pendingCooldownReset{};
+
+    // 채널 중단 마킹 — IsFinished() 후 쿨타임 세팅 시 50% 페널티 적용 여부 추적
+    std::array<bool, static_cast<size_t>(SkillSlot::Count)> m_bChannelInterrupted{};
+
+    // 무한 룬 VFX 추적 (플레이어 따라 이동)
+    int   m_infRuneVFXSlot  = -1;
+    float m_infRuneVFXTimer = 0.f;
+
+    // 과열 룬(ABY_OVL) 스택 불꽃 오라 — 플레이어 머리 위 추적, 스택 수만큼 표시
+    std::vector<int> m_overheatStackVFX;
+    float            m_overheatVFXTimer = 0.f;
+    // 발동(4회째) 폭발 VFX — 플레이어 위치 추적
+    int   m_overheatBurstVFXSlot  = -1;
+    float m_overheatBurstVFXTimer = 0.f;
+    // 스택 불꽃/발동 폭발 VFX 스폰 헬퍼
+    void SpawnOverheatStackVFX(int stackCount);
+    void SpawnOverheatBurstVFX();
 
     // 활성화 룬(차지/증강/설치) 상태 전이를 다른 클라에 알리는 헬퍼. NetworkManager::IsConnected() 일 때만 전송.
     //   actionType: PLAYER_ACTION_CHARGE_BEGIN/END, ENHANCE_BEGIN/END, PLACE_SPAWN/FIRE

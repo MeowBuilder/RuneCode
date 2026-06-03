@@ -284,6 +284,7 @@ void GaleRushBehavior::HitEnemiesNearCaster(float damage)
 
         pEnemy->TakeDamage(ApplyExecBonus(damage, pEnemy, m_pCaster), true, HasExecRune(m_pCaster));
         m_hitEnemies.insert(pEnemy);
+        NotifyHit(m_pCaster, ePos);
 
         {
             auto* pSC = m_pCaster->GetComponent<SkillComponent>();

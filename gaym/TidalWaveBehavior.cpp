@@ -81,6 +81,7 @@ void TidalWaveBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT
         XMVECTOR latV = XMVectorSubtract(toE, XMVectorScale(dV, fwd));
         if (XMVectorGetX(XMVector3Length(latV)) > CHANNEL_HALF_W) continue;
         pEnemy->TakeDamage(ApplyExecBonus(damage, pEnemy, m_pCaster), false, HasExecRune(m_pCaster));
+        NotifyHit(m_pCaster, ePos);
     }
 }
 
@@ -258,6 +259,7 @@ void TidalWaveBehavior::HitEnemiesInWave(float damage)
 
         pEnemy->TakeDamage(ApplyExecBonus(damage, pEnemy, m_pCaster), true, HasExecRune(m_pCaster));  // 해일은 경직 유발
         m_hitEnemies.insert(pEnemy);
+        NotifyHit(m_pCaster, ePos);
 
         if (m_pCaster) {
             auto* pSC = m_pCaster->GetComponent<SkillComponent>();

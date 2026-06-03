@@ -201,6 +201,7 @@ void WaterVortexBehavior::PullAndDamageEnemies(float deltaTime)
         if (bDoTick)
         {
             pEnemy->TakeDamage(ApplyExecBonus(dotDmg, pEnemy, m_pCaster), false, HasExecRune(m_pCaster));
+            NotifyHit(m_pCaster, ep);
             if (m_pCaster) {
                 auto* pSC = m_pCaster->GetComponent<SkillComponent>();
                 if (pSC && m_slot != SkillSlot::Count) {

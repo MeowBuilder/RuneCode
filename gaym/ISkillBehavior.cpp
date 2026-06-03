@@ -20,3 +20,10 @@ float ISkillBehavior::ApplyExecBonus(float dmg, EnemyComponent* pEnemy, GameObje
     SkillStats sts = pSC->BuildSkillStats(m_slot, ActivationType::Instant);
     return dmg * (1.f + sts.execDamageBonus);
 }
+
+void ISkillBehavior::NotifyHit(GameObject* caster, const DirectX::XMFLOAT3& hitPos) const
+{
+    if (!caster || m_slot == SkillSlot::Count) return;
+    auto* pSC = caster->GetComponent<SkillComponent>();
+    if (pSC) pSC->TryTriggerInfiniteRune(m_slot, hitPos);
+}

@@ -109,6 +109,57 @@ void SkillComponent::SpawnChargeGatherVFX(int step)
 
 void SkillComponent::Update(float deltaTime)
 {
+    // 무한 룬 VFX 위치 추적
+    if (m_infRuneVFXSlot >= 0)
+    {
+        m_infRuneVFXTimer -= deltaTime;
+        if (m_infRuneVFXTimer <= 0.f)
+            m_infRuneVFXSlot = -1;
+        else if (m_pOwner && m_pOwner->GetTransform())
+        {
+            DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+            pos.y += 0.8f;
+            VFXSpriteManager::Get().SetPosition(m_infRuneVFXSlot, pos);
+        }
+    }
+
+    // 과열 발동 폭발 VFX 추적 — 플레이어 몸통
+    if (m_overheatBurstVFXSlot >= 0)
+    {
+        m_overheatBurstVFXTimer -= deltaTime;
+        if (m_overheatBurstVFXTimer <= 0.f)
+            m_overheatBurstVFXSlot = -1;
+        else if (m_pOwner && m_pOwner->GetTransform())
+        {
+            DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+            pos.y += 1.2f;
+            VFXSpriteManager::Get().SetPosition(m_overheatBurstVFXSlot, pos);
+        }
+    }
+
+    // 과열 룬 스택 불꽃 오라 추적 — 플레이어 머리 위 가로 배치
+    if (!m_overheatStackVFX.empty())
+    {
+        m_overheatVFXTimer -= deltaTime;
+        if (m_overheatVFXTimer <= 0.f)
+        {
+            m_overheatStackVFX.clear();
+        }
+        else if (m_pOwner && m_pOwner->GetTransform())
+        {
+            DirectX::XMFLOAT3 base = m_pOwner->GetTransform()->GetPosition();
+            base.y += 2.2f;
+            int n = static_cast<int>(m_overheatStackVFX.size());
+            constexpr float spacing = 0.72f;
+            for (int i = 0; i < n; ++i)
+            {
+                DirectX::XMFLOAT3 p = base;
+                p.x += (static_cast<float>(i) - (n - 1) * 0.5f) * spacing;
+                VFXSpriteManager::Get().SetPosition(m_overheatStackVFX[i], p);
+            }
+        }
+    }
+
     // Update cooldown timers
     for (size_t i = 0; i < static_cast<size_t>(SkillSlot::Count); ++i)
     {
@@ -305,14 +356,16 @@ void SkillComponent::Update(float deltaTime)
             {
                 m_Skills[index]->OnChannelComplete(m_pOwner, m_ChannelTargetPosition);
                 m_Skills[index]->OnChannelEnd(m_pOwner);
-                m_CooldownTimers[index] = GetEffectiveCooldown(index);
+                m_bChannelInterrupted[index] = false;
                 bool keepCasting = !m_Skills[index]->IsFinished() && m_Skills[index]->HasPostChannelWork();
                 if (keepCasting)
                 {
+                    // PostChannelWork 완료(IsFinished) 후에 쿨타임 세팅
                     m_SkillStates[index] = SkillState::Casting;
                 }
                 else
                 {
+                    m_CooldownTimers[index] = GetEffectiveCooldown(index);
                     m_SkillStates[index] = SkillState::Cooldown;
                     m_Skills[index]->Reset();
                 }
@@ -353,7 +406,12 @@ void SkillComponent::Update(float deltaTime)
             m_Skills[slotIndex]->Reset();
             // echo 발동이었으면 쿨다운 타이머는 건드리지 않음 (이미 진행 중)
             if (!bEchoRun)
-                m_CooldownTimers[slotIndex] = GetEffectiveCooldown(slotIndex);
+            {
+                // 채널 중단 후 PostChannelWork 완료 → 50% 페널티 적용
+                float cdMult = m_bChannelInterrupted[slotIndex] ? 0.5f : 1.0f;
+                m_bChannelInterrupted[slotIndex] = false;
+                m_CooldownTimers[slotIndex] = GetEffectiveCooldown(slotIndex) * cdMult;
+            }
             // echo 종료 시 쿨다운이 이미 소진됐으면 바로 Ready
             // (echo Casting 중 타이머가 0에 도달해도 Casting 상태라 Ready 전환이 skip됐던 경우 대응)
             if (m_CooldownTimers[slotIndex] <= 0.0f)
@@ -547,8 +605,7 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
                 m_SkillStates[index] = SkillState::Casting;
                 m_ActiveSkillSlot = m_ChargingSlot;
 
-                // Start cooldown (cooldownMult 룬 적용)
-                m_CooldownTimers[index] = GetEffectiveCooldown(index);
+                // 쿨타임은 IsFinished() 후(Update 루프)에 세팅 — 발사 시점 세팅 시 UI가 즉시 돌다가 재리셋되어 어색
 
                 // 차지 발사 시점에 서버로 SendSkill — ExecuteWithActivationType 의 SendSkill 은
                 //   press 시점에 호출되면 원격 클라가 차지 buildup 없이 즉시 발사로 보이므로 release 에서 처리.
@@ -594,16 +651,19 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
             if (index < m_Skills.size() && m_Skills[index])
             {
                 m_Skills[index]->OnChannelEnd(m_pOwner);
-                m_CooldownTimers[index] = GetEffectiveCooldown(index) * 0.5f;
+                m_bChannelInterrupted[index] = true;
                 bool keepCasting = !m_Skills[index]->IsFinished() && m_Skills[index]->HasPostChannelWork();
                 if (keepCasting)
                 {
+                    // PostChannelWork 완료(IsFinished) 후에 50% 페널티 쿨타임 세팅
                     m_SkillStates[index] = SkillState::Casting;
                 }
                 else
                 {
+                    m_CooldownTimers[index] = GetEffectiveCooldown(index) * 0.5f;
                     m_SkillStates[index] = SkillState::Cooldown;
                     m_Skills[index]->Reset();
+                    m_bChannelInterrupted[index] = false;
                 }
             }
             m_ActiveSkillSlot = SkillSlot::Count;
@@ -740,6 +800,39 @@ void SkillComponent::ResetCooldown(SkillSlot slot)
             // Casting 종료 후 라인 345/298 에서 timer=GetEffectiveCooldown 으로 덮어써지는 것을 막기 위해 pending 플래그
             m_pendingCooldownReset[index] = true;
         }
+    }
+}
+
+void SkillComponent::TryTriggerInfiniteRune(SkillSlot slot, const DirectX::XMFLOAT3& hitPos)
+{
+    // 멀티: 무한 룬은 전적으로 서버 권위 (BuildSkillStats 에서 cdResetChance=0 으로 무효화됨).
+    //       클라가 독립적으로 굴리면 이중 발동/desync 발생하므로 즉시 return.
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr && pNetMgr->IsConnected()) return;
+
+    if (slot == SkillSlot::Count) return;
+
+    // 슬롯에 장착된 룬 누적 스탯에서 쿨다운 초기화 확률 조회
+    // (defaultType 은 fallback 용이며 cdResetChance 에 영향 없음 → 기본 Instant 사용)
+    SkillStats stats = BuildSkillStats(slot, ActivationType::Instant);
+    if (stats.cdResetChance <= 0.f) return;
+
+    // RNG 롤 (ProjectileManager::ApplyDamage 와 동일 패턴)
+    static std::mt19937 rng{ std::random_device{}() };
+    static std::uniform_real_distribution<float> dist(0.f, 1.f);
+    if (dist(rng) >= stats.cdResetChance) return;
+
+    // 성공: 쿨다운 즉시 초기화 + 플레이어 위치 twirl (쿨타임 리셋 피드백)
+    ResetCooldown(slot);
+
+    if (m_pOwner && m_pOwner->GetTransform())
+    {
+        constexpr float kLifetime = 0.65f;
+        DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+        pos.y += 0.8f;
+        m_infRuneVFXSlot  = VFXSpriteManager::Get().Spawn("twirl1", pos, 230.f, kLifetime,
+            { 1.0f, 0.88f, 0.25f, 1.0f }, 9.0f, VFXSpriteAnim::FadeOut);
+        m_infRuneVFXTimer = kLifetime;
     }
 }
 
@@ -1076,6 +1169,59 @@ VFXModifier SkillComponent::BuildActivationVFXMod(SkillSlot slot, float chargeRa
     return mod;
 }
 
+void SkillComponent::SpawnOverheatStackVFX(int stackCount)
+{
+    if (!m_pOwner || !m_pOwner->GetTransform() || stackCount <= 0) return;
+
+    // 기존 스택 불꽃 정리 후 새로 스폰 (개수가 갱신되므로)
+    for (int slot : m_overheatStackVFX)
+        VFXSpriteManager::Get().Stop(slot);
+    m_overheatStackVFX.clear();
+
+    // 스택이 쌓일수록 색이 진해짐: 1스택 밝은 노랑 → 3스택 진한 주황/빨강 (모두 불투명)
+    constexpr DirectX::XMFLOAT4 kStackColors[3] = {
+        { 1.0f, 0.88f, 0.30f, 1.0f },  // 1스택
+        { 1.0f, 0.58f, 0.12f, 1.0f },  // 2스택
+        { 1.0f, 0.30f, 0.06f, 1.0f },  // 3스택 (READY)
+    };
+    const DirectX::XMFLOAT4& color = kStackColors[(stackCount - 1) % 3];
+
+    // 스택 수만큼 불꽃을 머리 위에 배치 (위치는 Update에서 매 프레임 추적)
+    constexpr float kLifetime = 1.3f;
+    float size = 80.f + stackCount * 24.f;  // 스택 높을수록 크게 (1:104 / 2:128 / 3:152)
+    DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+    pos.y += 2.2f;
+    for (int i = 0; i < stackCount; ++i)
+    {
+        // 각 불꽃을 서로 다른 각도로 기울이고 미세하게 회전시켜 텍스처 반복이 티 안 나게
+        float initRot   = (static_cast<float>(i) - (stackCount - 1) * 0.5f) * 0.6f;
+        float spinSpeed = (i % 2 == 0 ? 1.f : -1.f) * 0.5f;
+        int slot = VFXSpriteManager::Get().Spawn("fire1", pos, size, kLifetime,
+            color, spinSpeed, VFXSpriteAnim::FadeOut, initRot);
+        if (slot >= 0) m_overheatStackVFX.push_back(slot);
+    }
+    m_overheatVFXTimer = kLifetime;
+}
+
+void SkillComponent::SpawnOverheatBurstVFX()
+{
+    if (!m_pOwner || !m_pOwner->GetTransform()) return;
+
+    // 발동: 진행 중이던 스택 불꽃 즉시 정리 (터지는 느낌)
+    for (int slot : m_overheatStackVFX)
+        VFXSpriteManager::Get().Stop(slot);
+    m_overheatStackVFX.clear();
+    m_overheatVFXTimer = 0.f;
+
+    // 플레이어 위치에 큰 화염 폭발 한 방 (회전하며 페이드, Update에서 위치 추적)
+    constexpr float kBurstLife = 0.6f;
+    DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+    pos.y += 1.2f;
+    m_overheatBurstVFXSlot  = VFXSpriteManager::Get().Spawn("flare1", pos, 380.f, kBurstLife,
+        { 1.0f, 0.55f, 0.15f, 1.0f }, 4.0f, VFXSpriteAnim::FadeOut);
+    m_overheatBurstVFXTimer = kBurstLife;
+}
+
 int SkillComponent::SpawnEchoTriggerVFX(ElementType element, const XMFLOAT3& targetPos, EnemyComponent** pOutTarget)
 {
     if (!m_pOwner || !m_pOwner->GetTransform()) return -1;
@@ -1226,20 +1372,35 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
     // 룬 데미지 배율 적용 — Execute에 넘기는 mult에 포함시켜 모든 스킬에 일괄 적용
     mult *= stats.damageMult;
 
-    // 과열 보너스 (ABY_OVL): 동일 스킬 연속 3회 → 다음 1회 +60%
+    // 과열 보너스 (ABY_OVL): 동일 스킬 연속 3회 누적 → 4회째 +60% 발동
     {
         size_t slotIdx = static_cast<size_t>(slot);
         if (m_overheatReady[slotIdx] && stats.overheatBonus > 0.f)
         {
+            // ─ 발동(4회째): 데미지 +60% + 스킬 VFX 강화(크기/파티클/강도) + 폭발 연출 ─
+            //   발동 회차는 카운트에 넣지 않음(아래 누적 분기 skip) → 다음 발동까지 정확히 4회.
             mult *= (1.f + stats.overheatBonus);
             m_overheatReady[slotIdx] = false;
+            m_overheatConsecutive[slotIdx] = 0;
+
+            m_activationVFXMod.sizeScaleMult     *= 1.45f;
+            m_activationVFXMod.particleCountMult *= 1.4f;
+            m_activationVFXMod.strengthMult      *= 1.6f;
+
+            SpawnOverheatBurstVFX();  // 내부에서 기존 스택 불꽃 정리 → 겹침 없음
         }
-        if (stats.overheatBonus > 0.f)
+        else if (stats.overheatBonus > 0.f)
         {
-            if (++m_overheatConsecutive[slotIdx] >= 3)
+            int cnt = ++m_overheatConsecutive[slotIdx];
+            if (cnt >= 3)
             {
                 m_overheatReady[slotIdx] = true;
                 m_overheatConsecutive[slotIdx] = 0;
+                SpawnOverheatStackVFX(3);  // 3스택 — 다음 발동 준비 완료
+            }
+            else
+            {
+                SpawnOverheatStackVFX(cnt);  // 1~2스택 누적 표시
             }
         }
         else

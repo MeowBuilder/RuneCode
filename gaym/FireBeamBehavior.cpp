@@ -414,6 +414,7 @@ void FireBeamBehavior::HitEnemiesInBeam(float damage, const XMFLOAT3* pDirOverri
         if (lateralDist < BEAM_RADIUS + eRadius)
         {
             pEnemy->TakeDamage(ApplyExecBonus(damage, pEnemy, m_pCaster), false, bExec);
+            NotifyHit(m_pCaster, ePos);
 
             if (hasStats && !sts.onHitHooks.empty())
             {
