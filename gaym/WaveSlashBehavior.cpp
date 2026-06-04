@@ -132,6 +132,7 @@ void WaveSlashBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT
         XMVECTOR latV = XMVectorSubtract(toE, XMVectorScale(dV, fwd));
         if (XMVectorGetX(XMVector3Length(latV)) > CHANNEL_WAVE_HALF_W) continue;
         pEnemy->TakeDamage(ApplyExecBonus(damage, pEnemy, caster), false, bExecCh);
+        NotifyHit(caster, ePos);
     }
 }
 
@@ -395,6 +396,7 @@ void WaveSlashBehavior::HitEnemiesInWave(float damage)
             damage *= (1.f + sts.execDamageBonus);
         pEnemy->TakeDamage(damage, false, bExec);
         m_hitEnemies.insert(pEnemy);
+        NotifyHit(m_pCaster, ePos);
 
         if (hasStats && !sts.onHitHooks.empty())
         {
@@ -473,7 +475,10 @@ void WaveSlashBehavior::UpdateFireTrail(float deltaTime)
             float dx = ePos.x - zone.center.x;
             float dz = ePos.z - zone.center.z;
             if (dx * dx + dz * dz <= TRAIL_ZONE_RADIUS * TRAIL_ZONE_RADIUS)
+            {
                 pEnemy->TakeDamage(ApplyExecBonus(dotDamage, pEnemy, m_pCaster), false, trailExec);
+                NotifyHit(m_pCaster, ePos);
+            }
         }
     }
 

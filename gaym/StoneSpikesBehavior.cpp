@@ -209,6 +209,7 @@ void StoneSpikesBehavior::HitEnemiesAtSpike(const DirectX::XMFLOAT3& center, flo
 
         bool bExec = hasStats && sts.execDamageBonus > 0.f;
         pEnemy->TakeDamage(dmg, true, bExec);
+        NotifyHit(m_pCaster, ep);
 
         // 처형자: 룬이 장착된 상태에서 적이 죽으면 skull 표시 (HP 조건 무관)
 

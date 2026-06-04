@@ -1522,6 +1522,47 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         // 보스 클리어 → 포탈이 Room::CheckClearCondition에서 스폰됨.
         // 플레이어가 포탈 F 상호작용하면 TransitionToNextRoom에서
         // m_bInBossRoom 플래그를 보고 다음 스테이지로 넘김.
+
+        // Grass(4스테이지) 보스 클리어 시 분기 포탈 추가 spawn:
+        //   기존 포탈 = 1스테이지 루프(파밍, 사이클++)
+        //   보조 포탈 = 최종 보스(DarkLord)
+        // 오프라인 한정. m_bInBossRoom 가 true 인 동안 한 번만 동작.
+        NetworkManager* pNetForPortal = NetworkManager::GetInstance();
+        bool bOfflinePortal = !(pNetForPortal && pNetForPortal->IsConnected());
+        if (bOfflinePortal
+            && m_bInBossRoom
+            && m_eCurrentTheme == StageTheme::Grass
+            && !m_bBranchPortalsSpawned
+            && m_pCurrentRoom->HasPortalCube())
+        {
+            GameObject* pMain = m_pCurrentRoom->GetPortalCube();
+            XMFLOAT3 basePos = pMain ? pMain->GetTransform()->GetPosition() : XMFLOAT3(0.0f, 1.5f, 0.0f);
+            // 메인 포탈에서 X축으로 떨어진 위치에 보조 포탈 배치 (시각적으로 분리)
+            XMFLOAT3 bossPortalPos = { basePos.x + 12.0f, basePos.y, basePos.z };
+
+            m_pCurrentRoom->SpawnSecondPortalAt(bossPortalPos, [this]() {
+                OutputDebugString(L"[Scene] Boss-branch portal interacted → DarkLord room\n");
+                m_bInBossRoom = false;          // 보스방 플래그 해제 (다음 보스방 진입 가드)
+                m_bBranchPortalsSpawned = false; // 다음 사이클을 위해 reset (DarkLord 클리어 시점 별개)
+                TransitionToDarkLordRoom();
+            });
+
+            m_bBranchPortalsSpawned = true;
+            OutputDebugString(L"[Scene] Grass boss cleared → two portals offered (farm loop / final boss)\n");
+        }
+
+        // 최종 보스(DarkLord) 클리어 → 게임 클리어 처리
+        //   포탈은 자동 spawn 되므로 즉시 숨겨 추가 전환 방지.
+        //   본격적인 엔딩 UI 는 Dx12App 측에서 m_bGameClear 플래그를 보고 처리.
+        if (m_bInBossRoom
+            && m_eCurrentTheme == StageTheme::Dark
+            && !m_bGameClear
+            && m_pCurrentRoom->HasPortalCube())
+        {
+            m_bGameClear = true;
+            m_pCurrentRoom->ClearPortalCube();
+            OutputDebugString(L"[Scene] ========== GAME CLEAR — DarkLord defeated! ==========\n");
+        }
     }
 
     // ── Dragon boss intro cutscene ──────────────────────────────────────────
@@ -2522,31 +2563,35 @@ bool Scene::IsNearPortalCube() const
     if (!m_pCurrentRoom || !m_pPlayerGameObject)
         return false;
 
-    GameObject* pPortal = m_pCurrentRoom->GetPortalCube();
-    if (!pPortal)
-        return false;
+    auto checkPortal = [this](GameObject* pPortal) -> bool {
+        if (!pPortal) return false;
+        auto* pInteractable = pPortal->GetComponent<InteractableComponent>();
+        if (!pInteractable || !pInteractable->IsActive()) return false;
+        return pInteractable->IsPlayerInRange(m_pPlayerGameObject);
+    };
 
-    auto* pInteractable = pPortal->GetComponent<InteractableComponent>();
-    if (!pInteractable || !pInteractable->IsActive())
-        return false;
-
-    return pInteractable->IsPlayerInRange(m_pPlayerGameObject);
+    if (checkPortal(m_pCurrentRoom->GetPortalCube()))   return true;
+    if (checkPortal(m_pCurrentRoom->GetSecondPortal())) return true;
+    return false;
 }
 
 void Scene::TriggerPortalInteraction()
 {
-    if (!IsNearPortalCube())
+    if (!m_pCurrentRoom || !m_pPlayerGameObject)
         return;
 
-    GameObject* pPortal = m_pCurrentRoom->GetPortalCube();
-    if (!pPortal)
-        return;
-
-    auto* pInteractable = pPortal->GetComponent<InteractableComponent>();
-    if (pInteractable)
-    {
+    auto tryInteract = [this](GameObject* pPortal) -> bool {
+        if (!pPortal) return false;
+        auto* pInteractable = pPortal->GetComponent<InteractableComponent>();
+        if (!pInteractable || !pInteractable->IsActive()) return false;
+        if (!pInteractable->IsPlayerInRange(m_pPlayerGameObject)) return false;
         pInteractable->Interact();
-    }
+        return true;
+    };
+
+    // 보조(최종 보스) 포탈을 먼저 시도 — 두 포탈이 겹치면 의도적으로 분기 우선
+    if (tryInteract(m_pCurrentRoom->GetSecondPortal())) return;
+    tryInteract(m_pCurrentRoom->GetPortalCube());
 }
 
 void Scene::ReAddRenderComponentsToShader(GameObject* pGO)
@@ -2572,7 +2617,19 @@ void Scene::TransitionToNextRoom()
         case StageTheme::Fire:  TransitionToWaterStage();  return;
         case StageTheme::Water: TransitionToEarthStage();  return;
         case StageTheme::Earth: TransitionToGrassStage();  return;
-        case StageTheme::Grass: TransitionToWaterStage();  return;  // 엔드 처리 전까지 루프
+        case StageTheme::Grass:
+            // 풀 보스 클리어 후 메인 포탈 = 파밍 루프. 1스테이지(Fire) 부터 다시 시작.
+            m_nCycleCount++;
+            m_bBranchPortalsSpawned = false;
+            {
+                wchar_t buf[96];
+                swprintf_s(buf, L"[Scene] Farm loop → cycle %d (back to Fire stage)\n", m_nCycleCount);
+                OutputDebugString(buf);
+            }
+            TransitionToFireStage();
+            return;
+        default:
+            return;
         }
     }
 
@@ -3158,6 +3215,121 @@ void Scene::RegisterPlayersToEnemy(EnemyComponent* pEnemy)
 
     std::vector<GameObject*> players = GetAllPlayers();
     pEnemy->RegisterAllPlayers(players);
+}
+
+void Scene::TransitionToFireStage(int roomIndex)
+{
+    OutputDebugString(L"[Scene] ========== FIRE STAGE (cycle restart) ==========\n");
+    if (!IsReadyForTransition()) return;
+
+    CleanupWindAmbient();
+
+    // 플레이어 Y 복원 & 비행 모드 해제
+    if (m_pPlayerGameObject)
+    {
+        if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
+            if (pPC->IsFlightMode()) pPC->ExitFlightMode();
+        XMFLOAT3 pp = m_pPlayerGameObject->GetTransform()->GetPosition();
+        pp.y = 0.0f;
+        m_pPlayerGameObject->GetTransform()->SetPosition(pp);
+        if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
+            pPC->DisableFallZone();
+    }
+    if (m_pCamera)
+    {
+        m_pCamera->SetFlightMode(false);
+        m_pCamera->SetFovDegrees(m_pCamera->GetBaseFovDeg());
+    }
+    m_pFlightBossDummy = nullptr;
+    m_fFlightFovOffsetCur = 0.0f;
+    m_eKrakenStage = KrakenCutsceneStage::None;
+    m_bPendingKrakenSpawn = false;
+
+    // 테마 변경 + 방 카운트 리셋
+    m_eCurrentTheme = StageTheme::Fire;
+    m_nRoomCount = 0;
+
+    // 셰이더 RC / 디스크립터 / 룸 / CB 캐시 리셋
+    m_vShaders[0]->ClearRenderComponents();
+    ProcessPendingDeletions();
+    m_vRooms.clear();
+    m_pCurrentRoom = nullptr;
+    m_nNextDescriptorIndex = m_nPersistentDescriptorEnd;
+    m_vCBCache.clear();
+    if (m_pTorchSystem) m_pTorchSystem->Clear();
+
+    // 평면 정렬: 용암 복귀, 물·바위 숨김
+    if (m_pLavaPlane)  m_pLavaPlane->GetTransform()->SetPosition(0.0f, -3.5f, -200.0f);
+    if (m_pWaterPlane) m_pWaterPlane->GetTransform()->SetPosition(0.0f, -10000.0f, 0.0f);
+    if (m_pRockPlane)  m_pRockPlane->GetTransform()->SetPosition(0.0f, -10000.0f, 0.0f);
+
+    // 영속 오브젝트 RC 재등록 (LavaPlane 포함)
+    for (auto& pGO : m_vGameObjects)
+        ReAddRenderComponentsToShader(pGO.get());
+
+    // 맵 로드 — 풀에서 인덱스 선택
+    int safeIdx = roomIndex;
+    if (safeIdx < 0) safeIdx = 0;
+    if (m_vMapPool.empty())
+    {
+        OutputDebugString(L"[Scene] Fire stage: map pool empty\n");
+        return;
+    }
+    if (safeIdx >= static_cast<int>(m_vMapPool.size()))
+        safeIdx = static_cast<int>(m_vMapPool.size()) - 1;
+    m_strCurrentMap = m_vMapPool[safeIdx];
+
+    ID3D12Device* pDevice = Dx12App::GetInstance()->GetDevice();
+    ID3D12GraphicsCommandList* pCommandList = Dx12App::GetInstance()->GetCommandList();
+
+    bool bLoaded = MapLoader::LoadIntoScene(
+        m_strCurrentMap.c_str(), this, pDevice, pCommandList, m_vShaders[0].get());
+
+    if (!bLoaded)
+    {
+        OutputDebugString(L"[Scene] Fire stage: map load failed\n");
+        return;
+    }
+
+    // 맵 정적 오브젝트 상수 버퍼 초기화 + 룸 활성화 (적 스폰)
+    if (m_pCurrentRoom)
+    {
+        for (const auto& pGO : m_pCurrentRoom->GetGameObjects())
+            pGO->Update(0.0f);
+        m_pCurrentRoom->SetState(RoomState::Active);
+    }
+
+    // 첫 방용 LavaGeyser 매니저 셋업 (Fire 전용 기믹)
+    if (m_pCurrentRoom)
+    {
+        UINT nGeyserDescStart = m_nNextDescriptorIndex;
+        m_nNextDescriptorIndex += 1;
+        m_pCurrentRoom->InitLavaGeyserManager(
+            pDevice, pCommandList, m_vShaders[0].get(),
+            m_pDescriptorHeap.get(), nGeyserDescStart);
+    }
+
+    // 인터랙션 큐브 숨김 + groundY 리셋
+    if (m_pInteractionCube)
+    {
+        auto* pI = m_pInteractionCube->GetComponent<InteractableComponent>();
+        if (pI) pI->Hide();
+        m_bInteractionCubeActive = false;
+    }
+    if (m_pPlayerGameObject)
+    {
+        auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>();
+        if (pPC) pPC->ResetGroundY();
+    }
+
+    // 파도 진폭 0 (불 스테이지에선 물 셰이더 안 씀)
+    if (m_pcbMappedPass)
+    {
+        for (int i = 0; i < 5; i++)
+            m_pcbMappedPass->m_Waves[i].m_fAmplitude = 0.0f;
+    }
+
+    OutputDebugString(L"[Scene] Fire stage ready!\n");
 }
 
 void Scene::TransitionToWaterStage(int roomIndex)
@@ -4465,6 +4637,119 @@ void Scene::TransitionToGrassBossRoom()
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// 최종 보스방 (DarkLord / DarkKnight) — 오프라인 전용, 단일 보스 직행
+// 정리/맵 로드 흐름은 TransitionToGrassBossRoom 의 단순화 버전.
+// ────────────────────────────────────────────────────────────────────────────
+void Scene::TransitionToDarkLordRoom()
+{
+    OutputDebugString(L"[Scene] ========== DARK LORD ROOM (FINAL BOSS) ==========\n");
+    if (!IsReadyForTransition()) return;
+
+    CleanupWindAmbient();
+
+    if (m_pPlayerGameObject)
+    {
+        if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
+            if (pPC->IsFlightMode()) pPC->ExitFlightMode();
+    }
+    if (m_pCamera)
+    {
+        m_pCamera->SetFlightMode(false);
+        m_pCamera->SetFovDegrees(m_pCamera->GetBaseFovDeg());
+    }
+    m_pFlightBossDummy = nullptr;
+    m_fFlightFovOffsetCur = 0.0f;
+
+    if (m_pPlayerGameObject)
+    {
+        XMFLOAT3 pp = m_pPlayerGameObject->GetTransform()->GetPosition();
+        pp.y = 0.0f;
+        m_pPlayerGameObject->GetTransform()->SetPosition(pp);
+        if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
+            pPC->DisableFallZone();
+    }
+
+    m_eKrakenStage = KrakenCutsceneStage::None;
+    m_eCurrentTheme = StageTheme::Dark;
+
+    m_vShaders[0]->ClearRenderComponents();
+    ProcessPendingDeletions();
+    m_vRooms.clear();
+    m_pCurrentRoom = nullptr;
+    m_nNextDescriptorIndex = m_nPersistentDescriptorEnd;
+    m_vCBCache.clear();
+
+    if (m_pTorchSystem) m_pTorchSystem->Clear();
+
+    if (m_pLavaPlane)  m_pLavaPlane->GetTransform()->SetPosition(0.0f, -10000.0f, 0.0f);
+    if (m_pWaterPlane) m_pWaterPlane->GetTransform()->SetPosition(0.0f, -10000.0f, 0.0f);
+    if (m_pRockPlane)  m_pRockPlane->GetTransform()->SetPosition(0.0f, -10000.0f, 0.0f);
+
+    for (auto& pGO : m_vGameObjects)
+    {
+        if (pGO.get() != m_pLavaPlane && pGO.get() != m_pWaterPlane && pGO.get() != m_pRockPlane)
+            ReAddRenderComponentsToShader(pGO.get());
+    }
+
+    ID3D12Device* pDevice = Dx12App::GetInstance()->GetDevice();
+    ID3D12GraphicsCommandList* pCommandList = Dx12App::GetInstance()->GetCommandList();
+
+    // 일단 보스 공용 맵 재사용 (전용 맵은 추후 추가)
+    m_strCurrentMap = m_strBossMap;
+    bool bLoaded = MapLoader::LoadIntoScene(
+        m_strCurrentMap.c_str(), this, pDevice, pCommandList, m_vShaders[0].get());
+
+    if (!bLoaded)
+    {
+        OutputDebugString(L"[Scene] DarkLord map load failed!\n");
+        return;
+    }
+
+    if (m_pCurrentRoom)
+    {
+        for (const auto& pGO : m_pCurrentRoom->GetGameObjects())
+            pGO->Update(0.0f);
+    }
+
+    if (m_pCurrentRoom && m_pEnemySpawner)
+    {
+        RoomSpawnConfig emptyConfig;
+        m_pCurrentRoom->SetSpawnConfig(emptyConfig);
+
+        const BoundingBox& bb = m_pCurrentRoom->GetBoundingBox();
+        XMFLOAT3 spawnPos = XMFLOAT3(bb.Center.x, 0.0f, bb.Center.z);
+
+        GameObject* pDarkLord = m_pEnemySpawner->SpawnEnemy(
+            m_pCurrentRoom, "DarkLord", spawnPos, m_pPlayerGameObject);
+
+        if (pDarkLord)
+        {
+            if (auto* pA = pDarkLord->GetComponent<AnimationComponent>())
+                pA->SetCullEnabled(false);
+            pDarkLord->GetTransform()->SetRotation(0.0f, 180.0f, 0.0f);
+        }
+
+        // 룸을 Active 로 전환 — 그래야 CRoom::Update/Render 가 돌고 보스 AI 와 렌더 모두 동작.
+        m_pCurrentRoom->SetState(RoomState::Active);
+    }
+
+    if (m_pInteractionCube)
+    {
+        auto* pI = m_pInteractionCube->GetComponent<InteractableComponent>();
+        if (pI) pI->Hide();
+        m_bInteractionCubeActive = false;
+    }
+    if (m_pPlayerGameObject)
+    {
+        auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>();
+        if (pPC) pPC->ResetGroundY();
+    }
+
+    m_bInBossRoom = true;
+    OutputDebugString(L"[Scene] DarkLord room ready - final boss spawned!\n");
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // 4스테이지 바람 ambient: 모든 grass 방에 공통 spawn (배경 토네이도/업드래프트/잎)
 // ────────────────────────────────────────────────────────────────────────────
 void Scene::SetupWindAmbient(const BoundingBox& roomBB)
@@ -4843,6 +5128,7 @@ void Scene::ApplyThemeSkyColor()
     case StageTheme::Water: pApp->SetClearColor(0.05f, 0.10f, 0.18f); break;
     case StageTheme::Earth: pApp->SetClearColor(0.10f, 0.08f, 0.06f); break;
     case StageTheme::Grass: pApp->SetClearColor(0.45f, 0.62f, 0.55f); break;
+    case StageTheme::Dark:  pApp->SetClearColor(0.03f, 0.02f, 0.05f); break;  // 거의 검은 보라
     }
 }
 

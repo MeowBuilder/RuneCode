@@ -31,10 +31,16 @@ CRoom::~CRoom()
             if (m_nPortalCubeRingVFXId    >= 0) pVFX->Stop(m_nPortalCubeRingVFXId);
             if (m_nPortalCubeSuctionVFXId >= 0) pVFX->Stop(m_nPortalCubeSuctionVFXId);
             if (m_nPortalCubeBeamVFXId    >= 0) pVFX->Stop(m_nPortalCubeBeamVFXId);
+            if (m_nSecondPortalRingVFXId    >= 0) pVFX->Stop(m_nSecondPortalRingVFXId);
+            if (m_nSecondPortalSuctionVFXId >= 0) pVFX->Stop(m_nSecondPortalSuctionVFXId);
+            if (m_nSecondPortalBeamVFXId    >= 0) pVFX->Stop(m_nSecondPortalBeamVFXId);
         }
         m_nPortalCubeRingVFXId    = -1;
         m_nPortalCubeSuctionVFXId = -1;
         m_nPortalCubeBeamVFXId    = -1;
+        m_nSecondPortalRingVFXId    = -1;
+        m_nSecondPortalSuctionVFXId = -1;
+        m_nSecondPortalBeamVFXId    = -1;
     }
 }
 
@@ -71,6 +77,38 @@ void CRoom::ClearPortalCube()
 
     m_fPortalCubeRingRespawnTimer = 0.0f;
     m_pPortalCube = nullptr;
+}
+
+void CRoom::ClearSecondPortal()
+{
+    if (m_pScene)
+    {
+        if (auto* pVFX = m_pScene->GetVFXManager())
+        {
+            if (m_nSecondPortalRingVFXId    >= 0) pVFX->Stop(m_nSecondPortalRingVFXId);
+            if (m_nSecondPortalSuctionVFXId >= 0) pVFX->Stop(m_nSecondPortalSuctionVFXId);
+            if (m_nSecondPortalBeamVFXId    >= 0) pVFX->Stop(m_nSecondPortalBeamVFXId);
+        }
+        m_nSecondPortalRingVFXId    = -1;
+        m_nSecondPortalSuctionVFXId = -1;
+        m_nSecondPortalBeamVFXId    = -1;
+    }
+
+    if (m_pSecondPortal)
+    {
+        if (auto* pInteractable = m_pSecondPortal->GetComponent<InteractableComponent>())
+        {
+            pInteractable->Hide();
+        }
+        else if (auto* pTransform = m_pSecondPortal->GetTransform())
+        {
+            XMFLOAT3 pos = pTransform->GetPosition();
+            pTransform->SetPosition(pos.x, -1000.0f, pos.z);
+        }
+    }
+
+    m_fSecondPortalRingRespawnTimer = 0.0f;
+    m_pSecondPortal = nullptr;
 }
 
 void CRoom::Update(float deltaTime)
@@ -178,6 +216,50 @@ void CRoom::Update(float deltaTime)
                 m_nPortalCubeBeamVFXId = -1;
             }
             m_fPortalCubeRingRespawnTimer = 0.0f;
+        }
+    }
+
+    // 보조 포탈 VFX (Grass 보스 클리어 후 등장하는 최종보스용 포탈)
+    if (m_pSecondPortal && m_pScene)
+    {
+        VFXManager* pVFX = m_pScene->GetVFXManager();
+        auto* pInteractable = m_pSecondPortal->GetComponent<InteractableComponent>();
+        bool bActive = pVFX && pInteractable && pInteractable->IsActive();
+
+        if (bActive)
+        {
+            DirectX::XMFLOAT3 cubePos = m_pSecondPortal->GetTransform()->GetPosition();
+            DirectX::XMFLOAT3 vfxNormal{ 0.0f, 1.0f, 0.0f };
+
+            constexpr float PORTAL_RING_RESPAWN_INTERVAL = 1.5f;
+            m_fSecondPortalRingRespawnTimer += deltaTime;
+
+            bool bNeedSpawn = (m_nSecondPortalRingVFXId < 0)
+                           || (m_fSecondPortalRingRespawnTimer >= PORTAL_RING_RESPAWN_INTERVAL);
+
+            if (bNeedSpawn)
+            {
+                if (m_nSecondPortalRingVFXId    >= 0) pVFX->Stop(m_nSecondPortalRingVFXId);
+                if (m_nSecondPortalSuctionVFXId >= 0) pVFX->Stop(m_nSecondPortalSuctionVFXId);
+                if (m_nSecondPortalBeamVFXId    >= 0) pVFX->Stop(m_nSecondPortalBeamVFXId);
+                m_nSecondPortalRingVFXId    = pVFX->Spawn("Portal_Ring",    cubePos, vfxNormal, 0u, false);
+                m_nSecondPortalSuctionVFXId = pVFX->Spawn("Portal_Suction", cubePos, vfxNormal, 0u, false);
+                m_nSecondPortalBeamVFXId    = pVFX->Spawn("Portal_Beam",    cubePos, vfxNormal, 0u, false);
+                m_fSecondPortalRingRespawnTimer = 0.0f;
+            }
+            else
+            {
+                if (m_nSecondPortalRingVFXId    >= 0) pVFX->Track(m_nSecondPortalRingVFXId,    cubePos, vfxNormal);
+                if (m_nSecondPortalSuctionVFXId >= 0) pVFX->Track(m_nSecondPortalSuctionVFXId, cubePos, vfxNormal);
+                if (m_nSecondPortalBeamVFXId    >= 0) pVFX->Track(m_nSecondPortalBeamVFXId,    cubePos, vfxNormal);
+            }
+        }
+        else
+        {
+            if (m_nSecondPortalRingVFXId >= 0)    { pVFX->Stop(m_nSecondPortalRingVFXId);    m_nSecondPortalRingVFXId = -1; }
+            if (m_nSecondPortalSuctionVFXId >= 0) { pVFX->Stop(m_nSecondPortalSuctionVFXId); m_nSecondPortalSuctionVFXId = -1; }
+            if (m_nSecondPortalBeamVFXId >= 0)    { pVFX->Stop(m_nSecondPortalBeamVFXId);    m_nSecondPortalBeamVFXId = -1; }
+            m_fSecondPortalRingRespawnTimer = 0.0f;
         }
     }
 }
@@ -871,6 +953,64 @@ void CRoom::SpawnPortalCubeAt(const XMFLOAT3& spawnPos)
         });
 
     OutputDebugString(L"[Room] Portal cube spawned successfully at reward position!\n");
+}
+
+void CRoom::SpawnSecondPortalAt(const XMFLOAT3& spawnPos, std::function<void()> onInteract)
+{
+    if (m_pSecondPortal)
+        return;
+
+    if (!m_pScene)
+    {
+        OutputDebugString(L"[Room] Cannot spawn second portal - no Scene pointer\n");
+        return;
+    }
+
+    OutputDebugString(L"[Room] Spawning SECOND portal (DarkLord branch)...\n");
+
+    m_pSecondPortal = m_pScene->CreateGameObject(
+        Dx12App::GetInstance()->GetDevice(),
+        Dx12App::GetInstance()->GetCommandList());
+
+    if (!m_pSecondPortal)
+    {
+        OutputDebugString(L"[Room] Failed to create second portal GameObject\n");
+        return;
+    }
+
+    m_pSecondPortal->GetTransform()->SetPosition(spawnPos.x, spawnPos.y, spawnPos.z);
+    m_pSecondPortal->GetTransform()->SetScale(9.0f, 9.0f, 9.0f);
+    m_pSecondPortal->GetTransform()->SetRotation(0.0f, 0.0f, 0.0f);
+
+    RingMesh* pPortalDisc = new RingMesh(
+        Dx12App::GetInstance()->GetDevice(),
+        Dx12App::GetInstance()->GetCommandList(),
+        1.0f, 0.0f, 64);
+
+    m_pSecondPortal->SetMesh(pPortalDisc);
+
+    // 최종 보스 포탈 톤 — 핏빛 적색 (기존 보라/라벤더와 시각적으로 구분)
+    MATERIAL portalMat;
+    portalMat.m_cAmbient  = XMFLOAT4(0.00f, 0.00f, 0.00f, 1.0f);
+    portalMat.m_cDiffuse  = XMFLOAT4(0.85f, 0.10f, 0.10f, 1.0f);
+    portalMat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+    portalMat.m_cEmissive = XMFLOAT4(1.00f, 0.20f, 0.20f, 1.0f);
+    m_pSecondPortal->SetMaterial(portalMat);
+
+    m_pSecondPortal->AddComponent<RenderComponent>()->SetMesh(pPortalDisc);
+    m_pSecondPortal->SetPortal(true);
+
+    auto* pInteractable = m_pSecondPortal->AddComponent<InteractableComponent>();
+    pInteractable->SetPromptText(L"[F] Final Boss");
+    pInteractable->SetInteractionDistance(7.0f);
+    pInteractable->DisablePhysics();
+
+    auto cb = std::move(onInteract);
+    pInteractable->SetOnInteract([cb](InteractableComponent* /*pComp*/) {
+        if (cb) cb();
+    });
+
+    OutputDebugString(L"[Room] Second portal spawned successfully!\n");
 }
 
 void CRoom::InitLavaGeyserManager(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList,

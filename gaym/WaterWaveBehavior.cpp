@@ -208,6 +208,7 @@ void WaterWaveBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT
         if (XMVectorGetX(XMVector3Length(latV)) > WAVE_HALF_W) continue;
 
         pEnemy->TakeDamage(ApplyExecBonus(damage, pEnemy, m_pCaster), false, HasExecRune(m_pCaster));
+        NotifyHit(m_pCaster, ePos);
 
         auto* pSC = caster->GetComponent<SkillComponent>();
         if (pSC && m_slot != SkillSlot::Count)
@@ -294,6 +295,7 @@ void WaterWaveBehavior::HitEnemiesInWave(float damage)
 
         pEnemy->TakeDamage(ApplyExecBonus(damage, pEnemy, m_pCaster), false, HasExecRune(m_pCaster));
         m_hitEnemies.insert(pEnemy);
+        NotifyHit(m_pCaster, ePos);
 
         if (m_pCaster)
         {
@@ -359,7 +361,10 @@ void WaterWaveBehavior::UpdateWaterPools(float deltaTime)
             XMFLOAT3 ep = pT->GetPosition();
             float dx = ep.x - pool.center.x, dz = ep.z - pool.center.z;
             if (dx * dx + dz * dz <= POOL_RADIUS * POOL_RADIUS)
+            {
                 pEnemy->TakeDamage(ApplyExecBonus(dotDmg, pEnemy, m_pCaster), false, HasExecRune(m_pCaster));
+                NotifyHit(m_pCaster, ep);
+            }
         }
     }
 
@@ -407,6 +412,7 @@ void WaterWaveBehavior::OnEchoFire(GameObject* caster, const XMFLOAT3& targetPos
             float dx = ep.x - targetPos.x, dz = ep.z - targetPos.z;
             if (dx * dx + dz * dz > WAVE_HALF_W * WAVE_HALF_W) continue;
             pEnemy->TakeDamage(ApplyExecBonus(damage, pEnemy, caster), false, HasExecRune(caster));
+            NotifyHit(caster, ep);
         }
         return;
     }

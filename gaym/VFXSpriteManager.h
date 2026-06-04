@@ -36,7 +36,8 @@ public:
                float lifetime,
                DirectX::XMFLOAT4 color      = { 1.f, 1.f, 1.f, 1.f },
                float rotateSpeed             = 0.f,
-               VFXSpriteAnim anim            = VFXSpriteAnim::FadeOut);
+               VFXSpriteAnim anim            = VFXSpriteAnim::FadeOut,
+               float initialRotation         = 0.f);
 
     // 활성 아이콘 위치 갱신 (캐릭터 추적 등)
     void SetPosition(int slot, const DirectX::XMFLOAT3& pos);

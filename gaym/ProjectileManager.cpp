@@ -711,16 +711,16 @@ void ProjectileManager::ApplyDamage(Projectile& projectile, EnemyComponent* pEne
         if (pPlayer) pPlayer->Heal(dmg * projectile.lifestealRatio);
     }
 
-    // 무한: 확률로 시전자 스킬 쿨다운 즉시 초기화
-    if (projectile.cdResetChance > 0.f && projectile.skillSlot != SkillSlot::Count && projectile.owner)
+    // 무한 룬 (ABY_INF) — TryTriggerInfiniteRune 에서 RNG/VFX 일괄 처리
+    if (projectile.skillSlot != SkillSlot::Count && projectile.owner)
     {
-        static std::mt19937 rng{ std::random_device{}() };
-        static std::uniform_real_distribution<float> dist(0.f, 1.f);
-        if (dist(rng) < projectile.cdResetChance)
-        {
-            SkillComponent* pSkill = projectile.owner->GetComponent<SkillComponent>();
-            if (pSkill) pSkill->ResetCooldown(projectile.skillSlot);
-        }
+        // 적중 위치: 피격 적의 월드 좌표
+        DirectX::XMFLOAT3 hitPos = projectile.position;
+        if (pEnemy->GetOwner() && pEnemy->GetOwner()->GetTransform())
+            hitPos = pEnemy->GetOwner()->GetTransform()->GetPosition();
+
+        if (auto* pSkill = projectile.owner->GetComponent<SkillComponent>())
+            pSkill->TryTriggerInfiniteRune(projectile.skillSlot, hitPos);
     }
 
     // onHit 훅 + 반향(spawnOnHitCount) 처리

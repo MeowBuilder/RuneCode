@@ -474,6 +474,7 @@ void MeteorBehavior::ApplyExplosionDamage(float damage, float radius, const XMFL
                 actualDmg *= (1.f + sts.execDamageBonus);
 
             pEnemy->TakeDamage(actualDmg, bTriggerStagger, bExec);
+            NotifyHit(m_pCaster, ePos);
 
             if (hasStats && !sts.onHitHooks.empty()) {
                 SkillContext ctx;

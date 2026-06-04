@@ -4,6 +4,7 @@
 #include "EnemySpawnData.h"
 #include <unordered_map>
 #include <array>
+#include <functional>
 
 class EnemyComponent;
 class EnemySpawner;
@@ -83,6 +84,12 @@ public:
     bool HasPortalCube() const { return m_pPortalCube != nullptr; }
     void ClearPortalCube();
 
+    // 보조 포탈 (Grass 보스 클리어 후 최종 보스 분기용) — 위치/콜백 모두 외부에서 지정
+    void SpawnSecondPortalAt(const XMFLOAT3& spawnPos, std::function<void()> onInteract);
+    GameObject* GetSecondPortal() const { return m_pSecondPortal; }
+    bool HasSecondPortal() const { return m_pSecondPortal != nullptr; }
+    void ClearSecondPortal();
+
     // Lava Geyser system
     void InitLavaGeyserManager(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList,
                                Shader* pShader, CDescriptorHeap* pDescriptorHeap, UINT nDescriptorIndex);
@@ -152,6 +159,13 @@ protected:
     int   m_nPortalCubeSuctionVFXId = -1; // Portal_Suction (흡입)
     int   m_nPortalCubeBeamVFXId    = -1; // Portal_Beam (수직 광주)
     float m_fPortalCubeRingRespawnTimer = 0.0f;
+
+    // 보조 포탈 (Grass 보스 클리어 후 최종 보스 분기용)
+    GameObject* m_pSecondPortal = nullptr;
+    int   m_nSecondPortalRingVFXId    = -1;
+    int   m_nSecondPortalSuctionVFXId = -1;
+    int   m_nSecondPortalBeamVFXId    = -1;
+    float m_fSecondPortalRingRespawnTimer = 0.0f;
 
     // Lava Geyser system
     std::unique_ptr<LavaGeyserManager> m_pGeyserManager;

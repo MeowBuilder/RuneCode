@@ -713,5 +713,21 @@ bool Handle_S_RUNE_TRIGGER(PacketSessionRef& session, Protocol::S_RUNE_TRIGGER& 
 
     WriteNetworkLog(buf);
 
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr)
+    {
+        pNetMgr->QueueRuneTrigger(
+            playerId,
+            skillSlot,
+            skillType,
+            runeId,
+            triggerType,
+            targetMonsterId,
+            targetPlayerId,
+            DirectX::XMFLOAT3(x, y, z),
+            value1,
+            value2);
+    }
+
     return true;
 }

@@ -33,7 +33,8 @@ enum class StageTheme
     Fire,   // Volcanic/lava theme (default)
     Water,  // Ocean/water theme
     Earth,  // Ground/rock theme
-    Grass   // Wind/forest theme
+    Grass,  // Wind/forest theme
+    Dark    // Final boss arena
 };
 
 // StageTheme → 적 메쉬 색 접미사 후보 (우선순위순). 첫 번째 존재 파일을 사용.
@@ -193,12 +194,16 @@ public:
     void TransitionToNextRoom();
     void TransitionToRoomByIndex(int index); // pool 인덱스 직접 지정 이동 (서버 동기화 / 9·0 디버그)
     void TransitionToBossRoom();        // 불 보스전 (Dragon)
+    void TransitionToFireStage(int roomIndex = 0);       // 불 스테이지 (파밍 루프 회귀용)
     void TransitionToWaterStage(int roomIndex = 0);      // 물 스테이지 (N: 불→물)
     void TransitionToWaterBossRoom();   // 물 보스전 (Kraken)
     void TransitionToEarthStage(int roomIndex = 0);      // 땅 스테이지 (N: 물→땅)
     void TransitionToEarthBossRoom();   // 땅 보스전 (Golem)
     void TransitionToGrassStage(int roomIndex = 0);      // 풀 스테이지 (N: 땅→풀)
     void TransitionToGrassBossRoom();   // 풀 보스전 (Demon)
+    void TransitionToDarkLordRoom();    // 최종 보스전 (DarkKnight, 오프라인)
+    int  GetCycleCount() const { return m_nCycleCount; }
+    bool IsGameClear() const { return m_bGameClear; }
 
     // 4스테이지 바람 ambient — 모든 grass 방에 공통 spawn (배경 토네이도/업드래프트/잎 드리프트)
     void SetupWindAmbient(const DirectX::BoundingBox& roomBB);
@@ -351,6 +356,12 @@ private:
     std::vector<std::unique_ptr<CRoom>> m_vRooms; // Room List
     CRoom* m_pCurrentRoom = nullptr; // Pointer to the current active room
     int m_nRoomCount = 0; // Room counter for tracking progression
+
+    // 4스테이지(Grass) 보스 클리어 후 파밍 루프를 돌 때마다 1씩 증가 — 적 HP/데미지 스케일에 사용
+    int  m_nCycleCount = 0;
+    bool m_bGameClear  = false;
+    // 풀 보스 클리어 후 분기 포탈 한 번만 spawn 하기 위한 가드
+    bool m_bBranchPortalsSpawned = false;
 
     // Flight prototype (4스테이지 바람 보스 레일 슈팅) — F6 토글
     GameObject* m_pFlightBossDummy = nullptr;

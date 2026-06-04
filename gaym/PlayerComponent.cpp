@@ -700,8 +700,12 @@ void PlayerComponent::TakeDamage(float fDamage)
     // 오프라인에선 이 세 가지가 누락되어 있어 체감상 "맞는지 모르겠음".
     TriggerHitFlash();
 
-    // 보복 룬 (ABY_RVG): 피격 시 보복 상태 활성화
-    TriggerVengeance(10.f);
+    // 보복 룬 (ABY_RVG): 피격 시 보복 상태 활성화 — 멀티는 서버 권위
+    {
+        NetworkManager* pNetMgr = NetworkManager::GetInstance();
+        if (!(pNetMgr && pNetMgr->IsConnected()))
+            TriggerVengeance(10.f);
+    }
 
     if (m_pOwner && m_pOwner->GetTransform())
     {
@@ -721,6 +725,13 @@ void PlayerComponent::AddShield(float amount)
 {
     if (amount <= 0.f) return;
     m_fShield = min(m_fShield + amount, MAX_SHIELD);
+}
+
+void PlayerComponent::SetShield(float amount)
+{
+    if (amount < 0.f) amount = 0.f;
+    if (amount > MAX_SHIELD) amount = MAX_SHIELD;
+    m_fShield = amount;
 }
 
 void PlayerComponent::SetDamageReduction(float ratio, float duration)

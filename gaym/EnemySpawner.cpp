@@ -964,6 +964,57 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
 
     RegisterEnemyPreset("BlueDragon", blueDragon);
 
+    // ===== Final Boss: DarkLord (DarkKnight) — 최종 보스, 단순 근접 콤보 =====
+    EnemySpawnData darkLord;
+    darkLord.m_strMeshPath      = "Assets/Enemies/DeathKnight/DarkKnight2_skin3.bin";
+    darkLord.m_strAnimationPath = "Assets/Enemies/DeathKnight/DarkKnight2_skin3_Anim.bin";
+    darkLord.m_strTexturePath   = "Assets/Enemies/DeathKnight/Textures/T_Skin3_DeathKnight_Armor_Albedo.png";
+    darkLord.m_xmf3Scale = XMFLOAT3(10.0f, 10.0f, 10.0f);
+    darkLord.m_xmf4Color = XMFLOAT4(0.55f, 0.10f, 0.85f, 1.0f); // 흑마법 보라
+
+    darkLord.m_Stats.m_fMaxHP              = 6000.0f;
+    darkLord.m_Stats.m_fCurrentHP          = 6000.0f;
+    darkLord.m_Stats.m_fMoveSpeed          = 12.0f;
+    darkLord.m_Stats.m_fAttackRange        = 7.0f;
+    darkLord.m_Stats.m_fAttackCooldown     = 1.0f;
+    darkLord.m_Stats.m_fLongRangeThreshold = 35.0f;
+    darkLord.m_Stats.m_fMidRangeThreshold  = 18.0f;
+
+    darkLord.m_bIsBoss = true;
+    darkLord.m_fSpecialAttackCooldown = 6.0f;
+    darkLord.m_nSpecialAttackChance   = 50;
+    darkLord.m_fAnimationPlaybackSpeed = 1.0f;
+
+    // 애니메이션 클립 매핑 (Assets/Enemies/DeathKnight/DarkKnight2_skin3_Anim.bin)
+    darkLord.m_AnimConfig.m_strIdleClip    = "fightidle";
+    darkLord.m_AnimConfig.m_strChaseClip   = "run";
+    darkLord.m_AnimConfig.m_strAttackClip  = "attack3";
+    darkLord.m_AnimConfig.m_strStaggerClip = "gethit1";
+    darkLord.m_AnimConfig.m_strDeathClip   = "death1";
+
+    darkLord.m_IndicatorConfig.m_eType      = IndicatorType::ForwardBox;
+    darkLord.m_IndicatorConfig.m_fHitRadius = 4.5f;
+    darkLord.m_IndicatorConfig.m_fHitLength = 9.0f;
+
+    // 기본 공격 — 단순 근접 휘두름. 패턴은 추후 강화.
+    darkLord.m_fnCreateAttack = []() {
+        auto p = std::make_unique<MeleeAttackBehavior>(
+            40.0f /*damage*/, 0.35f /*windup*/, 0.55f /*hit*/, 0.50f /*recovery*/);
+        p->SetHitRange(8.0f);
+        return p;
+    };
+
+    // 특수 공격 — 일단 점프 슬램 1종만. attack10 클립이 광역 공격 모션으로 적합.
+    darkLord.m_fnCreateSpecialAttack = []() {
+        return std::make_unique<JumpSlamAttackBehavior>(
+            80.0f /*damage*/, 14.0f /*jumpHeight*/, 1.0f /*jumpDur*/,
+            12.0f /*slamRadius*/, 0.35f /*windup*/, 0.9f /*recovery*/,
+            true  /*trackTarget*/, 2.5f /*shake*/, 0.4f /*shakeDur*/,
+            "Attack10" /*clipOverride*/);
+    };
+
+    RegisterEnemyPreset("DarkLord", darkLord);
+
     // Create shared meshes for attack indicators
     // m_pRingMesh = 얇은 테두리 링 (공격 범위 윤곽) — 공격 내내 고정 표시
     m_pRingMesh = new RingMesh(pDevice, pCommandList, 1.0f, 0.96f, 48);   // 0.88 → 0.96 (더 얇게)
@@ -1030,6 +1081,23 @@ GameObject* EnemySpawner::SpawnEnemy(CRoom* pRoom, const std::string& preset, co
     if (pEnemy)
     {
         SetupEnemyComponents(pEnemy, data, pRoom, pTarget);
+
+        // 파밍 사이클별 글로벌 HP 스케일 (오프라인 한정). 사이클 N → 1 + 0.5*N 배.
+        // 데미지는 AttackBehavior 분산 보유라 추후 글로벌 곱하기 인터페이스 도입 시 적용.
+        if (m_pScene)
+        {
+            int cycle = m_pScene->GetCycleCount();
+            if (cycle > 0)
+            {
+                if (auto* pEC = pEnemy->GetComponent<EnemyComponent>())
+                {
+                    float mul = 1.0f + 0.5f * static_cast<float>(cycle);
+                    auto& s = pEC->GetStats();
+                    s.m_fMaxHP     *= mul;
+                    s.m_fCurrentHP *= mul;
+                }
+            }
+        }
     }
 
     return pEnemy;

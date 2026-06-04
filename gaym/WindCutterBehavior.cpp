@@ -99,6 +99,7 @@ void WindCutterBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOA
         XMVECTOR latV = XMVectorSubtract(toE, XMVectorScale(dV, fwd));
         if (XMVectorGetX(XMVector3Length(latV)) > HALF_W) continue;
         pEnemy->TakeDamage(ApplyExecBonus(damage, pEnemy, caster), false, HasExecRune(caster));
+        NotifyHit(caster, ePos);
     }
 }
 
@@ -226,6 +227,7 @@ void WindCutterBehavior::HitEnemiesInCutter(float damage)
         // 관통 — 이미 히트한 적도 매 프레임 체크하지 않으므로 set에 넣어 중복 방지
         pEnemy->TakeDamage(ApplyExecBonus(damage, pEnemy, m_pCaster), false, HasExecRune(m_pCaster));
         m_hitEnemies.insert(pEnemy);
+        NotifyHit(m_pCaster, ePos);
     }
 }
 

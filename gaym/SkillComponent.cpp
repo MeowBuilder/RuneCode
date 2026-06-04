@@ -109,6 +109,57 @@ void SkillComponent::SpawnChargeGatherVFX(int step)
 
 void SkillComponent::Update(float deltaTime)
 {
+    // 무한 룬 VFX 위치 추적
+    if (m_infRuneVFXSlot >= 0)
+    {
+        m_infRuneVFXTimer -= deltaTime;
+        if (m_infRuneVFXTimer <= 0.f)
+            m_infRuneVFXSlot = -1;
+        else if (m_pOwner && m_pOwner->GetTransform())
+        {
+            DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+            pos.y += 0.8f;
+            VFXSpriteManager::Get().SetPosition(m_infRuneVFXSlot, pos);
+        }
+    }
+
+    // 과열 발동 폭발 VFX 추적 — 플레이어 몸통
+    if (m_overheatBurstVFXSlot >= 0)
+    {
+        m_overheatBurstVFXTimer -= deltaTime;
+        if (m_overheatBurstVFXTimer <= 0.f)
+            m_overheatBurstVFXSlot = -1;
+        else if (m_pOwner && m_pOwner->GetTransform())
+        {
+            DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+            pos.y += 1.2f;
+            VFXSpriteManager::Get().SetPosition(m_overheatBurstVFXSlot, pos);
+        }
+    }
+
+    // 과열 룬 스택 불꽃 오라 추적 — 플레이어 머리 위 가로 배치
+    if (!m_overheatStackVFX.empty())
+    {
+        m_overheatVFXTimer -= deltaTime;
+        if (m_overheatVFXTimer <= 0.f)
+        {
+            m_overheatStackVFX.clear();
+        }
+        else if (m_pOwner && m_pOwner->GetTransform())
+        {
+            DirectX::XMFLOAT3 base = m_pOwner->GetTransform()->GetPosition();
+            base.y += 2.2f;
+            int n = static_cast<int>(m_overheatStackVFX.size());
+            constexpr float spacing = 0.72f;
+            for (int i = 0; i < n; ++i)
+            {
+                DirectX::XMFLOAT3 p = base;
+                p.x += (static_cast<float>(i) - (n - 1) * 0.5f) * spacing;
+                VFXSpriteManager::Get().SetPosition(m_overheatStackVFX[i], p);
+            }
+        }
+    }
+
     // Update cooldown timers
     for (size_t i = 0; i < static_cast<size_t>(SkillSlot::Count); ++i)
     {
@@ -123,6 +174,15 @@ void SkillComponent::Update(float deltaTime)
                     m_SkillStates[i] = SkillState::Ready;
                 }
             }
+        }
+
+        // 무한 룬 Pending reset 소비 — Casting 끝나서 Cooldown 으로 전환된 직후 즉시 Ready 로
+        if (m_pendingCooldownReset[i] && m_SkillStates[i] != SkillState::Casting)
+        {
+            m_CooldownTimers[i] = 0.0f;
+            if (m_SkillStates[i] == SkillState::Cooldown)
+                m_SkillStates[i] = SkillState::Ready;
+            m_pendingCooldownReset[i] = false;
         }
     }
 
@@ -286,6 +346,7 @@ void SkillComponent::Update(float deltaTime)
         if (m_fChannelTime >= m_fChannelDuration)
         {
             OutputDebugString(L"[Skill] Channel complete!\n");
+            NotifyActionNet(PLAYER_ACTION_CHANNEL_END, m_ActiveSkillSlot);
             m_bIsChanneling = false;
             m_fChannelTime = 0.0f;
             m_fChannelTickAccum = 0.0f;
@@ -295,14 +356,16 @@ void SkillComponent::Update(float deltaTime)
             {
                 m_Skills[index]->OnChannelComplete(m_pOwner, m_ChannelTargetPosition);
                 m_Skills[index]->OnChannelEnd(m_pOwner);
-                m_CooldownTimers[index] = GetEffectiveCooldown(index);
+                m_bChannelInterrupted[index] = false;
                 bool keepCasting = !m_Skills[index]->IsFinished() && m_Skills[index]->HasPostChannelWork();
                 if (keepCasting)
                 {
+                    // PostChannelWork 완료(IsFinished) 후에 쿨타임 세팅
                     m_SkillStates[index] = SkillState::Casting;
                 }
                 else
                 {
+                    m_CooldownTimers[index] = GetEffectiveCooldown(index);
                     m_SkillStates[index] = SkillState::Cooldown;
                     m_Skills[index]->Reset();
                 }
@@ -320,6 +383,7 @@ void SkillComponent::Update(float deltaTime)
             m_bIsEnhanced = false;
             m_fEnhanceTimer = 0.0f;
             OutputDebugString(L"[Skill] Enhancement expired\n");
+            NotifyActionNet(PLAYER_ACTION_ENHANCE_END, SkillSlot::Count);
         }
     }
 
@@ -342,7 +406,12 @@ void SkillComponent::Update(float deltaTime)
             m_Skills[slotIndex]->Reset();
             // echo 발동이었으면 쿨다운 타이머는 건드리지 않음 (이미 진행 중)
             if (!bEchoRun)
-                m_CooldownTimers[slotIndex] = GetEffectiveCooldown(slotIndex);
+            {
+                // 채널 중단 후 PostChannelWork 완료 → 50% 페널티 적용
+                float cdMult = m_bChannelInterrupted[slotIndex] ? 0.5f : 1.0f;
+                m_bChannelInterrupted[slotIndex] = false;
+                m_CooldownTimers[slotIndex] = GetEffectiveCooldown(slotIndex) * cdMult;
+            }
             // echo 종료 시 쿨다운이 이미 소진됐으면 바로 Ready
             // (echo Casting 중 타이머가 0에 도달해도 Casting 상태라 Ready 전환이 skip됐던 경우 대응)
             if (m_CooldownTimers[slotIndex] <= 0.0f)
@@ -512,6 +581,7 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
                     m_bIsEnhanced = false;
                     m_fEnhanceTimer = 0.0f;
                     OutputDebugString(L"[Skill] Enhancement consumed with Charge!\n");
+                    NotifyActionNet(PLAYER_ACTION_ENHANCE_END, static_cast<SkillSlot>(index));
                 }
 
                 wchar_t buffer[128];
@@ -539,48 +609,17 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
                 m_SkillStates[index] = SkillState::Casting;
                 m_ActiveSkillSlot = m_ChargingSlot;
 
-                // 4. 서버에 차징 공격 판정 요청
-                //    TRF_CHG는 서버가 chargeRatio를 기준으로 피해/범위를 계산한다.
-                NetworkManager* pNetMgr = NetworkManager::GetInstance();
+                // 4. 차징 해제 시점에 서버 공격 판정 요청
+                //    일반 차징은 SendSkill + SendPlayerAttack 둘 다 전송
+                //    설치 + 차징은 SendSkill은 생략하고 SendPlayerAttack만 전송
+                SendSkillNet(
+                    m_ChargingSlot,
+                    targetPos,
+                    chargeRatio,
+                    !combo.hasPlace);
 
-                if (pNetMgr && pNetMgr->IsConnected() && m_pOwner)
-                {
-                    // 5. 스킬 슬롯을 서버 SkillType으로 변환
-                    int skillType = 0;
-
-                    switch (m_ChargingSlot)
-                    {
-                    case SkillSlot::Q:          skillType = 1; break;
-                    case SkillSlot::E:          skillType = 2; break;
-                    case SkillSlot::R:          skillType = 3; break;
-                    case SkillSlot::RightClick: skillType = 4; break;
-                    default:                    skillType = 0; break;
-                    }
-
-                    // 6. 플레이어 위치와 방향 가져오기
-                    TransformComponent* pTransform = m_pOwner->GetTransform();
-
-                    if (pTransform)
-                    {
-                        const DirectX::XMFLOAT3& pos = pTransform->GetPosition();
-
-                        DirectX::XMVECTOR lookVec = pTransform->GetLook();
-                        DirectX::XMFLOAT3 lookDir;
-                        DirectX::XMStoreFloat3(&lookDir, lookVec);
-
-                        // 7. 서버에 chargeRatio 포함해서 공격 패킷 전송
-                        pNetMgr->SendPlayerAttack(
-                            skillType,
-                            pos.x, pos.y, pos.z,
-                            lookDir.x, lookDir.y, lookDir.z,
-                            targetPos.x, targetPos.y, targetPos.z,
-                            chargeRatio);
-                    }
-                }
-
-                // Start cooldown (cooldownMult 룬 적용)
-                m_CooldownTimers[index] = GetEffectiveCooldown(index);
-            }
+                // 쿨타임은 IsFinished() 후 Update 루프에서 세팅한다.
+                // 여기서 바로 m_CooldownTimers[index]를 세팅하면 UI가 즉시 돌다가 다시 리셋될 수 있다.
 
             size_t relIdx = static_cast<size_t>(m_ChargingSlot);
             if (m_pVFXManager && m_chargeGatherVFXIds[relIdx] >= 0)
@@ -589,9 +628,11 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
                 m_chargeGatherVFXIds[relIdx] = -1;
             }
             m_chargeScaleSteps[relIdx] = 0;
+            SkillSlot endedSlot = m_ChargingSlot;
             m_bIsCharging = false;
             m_fChargeTime = 0.0f;
             m_ChargingSlot = SkillSlot::Count;
+            NotifyActionNet(PLAYER_ACTION_CHARGE_END, endedSlot);
         }
         return;  // Don't process other inputs while charging
     }
@@ -608,6 +649,7 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
         {
             // Key released - stop channeling
             OutputDebugString(L"[Skill] Channel interrupted\n");
+            NotifyActionNet(PLAYER_ACTION_CHANNEL_END, m_ActiveSkillSlot);
             m_bIsChanneling = false;
             m_fChannelTime = 0.0f;
             m_fChannelTickAccum = 0.0f;
@@ -616,16 +658,19 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
             if (index < m_Skills.size() && m_Skills[index])
             {
                 m_Skills[index]->OnChannelEnd(m_pOwner);
-                m_CooldownTimers[index] = GetEffectiveCooldown(index) * 0.5f;
+                m_bChannelInterrupted[index] = true;
                 bool keepCasting = !m_Skills[index]->IsFinished() && m_Skills[index]->HasPostChannelWork();
                 if (keepCasting)
                 {
+                    // PostChannelWork 완료(IsFinished) 후에 50% 페널티 쿨타임 세팅
                     m_SkillStates[index] = SkillState::Casting;
                 }
                 else
                 {
+                    m_CooldownTimers[index] = GetEffectiveCooldown(index) * 0.5f;
                     m_SkillStates[index] = SkillState::Cooldown;
                     m_Skills[index]->Reset();
+                    m_bChannelInterrupted[index] = false;
                 }
             }
             m_ActiveSkillSlot = SkillSlot::Count;
@@ -726,14 +771,75 @@ float SkillComponent::GetEffectiveCooldown(size_t slotIndex) const
     return base * stats.cooldownMult;
 }
 
+void SkillComponent::NotifyActionNet(uint32_t actionType, SkillSlot slot, float extraY)
+{
+    NetworkManager* pNet = NetworkManager::GetInstance();
+    if (!pNet || !pNet->IsConnected()) return;
+    if (!m_pOwner || !m_pOwner->GetTransform()) return;
+    DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+    pNet->SendPlayerAction(actionType, pos.x, pos.y, pos.z,
+                            static_cast<float>(slot), extraY, 0.f);
+}
+
+void SkillComponent::NotifyActionNetAt(uint32_t actionType, SkillSlot slot, const DirectX::XMFLOAT3& pos, float extraY)
+{
+    NetworkManager* pNet = NetworkManager::GetInstance();
+    if (!pNet || !pNet->IsConnected()) return;
+    pNet->SendPlayerAction(actionType, pos.x, pos.y, pos.z,
+                            static_cast<float>(slot), extraY, 0.f);
+}
+
 void SkillComponent::ResetCooldown(SkillSlot slot)
 {
     size_t index = static_cast<size_t>(slot);
-    if (index < m_CooldownTimers.size())
+    if (index >= m_CooldownTimers.size()) return;
+
+    m_CooldownTimers[index] = 0.0f;
+
+    if (index < m_SkillStates.size())
     {
-        m_CooldownTimers[index] = 0.0f;
-        if (index < m_SkillStates.size() && m_SkillStates[index] == SkillState::Cooldown)
+        if (m_SkillStates[index] == SkillState::Cooldown)
+        {
             m_SkillStates[index] = SkillState::Ready;
+        }
+        else if (m_SkillStates[index] == SkillState::Casting)
+        {
+            // Casting 종료 후 라인 345/298 에서 timer=GetEffectiveCooldown 으로 덮어써지는 것을 막기 위해 pending 플래그
+            m_pendingCooldownReset[index] = true;
+        }
+    }
+}
+
+void SkillComponent::TryTriggerInfiniteRune(SkillSlot slot, const DirectX::XMFLOAT3& hitPos)
+{
+    // 멀티: 무한 룬은 전적으로 서버 권위 (BuildSkillStats 에서 cdResetChance=0 으로 무효화됨).
+    //       클라가 독립적으로 굴리면 이중 발동/desync 발생하므로 즉시 return.
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr && pNetMgr->IsConnected()) return;
+
+    if (slot == SkillSlot::Count) return;
+
+    // 슬롯에 장착된 룬 누적 스탯에서 쿨다운 초기화 확률 조회
+    // (defaultType 은 fallback 용이며 cdResetChance 에 영향 없음 → 기본 Instant 사용)
+    SkillStats stats = BuildSkillStats(slot, ActivationType::Instant);
+    if (stats.cdResetChance <= 0.f) return;
+
+    // RNG 롤 (ProjectileManager::ApplyDamage 와 동일 패턴)
+    static std::mt19937 rng{ std::random_device{}() };
+    static std::uniform_real_distribution<float> dist(0.f, 1.f);
+    if (dist(rng) >= stats.cdResetChance) return;
+
+    // 성공: 쿨다운 즉시 초기화 + 플레이어 위치 twirl (쿨타임 리셋 피드백)
+    ResetCooldown(slot);
+
+    if (m_pOwner && m_pOwner->GetTransform())
+    {
+        constexpr float kLifetime = 0.65f;
+        DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+        pos.y += 0.8f;
+        m_infRuneVFXSlot  = VFXSpriteManager::Get().Spawn("twirl1", pos, 230.f, kLifetime,
+            { 1.0f, 0.88f, 0.25f, 1.0f }, 9.0f, VFXSpriteAnim::FadeOut);
+        m_infRuneVFXTimer = kLifetime;
     }
 }
 
@@ -968,6 +1074,25 @@ SkillStats SkillComponent::BuildSkillStats(SkillSlot skill, ActivationType defau
         stats.elementOverride = elements[dist(rng)];
     }
 
+    // ── 멀티 게이트 ─────────────────────────────────────────────────────────
+    //   서버 연결 시 룬 발동은 전적으로 서버 권위. 클라가 독립적으로 onCast/onHit 훅,
+    //   RNG 기반 트리거(INF/ECO), 카운터 기반 트리거(OVL), 피격 응답(RVG)을 굴리면
+    //   서버와 desync 가 나거나 이중 발동된다.
+    //   → 트리거 계열 필드만 zero 화. damageMult/cooldownMult/activationType/elementSet
+    //     /subVFXIds 등은 시각·입력 동작에 필요하므로 유지.
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr && pNetMgr->IsConnected())
+    {
+        stats.onCastHooks.clear();
+        stats.onHitHooks.clear();
+        stats.cdResetChance   = 0.f;  // ABY_INF
+        stats.lifestealRatio  = 0.f;  // ABY_VMP
+        stats.execDamageBonus = 0.f;  // ABY_EXC
+        stats.revengeBonus    = 0.f;  // ABY_RVG
+        stats.overheatBonus   = 0.f;  // ABY_OVL
+        stats.echoOnCast      = false; // ABY_ECO
+    }
+
     return stats;
 }
 
@@ -1051,6 +1176,59 @@ VFXModifier SkillComponent::BuildActivationVFXMod(SkillSlot slot, float chargeRa
     return mod;
 }
 
+void SkillComponent::SpawnOverheatStackVFX(int stackCount)
+{
+    if (!m_pOwner || !m_pOwner->GetTransform() || stackCount <= 0) return;
+
+    // 기존 스택 불꽃 정리 후 새로 스폰 (개수가 갱신되므로)
+    for (int slot : m_overheatStackVFX)
+        VFXSpriteManager::Get().Stop(slot);
+    m_overheatStackVFX.clear();
+
+    // 스택이 쌓일수록 색이 진해짐: 1스택 밝은 노랑 → 3스택 진한 주황/빨강 (모두 불투명)
+    constexpr DirectX::XMFLOAT4 kStackColors[3] = {
+        { 1.0f, 0.88f, 0.30f, 1.0f },  // 1스택
+        { 1.0f, 0.58f, 0.12f, 1.0f },  // 2스택
+        { 1.0f, 0.30f, 0.06f, 1.0f },  // 3스택 (READY)
+    };
+    const DirectX::XMFLOAT4& color = kStackColors[(stackCount - 1) % 3];
+
+    // 스택 수만큼 불꽃을 머리 위에 배치 (위치는 Update에서 매 프레임 추적)
+    constexpr float kLifetime = 1.3f;
+    float size = 80.f + stackCount * 24.f;  // 스택 높을수록 크게 (1:104 / 2:128 / 3:152)
+    DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+    pos.y += 2.2f;
+    for (int i = 0; i < stackCount; ++i)
+    {
+        // 각 불꽃을 서로 다른 각도로 기울이고 미세하게 회전시켜 텍스처 반복이 티 안 나게
+        float initRot   = (static_cast<float>(i) - (stackCount - 1) * 0.5f) * 0.6f;
+        float spinSpeed = (i % 2 == 0 ? 1.f : -1.f) * 0.5f;
+        int slot = VFXSpriteManager::Get().Spawn("fire1", pos, size, kLifetime,
+            color, spinSpeed, VFXSpriteAnim::FadeOut, initRot);
+        if (slot >= 0) m_overheatStackVFX.push_back(slot);
+    }
+    m_overheatVFXTimer = kLifetime;
+}
+
+void SkillComponent::SpawnOverheatBurstVFX()
+{
+    if (!m_pOwner || !m_pOwner->GetTransform()) return;
+
+    // 발동: 진행 중이던 스택 불꽃 즉시 정리 (터지는 느낌)
+    for (int slot : m_overheatStackVFX)
+        VFXSpriteManager::Get().Stop(slot);
+    m_overheatStackVFX.clear();
+    m_overheatVFXTimer = 0.f;
+
+    // 플레이어 위치에 큰 화염 폭발 한 방 (회전하며 페이드, Update에서 위치 추적)
+    constexpr float kBurstLife = 0.6f;
+    DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+    pos.y += 1.2f;
+    m_overheatBurstVFXSlot  = VFXSpriteManager::Get().Spawn("flare1", pos, 380.f, kBurstLife,
+        { 1.0f, 0.55f, 0.15f, 1.0f }, 4.0f, VFXSpriteAnim::FadeOut);
+    m_overheatBurstVFXTimer = kBurstLife;
+}
+
 int SkillComponent::SpawnEchoTriggerVFX(ElementType element, const XMFLOAT3& targetPos, EnemyComponent** pOutTarget)
 {
     if (!m_pOwner || !m_pOwner->GetTransform()) return -1;
@@ -1110,10 +1288,13 @@ void SkillComponent::SpawnPlaceTrap(size_t skillIndex, const XMFLOAT3& pos, floa
 
     m_placeQueue.push_back({ skillIndex, mult, groundPos, spriteSlot, 3.0f, playerTrig, windGate });
     OutputDebugString(L"[Skill] PlacedTrap spawned\n");
+    NotifyActionNetAt(PLAYER_ACTION_PLACE_SPAWN, static_cast<SkillSlot>(skillIndex), groundPos);
 }
 
 void SkillComponent::FirePlacedTrap(PlacedTrap& trap, const XMFLOAT3& currentTargetPos)
 {
+    NotifyActionNetAt(PLAYER_ACTION_PLACE_FIRE, static_cast<SkillSlot>(trap.skillIndex), trap.worldPos);
+
     if (trap.spriteSlot >= 0)
     {
         auto* pScene2 = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
@@ -1198,20 +1379,35 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
     // 룬 데미지 배율 적용 — Execute에 넘기는 mult에 포함시켜 모든 스킬에 일괄 적용
     mult *= stats.damageMult;
 
-    // 과열 보너스 (ABY_OVL): 동일 스킬 연속 3회 → 다음 1회 +60%
+    // 과열 보너스 (ABY_OVL): 동일 스킬 연속 3회 누적 → 4회째 +60% 발동
     {
         size_t slotIdx = static_cast<size_t>(slot);
         if (m_overheatReady[slotIdx] && stats.overheatBonus > 0.f)
         {
+            // ─ 발동(4회째): 데미지 +60% + 스킬 VFX 강화(크기/파티클/강도) + 폭발 연출 ─
+            //   발동 회차는 카운트에 넣지 않음(아래 누적 분기 skip) → 다음 발동까지 정확히 4회.
             mult *= (1.f + stats.overheatBonus);
             m_overheatReady[slotIdx] = false;
+            m_overheatConsecutive[slotIdx] = 0;
+
+            m_activationVFXMod.sizeScaleMult     *= 1.45f;
+            m_activationVFXMod.particleCountMult *= 1.4f;
+            m_activationVFXMod.strengthMult      *= 1.6f;
+
+            SpawnOverheatBurstVFX();  // 내부에서 기존 스택 불꽃 정리 → 겹침 없음
         }
-        if (stats.overheatBonus > 0.f)
+        else if (stats.overheatBonus > 0.f)
         {
-            if (++m_overheatConsecutive[slotIdx] >= 3)
+            int cnt = ++m_overheatConsecutive[slotIdx];
+            if (cnt >= 3)
             {
                 m_overheatReady[slotIdx] = true;
                 m_overheatConsecutive[slotIdx] = 0;
+                SpawnOverheatStackVFX(3);  // 3스택 — 다음 발동 준비 완료
+            }
+            else
+            {
+                SpawnOverheatStackVFX(cnt);  // 1~2스택 누적 표시
             }
         }
         else
@@ -1339,6 +1535,7 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
         m_ChargingSlot = slot;
         m_ChargeTargetPosition = targetPosition;
         m_SkillStates[index] = SkillState::Casting;
+        NotifyActionNet(PLAYER_ACTION_CHARGE_BEGIN, slot);
         m_Skills[index]->OnChargeBegin(m_pOwner);
         m_chargeScaleSteps[index] = 0;
         SpawnChargeGatherVFX(0);
@@ -1357,6 +1554,7 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
         m_SkillStates[index] = SkillState::Casting;
         m_Skills[index]->OnChannelBegin(m_pOwner, targetPosition);
         OutputDebugString(L"[Skill] Channeling started... Hold to continue\n");
+        NotifyActionNet(PLAYER_ACTION_CHANNEL_BEGIN, slot);
 
         if (cat == SkillCategory::Projectile || defaultType == ActivationType::Channel)
         {
@@ -1369,6 +1567,7 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
                 tickMult *= m_fEnhanceMultiplier;
                 m_bIsEnhanced = false;
                 m_fEnhanceTimer = 0.0f;
+                NotifyActionNet(PLAYER_ACTION_ENHANCE_END, static_cast<SkillSlot>(index));
             }
 
             // 메아리: 채널/빔 스킬은 발동 시작 시 여기서 한 번만 등록
@@ -1382,9 +1581,9 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
                 m_echoQueue.push_back({ index, tickMult * 0.5f, 2.0f, echoSlot, pEchoTarget });
             }
 
-            m_currentChargeRatio    = 0.f;
+            m_currentChargeRatio = 0.f;
             m_bCurrentIsChannelTick = true;
-            m_bCurrentEnhanceUsed  = false;
+            m_bCurrentEnhanceUsed = false;
             if (combo.hasPlace)
                 SpawnPlaceTrap(index, targetPosition, tickMult, combo);
             else
@@ -1401,10 +1600,11 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
                 damageMultiplier *= m_fEnhanceMultiplier;
                 m_bIsEnhanced = false;
                 m_fEnhanceTimer = 0.0f;
+                NotifyActionNet(PLAYER_ACTION_ENHANCE_END, static_cast<SkillSlot>(index));
             }
-            m_currentChargeRatio    = 0.f;
+            m_currentChargeRatio = 0.f;
             m_bCurrentIsChannelTick = false;
-            m_bCurrentEnhanceUsed  = (damageMultiplier > 1.5f);
+            m_bCurrentEnhanceUsed = (damageMultiplier > 1.5f);
             if (combo.hasPlace)
                 SpawnPlaceTrap(index, targetPosition, damageMultiplier, combo);
             else
@@ -1417,10 +1617,11 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
         m_fEnhanceTimer = m_fEnhanceDuration;
         m_SkillStates[index] = SkillState::Casting;
         m_ActiveSkillSlot = slot;
+        NotifyActionNet(PLAYER_ACTION_ENHANCE_BEGIN, slot, m_fEnhanceDuration);
 
-        m_currentChargeRatio    = 0.f;
+        m_currentChargeRatio = 0.f;
         m_bCurrentIsChannelTick = false;
-        m_bCurrentEnhanceUsed  = false;
+        m_bCurrentEnhanceUsed = false;
 
         DirectX::XMFLOAT3 selfPos = m_pOwner->GetTransform()->GetPosition();
         m_Skills[index]->OnEnhanceActivate(m_pOwner);
@@ -1439,11 +1640,12 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
             m_bIsEnhanced = false;
             m_fEnhanceTimer = 0.0f;
             OutputDebugString(L"[Skill] Enhancement consumed! 2x damage!\n");
+            NotifyActionNet(PLAYER_ACTION_ENHANCE_END, static_cast<SkillSlot>(index));
         }
 
-        m_currentChargeRatio    = 0.f;
+        m_currentChargeRatio = 0.f;
         m_bCurrentIsChannelTick = false;
-        m_bCurrentEnhanceUsed  = (damageMultiplier > 1.5f);
+        m_bCurrentEnhanceUsed = (damageMultiplier > 1.5f);
 
         if (combo.hasPlace)
         {
@@ -1460,57 +1662,94 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
     }
 
     // 네트워크로 스킬 전송
+    //   설치 룬: PLACE_SPAWN 액션을 이미 보냈으므로 SendSkill 까지 보내면 원격이 일반 투사체도 함께 spawn (이중 발사).
+    //   차지 룬: press 시점에 SendSkill 보내면 원격이 차지 buildup 없이 즉시 발사 VFX 를 그림.
+    //            차지 발사는 release 시점에 ProcessSkillInput 의 charge 종료 블록에서 SendSkillNet 가 처리.
+    if (combo.hasPlace || combo.hasCharge)
+        return;
+
+    // 네트워크로 스킬 전송
+    // 일반 스킬은 chargeRatio가 없으므로 0.0f를 보낸다.
+    SendSkillNet(slot, targetPosition, 0.0f, true);
+
+}
+
+void SkillComponent::SendSkillNet(
+    SkillSlot slot,
+    const DirectX::XMFLOAT3& targetPosition,
+    float chargeRatio,
+    bool sendSkill)
+{
+    // 1. 네트워크 매니저 확인
     NetworkManager* pNetMgr = NetworkManager::GetInstance();
-    if (pNetMgr && pNetMgr->IsConnected())
+
+    if (!pNetMgr || !pNetMgr->IsConnected())
+        return;
+
+    if (!m_pOwner)
+        return;
+
+    // 2. 스킬 슬롯을 서버 SkillType으로 변환
+    int skillType = 0;
+
+    switch (slot)
     {
-        // 스킬 슬롯을 Protocol::SkillType으로 변환
-        int skillType = 0;
-        switch (slot)
+    case SkillSlot::Q:          skillType = 1; break; // SKILL_TYPE_Q
+    case SkillSlot::E:          skillType = 2; break; // SKILL_TYPE_E
+    case SkillSlot::R:          skillType = 3; break; // SKILL_TYPE_R
+    case SkillSlot::RightClick: skillType = 4; break; // SKILL_TYPE_MOUSE_RIGHT
+    default:                    return;
+    }
+
+    // 3. 플레이어 위치와 방향 가져오기
+    TransformComponent* pTransform = m_pOwner->GetTransform();
+
+    if (!pTransform)
+        return;
+
+    const DirectX::XMFLOAT3& pos = pTransform->GetPosition();
+
+    DirectX::XMVECTOR lookVec = pTransform->GetLook();
+    DirectX::XMFLOAT3 lookDir;
+    DirectX::XMStoreFloat3(&lookDir, lookVec);
+
+    // 4. R 스킬과 Water Q/E는 방향 대신 target 좌표를 전송한다.
+    ElementType elem = ElementType::None;
+
+    if (auto* pc = m_pOwner->GetComponent<PlayerComponent>())
+        elem = pc->GetElementType();
+
+    bool sendTarget =
+        (slot == SkillSlot::R) ||
+        (elem == ElementType::Water && (slot == SkillSlot::Q || slot == SkillSlot::E));
+
+    // 5. 원격 클라 연출용 스킬 패킷 전송
+    //    설치 + 차징 조합처럼 SendSkill을 생략해야 하는 경우 sendSkill=false로 들어온다.
+    if (sendSkill)
+    {
+        if (sendTarget)
         {
-        case SkillSlot::Q:          skillType = 1; break; // SKILL_TYPE_Q
-        case SkillSlot::E:          skillType = 2; break; // SKILL_TYPE_E
-        case SkillSlot::R:          skillType = 3; break; // SKILL_TYPE_R
-        case SkillSlot::RightClick: skillType = 4; break; // SKILL_TYPE_MOUSE_RIGHT
-        default:                    skillType = 0; break;
-        }
-
-        // 플레이어 위치와 방향 가져오기
-        TransformComponent* pTransform = m_pOwner->GetTransform();
-        if (pTransform)
-        {
-            const DirectX::XMFLOAT3& pos = pTransform->GetPosition();
-            DirectX::XMVECTOR lookVec = pTransform->GetLook();
-            DirectX::XMFLOAT3 lookDir;
-            DirectX::XMStoreFloat3(&lookDir, lookVec);
-
-            // R 스킬 + Water Q/E(WaterPuddle/Vortex) 는 target 위치가 visual 본질.
-            // dirX/Y/Z 슬롯을 absolute target 좌표로 재활용 (수신 측이 element 보고 해석).
-            ElementType elem = ElementType::None;
-            if (auto* pc = m_pOwner->GetComponent<PlayerComponent>())
-                elem = pc->GetElementType();
-            bool sendTarget =
-                (slot == SkillSlot::R) ||
-                (elem == ElementType::Water && (slot == SkillSlot::Q || slot == SkillSlot::E));
-
-            if (sendTarget)
-            {
-                pNetMgr->SendSkill(skillType, pos.x, pos.y, pos.z,
-                    targetPosition.x, targetPosition.y, targetPosition.z);
-            }
-            else
-            {
-                pNetMgr->SendSkill(skillType, pos.x, pos.y, pos.z, lookDir.x, lookDir.y, lookDir.z);
-            }
-
-            // 서버 히트 판정 요청 — C_PLAYER_ATTACK.
-            // 서버는 target 좌표 기준 반경 판정 (Q=6, E=8, R=10, 우클릭=5).
-            // Q/E/우클릭 모두 마우스로 조준해서 쓰는 원거리 스킬이므로, 조준 월드 좌표(targetPosition)를
-            // target 으로 쓰는 게 R 과 동일하게 가장 자연스러움. 플레이어가 조준한 지점 반경 내 몬스터가 맞는다.
-            pNetMgr->SendPlayerAttack(skillType,
+            pNetMgr->SendSkill(
+                skillType,
                 pos.x, pos.y, pos.z,
-                lookDir.x, lookDir.y, lookDir.z,
-                targetPosition.x, targetPosition.y, targetPosition.z,
-                0.0f);
+                targetPosition.x, targetPosition.y, targetPosition.z);
+        }
+        else
+        {
+            pNetMgr->SendSkill(
+                skillType,
+                pos.x, pos.y, pos.z,
+                lookDir.x, lookDir.y, lookDir.z);
         }
     }
+
+    // 6. 서버 히트 판정 요청
+    //    일반 공격은 chargeRatio=0.0f,
+    //    차징 해제 공격은 실제 chargeRatio를 보낸다.
+    pNetMgr->SendPlayerAttack(
+        skillType,
+        pos.x, pos.y, pos.z,
+        lookDir.x, lookDir.y, lookDir.z,
+        targetPosition.x, targetPosition.y, targetPosition.z,
+        chargeRatio);
 }

@@ -43,10 +43,25 @@ struct NetworkRewardRuneObjectInfo
 };
 
 // 플레이어 연출 액션 타입
+// 10~ 활성화 룬 시각 동기화: C_PLAYER_ACTION 을 재활용해 charge/enhance/place 의 begin/end 상태를
+//   다른 클라에 알린다. dirX 슬롯에 skillSlot 정수를 실어 보낸다 (Q=0,E=1,R=2,RC=3).
+//   x/y/z 는 액션 위치 (CHARGE/ENHANCE: 시전자 위치, PLACE: 트랩 좌표).
 enum : uint32
 {
-    PLAYER_ACTION_DASH_CAPE_FLUTTER = 1,
-    PLAYER_ACTION_PORTAL_INTRO_FLY = 2,
+    PLAYER_ACTION_DASH_CAPE_FLUTTER  = 1,
+    PLAYER_ACTION_PORTAL_INTRO_FLY   = 2,
+
+    PLAYER_ACTION_CHARGE_BEGIN       = 10, // dirX = skillSlot
+    PLAYER_ACTION_CHARGE_END         = 11, // dirX = skillSlot (cancel or release)
+
+    PLAYER_ACTION_ENHANCE_BEGIN      = 20, // dirX = skillSlot, dirY = durationSec
+    PLAYER_ACTION_ENHANCE_END        = 21, // dirX = skillSlot (expire or consume)
+
+    PLAYER_ACTION_PLACE_SPAWN        = 30, // x,y,z = trapPos, dirX = skillSlot
+    PLAYER_ACTION_PLACE_FIRE         = 31, // x,y,z = trapPos, dirX = skillSlot
+
+    PLAYER_ACTION_CHANNEL_BEGIN      = 40, // dirX = skillSlot
+    PLAYER_ACTION_CHANNEL_END        = 41, // dirX = skillSlot
 };
 
 // 패킷 처리를 위한 명령 타입
@@ -73,7 +88,8 @@ enum class NetworkCommand
     RoomRewardSpawn,
     RuneRewardPicked,
     RuneEquip,
-    RuneHomingTarget
+    RuneHomingTarget,
+    RuneTrigger
 };
 
 // 네트워크 명령 구조체
@@ -155,6 +171,15 @@ struct NetworkCommandData
     float runeHomingOriginX = 0.0f;
     float runeHomingOriginY = 0.0f;
     float runeHomingOriginZ = 0.0f;
+
+    // S_RUNE_TRIGGER 필드 (runeId 는 위 공용 필드 재사용, x/y/z 도 재사용)
+    int32  runeTriggerSkillSlot       = -1;
+    int32  runeTriggerSkillType       = 0;
+    int32  runeTriggerType            = 0;
+    uint64 runeTriggerTargetMonsterId = 0;
+    uint64 runeTriggerTargetPlayerId  = 0;
+    float  runeTriggerValue1          = 0.0f;
+    float  runeTriggerValue2          = 0.0f;
 };
 
 // =============================================================================
@@ -289,6 +314,12 @@ public:
     // 룬 유도 타겟 큐잉
     void QueueRuneHomingTarget(uint64 playerId, int32 skillSlot, int32 skillType, uint64 targetMonsterId, const DirectX::XMFLOAT3& targetPos, const DirectX::XMFLOAT3& originPos);
 
+    // 룬 발동(S_RUNE_TRIGGER) 큐잉 — 서버 권위 룬 결과를 클라 시각화에 전달
+    void QueueRuneTrigger(uint64 playerId, int32 skillSlot, int32 skillType,
+                          const std::string& runeId, int32 triggerType,
+                          uint64 targetMonsterId, uint64 targetPlayerId,
+                          const DirectX::XMFLOAT3& pos, float value1, float value2);
+
     // 보스 이벤트 (인트로/페이즈 전환/사망 컷씬)
     void QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 phaseIndex);
 
@@ -377,6 +408,18 @@ private:
     void ProcessRuneRewardPicked(Scene* pScene, uint64 ownerPlayerId);
     void ProcessRuneEquip(Scene* pScene, uint64 playerId, uint32 skillSlot, uint32 runeSlotIndex, const std::string& runeId, uint32 stackCount);
     void ProcessRuneHomingTarget(Scene* pScene, uint64 playerId, int32 skillSlot, int32 skillType, uint64 targetMonsterId, const DirectX::XMFLOAT3& targetPos, const DirectX::XMFLOAT3& originPos);
+    void ProcessRuneTrigger(Scene* pScene,
+                            uint64 playerId, int32 skillSlot, int32 skillType,
+                            const std::string& runeId, int32 triggerType,
+                            uint64 targetMonsterId, uint64 targetPlayerId,
+                            const DirectX::XMFLOAT3& pos, float value1, float value2);
+
+    // 메아리(ABY_ECO) ECHO_FIRE 시 원본 스킬 시각을 echo 위치에 50% 스케일로 재생
+    void SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType element,
+                           const DirectX::XMFLOAT3& pos, uint32_t runeFlags = 0);
+
+    // playerId 기준 원소 조회 — local 은 PlayerComponent, remote 는 m_mapRemotePlayerElement
+    ElementType GetPlayerElement(uint64 playerId) const;
     void ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 eventType, uint32 phaseIndex);
     void ProcessMonsterStagger(uint64 monsterId, float duration);
 
@@ -679,6 +722,48 @@ private:
     // idle 전환까지 대기 시간 (초)
     static constexpr float IDLE_TRANSITION_TIME = 0.15f;
 
+    // 원격 플레이어 활성화 룬(차지/증강) VFX id — 시작 시 spawn, 종료 시 stop.
+    //   매 프레임 원격 플레이어 위치로 TrackEffect 호출해서 발 아래에 붙어있도록 한다.
+    std::unordered_map<uint64, int> m_mapRemoteChargeVFXId;
+    std::unordered_map<uint64, int> m_mapRemoteEnhanceVFXId;
+
+    // 채널 룬 활성 원격 플레이어 — ProcessSkill 가 매 tick 마다 Attack1 CrossFade 를 새로 호출해서
+    // 애니메이션이 0.2초마다 끊겨 보이고 렉처럼 느껴지는 문제를 막기 위한 마커.
+    // CHANNEL_BEGIN 도착 시 추가, CHANNEL_END 도착 시 제거.
+    std::unordered_set<uint64> m_setRemoteChannelingPlayers;
+
+    // 채널 중 ProcessSkill VFX 스폰 throttle — 0.33초 (3 Hz) 이내 동일 플레이어 spawn 요청 skip.
+    //   서버는 5 Hz (0.2초) 로 tick 보내지만 원격에서 spawn 비용이 누적되어 렉 유발.
+    std::unordered_map<uint64, float> m_mapRemoteChannelLastSpawnTime;
+    float m_fNetworkAccumulatedTime = 0.f; // throttle 비교용 시간 누적
+
+    // 원격 플레이어 설치 룬(TRF_DEP) 데칼 ID — (playerId, skillSlot) 단위로 추적해서
+    //   같은 슬롯 재설치 시 이전 데칼을 Stop. lifetime 30s 가 남아 화면에 잔류하는 문제 방지.
+    std::unordered_map<uint64, std::array<int, 4>> m_mapRemotePlaceDecalIds;
+
+    // 궤도 룬(TRF_ORB) — 원격 플레이어 RC 발사 시 0.5초 공전 visual 후 실제 투사체 spawn.
+    //   서버는 즉시 데미지 처리하므로 visual 만 살짝 늦지만 수용 가능.
+    struct PendingOrbitalProjectile
+    {
+        DirectX::XMFLOAT3 origin{};
+        DirectX::XMFLOAT3 target{};
+        float speed = 30.f;
+        float radius = 0.5f;
+        float explosionRadius = 3.f;
+        float scale = 1.f;
+        ElementType element = ElementType::Fire;
+        GameObject* owner = nullptr;
+        bool isPiercing = false;
+        int orbVfxId = -1;
+        float delay = 0.5f;
+    };
+    std::vector<PendingOrbitalProjectile> m_vPendingOrbitals;
+
+public:
+    // 매 프레임 호출 — 궤도 deferred 큐 tick
+    void UpdatePendingOrbitals(Scene* pScene, float deltaTime);
+private:
+
     // 원격 플레이어 VFX 상태 (채널링 스킬 방향 추적용)
     struct RemoteVFXState
     {
@@ -739,6 +824,9 @@ public:
 
     // 원격 플레이어 VFX 타임아웃 체크 (Update에서 호출)
     void CheckRemotePlayerVFXTimeout(Scene* pScene, float deltaTime);
+
+    // 활성화 룬 VFX 위치 추적 — charge_gather/enhance aura 가 원격 플레이어 발 아래 따라가도록 갱신
+    void UpdateRemoteActivationRuneVFX(Scene* pScene);
 
     // 서버 몬스터 idle 전환 체크 (Update에서 호출)
     void CheckServerMonsterIdle(float deltaTime);
