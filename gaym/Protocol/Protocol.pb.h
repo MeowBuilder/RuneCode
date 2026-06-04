@@ -3788,6 +3788,7 @@ class C_PLAYER_ATTACK final :
     kTargetXFieldNumber = 8,
     kTargetYFieldNumber = 9,
     kTargetZFieldNumber = 10,
+    kChargeRatioFieldNumber = 11,
   };
   // .Protocol.SkillType skillType = 1;
   void clear_skilltype();
@@ -3879,6 +3880,15 @@ class C_PLAYER_ATTACK final :
   void _internal_set_targetz(float value);
   public:
 
+  // float chargeRatio = 11;
+  void clear_chargeratio();
+  float chargeratio() const;
+  void set_chargeratio(float value);
+  private:
+  float _internal_chargeratio() const;
+  void _internal_set_chargeratio(float value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.C_PLAYER_ATTACK)
  private:
   class _Internal;
@@ -3896,6 +3906,7 @@ class C_PLAYER_ATTACK final :
   float targetx_;
   float targety_;
   float targetz_;
+  float chargeratio_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -8934,6 +8945,26 @@ inline void C_PLAYER_ATTACK::_internal_set_targetz(float value) {
 inline void C_PLAYER_ATTACK::set_targetz(float value) {
   _internal_set_targetz(value);
   // @@protoc_insertion_point(field_set:Protocol.C_PLAYER_ATTACK.targetZ)
+}
+
+// float chargeRatio = 11;
+inline void C_PLAYER_ATTACK::clear_chargeratio() {
+  chargeratio_ = 0;
+}
+inline float C_PLAYER_ATTACK::_internal_chargeratio() const {
+  return chargeratio_;
+}
+inline float C_PLAYER_ATTACK::chargeratio() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_PLAYER_ATTACK.chargeRatio)
+  return _internal_chargeratio();
+}
+inline void C_PLAYER_ATTACK::_internal_set_chargeratio(float value) {
+  
+  chargeratio_ = value;
+}
+inline void C_PLAYER_ATTACK::set_chargeratio(float value) {
+  _internal_set_chargeratio(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_PLAYER_ATTACK.chargeRatio)
 }
 
 // -------------------------------------------------------------------

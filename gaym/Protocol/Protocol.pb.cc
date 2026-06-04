@@ -337,7 +337,8 @@ constexpr C_PLAYER_ATTACK::C_PLAYER_ATTACK(
   , dirz_(0)
   , targetx_(0)
   , targety_(0)
-  , targetz_(0){}
+  , targetz_(0)
+  , chargeratio_(0){}
 struct C_PLAYER_ATTACKDefaultTypeInternal {
   constexpr C_PLAYER_ATTACKDefaultTypeInternal()
     : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
@@ -825,6 +826,7 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_Protocol_2eproto::offsets[] PR
   PROTOBUF_FIELD_OFFSET(::Protocol::C_PLAYER_ATTACK, targetx_),
   PROTOBUF_FIELD_OFFSET(::Protocol::C_PLAYER_ATTACK, targety_),
   PROTOBUF_FIELD_OFFSET(::Protocol::C_PLAYER_ATTACK, targetz_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::C_PLAYER_ATTACK, chargeratio_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::S_MONSTER_DAMAGE, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -1018,23 +1020,23 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOB
   { 155, -1, sizeof(::Protocol::S_MONSTER_ATTACK)},
   { 170, -1, sizeof(::Protocol::S_PLAYER_DAMAGE)},
   { 180, -1, sizeof(::Protocol::C_PLAYER_ATTACK)},
-  { 195, -1, sizeof(::Protocol::S_MONSTER_DAMAGE)},
-  { 206, -1, sizeof(::Protocol::S_ROOM_CLEARED)},
-  { 213, -1, sizeof(::Protocol::S_BOSS_EVENT)},
-  { 221, -1, sizeof(::Protocol::C_BOSS_CUTSCENE_END)},
-  { 229, -1, sizeof(::Protocol::S_MONSTER_STAGGER)},
-  { 236, -1, sizeof(::Protocol::S_MAP_TORNADO_EVENT)},
-  { 247, -1, sizeof(::Protocol::C_PLAYER_ACTION)},
-  { 259, -1, sizeof(::Protocol::S_PLAYER_ACTION)},
-  { 272, -1, sizeof(::Protocol::S_ROOM_START)},
-  { 278, -1, sizeof(::Protocol::RewardRuneObjectInfo)},
-  { 288, -1, sizeof(::Protocol::S_ROOM_REWARD_SPAWN)},
-  { 299, -1, sizeof(::Protocol::C_RUNE_REWARD_PICK)},
-  { 304, -1, sizeof(::Protocol::S_RUNE_REWARD_PICKED)},
-  { 310, -1, sizeof(::Protocol::C_RUNE_EQUIP)},
-  { 318, -1, sizeof(::Protocol::S_RUNE_EQUIP)},
-  { 328, -1, sizeof(::Protocol::S_RUNE_HOMING_TARGET)},
-  { 343, -1, sizeof(::Protocol::S_RUNE_TRIGGER)},
+  { 196, -1, sizeof(::Protocol::S_MONSTER_DAMAGE)},
+  { 207, -1, sizeof(::Protocol::S_ROOM_CLEARED)},
+  { 214, -1, sizeof(::Protocol::S_BOSS_EVENT)},
+  { 222, -1, sizeof(::Protocol::C_BOSS_CUTSCENE_END)},
+  { 230, -1, sizeof(::Protocol::S_MONSTER_STAGGER)},
+  { 237, -1, sizeof(::Protocol::S_MAP_TORNADO_EVENT)},
+  { 248, -1, sizeof(::Protocol::C_PLAYER_ACTION)},
+  { 260, -1, sizeof(::Protocol::S_PLAYER_ACTION)},
+  { 273, -1, sizeof(::Protocol::S_ROOM_START)},
+  { 279, -1, sizeof(::Protocol::RewardRuneObjectInfo)},
+  { 289, -1, sizeof(::Protocol::S_ROOM_REWARD_SPAWN)},
+  { 300, -1, sizeof(::Protocol::C_RUNE_REWARD_PICK)},
+  { 305, -1, sizeof(::Protocol::S_RUNE_REWARD_PICKED)},
+  { 311, -1, sizeof(::Protocol::C_RUNE_EQUIP)},
+  { 319, -1, sizeof(::Protocol::S_RUNE_EQUIP)},
+  { 329, -1, sizeof(::Protocol::S_RUNE_HOMING_TARGET)},
+  { 344, -1, sizeof(::Protocol::S_RUNE_TRIGGER)},
 };
 
 static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] = {
@@ -1121,74 +1123,74 @@ const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABL
   "osition\022\024\n\014effectOption\030\n \001(\r\"q\n\017S_PLAYE"
   "R_DAMAGE\022\020\n\010playerId\030\001 \001(\004\022\016\n\006damage\030\002 \001"
   "(\002\022\021\n\tcurrentHp\030\003 \001(\002\022\016\n\006isDead\030\004 \001(\010\022\031\n"
-  "\021attackerMonsterId\030\005 \001(\004\"\267\001\n\017C_PLAYER_AT"
+  "\021attackerMonsterId\030\005 \001(\004\"\314\001\n\017C_PLAYER_AT"
   "TACK\022&\n\tskillType\030\001 \001(\0162\023.Protocol.Skill"
   "Type\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\014\n"
   "\004dirX\030\005 \001(\002\022\014\n\004dirY\030\006 \001(\002\022\014\n\004dirZ\030\007 \001(\002\022"
   "\017\n\007targetX\030\010 \001(\002\022\017\n\007targetY\030\t \001(\002\022\017\n\007tar"
-  "getZ\030\n \001(\002\"\232\001\n\020S_MONSTER_DAMAGE\022\021\n\tmonst"
-  "erId\030\001 \001(\004\022\016\n\006damage\030\002 \001(\002\022\021\n\tcurrentHp\030"
-  "\003 \001(\002\022\016\n\006isDead\030\004 \001(\010\022\030\n\020attackerPlayerI"
-  "d\030\005 \001(\004\022&\n\tskillType\030\006 \001(\0162\023.Protocol.Sk"
-  "illType\"7\n\016S_ROOM_CLEARED\022\022\n\nstageIndex\030"
-  "\001 \001(\r\022\021\n\troomIndex\030\002 \001(\r\"a\n\014S_BOSS_EVENT"
-  "\022\021\n\tmonsterId\030\001 \001(\004\022*\n\teventType\030\002 \001(\0162\027"
-  ".Protocol.BossEventType\022\022\n\nphaseIndex\030\003 "
-  "\001(\r\"h\n\023C_BOSS_CUTSCENE_END\022\021\n\tmonsterId\030"
-  "\001 \001(\004\022*\n\teventType\030\002 \001(\0162\027.Protocol.Boss"
-  "EventType\022\022\n\nphaseIndex\030\003 \001(\r\"8\n\021S_MONST"
-  "ER_STAGGER\022\021\n\tmonsterId\030\001 \001(\004\022\020\n\010duratio"
-  "n\030\002 \001(\002\"p\n\023S_MAP_TORNADO_EVENT\022\021\n\teventT"
-  "ype\030\001 \001(\r\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 \001"
-  "(\002\022\022\n\nwarningSec\030\005 \001(\002\022\021\n\tactiveSec\030\006 \001("
-  "\002\"p\n\017C_PLAYER_ACTION\022\022\n\nactionType\030\001 \001(\r"
-  "\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\014\n\004dir"
-  "X\030\005 \001(\002\022\014\n\004dirY\030\006 \001(\002\022\014\n\004dirZ\030\007 \001(\002\"\202\001\n\017"
-  "S_PLAYER_ACTION\022\020\n\010playerId\030\001 \001(\004\022\022\n\nact"
-  "ionType\030\002 \001(\r\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\t\n\001z"
-  "\030\005 \001(\002\022\014\n\004dirX\030\006 \001(\002\022\014\n\004dirY\030\007 \001(\002\022\014\n\004di"
-  "rZ\030\010 \001(\002\"\'\n\014S_ROOM_START\022\027\n\017starterplaye"
-  "rid\030\001 \001(\004\"_\n\024RewardRuneObjectInfo\022\025\n\rown"
-  "erPlayerId\030\001 \001(\004\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t"
-  "\n\001z\030\004 \001(\002\022\017\n\007runeIds\030\005 \003(\t\"\244\001\n\023S_ROOM_RE"
-  "WARD_SPAWN\022\022\n\nstageIndex\030\001 \001(\r\022\021\n\troomIn"
-  "dex\030\002 \001(\r\022\017\n\007portalX\030\003 \001(\002\022\017\n\007portalY\030\004 "
-  "\001(\002\022\017\n\007portalZ\030\005 \001(\002\0223\n\013runeObjects\030\006 \003("
-  "\0132\036.Protocol.RewardRuneObjectInfo\"\024\n\022C_R"
-  "UNE_REWARD_PICK\"-\n\024S_RUNE_REWARD_PICKED\022"
-  "\025\n\rownerPlayerId\030\001 \001(\004\"S\n\014C_RUNE_EQUIP\022\031"
-  "\n\021rewardOptionIndex\030\001 \001(\r\022\021\n\tskillSlot\030\002"
-  " \001(\r\022\025\n\rruneSlotIndex\030\003 \001(\r\"n\n\014S_RUNE_EQ"
-  "UIP\022\020\n\010playerId\030\001 \001(\004\022\021\n\tskillSlot\030\002 \001(\r"
-  "\022\025\n\rruneSlotIndex\030\003 \001(\r\022\016\n\006runeId\030\004 \001(\t\022"
-  "\022\n\nstackCount\030\005 \001(\r\"\342\001\n\024S_RUNE_HOMING_TA"
-  "RGET\022\020\n\010playerId\030\001 \001(\004\022\021\n\tskillSlot\030\002 \001("
-  "\005\022&\n\tskillType\030\003 \001(\0162\023.Protocol.SkillTyp"
-  "e\022\027\n\017targetMonsterId\030\004 \001(\004\022\017\n\007targetX\030\005 "
-  "\001(\002\022\017\n\007targetY\030\006 \001(\002\022\017\n\007targetZ\030\007 \001(\002\022\017\n"
-  "\007originX\030\010 \001(\002\022\017\n\007originY\030\t \001(\002\022\017\n\007origi"
-  "nZ\030\n \001(\002\"\313\002\n\016S_RUNE_TRIGGER\022\020\n\010playerId\030"
-  "\001 \001(\004\022\021\n\tskillSlot\030\002 \001(\005\022&\n\tskillType\030\003 "
-  "\001(\0162\023.Protocol.SkillType\022\016\n\006runeId\030\004 \001(\t"
-  "\022.\n\013triggerType\030\005 \001(\0162\031.Protocol.RuneTri"
-  "ggerType\022\027\n\017targetMonsterId\030\006 \001(\004\022\026\n\016tar"
-  "getPlayerId\030\007 \001(\004\022\020\n\010objectId\030\010 \001(\004\022\t\n\001x"
-  "\030\t \001(\002\022\t\n\001y\030\n \001(\002\022\t\n\001z\030\013 \001(\002\022\014\n\004dirX\030\014 \001"
-  "(\002\022\014\n\004dirY\030\r \001(\002\022\014\n\004dirZ\030\016 \001(\002\022\016\n\006value1"
-  "\030\017 \001(\002\022\016\n\006value2\030\020 \001(\002*\360\003\n\017RuneTriggerTy"
-  "pe\022\025\n\021RUNE_TRIGGER_NONE\020\000\022\025\n\021RUNE_TRIGGE"
-  "R_PROC\020\001\022\032\n\026RUNE_TRIGGER_EXEC_KILL\020\002\022\032\n\026"
-  "RUNE_TRIGGER_LIFESTEAL\020\003\022\027\n\023RUNE_TRIGGER"
-  "_SHIELD\020\004\022\036\n\032RUNE_TRIGGER_ECHO_SCHEDULE\020"
-  "\n\022\032\n\026RUNE_TRIGGER_ECHO_FIRE\020\013\022\033\n\027RUNE_TR"
-  "IGGER_TRAP_SPAWN\020\024\022\032\n\026RUNE_TRIGGER_TRAP_"
-  "FIRE\020\025\022\034\n\030RUNE_TRIGGER_TRAP_REMOVE\020\026\022 \n\034"
-  "RUNE_TRIGGER_VENGEANCE_READY\020\036\022\"\n\036RUNE_T"
-  "RIGGER_VENGEANCE_CONSUME\020\037\022\037\n\033RUNE_TRIGG"
-  "ER_OVERHEAT_READY\020(\022!\n\035RUNE_TRIGGER_OVER"
-  "HEAT_CONSUME\020)\022 \n\034RUNE_TRIGGER_COOLDOWN_"
-  "REDUCE\0202\022\037\n\033RUNE_TRIGGER_COOLDOWN_RESET\020"
-  "3b\006proto3"
+  "getZ\030\n \001(\002\022\023\n\013chargeRatio\030\013 \001(\002\"\232\001\n\020S_MO"
+  "NSTER_DAMAGE\022\021\n\tmonsterId\030\001 \001(\004\022\016\n\006damag"
+  "e\030\002 \001(\002\022\021\n\tcurrentHp\030\003 \001(\002\022\016\n\006isDead\030\004 \001"
+  "(\010\022\030\n\020attackerPlayerId\030\005 \001(\004\022&\n\tskillTyp"
+  "e\030\006 \001(\0162\023.Protocol.SkillType\"7\n\016S_ROOM_C"
+  "LEARED\022\022\n\nstageIndex\030\001 \001(\r\022\021\n\troomIndex\030"
+  "\002 \001(\r\"a\n\014S_BOSS_EVENT\022\021\n\tmonsterId\030\001 \001(\004"
+  "\022*\n\teventType\030\002 \001(\0162\027.Protocol.BossEvent"
+  "Type\022\022\n\nphaseIndex\030\003 \001(\r\"h\n\023C_BOSS_CUTSC"
+  "ENE_END\022\021\n\tmonsterId\030\001 \001(\004\022*\n\teventType\030"
+  "\002 \001(\0162\027.Protocol.BossEventType\022\022\n\nphaseI"
+  "ndex\030\003 \001(\r\"8\n\021S_MONSTER_STAGGER\022\021\n\tmonst"
+  "erId\030\001 \001(\004\022\020\n\010duration\030\002 \001(\002\"p\n\023S_MAP_TO"
+  "RNADO_EVENT\022\021\n\teventType\030\001 \001(\r\022\t\n\001x\030\002 \001("
+  "\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\022\n\nwarningSec\030\005 "
+  "\001(\002\022\021\n\tactiveSec\030\006 \001(\002\"p\n\017C_PLAYER_ACTIO"
+  "N\022\022\n\nactionType\030\001 \001(\r\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 "
+  "\001(\002\022\t\n\001z\030\004 \001(\002\022\014\n\004dirX\030\005 \001(\002\022\014\n\004dirY\030\006 \001"
+  "(\002\022\014\n\004dirZ\030\007 \001(\002\"\202\001\n\017S_PLAYER_ACTION\022\020\n\010"
+  "playerId\030\001 \001(\004\022\022\n\nactionType\030\002 \001(\r\022\t\n\001x\030"
+  "\003 \001(\002\022\t\n\001y\030\004 \001(\002\022\t\n\001z\030\005 \001(\002\022\014\n\004dirX\030\006 \001("
+  "\002\022\014\n\004dirY\030\007 \001(\002\022\014\n\004dirZ\030\010 \001(\002\"\'\n\014S_ROOM_"
+  "START\022\027\n\017starterplayerid\030\001 \001(\004\"_\n\024Reward"
+  "RuneObjectInfo\022\025\n\rownerPlayerId\030\001 \001(\004\022\t\n"
+  "\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t\n\001z\030\004 \001(\002\022\017\n\007runeId"
+  "s\030\005 \003(\t\"\244\001\n\023S_ROOM_REWARD_SPAWN\022\022\n\nstage"
+  "Index\030\001 \001(\r\022\021\n\troomIndex\030\002 \001(\r\022\017\n\007portal"
+  "X\030\003 \001(\002\022\017\n\007portalY\030\004 \001(\002\022\017\n\007portalZ\030\005 \001("
+  "\002\0223\n\013runeObjects\030\006 \003(\0132\036.Protocol.Reward"
+  "RuneObjectInfo\"\024\n\022C_RUNE_REWARD_PICK\"-\n\024"
+  "S_RUNE_REWARD_PICKED\022\025\n\rownerPlayerId\030\001 "
+  "\001(\004\"S\n\014C_RUNE_EQUIP\022\031\n\021rewardOptionIndex"
+  "\030\001 \001(\r\022\021\n\tskillSlot\030\002 \001(\r\022\025\n\rruneSlotInd"
+  "ex\030\003 \001(\r\"n\n\014S_RUNE_EQUIP\022\020\n\010playerId\030\001 \001"
+  "(\004\022\021\n\tskillSlot\030\002 \001(\r\022\025\n\rruneSlotIndex\030\003"
+  " \001(\r\022\016\n\006runeId\030\004 \001(\t\022\022\n\nstackCount\030\005 \001(\r"
+  "\"\342\001\n\024S_RUNE_HOMING_TARGET\022\020\n\010playerId\030\001 "
+  "\001(\004\022\021\n\tskillSlot\030\002 \001(\005\022&\n\tskillType\030\003 \001("
+  "\0162\023.Protocol.SkillType\022\027\n\017targetMonsterI"
+  "d\030\004 \001(\004\022\017\n\007targetX\030\005 \001(\002\022\017\n\007targetY\030\006 \001("
+  "\002\022\017\n\007targetZ\030\007 \001(\002\022\017\n\007originX\030\010 \001(\002\022\017\n\007o"
+  "riginY\030\t \001(\002\022\017\n\007originZ\030\n \001(\002\"\313\002\n\016S_RUNE"
+  "_TRIGGER\022\020\n\010playerId\030\001 \001(\004\022\021\n\tskillSlot\030"
+  "\002 \001(\005\022&\n\tskillType\030\003 \001(\0162\023.Protocol.Skil"
+  "lType\022\016\n\006runeId\030\004 \001(\t\022.\n\013triggerType\030\005 \001"
+  "(\0162\031.Protocol.RuneTriggerType\022\027\n\017targetM"
+  "onsterId\030\006 \001(\004\022\026\n\016targetPlayerId\030\007 \001(\004\022\020"
+  "\n\010objectId\030\010 \001(\004\022\t\n\001x\030\t \001(\002\022\t\n\001y\030\n \001(\002\022\t"
+  "\n\001z\030\013 \001(\002\022\014\n\004dirX\030\014 \001(\002\022\014\n\004dirY\030\r \001(\002\022\014\n"
+  "\004dirZ\030\016 \001(\002\022\016\n\006value1\030\017 \001(\002\022\016\n\006value2\030\020 "
+  "\001(\002*\360\003\n\017RuneTriggerType\022\025\n\021RUNE_TRIGGER_"
+  "NONE\020\000\022\025\n\021RUNE_TRIGGER_PROC\020\001\022\032\n\026RUNE_TR"
+  "IGGER_EXEC_KILL\020\002\022\032\n\026RUNE_TRIGGER_LIFEST"
+  "EAL\020\003\022\027\n\023RUNE_TRIGGER_SHIELD\020\004\022\036\n\032RUNE_T"
+  "RIGGER_ECHO_SCHEDULE\020\n\022\032\n\026RUNE_TRIGGER_E"
+  "CHO_FIRE\020\013\022\033\n\027RUNE_TRIGGER_TRAP_SPAWN\020\024\022"
+  "\032\n\026RUNE_TRIGGER_TRAP_FIRE\020\025\022\034\n\030RUNE_TRIG"
+  "GER_TRAP_REMOVE\020\026\022 \n\034RUNE_TRIGGER_VENGEA"
+  "NCE_READY\020\036\022\"\n\036RUNE_TRIGGER_VENGEANCE_CO"
+  "NSUME\020\037\022\037\n\033RUNE_TRIGGER_OVERHEAT_READY\020("
+  "\022!\n\035RUNE_TRIGGER_OVERHEAT_CONSUME\020)\022 \n\034R"
+  "UNE_TRIGGER_COOLDOWN_REDUCE\0202\022\037\n\033RUNE_TR"
+  "IGGER_COOLDOWN_RESET\0203b\006proto3"
   ;
 static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor_table_Protocol_2eproto_deps[2] = {
   &::descriptor_table_Enum_2eproto,
@@ -1196,7 +1198,7 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor
 };
 static ::PROTOBUF_NAMESPACE_ID::internal::once_flag descriptor_table_Protocol_2eproto_once;
 const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_Protocol_2eproto = {
-  false, false, 4329, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
+  false, false, 4350, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
   &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 39,
   schemas, file_default_instances, TableStruct_Protocol_2eproto::offsets,
   file_level_metadata_Protocol_2eproto, file_level_enum_descriptors_Protocol_2eproto, file_level_service_descriptors_Protocol_2eproto,
@@ -6603,16 +6605,16 @@ C_PLAYER_ATTACK::C_PLAYER_ATTACK(const C_PLAYER_ATTACK& from)
   : ::PROTOBUF_NAMESPACE_ID::Message() {
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
   ::memcpy(&skilltype_, &from.skilltype_,
-    static_cast<size_t>(reinterpret_cast<char*>(&targetz_) -
-    reinterpret_cast<char*>(&skilltype_)) + sizeof(targetz_));
+    static_cast<size_t>(reinterpret_cast<char*>(&chargeratio_) -
+    reinterpret_cast<char*>(&skilltype_)) + sizeof(chargeratio_));
   // @@protoc_insertion_point(copy_constructor:Protocol.C_PLAYER_ATTACK)
 }
 
 void C_PLAYER_ATTACK::SharedCtor() {
 ::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
     reinterpret_cast<char*>(&skilltype_) - reinterpret_cast<char*>(this)),
-    0, static_cast<size_t>(reinterpret_cast<char*>(&targetz_) -
-    reinterpret_cast<char*>(&skilltype_)) + sizeof(targetz_));
+    0, static_cast<size_t>(reinterpret_cast<char*>(&chargeratio_) -
+    reinterpret_cast<char*>(&skilltype_)) + sizeof(chargeratio_));
 }
 
 C_PLAYER_ATTACK::~C_PLAYER_ATTACK() {
@@ -6642,8 +6644,8 @@ void C_PLAYER_ATTACK::Clear() {
   (void) cached_has_bits;
 
   ::memset(&skilltype_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&targetz_) -
-      reinterpret_cast<char*>(&skilltype_)) + sizeof(targetz_));
+      reinterpret_cast<char*>(&chargeratio_) -
+      reinterpret_cast<char*>(&skilltype_)) + sizeof(chargeratio_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -6721,6 +6723,13 @@ const char* C_PLAYER_ATTACK::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPAC
       case 10:
         if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 85)) {
           targetz_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else goto handle_unusual;
+        continue;
+      // float chargeRatio = 11;
+      case 11:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 93)) {
+          chargeratio_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
           ptr += sizeof(float);
         } else goto handle_unusual;
         continue;
@@ -6814,6 +6823,12 @@ failure:
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(10, this->_internal_targetz(), target);
   }
 
+  // float chargeRatio = 11;
+  if (!(this->chargeratio() <= 0 && this->chargeratio() >= 0)) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(11, this->_internal_chargeratio(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -6881,6 +6896,11 @@ size_t C_PLAYER_ATTACK::ByteSizeLong() const {
     total_size += 1 + 4;
   }
 
+  // float chargeRatio = 11;
+  if (!(this->chargeratio() <= 0 && this->chargeratio() >= 0)) {
+    total_size += 1 + 4;
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     return ::PROTOBUF_NAMESPACE_ID::internal::ComputeUnknownFieldsSize(
         _internal_metadata_, total_size, &_cached_size_);
@@ -6942,6 +6962,9 @@ void C_PLAYER_ATTACK::MergeFrom(const C_PLAYER_ATTACK& from) {
   if (!(from.targetz() <= 0 && from.targetz() >= 0)) {
     _internal_set_targetz(from._internal_targetz());
   }
+  if (!(from.chargeratio() <= 0 && from.chargeratio() >= 0)) {
+    _internal_set_chargeratio(from._internal_chargeratio());
+  }
 }
 
 void C_PLAYER_ATTACK::CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
@@ -6966,8 +6989,8 @@ void C_PLAYER_ATTACK::InternalSwap(C_PLAYER_ATTACK* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(C_PLAYER_ATTACK, targetz_)
-      + sizeof(C_PLAYER_ATTACK::targetz_)
+      PROTOBUF_FIELD_OFFSET(C_PLAYER_ATTACK, chargeratio_)
+      + sizeof(C_PLAYER_ATTACK::chargeratio_)
       - PROTOBUF_FIELD_OFFSET(C_PLAYER_ATTACK, skilltype_)>(
           reinterpret_cast<char*>(&skilltype_),
           reinterpret_cast<char*>(&other->skilltype_));

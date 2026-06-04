@@ -230,7 +230,8 @@ public:
     void SendPlayerAttack(int skillType,
                           float x, float y, float z,
                           float dirX, float dirY, float dirZ,
-                          float targetX, float targetY, float targetZ);
+                          float targetX, float targetY, float targetZ,
+                          float chargeRatio = 0.0f);
 
     // 보스 컷신 종료 알림 전송
     void SendBossCutsceneEnd(uint64 monsterId, uint32 eventType, uint32 phaseIndex);
@@ -354,8 +355,7 @@ private:
     std::vector<NetworkCommandData> m_vPendingSpawns;
 
     // 메인 스레드에서 실행할 명령 처리
-    void ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList,
-                           uint64 playerId, const std::string& name, int playerType, float x, float y, float z);
+    void ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList, uint64 playerId, const std::string& name, int playerType, float x, float y, float z);
     void ProcessDespawnPlayer(Scene* pScene, uint64 playerId);
     void ProcessMovePlayer(uint64 playerId, float x, float y, float z, float dirX, float dirY, float dirZ);
     void ProcessSkill(Scene* pScene, uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ);

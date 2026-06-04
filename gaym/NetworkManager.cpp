@@ -803,7 +803,8 @@ void NetworkManager::SendDebugKillAll()
 void NetworkManager::SendPlayerAttack(int skillType,
                                       float x, float y, float z,
                                       float dirX, float dirY, float dirZ,
-                                      float targetX, float targetY, float targetZ)
+                                      float targetX, float targetY, float targetZ,
+                                      float chargeRatio)
 {
     if (!m_bConnected || !m_pSession)
         return;
@@ -826,13 +827,15 @@ void NetworkManager::SendPlayerAttack(int skillType,
     pkt.set_targetx(targetX);
     pkt.set_targety(targetY);
     pkt.set_targetz(targetZ);
+    pkt.set_chargeratio(chargeRatio);
 
     auto sendBuffer = ServerPacketHandler::MakeSendBuffer(pkt);
     m_pSession->Send(sendBuffer);
 
     char buf[256];
-    sprintf_s(buf, "[Network] C_PLAYER_ATTACK sent: skillType=%d pos=(%.2f,%.2f,%.2f) target=(%.2f,%.2f,%.2f)",
-        skillType, x, y, z, targetX, targetY, targetZ);
+    sprintf_s(buf,
+        "[Network] C_PLAYER_ATTACK sent: skillType=%d chargeRatio=%.2f pos=(%.2f,%.2f,%.2f) target=(%.2f,%.2f,%.2f)",
+        skillType, chargeRatio, x, y, z, targetX, targetY, targetZ);
     WriteNetworkLog(buf);
 }
 

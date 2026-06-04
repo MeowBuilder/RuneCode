@@ -526,14 +526,57 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
 
                 if (combo.hasPlace)
                 {
+                    // 1. 설치 룬이면 클라에서는 함정을 생성한다.
                     SpawnPlaceTrap(index, targetPos, damageMultiplier, combo);
                 }
                 else
                 {
+                    // 2. 일반 차징 스킬이면 클라에서 스킬을 실행한다.
                     ExecuteOrSplit(index, targetPos, damageMultiplier);
                 }
+
+                // 3. 스킬 상태 갱신
                 m_SkillStates[index] = SkillState::Casting;
                 m_ActiveSkillSlot = m_ChargingSlot;
+
+                // 4. 서버에 차징 공격 판정 요청
+                //    TRF_CHG는 서버가 chargeRatio를 기준으로 피해/범위를 계산한다.
+                NetworkManager* pNetMgr = NetworkManager::GetInstance();
+
+                if (pNetMgr && pNetMgr->IsConnected() && m_pOwner)
+                {
+                    // 5. 스킬 슬롯을 서버 SkillType으로 변환
+                    int skillType = 0;
+
+                    switch (m_ChargingSlot)
+                    {
+                    case SkillSlot::Q:          skillType = 1; break;
+                    case SkillSlot::E:          skillType = 2; break;
+                    case SkillSlot::R:          skillType = 3; break;
+                    case SkillSlot::RightClick: skillType = 4; break;
+                    default:                    skillType = 0; break;
+                    }
+
+                    // 6. 플레이어 위치와 방향 가져오기
+                    TransformComponent* pTransform = m_pOwner->GetTransform();
+
+                    if (pTransform)
+                    {
+                        const DirectX::XMFLOAT3& pos = pTransform->GetPosition();
+
+                        DirectX::XMVECTOR lookVec = pTransform->GetLook();
+                        DirectX::XMFLOAT3 lookDir;
+                        DirectX::XMStoreFloat3(&lookDir, lookVec);
+
+                        // 7. 서버에 chargeRatio 포함해서 공격 패킷 전송
+                        pNetMgr->SendPlayerAttack(
+                            skillType,
+                            pos.x, pos.y, pos.z,
+                            lookDir.x, lookDir.y, lookDir.z,
+                            targetPos.x, targetPos.y, targetPos.z,
+                            chargeRatio);
+                    }
+                }
 
                 // Start cooldown (cooldownMult 룬 적용)
                 m_CooldownTimers[index] = GetEffectiveCooldown(index);
@@ -1300,6 +1343,7 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
         m_chargeScaleSteps[index] = 0;
         SpawnChargeGatherVFX(0);
         OutputDebugString(L"[Skill] Charging started... Hold to charge, release to fire\n");
+        return;
     }
     else if (combo.hasChannel || defaultType == ActivationType::Channel)
     {
@@ -1465,7 +1509,8 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
             pNetMgr->SendPlayerAttack(skillType,
                 pos.x, pos.y, pos.z,
                 lookDir.x, lookDir.y, lookDir.z,
-                targetPosition.x, targetPosition.y, targetPosition.z);
+                targetPosition.x, targetPosition.y, targetPosition.z,
+                0.0f);
         }
     }
 }
