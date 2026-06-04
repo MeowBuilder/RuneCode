@@ -590,9 +590,9 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
                 OutputDebugString(buffer);
 
                 // 활성화 VFX 컨텍스트 세팅 (Execute 직전)
-                m_currentChargeRatio    = chargeRatio;
+                m_currentChargeRatio = chargeRatio;
                 m_bCurrentIsChannelTick = false;
-                m_bCurrentEnhanceUsed  = (m_bIsEnhanced); // 이미 소모됨
+                m_bCurrentEnhanceUsed = (m_bIsEnhanced); // 이미 소모됨
 
                 if (combo.hasPlace)
                 {
@@ -620,6 +620,7 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
 
                 // 쿨타임은 IsFinished() 후 Update 루프에서 세팅한다.
                 // 여기서 바로 m_CooldownTimers[index]를 세팅하면 UI가 즉시 돌다가 다시 리셋될 수 있다.
+            }
 
             size_t relIdx = static_cast<size_t>(m_ChargingSlot);
             if (m_pVFXManager && m_chargeGatherVFXIds[relIdx] >= 0)
@@ -1671,7 +1672,6 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
     // 네트워크로 스킬 전송
     // 일반 스킬은 chargeRatio가 없으므로 0.0f를 보낸다.
     SendSkillNet(slot, targetPosition, 0.0f, true);
-
 }
 
 void SkillComponent::SendSkillNet(
