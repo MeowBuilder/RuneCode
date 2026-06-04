@@ -791,7 +791,12 @@ float4 PS(PS_INPUT input) : SV_TARGET
         float  decalA   = albedoColor.a * gMaterial.m_cDiffuse.a;
         if (bHasTexture == 0)
         {
-            decalRGB += gMaterial.m_cEmissive.rgb;
+            // UV.u 가로축 grade: 가운데(0.5) = emissive (core), 양 옆(0/1) = ambient (edge) lerp.
+            //   SwordTrailMesh 가 두 색 활용해 검기 코어/엣지 시각화. 다른 indicator 의 ambient 가
+            //   작은 값이라 lerp 영향 미미.
+            float edgeT = abs(input.uv.x - 0.5f) * 2.0f;
+            float3 colorMix = lerp(gMaterial.m_cEmissive.rgb, gMaterial.m_cAmbient.rgb, edgeT);
+            decalRGB += colorMix;
             float v = input.uv.y;
             float edgeFade = smoothstep(0.0f, 0.12f, v) * smoothstep(1.0f, 0.88f, v);
             decalA *= edgeFade;

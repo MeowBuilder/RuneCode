@@ -2,6 +2,7 @@
 #include "Mesh.h"
 #include "Dx12App.h"
 #include "MeshLoader.h"
+#include "d3dx12.h"
 #include <random>
 #include <cmath>
 
@@ -546,6 +547,161 @@ void LineMesh::Render(ID3D12GraphicsCommandList* pd3dCommandList, int nSubSet)
     pd3dCommandList->IASetVertexBuffers(0, 3, pVertexBufferViews);
     pd3dCommandList->IASetIndexBuffer(&m_d3dIndexBufferView);
     pd3dCommandList->DrawIndexedInstanced(m_nIndices, 1, 0, 0, 0);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// SwordTrailMesh — dynamic ribbon for sword trail.
+//   UPLOAD heap 3 buffer (position, normal, uv). persistent map.
+//   매 frame UpdateTrail(points, halfWidth) → memcpy 로 vertex 데이터 갱신.
+//   TriangleStrip 으로 그려서 한 mesh 가 곡선 ribbon 형태. piece 누적 X.
+
+using namespace DirectX;
+
+SwordTrailMesh::SwordTrailMesh(ID3D12Device* pd3dDevice, int nMaxPoints)
+{
+    m_nMaxPoints   = nMaxPoints;
+    m_nMaxVertices = nMaxPoints * 2;   // 2 verts per point (left + right)
+    m_nDrawVertices = 0;
+    m_nType = VERTEXT_POSITION | VERTEXT_NORMAL | VERTEXT_TEXTURE_COORD0;
+
+    CD3DX12_HEAP_PROPERTIES upload(D3D12_HEAP_TYPE_UPLOAD);
+
+    auto createBuf = [&](UINT sizeBytes, ComPtr<ID3D12Resource>& out, void** ppMapped)
+    {
+        CD3DX12_RESOURCE_DESC desc = CD3DX12_RESOURCE_DESC::Buffer(sizeBytes);
+        CHECK_HR(pd3dDevice->CreateCommittedResource(
+            &upload, D3D12_HEAP_FLAG_NONE, &desc,
+            D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+            IID_PPV_ARGS(&out)));
+        CD3DX12_RANGE range(0, 0);
+        out->Map(0, &range, ppMapped);
+    };
+
+    UINT posBytes  = sizeof(XMFLOAT3) * m_nMaxVertices;
+    UINT normBytes = sizeof(XMFLOAT3) * m_nMaxVertices;
+    UINT uvBytes   = sizeof(XMFLOAT2) * m_nMaxVertices;
+
+    createBuf(posBytes,  m_pPosBuffer,  &m_pPosMapped);
+    createBuf(normBytes, m_pNormBuffer, &m_pNormMapped);
+    createBuf(uvBytes,   m_pUvBuffer,   &m_pUvMapped);
+
+    m_posView.BufferLocation  = m_pPosBuffer->GetGPUVirtualAddress();
+    m_posView.StrideInBytes   = sizeof(XMFLOAT3);
+    m_posView.SizeInBytes     = posBytes;
+
+    m_normView.BufferLocation = m_pNormBuffer->GetGPUVirtualAddress();
+    m_normView.StrideInBytes  = sizeof(XMFLOAT3);
+    m_normView.SizeInBytes    = normBytes;
+
+    m_uvView.BufferLocation   = m_pUvBuffer->GetGPUVirtualAddress();
+    m_uvView.StrideInBytes    = sizeof(XMFLOAT2);
+    m_uvView.SizeInBytes      = uvBytes;
+}
+
+SwordTrailMesh::~SwordTrailMesh()
+{
+    if (m_pPosBuffer)  m_pPosBuffer->Unmap(0, nullptr);
+    if (m_pNormBuffer) m_pNormBuffer->Unmap(0, nullptr);
+    if (m_pUvBuffer)   m_pUvBuffer->Unmap(0, nullptr);
+}
+
+void SwordTrailMesh::UpdateTrail(const std::vector<XMFLOAT3>& points, float halfWidth)
+{
+    int n = (int)points.size();
+    if (n > m_nMaxPoints) n = m_nMaxPoints;
+    if (n < 2) { m_nDrawVertices = 0; return; }
+
+    XMFLOAT3* pPos  = reinterpret_cast<XMFLOAT3*>(m_pPosMapped);
+    XMFLOAT3* pNorm = reinterpret_cast<XMFLOAT3*>(m_pNormMapped);
+    XMFLOAT2* pUv   = reinterpret_cast<XMFLOAT2*>(m_pUvMapped);
+
+    const XMFLOAT3 kUp(0.0f, 1.0f, 0.0f);
+
+    // 검 본 jitter 가 trail 에 흐물거림으로 amplify 됨 → 3-point box smoothing 으로 부드럽게.
+    //   head (인덱스 n-1) 는 jitter 와 무관하게 정확한 검 본 위치 유지.
+    std::vector<XMFLOAT3> smoothed(n);
+    for (int i = 0; i < n; ++i)
+    {
+        if (i == n - 1) { smoothed[i] = points[i]; continue; }  // head 그대로
+        int i0 = (i > 0)     ? i - 1 : i;
+        int i2 = (i < n - 1) ? i + 1 : i;
+        smoothed[i].x = (points[i0].x + points[i].x + points[i2].x) * (1.0f / 3.0f);
+        smoothed[i].y = (points[i0].y + points[i].y + points[i2].y) * (1.0f / 3.0f);
+        smoothed[i].z = (points[i0].z + points[i].z + points[i2].z) * (1.0f / 3.0f);
+    }
+
+    // head 고정, tail 쪽 stretch — 시각 길이 swing path 보다 길게.
+    //   stretch 강하면 jitter 도 amplified — 적당히 2.0 으로 유지.
+    const float kStretchFactor = 2.0f;
+    const XMFLOAT3& head = smoothed[n - 1];
+
+    for (int i = 0; i < n; ++i)
+    {
+        // 각 point 에서 swing tangent (XZ 평면) — smoothed 좌표 사용
+        XMFLOAT3 tangent;
+        if (i == 0)
+        {
+            tangent.x = smoothed[1].x - smoothed[0].x;
+            tangent.z = smoothed[1].z - smoothed[0].z;
+        }
+        else if (i == n - 1)
+        {
+            tangent.x = smoothed[i].x - smoothed[i - 1].x;
+            tangent.z = smoothed[i].z - smoothed[i - 1].z;
+        }
+        else
+        {
+            tangent.x = smoothed[i + 1].x - smoothed[i - 1].x;
+            tangent.z = smoothed[i + 1].z - smoothed[i - 1].z;
+        }
+        tangent.y = 0.0f;
+        float tLen = sqrtf(tangent.x * tangent.x + tangent.z * tangent.z);
+        if (tLen < 1e-4f) { tangent.x = 0.0f; tangent.z = 1.0f; }
+        else { tangent.x /= tLen; tangent.z /= tLen; }
+
+        // perpendicular (XZ 평면에서 좌측 90도) = (-tangent.z, 0, tangent.x)
+        XMFLOAT3 perp(-tangent.z, 0.0f, tangent.x);
+
+        // Taper — bell curve: 가운데 두껍게, 양 끝 얇게. swing 의 중간이 가장 폭 넓어 dramatic.
+        //   v = i/(n-1): 0 (tail) ~ 1 (head). bell = sin(πv) — v=0/1 에서 0, v=0.5 에서 1.
+        float v = (float)i / (float)(n - 1);
+        const float kPi = 3.14159265f;
+        float taper = sinf(v * kPi);    // 0 → 1 → 0
+        // head (검 본) 는 dramatic 양 끝 fade 와 별개로 잡아 — 검과 연결되어 끊김 없게
+        if (i == n - 1)  taper = 0.85f;
+
+        float hw = halfWidth * taper;
+
+        // 점 위치를 head 기준으로 stretch — head 그대로, 다른 점들은 head 에서 멀어짐 (smoothed 좌표 사용)
+        XMFLOAT3 stretched = {
+            head.x + (smoothed[i].x - head.x) * kStretchFactor,
+            head.y + (smoothed[i].y - head.y) * kStretchFactor,
+            head.z + (smoothed[i].z - head.z) * kStretchFactor,
+        };
+
+        XMFLOAT3 left  = { stretched.x + perp.x * hw, stretched.y, stretched.z + perp.z * hw };
+        XMFLOAT3 right = { stretched.x - perp.x * hw, stretched.y, stretched.z - perp.z * hw };
+
+        // index 2*i = left, 2*i+1 = right
+        pPos[2 * i + 0]  = left;
+        pPos[2 * i + 1]  = right;
+        pNorm[2 * i + 0] = kUp;
+        pNorm[2 * i + 1] = kUp;
+        pUv[2 * i + 0]   = XMFLOAT2(0.0f, v);
+        pUv[2 * i + 1]   = XMFLOAT2(1.0f, v);
+    }
+
+    m_nDrawVertices = (UINT)(n * 2);
+}
+
+void SwordTrailMesh::Render(ID3D12GraphicsCommandList* pd3dCommandList, int /*nSubSet*/)
+{
+    if (m_nDrawVertices < 4) return;   // 최소 2 triangle 형성 위해 vertex >=4 (2 points)
+
+    pd3dCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+    D3D12_VERTEX_BUFFER_VIEW vbvs[3] = { m_posView, m_normView, m_uvView };
+    pd3dCommandList->IASetVertexBuffers(0, 3, vbvs);
+    pd3dCommandList->DrawInstanced(m_nDrawVertices, 1, 0, 0);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

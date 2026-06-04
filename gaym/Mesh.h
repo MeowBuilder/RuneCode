@@ -264,6 +264,44 @@ protected:
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Dynamic ribbon mesh for sword trail effects.
+//   유저가 UpdateTrail() 로 좌표 history 를 push 하면 매 프레임 vertex buffer 가 새로 채워짐.
+//   각 trail point 마다 swing tangent perpendicular 방향으로 ±halfWidth vertex 2개를 만들어
+//   TriangleStrip 으로 렌더 → 한 mesh 로 swing arc 표현 (piece 누적 X, fan/boundary 없음).
+//   UV.v = 0 (가장 오래된 tail) ~ 1 (최신 head), UV.u = 0/1 (양옆 side). decal 패스의 V축 fade 가 자연스럽게 tail 페이드.
+class SwordTrailMesh : public Mesh
+{
+public:
+	SwordTrailMesh(ID3D12Device* pd3dDevice, int nMaxPoints = 20);
+	virtual ~SwordTrailMesh();
+
+	// points: 검 본 world 위치 시간순 리스트 (oldest first). halfWidth: ribbon 폭 절반.
+	// pCmdList 는 vertex buffer 가 UPLOAD heap 이라 cpu->gpu visible, 직접 memcpy 사용.
+	void UpdateTrail(const std::vector<DirectX::XMFLOAT3>& points, float halfWidth);
+
+	virtual void ReleaseUploadBuffers() override {}
+	virtual void Render(ID3D12GraphicsCommandList* pd3dCommandList, int nSubSet = 0) override;
+
+private:
+	int  m_nMaxPoints   = 0;
+	int  m_nMaxVertices = 0;        // 2 * maxPoints (left, right per point)
+	UINT m_nDrawVertices = 0;       // 현재 frame 의 active vertex 수
+
+	// 3 UPLOAD heap buffers (position, normal, uv). bone slots 는 LineMesh 처럼 unbind.
+	ComPtr<ID3D12Resource> m_pPosBuffer;
+	ComPtr<ID3D12Resource> m_pNormBuffer;
+	ComPtr<ID3D12Resource> m_pUvBuffer;
+	D3D12_VERTEX_BUFFER_VIEW m_posView{};
+	D3D12_VERTEX_BUFFER_VIEW m_normView{};
+	D3D12_VERTEX_BUFFER_VIEW m_uvView{};
+
+	// persistent map
+	void* m_pPosMapped  = nullptr;
+	void* m_pNormMapped = nullptr;
+	void* m_pUvMapped   = nullptr;
+};
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Flat ring mesh on XZ plane (for range indicators)
 class RingMesh : public Mesh
 {

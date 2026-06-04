@@ -95,7 +95,8 @@ private:
     float m_fTrailEmitAccum       = 0.0f;
     float m_fTrailEmitInterval    = 0.005f;     // 200Hz — 매우 촘촘, dash 들이 연속 띠 형성
     float m_fTrailPieceScale      = 1.0f;
-    DirectX::XMFLOAT4 m_xmf4TrailColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+    DirectX::XMFLOAT4 m_xmf4TrailColor    = { 1.0f, 1.0f, 1.0f, 1.0f };   // core (밝은 가운데)
+    DirectX::XMFLOAT4 m_xmf4TrailEdgeColor= { 1.0f, 1.0f, 1.0f, 1.0f };   // edge (양 옆 색)
     // 검 본 이전 위치 — swing 방향(속도) 계산해서 piece 를 그 방향으로 stretch
     DirectX::XMFLOAT3 m_xmf3PrevSwordPos = { 0.0f, 0.0f, 0.0f };
     bool m_bHasPrevSwordPos       = false;
@@ -103,14 +104,16 @@ private:
     float m_fSmoothedYaw          = 0.0f;
     bool  m_bYawInitialized       = false;
 
-    // ── 단일 dynamic ribbon 접근 — 한 hit 당 1개 ellipse GameObject 만 사용.
-    //   매 frame hit 시작점 → 현재 검 위치로 stretch + yaw 정렬. 누적 piece X → fan X.
-    class GameObject*  m_pTrailRibbon       = nullptr;
-    class Scene*       m_pRibbonScene       = nullptr;
-    DirectX::XMFLOAT3  m_xmf3TrailStartPos  = { 0,0,0 };
+    // ── Dynamic triangle strip ribbon mesh — 한 hit 당 1 mesh, 검 본 history 따라 매 frame 갱신.
+    //   piece 누적 X → fan/boundary 없음. 진짜 검 swing arc 표현.
+    class GameObject*       m_pTrailRibbon       = nullptr;
+    class Scene*            m_pRibbonScene       = nullptr;
+    class SwordTrailMesh*   m_pTrailMesh         = nullptr;   // Behavior owns; AddRef'd by GameObject
+    std::vector<DirectX::XMFLOAT3> m_vSwordHistory;
+    DirectX::XMFLOAT3       m_xmf3TrailStartPos  = { 0,0,0 };
     float              m_fRibbonFadeT       = 1.0f;
     bool               m_bRibbonFading      = false;
-    void UpdateRibbon(float dt, EnemyComponent* pEnemy);
+    void UpdateTrailMesh(float dt, EnemyComponent* pEnemy);
     void StopRibbon();
 
     // 검 자체 emissive 발광 — 검 GameObject 의 material.m_cEmissive 를 동적 boost

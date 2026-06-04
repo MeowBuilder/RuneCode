@@ -12,6 +12,8 @@
 #include "VFXManager.h"
 #include "EffectRegistry.h"
 #include "VFXTypes.h"
+#include "Mesh.h"
+#include "Dx12App.h"
 #include <fstream>
 #include <chrono>
 
@@ -81,9 +83,9 @@ void ComboAttackBehavior::Execute(EnemyComponent* pEnemy)
 
 void ComboAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
 {
-    // 검기 trail 생성 + piece 페이드 + 검 자체 발광 갱신
-    UpdateTrailEmission(dt, pEnemy);
-    UpdateSlashPieces(dt);
+    // Dynamic triangle strip ribbon mesh (검 본 history 따라 swing arc 형성)
+    UpdateTrailMesh(dt, pEnemy);
+    UpdateSlashPieces(dt);   // legacy — 잔여 piece 페이드 (이제 spawn 안 됨)
     UpdateSwordGlow(dt);
 
     if (m_bFinished || m_vHits.empty()) return;
@@ -173,6 +175,8 @@ void ComboAttackBehavior::Reset()
     m_bEmittingTrail = false;
     m_fTrailRemain = 0.0f;
     CleanupAllSlashPieces();
+    StopSwordGlow();
+    StopRibbon();   // 누락 시 trail mesh 가 fade 시작 못 하고 영구 잔존
 }
 
 void ComboAttackBehavior::DealConeDamage(EnemyComponent* pEnemy, const ComboHit& hit)
@@ -361,25 +365,40 @@ TransformComponent* ComboAttackBehavior::FindSwordBone(EnemyComponent* pEnemy)
 //   톤 다운된 채도 (형광 회피) — 코어가 너무 밝지 않게 ~1.6 (HDR 부드러운 발광).
 namespace
 {
-    XMFLOAT4 PickEmissiveForEffect(const std::string& effectName)
+    // 원소별 (core, edge) 두 색 — 검기 가운데 밝은 코어 + 양 옆 saturated edge.
+    //   core 는 거의 white-tinted (광원같은 강도), edge 는 원소 채도 강한 색.
+    // 원소별 (core, edge) — 명확한 color contrast. core 거의 white-tinted, edge 매우 saturated.
+    struct ColorPair { XMFLOAT4 core; XMFLOAT4 edge; };
+    ColorPair PickColorPairForEffect(const std::string& effectName)
     {
-        // 강도 톤다운 — 이전 1.8 너무 강함, 0.8~1.2 로 화면 가득 채움 회피
-        if (effectName.find("burn")     != std::string::npos) return XMFLOAT4(1.20f, 0.40f, 0.15f, 1.0f);
-        if (effectName.find("chill")    != std::string::npos) return XMFLOAT4(0.25f, 0.70f, 1.10f, 1.0f);
-        if (effectName.find("freeze")   != std::string::npos) return XMFLOAT4(0.50f, 1.00f, 0.75f, 1.0f);
-        if (effectName.find("fracture") != std::string::npos) return XMFLOAT4(1.00f, 0.70f, 0.25f, 1.0f);
-        if (effectName.find("water")    != std::string::npos) return XMFLOAT4(0.25f, 0.70f, 1.10f, 1.0f);
-        if (effectName.find("wind")     != std::string::npos) return XMFLOAT4(0.50f, 1.00f, 0.75f, 1.0f);
-        if (effectName.find("earth")    != std::string::npos) return XMFLOAT4(1.00f, 0.70f, 0.25f, 1.0f);
-        if (effectName.find("fire")     != std::string::npos) return XMFLOAT4(1.20f, 0.40f, 0.15f, 1.0f);
-        if (effectName.find("Meteor")   != std::string::npos) return XMFLOAT4(1.20f, 0.40f, 0.15f, 1.0f);
-        if (effectName.find("Stone")    != std::string::npos) return XMFLOAT4(1.00f, 0.70f, 0.25f, 1.0f);
-        if (effectName.find("EarthArmor")!= std::string::npos) return XMFLOAT4(1.00f, 0.70f, 0.25f, 1.0f);
-        if (effectName.find("Wave")     != std::string::npos) return XMFLOAT4(0.25f, 0.70f, 1.10f, 1.0f);
-        if (effectName.find("Vortex")   != std::string::npos) return XMFLOAT4(0.25f, 0.70f, 1.10f, 1.0f);
-        if (effectName.find("Wind")     != std::string::npos) return XMFLOAT4(0.50f, 1.00f, 0.75f, 1.0f);
-        if (effectName.find("Gale")     != std::string::npos) return XMFLOAT4(0.50f, 1.00f, 0.75f, 1.0f);
-        return XMFLOAT4(1.00f, 0.85f, 0.60f, 1.0f);
+        // 불: 흰-노랑 core / 진한 빨강 edge — 강한 contrast
+        if (effectName.find("burn")  != std::string::npos ||
+            effectName.find("fire")  != std::string::npos ||
+            effectName.find("Meteor")!= std::string::npos)
+            return { XMFLOAT4(2.00f, 1.70f, 0.60f, 1.0f), XMFLOAT4(2.20f, 0.20f, 0.00f, 1.0f) };
+
+        // 물: 흰-시안 core / 짙은 파랑 edge
+        if (effectName.find("chill") != std::string::npos ||
+            effectName.find("water") != std::string::npos ||
+            effectName.find("Wave")  != std::string::npos ||
+            effectName.find("Vortex")!= std::string::npos)
+            return { XMFLOAT4(0.80f, 1.60f, 2.00f, 1.0f), XMFLOAT4(0.00f, 0.30f, 1.80f, 1.0f) };
+
+        // 바람: 흰-초록 core / 짙은 청록 edge
+        if (effectName.find("freeze")!= std::string::npos ||
+            effectName.find("wind")  != std::string::npos ||
+            effectName.find("Wind")  != std::string::npos ||
+            effectName.find("Gale")  != std::string::npos)
+            return { XMFLOAT4(1.00f, 1.80f, 1.20f, 1.0f), XMFLOAT4(0.10f, 1.20f, 0.40f, 1.0f) };
+
+        // 땅: 흰-앰버 core / 짙은 갈색 edge
+        if (effectName.find("fracture")  != std::string::npos ||
+            effectName.find("earth")     != std::string::npos ||
+            effectName.find("Stone")     != std::string::npos ||
+            effectName.find("EarthArmor")!= std::string::npos)
+            return { XMFLOAT4(2.00f, 1.50f, 0.70f, 1.0f), XMFLOAT4(1.60f, 0.40f, 0.00f, 1.0f) };
+
+        return { XMFLOAT4(1.50f, 1.30f, 1.00f, 1.0f), XMFLOAT4(1.00f, 0.50f, 0.20f, 1.0f) };
     }
 }
 
@@ -402,7 +421,11 @@ void ComboAttackBehavior::SpawnHitVFX(EnemyComponent* pEnemy, const ComboHit& hi
 
     // Trail emission 시작 — Hit phase + recovery 일부까지 길게 emit.
     //   실제 swing 끝나도 검 본 잔여 모션 동안 piece 계속 emit → 호 누적.
-    m_xmf4TrailColor = PickEmissiveForEffect(hit.strVFXOnHit);
+    {
+        ColorPair cp = PickColorPairForEffect(hit.strVFXOnHit);
+        m_xmf4TrailColor     = cp.core;
+        m_xmf4TrailEdgeColor = cp.edge;
+    }
     m_fTrailPieceScale = hit.fVFXScale;
     float baseEmit = (hit.fHitTime > 0.10f) ? hit.fHitTime : 0.10f;
     m_fTrailRemain = baseEmit + hit.fRecoveryTime * 0.3f + 0.05f;
@@ -413,7 +436,32 @@ void ComboAttackBehavior::SpawnHitVFX(EnemyComponent* pEnemy, const ComboHit& hi
     CleanupAllSlashPieces();
     StopRibbon();   // 이전 hit 잔여 ribbon 즉시 정리
 
-    // ribbon 단일 piece 방식 disable — chord chain 으로 호 표현이 어려워 trail piece 시스템 사용.
+    // Dynamic triangle strip ribbon mesh 생성 — 한 hit 당 1 mesh + 1 GameObject.
+    if (m_pCachedSwordBone)
+    {
+        const XMFLOAT4X4& w = m_pCachedSwordBone->GetWorldMatrix();
+        m_xmf3TrailStartPos = { w._41, w._42, w._43 };
+        m_vSwordHistory.clear();
+        m_vSwordHistory.push_back(m_xmf3TrailStartPos);
+
+        ID3D12Device* pDevice = Dx12App::GetInstance()->GetDevice();
+        m_pTrailMesh = new SwordTrailMesh(pDevice, 40);
+        m_pTrailMesh->AddRef();   // self-ref: Behavior 가 살아있는 동안 mesh 유지
+
+        EnemySpawner* pSpawner = pScene->GetEnemySpawner();
+        if (pSpawner)
+        {
+            // identity transform — mesh 가 이미 world space vertex 를 갖고 있음
+            m_pTrailRibbon = pSpawner->SpawnSlashMesh(pRoom, m_pTrailMesh,
+                                                      XMFLOAT3(0.0f, 0.0f, 0.0f),
+                                                      XMFLOAT3(0.0f, 0.0f, 0.0f),
+                                                      XMFLOAT3(1.0f, 1.0f, 1.0f),
+                                                      m_xmf4TrailColor);
+            m_pRibbonScene = pScene;
+            m_fRibbonFadeT = 1.0f;
+            m_bRibbonFading = false;
+        }
+    }
 
     // 검 자체 emissive 발광 — 검 본의 owner GameObject material.m_cEmissive 를 동적 boost.
     if (m_pCachedSwordBone)
@@ -442,9 +490,11 @@ void ComboAttackBehavior::UpdateSwordGlow(float dt)
     float intensity = (t > 0.7f) ? 1.0f : (t / 0.7f);
 
     MATERIAL mat = m_pSwordObj->GetMaterial();
-    mat.m_cEmissive.x = m_xmf4SwordGlowColor.x * intensity;
-    mat.m_cEmissive.y = m_xmf4SwordGlowColor.y * intensity;
-    mat.m_cEmissive.z = m_xmf4SwordGlowColor.z * intensity;
+    // 검 자체 emissive 도 강하게 (HDR 3.5x) — trail 과 어우러져 포스 ↑
+    const float kSwordEmBoost = 3.5f;
+    mat.m_cEmissive.x = m_xmf4SwordGlowColor.x * intensity * kSwordEmBoost;
+    mat.m_cEmissive.y = m_xmf4SwordGlowColor.y * intensity * kSwordEmBoost;
+    mat.m_cEmissive.z = m_xmf4SwordGlowColor.z * intensity * kSwordEmBoost;
     mat.m_cEmissive.w = 1.0f;
     m_pSwordObj->SetMaterial(mat);
 }
@@ -461,61 +511,81 @@ void ComboAttackBehavior::StopSwordGlow()
     m_fSwordGlowRemain = 0.0f;
 }
 
-// 단일 dynamic ribbon — LineMesh 한쪽 끝이 검 본 위치 추종, 다른 끝은 hit 시작점.
-//   검 swing 따라 ribbon 의 끝점이 검과 함께 이동 → "검 따라가는 trail" 느낌.
-void ComboAttackBehavior::UpdateRibbon(float dt, EnemyComponent* pEnemy)
+// Dynamic triangle strip ribbon — 검 본 world position history 를 SwordTrailMesh 에 push.
+//   mesh 내부에서 매 frame vertex buffer 갱신 → 한 mesh 가 swing arc 따라 곡선 형성.
+void ComboAttackBehavior::UpdateTrailMesh(float dt, EnemyComponent* pEnemy)
 {
-    if (!m_pTrailRibbon || !pEnemy || !m_pCachedSwordBone) return;
+    if (!m_pTrailRibbon || !m_pTrailMesh || !pEnemy || !m_pCachedSwordBone) return;
 
+    // m_fTrailRemain 감소 — UpdateTrailEmission 가 호출 안 되니 여기서 직접 처리.
     if (m_bEmittingTrail)
     {
-        const XMFLOAT4X4& w = m_pCachedSwordBone->GetWorldMatrix();
-        XMFLOAT3 cur = { w._41, w._42, w._43 };
-
-        float dx = cur.x - m_xmf3TrailStartPos.x;
-        float dz = cur.z - m_xmf3TrailStartPos.z;
-        float horizLen = sqrtf(dx*dx + dz*dz);
-        if (horizLen < 0.5f) horizLen = 0.5f;
-
-        // LineMesh 는 +Z 가 length 축. yaw 회전으로 start → current 방향 정렬.
-        float yaw = atan2f(dx, dz);
-        float yawDeg = XMConvertToDegrees(yaw);
-
-        // 폭은 start 대비 current 위치 → ribbon native 0.4 × widScale
-        const float widScale = m_fTrailPieceScale * 1.20f;
-
-        if (auto* pT = m_pTrailRibbon->GetTransform())
+        m_fTrailRemain -= dt;
+        if (m_fTrailRemain <= 0.0f)
         {
-            // LineMesh 가 (0~1)*Z 인데 우리는 width 도 X 로 stretch. position = startpos.
-            pT->SetPosition(m_xmf3TrailStartPos);
-            pT->SetRotation(0.0f, yawDeg, 0.0f);
-            pT->SetScale(widScale, 1.0f, horizLen);
-        }
-    }
-    else
-    {
-        if (!m_bRibbonFading)
-        {
-            m_bRibbonFading = true;
-            m_fRibbonFadeT = 1.0f;
-        }
-        m_fRibbonFadeT -= dt / 0.20f;
-        if (m_fRibbonFadeT <= 0.0f)
-        {
+            m_bEmittingTrail = false;
             StopRibbon();
             return;
         }
     }
 
-    // emissive 강화 — 색 saturated, intensity 1.8x. 검기 톤 살리기.
+    if (m_bEmittingTrail)
+    {
+        // hit phase 중: 매 frame 검 본 world pos 를 sub-step 으로 dense push.
+        //   swing hit phase 가 짧아 (0.10s) frame 당 1 point 면 history 가 6~9 point 만 쌓여 trail 짧음.
+        //   prev → current 사이를 3 등분해 3 point 씩 push → trail mesh 가 검 길이 만큼 길게.
+        const XMFLOAT4X4& w = m_pCachedSwordBone->GetWorldMatrix();
+        XMFLOAT3 cur = { w._41, w._42, w._43 };
+
+        if (m_bHasPrevSwordPos)
+        {
+            XMFLOAT3 prev = m_xmf3PrevSwordPos;
+            const int nSub = 3;
+            for (int i = 1; i <= nSub; ++i)
+            {
+                float t = (float)i / (float)nSub;
+                XMFLOAT3 p = {
+                    prev.x + (cur.x - prev.x) * t,
+                    prev.y + (cur.y - prev.y) * t,
+                    prev.z + (cur.z - prev.z) * t,
+                };
+                m_vSwordHistory.push_back(p);
+            }
+        }
+        else
+        {
+            m_vSwordHistory.push_back(cur);
+            m_bHasPrevSwordPos = true;
+        }
+        m_xmf3PrevSwordPos = cur;
+
+        const size_t kMaxPoints = 40;
+        while (m_vSwordHistory.size() > kMaxPoints)
+            m_vSwordHistory.erase(m_vSwordHistory.begin());
+
+        const float halfWidth = m_fTrailPieceScale * 1.40f;   // 두툼하게 — 포스 ↑
+        m_pTrailMesh->UpdateTrail(m_vSwordHistory, halfWidth);
+    }
+    else
+    {
+        // hit phase 끝 → 즉시 cleanup (잔영 안 남김)
+        StopRibbon();
+        return;
+    }
+
+    // material: emissive = core, ambient = edge. shader 가 UV.u 양옆 gradient 로 lerp.
+    //   bloom 으로 색이 blur 되지 않도록 HDR 강도 낮춤. 색 자체는 saturated.
     MATERIAL mat;
-    mat.m_cAmbient  = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
     mat.m_cDiffuse  = XMFLOAT4(0.0f, 0.0f, 0.0f, m_fRibbonFadeT);
     mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-    const float emBoost = 1.8f;
-    mat.m_cEmissive = XMFLOAT4(m_xmf4TrailColor.x * m_fRibbonFadeT * emBoost,
-                                m_xmf4TrailColor.y * m_fRibbonFadeT * emBoost,
-                                m_xmf4TrailColor.z * m_fRibbonFadeT * emBoost, 1.0f);
+    const float kCoreBoost = 1.8f;   // HDR 적당히, bloom 강하지 않게
+    const float kEdgeBoost = 1.4f;
+    mat.m_cEmissive = XMFLOAT4(m_xmf4TrailColor.x * kCoreBoost,
+                                m_xmf4TrailColor.y * kCoreBoost,
+                                m_xmf4TrailColor.z * kCoreBoost, 1.0f);
+    mat.m_cAmbient  = XMFLOAT4(m_xmf4TrailEdgeColor.x * kEdgeBoost,
+                                m_xmf4TrailEdgeColor.y * kEdgeBoost,
+                                m_xmf4TrailEdgeColor.z * kEdgeBoost, 1.0f);
     m_pTrailRibbon->SetMaterial(mat);
 }
 
@@ -525,9 +595,16 @@ void ComboAttackBehavior::StopRibbon()
     {
         m_pRibbonScene->MarkForDeletion(m_pTrailRibbon);
     }
+    if (m_pTrailMesh)
+    {
+        m_pTrailMesh->Release();   // self-ref 해제. GameObject 의 ref 가 남아있으면 그쪽이 마지막에 delete.
+        m_pTrailMesh = nullptr;
+    }
+    m_vSwordHistory.clear();
     m_pTrailRibbon = nullptr;
     m_pRibbonScene = nullptr;
     m_bRibbonFading = false;
+    m_fRibbonFadeT = 1.0f;
 }
 
 // Hit phase 동안 매 frame 호출 — 검 본 위치에 swing 방향으로 stretched dash 를 emit.
