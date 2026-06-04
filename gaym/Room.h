@@ -30,6 +30,9 @@ public:
 
     // 오브젝트 관리
     void AddGameObject(std::unique_ptr<GameObject> pGameObject);
+    // Update iter 중 추가된 add 는 pending 큐에 모았다가 다음 프레임 시작에 flush
+    //   → vector reallocation 으로 인한 iterator invalidation 회피.
+    void FlushPendingAdds();
     void RemoveGameObject(GameObject* pGameObject);
     const std::vector<std::unique_ptr<GameObject>>& GetGameObjects() const { return m_vGameObjects; }
 
@@ -103,6 +106,8 @@ public:
 
 protected:
     std::vector<std::unique_ptr<GameObject>> m_vGameObjects; // 방에 속한 모든 오브젝트
+    std::vector<std::unique_ptr<GameObject>> m_vPendingAdds; // iter 중 추가 요청 deferred
+    bool m_bIterating = false;                               // m_vGameObjects iter 중인지 (iter 중에만 deferred)
     RoomState m_eState = RoomState::Inactive;
     BoundingBox m_BoundingBox; // 방의 영역 (AABB)
 

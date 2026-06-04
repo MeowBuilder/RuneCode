@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "GameObject.h"
+#include <fstream>
 #include "Component.h"
 #include "TransformComponent.h"
 #include "WICTextureLoader12.h"
@@ -178,6 +179,8 @@ void GameObject::LoadTexture(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList
         char buffer[256];
         sprintf_s(buffer, "Texture not found in any search path: %s\n", textureName.c_str());
         OutputDebugStringA(buffer);
+        std::ofstream f("vfx_debug.log", std::ios::app);
+        if (f.is_open()) f << "[TexLoadNOTFOUND] " << textureName << "\n";
         return;
     }
 
@@ -196,8 +199,12 @@ void GameObject::LoadTexture(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList
         if (FAILED(hr))
         {
             char buffer[512];
-            sprintf_s(buffer, "Failed to load texture: %ls\n", wstrTextureName.c_str());
+            sprintf_s(buffer, "Failed to load texture: %ls (hr=0x%08X)\n", wstrTextureName.c_str(), hr);
             OutputDebugStringA(buffer);
+            // 파일에도 기록
+            std::string narrow(wstrTextureName.begin(), wstrTextureName.end());
+            std::ofstream f("vfx_debug.log", std::ios::app);
+            if (f.is_open()) f << "[TexLoadFAIL] " << narrow << " hr=0x" << std::hex << hr << std::dec << "\n";
             return;
         }
 

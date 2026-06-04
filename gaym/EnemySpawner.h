@@ -71,8 +71,10 @@ private:
 
     // Load texture to all meshes in game object hierarchy.
     // tint != (1,1,1,1) 일 때 diffuse 에 곱해져 텍스처 위에 카테고리 색이 입혀짐.
+    // pOverrides: 프레임명 substring → 텍스처 경로 매핑. 매칭되면 default 대신 사용.
     void LoadTextureToHierarchy(GameObject* pGameObject, const std::string& texturePath,
-                                const XMFLOAT4& tint = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f));
+                                const XMFLOAT4& tint = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f),
+                                const std::vector<std::pair<std::string, std::string>>* pOverrides = nullptr);
 
     // Setup common enemy components
     void SetupEnemyComponents(GameObject* pEnemy, const EnemySpawnData& data, CRoom* pRoom, GameObject* pTarget);
@@ -101,4 +103,14 @@ public:
     LineMesh* m_pLineMesh = nullptr;
     FanMesh*  m_pFanMesh  = nullptr;
     Mesh*     m_pBoxMesh  = nullptr;   // 평평한 사각형 (ForwardBox 전방 직사각형)
+
+    // 보스 검기 / 글로우 슬래시용 임시 메쉬 GameObject 생성.
+    //   pMesh: m_pFanMesh / m_pDiscMesh / m_pRingMesh 등 공용 메쉬.
+    //   emissive: 발광색 (원소 톤). diffuse/ambient 어둡게 두고 emissive 가 라이팅 무시하고 밝게 표시.
+    //   Behavior 가 반환된 GameObject 의 lifetime / scale / material 을 자체 트래킹 + 만료 시 Scene::MarkForDeletion.
+    GameObject* SpawnSlashMesh(CRoom* pRoom, Mesh* pMesh,
+                                const DirectX::XMFLOAT3& pos,
+                                const DirectX::XMFLOAT3& rotDeg,
+                                const DirectX::XMFLOAT3& scale,
+                                const DirectX::XMFLOAT4& emissive);
 };

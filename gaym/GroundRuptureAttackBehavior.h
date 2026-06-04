@@ -28,10 +28,11 @@ public:
         float fImpactTime         = 0.6f,    // 터지는 지속 시간
         float fRecoveryTime       = 1.8f,
         float fCameraShakeIntensity = 2.8f,
-        float fCameraShakeDuration  = 0.5f
+        float fCameraShakeDuration  = 0.5f,
+        const char* pClipOverride = nullptr   // 보스마다 다른 휘두름 클립 지정 가능
     );
     virtual ~GroundRuptureAttackBehavior() = default;
-    
+
     // 네트워크 균열 연출 seed 설정
     void SetNetworkEffectSeed(uint32 seed);
 
@@ -40,8 +41,10 @@ public:
     virtual bool IsFinished() const override;
     virtual void Reset() override;
 
-    // 팔 휘두르기 (attack02) 재사용 — 땅을 쓸어 가르는 느낌
-    virtual const char* GetAnimClipName() const override { return "Golem_battle_attack02_ge"; }
+    // 팔 휘두르기 (attack02) 재사용 — 땅을 쓸어 가르는 느낌. override 있으면 그쪽 우선.
+    virtual const char* GetAnimClipName() const override {
+        return m_strClipOverride ? m_strClipOverride : "Golem_battle_attack02_ge";
+    }
     virtual float GetTimeToHit() const override { return m_fWindupTime; }
     virtual bool  ShouldShowHitZone() const override { return false; }
     // 애니 1회 재생 — 휘두른 후 idle 전환, 균열/바위는 계속 활성
@@ -87,4 +90,6 @@ private:
 
     bool m_bUseNetworkSeed = false; // 네트워크 동기화용 seed
     uint32 m_uNetworkSeed = 0;      // 서버가 보내준 seed
+
+    const char* m_strClipOverride = nullptr;
 };

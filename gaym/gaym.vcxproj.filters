@@ -177,6 +177,9 @@
     <ClInclude Include="JumpSlamAttackBehavior.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="CinematicSequencer.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
     <ClInclude Include="ComboAttackBehavior.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -609,6 +612,9 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="JumpSlamAttackBehavior.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="CinematicSequencer.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="ComboAttackBehavior.cpp">

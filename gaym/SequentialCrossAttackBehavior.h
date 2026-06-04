@@ -26,7 +26,8 @@ public:
         float fExplosionFlash    = 0.35f,   // 폭발 순간 지속 (바위 솟음)
         float fRecoveryTime      = 1.4f,
         float fCameraShakeIntensity = 2.4f,
-        float fCameraShakeDuration  = 0.45f
+        float fCameraShakeDuration  = 0.45f,
+        const char* pClipOverride = nullptr  // 보스마다 다른 클립 지정 가능
     );
     virtual ~SequentialCrossAttackBehavior() = default;
 
@@ -38,8 +39,10 @@ public:
     virtual bool IsFinished() const override;
     virtual void Reset() override;
 
-    // 팔 휘두르기 재사용
-    virtual const char* GetAnimClipName() const override { return "Golem_battle_attack02_ge"; }
+    // 팔 휘두르기 재사용. override 있으면 보스 전용 클립 사용.
+    virtual const char* GetAnimClipName() const override {
+        return m_strClipOverride ? m_strClipOverride : "Golem_battle_attack02_ge";
+    }
     virtual float GetTimeToHit() const override { return m_fWindupTime; }
     virtual bool  ShouldShowHitZone() const override { return false; }
     virtual bool  ShouldLoopAnim() const override { return false; }
@@ -97,4 +100,6 @@ private:
 
     bool m_bUseNetworkSeed = false; // 네트워크 동기화용 seed
     uint32 m_uNetworkSeed = 0;      // 서버가 보내준 seed
+
+    const char* m_strClipOverride = nullptr;
 };

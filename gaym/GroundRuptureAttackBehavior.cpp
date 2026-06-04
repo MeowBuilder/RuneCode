@@ -35,7 +35,8 @@ static RingMesh* GetFillMesh(ID3D12Device* pDevice, ID3D12GraphicsCommandList* p
 GroundRuptureAttackBehavior::GroundRuptureAttackBehavior(
     RuptureShape eShape, float fDamage, float fLineLength, float fLineHalfWidth,
     float fWindupTime, float fImpactTime, float fRecoveryTime,
-    float fCameraShakeIntensity, float fCameraShakeDuration)
+    float fCameraShakeIntensity, float fCameraShakeDuration,
+    const char* pClipOverride)
     : m_eShape(eShape)
     , m_fDamage(fDamage)
     , m_fLineLength(fLineLength)
@@ -45,6 +46,7 @@ GroundRuptureAttackBehavior::GroundRuptureAttackBehavior(
     , m_fRecoveryTime(fRecoveryTime)
     , m_fCameraShakeIntensity(fCameraShakeIntensity)
     , m_fCameraShakeDuration(fCameraShakeDuration)
+    , m_strClipOverride(pClipOverride)
 {
 }
 

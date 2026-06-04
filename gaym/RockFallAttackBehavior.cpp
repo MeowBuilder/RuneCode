@@ -38,7 +38,8 @@ RockFallAttackBehavior::RockFallAttackBehavior(int nRockCount, float fDamagePerR
                                                float fRockAoeRadius,
                                                float fSpawnMinRadius, float fSpawnMaxRadius,
                                                float fWindupTime, float fDropDuration, float fRecoveryTime,
-                                               float fCameraShakeIntensity, float fCameraShakeDuration)
+                                               float fCameraShakeIntensity, float fCameraShakeDuration,
+                                               const char* pClipOverride)
     : m_nRockCount(nRockCount)
     , m_fDamagePerRock(fDamagePerRock)
     , m_fRockAoeRadius(fRockAoeRadius)
@@ -49,6 +50,7 @@ RockFallAttackBehavior::RockFallAttackBehavior(int nRockCount, float fDamagePerR
     , m_fRecoveryTime(fRecoveryTime)
     , m_fCameraShakeIntensity(fCameraShakeIntensity)
     , m_fCameraShakeDuration(fCameraShakeDuration)
+    , m_strClipOverride(pClipOverride)
 {
 }
 

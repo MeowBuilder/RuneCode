@@ -514,8 +514,9 @@ VS_OUTLINE_OUTPUT VS_Outline(VS_INPUT input)
 
     // Canonical inverted hull: push outward in world space along the normal.
     // Scale by clip-w to keep the on-screen thickness roughly constant.
+    // 0.0040 → 0.0025: DarkLord 등 대형 보스에서 outline 너무 두꺼워 보이는 문제 완화.
     float4 clipFirst = mul(worldPos, ViewProj);
-    float thickness  = 0.0040f * clipFirst.w;
+    float thickness  = 0.0025f * clipFirst.w;
     worldPos.xyz += worldNormal * thickness;
 
     output.position = mul(worldPos, ViewProj);

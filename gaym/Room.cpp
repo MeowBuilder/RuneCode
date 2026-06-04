@@ -113,6 +113,9 @@ void CRoom::ClearSecondPortal()
 
 void CRoom::Update(float deltaTime)
 {
+    // 이전 프레임에 deferred 큐에 추가된 GameObject 들을 실제 vector 로 옮김 (iter 시작 전 안전 지점).
+    FlushPendingAdds();
+
     // Inactive 상태에서는 아무것도 하지 않음
     if (m_eState == RoomState::Inactive)
         return;
@@ -155,10 +158,13 @@ void CRoom::Update(float deltaTime)
     }
 
     // Active 및 Cleared 상태 모두에서 오브젝트 업데이트 (드랍 아이템 등)
+    // iter 중 AddGameObject 호출되면 deferred 큐로 가도록 플래그 set.
+    m_bIterating = true;
     for (auto& pGameObject : m_vGameObjects)
     {
         pGameObject->Update(deltaTime);
     }
+    m_bIterating = false;
 
     // ── PortalCube Portal_Ring VFX 관리 (InteractionCube 와 동일 패턴) ─────────
     //   Ring 이미터는 1회 spawn 후 입자가 lifetime 끝나면 사라지므로 1.5s 마다 stop+respawn 으로 continuous 유지
@@ -278,7 +284,23 @@ void CRoom::Render(ID3D12GraphicsCommandList* pCommandList)
 
 void CRoom::AddGameObject(std::unique_ptr<GameObject> pGameObject)
 {
-    m_vGameObjects.push_back(std::move(pGameObject));
+    // iter 중일 때만 deferred (iterator invalidation 회피). 평소엔 직접 push 해서
+    //   변경 전 동작 복원 — Init / MapLoader / 첫 룸 setup 등이 즉시 m_vGameObjects 에 반영되도록.
+    if (m_bIterating)
+        m_vPendingAdds.push_back(std::move(pGameObject));
+    else
+        m_vGameObjects.push_back(std::move(pGameObject));
+}
+
+void CRoom::FlushPendingAdds()
+{
+    if (m_vPendingAdds.empty()) return;
+    m_vGameObjects.reserve(m_vGameObjects.size() + m_vPendingAdds.size());
+    for (auto& p : m_vPendingAdds)
+    {
+        m_vGameObjects.push_back(std::move(p));
+    }
+    m_vPendingAdds.clear();
 }
 
 void CRoom::RemoveGameObject(GameObject* pGameObject)

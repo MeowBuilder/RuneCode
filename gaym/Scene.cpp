@@ -1410,6 +1410,12 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         m_pcbMappedPass->m_xmf4LightColor = XMFLOAT4(2.1f, 2.0f, 1.8f, 1.0f);
         lightDir = XMVector3Normalize(XMVectorSet(-0.4f, -0.8f, 0.3f, 0.0f));
         break;
+    case StageTheme::Dark:
+        // 차가운 어두운 라이트 — 다크나이트 아레나, 강도 낮춤 + cool 톤
+        //   warm Fire 라이트가 Skin1 청-회색 텍스처를 황금톤으로 보이게 하던 문제 해소.
+        m_pcbMappedPass->m_xmf4LightColor = XMFLOAT4(1.0f, 1.1f, 1.5f, 1.0f);
+        lightDir = XMVector3Normalize(XMVectorSet(-0.5f, -0.7f, 0.4f, 0.0f));
+        break;
     default: // Fire
         m_pcbMappedPass->m_xmf4LightColor = XMFLOAT4(2.0f, 1.3f, 0.8f, 1.0f);
         lightDir = XMVector3Normalize(XMVectorSet(-0.6f, -0.7f, 0.3f, 0.0f));

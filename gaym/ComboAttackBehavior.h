@@ -24,10 +24,23 @@ public:
         // 전방 사각형 판정 모드 — 둘 다 >0 이면 cone 대신 사각형 사용
         float fRectWidthHalf = 0.0f;
         float fRectLength    = 0.0f;
+
+        // 타격 시점에 보스 칼 끝에 스폰할 EffectRegistry 이펙트 이름.
+        // 비어있으면 VFX 안 뜸. 원소 보스 짤패에 "칼날에 깃든 원소" 표현용.
+        std::string strVFXOnHit;
+        // 추가 임팩트 이펙트 (예: sub_blast_wave, sub_strike_spark). 비어있으면 안 띄움.
+        std::string strVFXImpact;
+        // VFX 스폰 오프셋 — 보스 본체 감싸는 모드 기본값 (DarkLord scale 10 기준).
+        //   forward 0 = 보스 중심에서 스폰. Y 9 = 본체 중심 높이.
+        //   "검기" 효과 원하면 forward 키워서 검 끝쪽으로 밀기 (예: 8~10).
+        float fVFXForwardOffset = 0.0f;
+        float fVFXYOffset       = 9.0f;
+        // 파티클/사이즈 스케일 — 본체 감싸려면 5.0~8.0 추천
+        float fVFXScale         = 6.0f;
     };
 
     ComboAttackBehavior(const std::vector<ComboHit>& hits);
-    virtual ~ComboAttackBehavior() = default;
+    virtual ~ComboAttackBehavior();
 
     virtual void Execute(EnemyComponent* pEnemy) override;
     virtual void Update(float dt, EnemyComponent* pEnemy) override;
@@ -49,6 +62,65 @@ public:
 
 private:
     void DealConeDamage(EnemyComponent* pEnemy, const ComboHit& hit);
+    void SpawnHitVFX(EnemyComponent* pEnemy, const ComboHit& hit);
+    // 검 본 자동 탐색 — DarkLord 등 sword-wielding 보스용. nullptr 면 fallback (boss forward + Y).
+    class TransformComponent* FindSwordBone(EnemyComponent* pEnemy);
+
+    // 검기/글로우 메쉬 lifecycle — 작은 piece 들이 검 본 trail 따라 emit, 각자 scale + emissive 페이드.
+    struct SlashPiece
+    {
+        class GameObject* pObj = nullptr;
+        float fAge      = 0.0f;
+        float fLifetime = 0.30f;
+        DirectX::XMFLOAT3 startScale = { 1.0f, 1.0f, 1.0f };
+        DirectX::XMFLOAT3 endScale   = { 1.6f, 1.6f, 1.6f };
+        DirectX::XMFLOAT4 startEmissive = { 1.0f, 1.0f, 1.0f, 1.0f };
+        class Scene* pScene = nullptr;   // cleanup 시 MarkForDeletion 에 사용
+    };
+    void UpdateSlashPieces(float dt);
+    void CleanupAllSlashPieces();
+    // Hit phase 동안 매 N 초마다 검 본 위치에 작은 glow piece 를 spawn — 진짜 trail 표현
+    void UpdateTrailEmission(float dt, EnemyComponent* pEnemy);
+
+private:
+    // 본 탐색 1회 로그용 (per instance)
+    bool m_bBoneLookupDone = false;
+    class TransformComponent* m_pCachedSwordBone = nullptr;
+
+    std::vector<SlashPiece> m_vSlashPieces;
+
+    // Trail emission state — hit 발생 시 시작, fTrailDuration 동안 매 fTrailInterval 마다 piece spawn
+    bool  m_bEmittingTrail        = false;
+    float m_fTrailRemain          = 0.0f;
+    float m_fTrailEmitAccum       = 0.0f;
+    float m_fTrailEmitInterval    = 0.005f;     // 200Hz — 매우 촘촘, dash 들이 연속 띠 형성
+    float m_fTrailPieceScale      = 1.0f;
+    DirectX::XMFLOAT4 m_xmf4TrailColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+    // 검 본 이전 위치 — swing 방향(속도) 계산해서 piece 를 그 방향으로 stretch
+    DirectX::XMFLOAT3 m_xmf3PrevSwordPos = { 0.0f, 0.0f, 0.0f };
+    bool m_bHasPrevSwordPos       = false;
+    // 누적 swing yaw — 매 frame fresh atan2 가 jitter 로 spike 생성 → smoothing 필요
+    float m_fSmoothedYaw          = 0.0f;
+    bool  m_bYawInitialized       = false;
+
+    // ── 단일 dynamic ribbon 접근 — 한 hit 당 1개 ellipse GameObject 만 사용.
+    //   매 frame hit 시작점 → 현재 검 위치로 stretch + yaw 정렬. 누적 piece X → fan X.
+    class GameObject*  m_pTrailRibbon       = nullptr;
+    class Scene*       m_pRibbonScene       = nullptr;
+    DirectX::XMFLOAT3  m_xmf3TrailStartPos  = { 0,0,0 };
+    float              m_fRibbonFadeT       = 1.0f;
+    bool               m_bRibbonFading      = false;
+    void UpdateRibbon(float dt, EnemyComponent* pEnemy);
+    void StopRibbon();
+
+    // 검 자체 emissive 발광 — 검 GameObject 의 material.m_cEmissive 를 동적 boost
+    class GameObject*  m_pSwordObj         = nullptr;
+    bool               m_bSwordGlowing     = false;
+    float              m_fSwordGlowRemain  = 0.0f;
+    float              m_fSwordGlowMax     = 0.30f;
+    DirectX::XMFLOAT4  m_xmf4SwordGlowColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+    void UpdateSwordGlow(float dt);
+    void StopSwordGlow();
 
 private:
     std::vector<ComboHit> m_vHits;

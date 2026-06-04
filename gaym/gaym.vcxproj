@@ -48,7 +48,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v145</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -212,6 +212,7 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClInclude Include="TailSweepAttackBehavior.h" />
     <ClInclude Include="SideSmashAttackBehavior.h" />
     <ClInclude Include="JumpSlamAttackBehavior.h" />
+    <ClInclude Include="CinematicSequencer.h" />
     <ClInclude Include="ComboAttackBehavior.h" />
     <ClInclude Include="MegaBreathAttackBehavior.h" />
     <ClInclude Include="RockFallAttackBehavior.h" />
@@ -358,6 +359,7 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClCompile Include="TailSweepAttackBehavior.cpp" />
     <ClCompile Include="SideSmashAttackBehavior.cpp" />
     <ClCompile Include="JumpSlamAttackBehavior.cpp" />
+    <ClCompile Include="CinematicSequencer.cpp" />
     <ClCompile Include="ComboAttackBehavior.cpp" />
     <ClCompile Include="MegaBreathAttackBehavior.cpp" />
     <ClCompile Include="RockFallAttackBehavior.cpp" />

@@ -183,14 +183,18 @@ void BossPhaseController::ApplyPhaseData(const BossPhaseData& phase)
     m_pOwner->SetSpecialAttackChance(phase.m_nSpecialAttackChance);
 
     // 공격 행동 교체
+    //   주의: EnemyComponent::Update 가 매 공격마다 m_fnAttackFactory() 로 재생성하기 때문에
+    //   factory 까지 페이즈 람다로 교체해야 다음 공격에도 페이즈 패턴이 유지된다.
     if (phase.m_fnPrimaryAttack)
     {
         m_pOwner->SetAttackBehavior(phase.m_fnPrimaryAttack());
+        m_pOwner->SetAttackFactory(phase.m_fnPrimaryAttack);
     }
 
     if (phase.m_fnSpecialAttack)
     {
         m_pOwner->SetSpecialAttackBehavior(phase.m_fnSpecialAttack());
+        m_pOwner->SetSpecialAttackFactory(phase.m_fnSpecialAttack);
     }
 
 #ifdef _DEBUG

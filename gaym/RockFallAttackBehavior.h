@@ -24,7 +24,8 @@ public:
         float fDropDuration       = 0.8f,   // 하늘 → 지면 낙하 시간
         float fRecoveryTime       = 2.0f,
         float fCameraShakeIntensity = 2.8f,
-        float fCameraShakeDuration  = 0.5f
+        float fCameraShakeDuration  = 0.5f,
+        const char* pClipOverride = nullptr  // 보스마다 다른 휘두름 클립 지정 가능
     );
     virtual ~RockFallAttackBehavior() = default;
     
@@ -36,8 +37,11 @@ public:
     virtual bool IsFinished() const override;
     virtual void Reset() override;
 
-    // 바위 흩뿌리기 — 팔 휘두르는 모션 (attack02) 이 바위를 사방으로 뿌리는 연출에 어울림
-    virtual const char* GetAnimClipName() const override { return "Golem_battle_attack02_ge"; }
+    // 바위 흩뿌리기 — 팔 휘두르는 모션 (attack02) 이 바위를 사방으로 뿌리는 연출에 어울림.
+    // override 있으면 보스 전용 클립 사용.
+    virtual const char* GetAnimClipName() const override {
+        return m_strClipOverride ? m_strClipOverride : "Golem_battle_attack02_ge";
+    }
     virtual float GetTimeToHit() const override { return m_fWindupTime + m_fDropDuration; }
     // 각 바위가 자체 인디케이터 가짐 → 전역 인디케이터는 끔 (None 반환)
     virtual bool  ShouldShowHitZone() const override { return false; }
@@ -100,4 +104,6 @@ private:
 
     // 서버가 보내준 동기화 seed
     uint32 m_uNetworkSeed = 0;
+
+    const char* m_strClipOverride = nullptr;
 };

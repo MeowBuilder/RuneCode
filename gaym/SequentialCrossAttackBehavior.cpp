@@ -35,7 +35,8 @@ static RingMesh* GetSeqFillMesh(ID3D12Device* pDevice, ID3D12GraphicsCommandList
 SequentialCrossAttackBehavior::SequentialCrossAttackBehavior(
     float fDamagePerCross, float fBarHalfLength, float fBarHalfWidth,
     float fWindupTime, float fExplosionInterval, float fExplosionFlash,
-    float fRecoveryTime, float fCameraShakeIntensity, float fCameraShakeDuration)
+    float fRecoveryTime, float fCameraShakeIntensity, float fCameraShakeDuration,
+    const char* pClipOverride)
     : m_fDamagePerCross(fDamagePerCross)
     , m_fBarHalfLength(fBarHalfLength)
     , m_fBarHalfWidth(fBarHalfWidth)
@@ -45,6 +46,7 @@ SequentialCrossAttackBehavior::SequentialCrossAttackBehavior(
     , m_fRecoveryTime(fRecoveryTime)
     , m_fCameraShakeIntensity(fCameraShakeIntensity)
     , m_fCameraShakeDuration(fCameraShakeDuration)
+    , m_strClipOverride(pClipOverride)
 {
 }
 

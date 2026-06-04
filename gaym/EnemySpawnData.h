@@ -14,6 +14,10 @@ struct EnemySpawnData
     std::string m_strMeshPath;          // Empty = use CubeMesh
     std::string m_strAnimationPath;     // Empty = no animation
     std::string m_strTexturePath;       // Empty = no texture override
+    // 프레임명 substring → 텍스처 경로 매핑. 매칭 시 default 대신 사용.
+    //   예: {{"Sword", "T_Skin3_Sword.png"}, {"Helm", "T_Skin3_Helm.png"}}
+    //   첫 매치 우선. 매칭 없는 프레임은 m_strTexturePath 사용.
+    std::vector<std::pair<std::string, std::string>> m_vTextureOverrides;
     XMFLOAT3 m_xmf3Scale = { 1.0f, 1.0f, 1.0f };
     XMFLOAT4 m_xmf4Color = { 1.0f, 0.0f, 0.0f, 1.0f }; // Red by default
 

@@ -240,7 +240,10 @@ private:
 
     // 스킬 시전을 서버에 전송 (SendSkill + SendPlayerAttack) — ExecuteWithActivationType 평시 경로와
     //   charge release 경로 양쪽에서 호출되도록 추출.
-    void SendSkillNet(SkillSlot slot, const DirectX::XMFLOAT3& targetPosition, float chargeRatio = 0.0f, bool sendSkill = true);
+    //   chargeRatio: 차징 비율 (0~1), 평시 경로에선 0
+    //   sendSkill:   설치+차징은 false 로 SendSkill 생략하고 PlayerAttack 만 전송
+    void SendSkillNet(SkillSlot slot, const DirectX::XMFLOAT3& targetPosition,
+                      float chargeRatio = 0.0f, bool sendSkill = true);
 
     // 메아리 지연 큐 (ABY_ECO: 2초 후 가장 가까운 적을 향해 50% 재발동)
     struct DeferredEcho { size_t index; float mult; float timer; int decalSlot = -1; EnemyComponent* pTarget = nullptr; };

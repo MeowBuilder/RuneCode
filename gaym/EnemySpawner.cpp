@@ -39,6 +39,7 @@
 #include "Shader.h"
 #include "Mesh.h"
 #include "MeshLoader.h"
+#include <fstream>
 
 EnemySpawner::EnemySpawner()
 {
@@ -966,14 +967,33 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
 
     // ===== Final Boss: DarkLord (DarkKnight) — 최종 보스, 단순 근접 콤보 =====
     EnemySpawnData darkLord;
+    // Mesh + Anim 는 skin3 짝 유지 (skin1 anim 부재 → 본 구조 mismatch 로 메쉬 깨짐).
+    //   텍스처만 Skin1 (어두운 푸른 강철) 로 적용 — UV 는 skin3 mesh 의 것 그대로 사용.
     darkLord.m_strMeshPath      = "Assets/Enemies/DeathKnight/DarkKnight2_skin3.bin";
     darkLord.m_strAnimationPath = "Assets/Enemies/DeathKnight/DarkKnight2_skin3_Anim.bin";
-    darkLord.m_strTexturePath   = "Assets/Enemies/DeathKnight/Textures/T_Skin3_DeathKnight_Armor_Albedo.png";
+    // Skin1 전체 풀세트 사용 — 어두운 푸른 강철 다크나이트 톤. Body/Armor/Helm/Sword 모두 Skin1.
+    darkLord.m_strTexturePath   = "Assets/Enemies/DeathKnight/Textures/T_Skin1_DeathKnight_Armor_Albedo.png";
+    darkLord.m_vTextureOverrides = {
+        { "Sword",  "Assets/Enemies/DeathKnight/Textures/T_Skin1_DeathKnight_Sword_Albedo.png" },
+        { "sword",  "Assets/Enemies/DeathKnight/Textures/T_Skin1_DeathKnight_Sword_Albedo.png" },
+        { "Weapon", "Assets/Enemies/DeathKnight/Textures/T_Skin1_DeathKnight_Sword_Albedo.png" },
+        { "Helm",   "Assets/Enemies/DeathKnight/Textures/T_Skin1_DeathKnight_Helm_Albedo.png"  },
+        { "helm",   "Assets/Enemies/DeathKnight/Textures/T_Skin1_DeathKnight_Helm_Albedo.png"  },
+        { "Hood",   "Assets/Enemies/DeathKnight/Textures/T_Skin1_DeathKnight_Helm_Albedo.png"  },
+        { "Body",   "Assets/Enemies/DeathKnight/Textures/T_Skin1_DeathKnight_Body_Albedo.png"  },
+        { "body",   "Assets/Enemies/DeathKnight/Textures/T_Skin1_DeathKnight_Body_Albedo.png"  },
+        { "Head",   "Assets/Enemies/DeathKnight/Textures/T_DeathKnigh_2_Mat_DarkKnight2_Head_Albedo.png" },
+        { "head",   "Assets/Enemies/DeathKnight/Textures/T_DeathKnigh_2_Mat_DarkKnight2_Head_Albedo.png" },
+        { "Face",   "Assets/Enemies/DeathKnight/Textures/T_DeathKnigh_2_Mat_DarkKnight2_Head_Albedo.png" },
+    };
     darkLord.m_xmf3Scale = XMFLOAT3(10.0f, 10.0f, 10.0f);
-    darkLord.m_xmf4Color = XMFLOAT4(0.55f, 0.10f, 0.85f, 1.0f); // 흑마법 보라
+    // 자연 텍스처 — 다크 아레나의 cool 라이트 (1.0, 1.1, 1.5) 가 이미 차가운 톤 보장.
+    //   별도 tint 불필요.
+    darkLord.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 
-    darkLord.m_Stats.m_fMaxHP              = 6000.0f;
-    darkLord.m_Stats.m_fCurrentHP          = 6000.0f;
+    // 테스트 편의 — 페이즈 진행을 빠르게 보기 위해 6000 → 1500. 추후 밸런스 잡힐 때 상향.
+    darkLord.m_Stats.m_fMaxHP              = 1500.0f;
+    darkLord.m_Stats.m_fCurrentHP          = 1500.0f;
     darkLord.m_Stats.m_fMoveSpeed          = 12.0f;
     darkLord.m_Stats.m_fAttackRange        = 7.0f;
     darkLord.m_Stats.m_fAttackCooldown     = 1.0f;
@@ -996,21 +1016,256 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     darkLord.m_IndicatorConfig.m_fHitRadius = 4.5f;
     darkLord.m_IndicatorConfig.m_fHitLength = 9.0f;
 
-    // 기본 공격 — 단순 근접 휘두름. 패턴은 추후 강화.
+    // 기본 공격 — 페이즈 컨트롤러가 처음 적용되기 전 fallback 용 단순 근접.
     darkLord.m_fnCreateAttack = []() {
         auto p = std::make_unique<MeleeAttackBehavior>(
-            40.0f /*damage*/, 0.35f /*windup*/, 0.55f /*hit*/, 0.50f /*recovery*/);
+            40.0f /*damage*/, 0.45f /*windup*/, 0.55f /*hit*/, 0.50f /*recovery*/);
         p->SetHitRange(8.0f);
         return p;
     };
-
-    // 특수 공격 — 일단 점프 슬램 1종만. attack10 클립이 광역 공격 모션으로 적합.
+    // Special fallback — phase 적용 전에만 사용
     darkLord.m_fnCreateSpecialAttack = []() {
         return std::make_unique<JumpSlamAttackBehavior>(
-            80.0f /*damage*/, 14.0f /*jumpHeight*/, 1.0f /*jumpDur*/,
-            12.0f /*slamRadius*/, 0.35f /*windup*/, 0.9f /*recovery*/,
-            true  /*trackTarget*/, 2.5f /*shake*/, 0.4f /*shakeDur*/,
-            "Attack10" /*clipOverride*/);
+            70.0f, 12.0f, 0.9f, 10.0f, 0.40f, 0.8f, true, 2.0f, 0.35f, "Attack10");
+    };
+
+    // ── DarkLord 5단계 페이즈 (땅 → 물 → 풀/바람 → 불 → Final) ───────────────
+    //   기획: 뒤로 갈수록 화려해지도록 원소 배치. 페이즈 전환 시 attack9(짧은 포효)로
+    //   1.6초 무적, 그 사이 DarkArenaController 가 코너 색상 복귀를 트리거.
+    //   톤: 묵직 → 가속. windup 을 길게 잡아 텔레그래프가 또렷하고, 광역 / 다단 패턴 위주.
+    darkLord.m_fnCreateBossPhaseConfig = []() {
+        auto pConfig = std::make_unique<BossPhaseConfig>();
+
+        // 짤패 공통 헬퍼 — DarkLord 의 모든 짤패는 칼 휘두름(콤보) 으로 통일.
+        // 페이즈마다 hit 횟수 / 템포 / 사거리 / cone 각도만 다르게 잡아서 원소 톤 차이를 표현.
+        // (Phase Lambda 안에서 캡처할 일이 없으므로 free function 으로 두려면 별도 정의 필요해서
+        //  여기선 각 페이즈마다 인라인 Make 로 중복 해소함)
+
+        // ── Phase 0 (100→80% HP) : 땅 / 묵직 2타 칼 + 십자 균열 ──────────────
+        //   짤패: attack6 → attack9 묵직 2타, windup 길게, 사거리 넓게 (광역 칼바람 느낌).
+        //   서명: GroundRupture 십자 균열 — 광장 전체 가로/세로 4가닥.
+        {
+            BossPhaseData p;
+            p.m_fHealthThreshold = 1.0f;
+            p.m_fSpeedMultiplier = 0.95f;          // 시작은 느릿
+            p.m_fAttackSpeedMultiplier = 1.20f;    // 쿨다운 길게
+            p.m_nSpecialAttackChance = 45;
+
+            // Primary: 묵직 2타 칼 + 땅 원소 VFX (Q_StoneSpike + sub_blast_wave 충격파)
+            p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
+                std::vector<ComboAttackBehavior::ComboHit> hits;
+                auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
+                               const char* vfx, const char* impact, float scale) {
+                    ComboAttackBehavior::ComboHit hh;
+                    hh.fDamage = dmg; hh.fWindupTime = w; hh.fHitTime = h; hh.fRecoveryTime = r;
+                    hh.fHitRange = range; hh.fConeAngle = cone; hh.strAnimation = clip;
+                    hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
+                    return hh;
+                };
+                hits.push_back(Make("attack6", 55.0f, 0.55f, 0.25f, 0.20f, 10.0f, 180.0f, "status_fracture", "sub_blast_wave", 3.0f));
+                hits.push_back(Make("attack9", 80.0f, 0.45f, 0.25f, 0.45f, 10.5f, 220.0f, "status_fracture", "sub_blast_wave", 5.0f));
+                return std::make_unique<ComboAttackBehavior>(hits);
+            };
+            // Special: 십자 균열 — 광장 전체 가로/세로 4 가닥 솟구침
+            p.m_fnSpecialAttack = []() {
+                return std::make_unique<GroundRuptureAttackBehavior>(
+                    GroundRuptureAttackBehavior::RuptureShape::Cross,
+                    130.0f /*dmg*/, 55.0f /*lineLength*/, 4.5f /*halfWidth*/,
+                    2.2f /*windup*/, 0.7f /*impact*/, 1.6f /*recovery*/,
+                    3.5f /*shake*/, 0.6f /*shakeDur*/,
+                    "attack7" /*clipOverride*/);
+            };
+            pConfig->AddPhase(p);
+        }
+
+        // ── Phase 1 (80→60% HP) : 물 / 흐르는 3타 칼 + 풀맵 충격파 ──────────
+        //   짤패: attack1 → attack2 → spin — 부드럽게 이어지는 3타, 마지막 spin 으로 휩쓰는 느낌.
+        //   서명: ShockwaveRing — 보스 중심 거대 충격파 링.
+        {
+            BossPhaseData p;
+            p.m_fHealthThreshold = 0.80f;
+            p.m_fSpeedMultiplier = 1.05f;
+            p.m_fAttackSpeedMultiplier = 1.05f;
+            p.m_nSpecialAttackChance = 50;
+            p.m_bInvincibleDuringTransition = true;
+            p.m_fTransitionDuration = 1.6f;
+            p.m_strTransitionAnimation = "attack9";
+
+            // Primary: 흐르는 3타 + 물 원소 VFX (Q_WaveSlash + sub_cool_mist 한기)
+            p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
+                std::vector<ComboAttackBehavior::ComboHit> hits;
+                auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
+                               const char* vfx, const char* impact, float scale) {
+                    ComboAttackBehavior::ComboHit hh;
+                    hh.fDamage = dmg; hh.fWindupTime = w; hh.fHitTime = h; hh.fRecoveryTime = r;
+                    hh.fHitRange = range; hh.fConeAngle = cone; hh.strAnimation = clip;
+                    hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
+                    return hh;
+                };
+                hits.push_back(Make("attack1", 45.0f, 0.30f, 0.15f, 0.10f, 9.0f, 130.0f, "status_chill", "sub_cool_mist", 3.0f));
+                hits.push_back(Make("attack2", 45.0f, 0.22f, 0.15f, 0.10f, 9.0f, 130.0f, "status_chill", "sub_cool_mist", 3.0f));
+                hits.push_back(Make("spin",    60.0f, 0.25f, 0.30f, 0.30f, 9.5f, 280.0f, "status_chill", "sub_cool_mist", 5.0f));
+                return std::make_unique<ComboAttackBehavior>(hits);
+            };
+            // Special: 풀맵 충격파 링 (36 반경)
+            p.m_fnSpecialAttack = []() {
+                return std::make_unique<ShockwaveRingAttackBehavior>(
+                    110.0f /*dmg*/, 36.0f /*maxRadius*/, 4.5f /*thickness*/,
+                    1.8f /*windup*/, 1.1f /*expand*/, 1.4f /*recovery*/,
+                    2.8f /*shake*/, 0.55f);
+            };
+            pConfig->AddPhase(p);
+        }
+
+        // ── Phase 2 (60→40% HP) : 풀/바람 / 빠른 3타 칼 + X자 진공파 ────────
+        //   짤패: attack1 → attack2 → attack4, windup 짧음·회복 짧음 — 칼바람 느낌.
+        //   서명: GaleSlash XDiag — X자 진공파.
+        {
+            BossPhaseData p;
+            p.m_fHealthThreshold = 0.60f;
+            p.m_fSpeedMultiplier = 1.20f;
+            p.m_fAttackSpeedMultiplier = 0.90f;
+            p.m_nSpecialAttackChance = 55;
+            p.m_bInvincibleDuringTransition = true;
+            p.m_fTransitionDuration = 1.6f;
+            p.m_strTransitionAnimation = "attack9";
+
+            // Primary: 빠른 3타 칼 + 바람 원소 VFX (Q_WindCutter + sub_speed_streak 속도 잔상)
+            p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
+                std::vector<ComboAttackBehavior::ComboHit> hits;
+                auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
+                               const char* vfx, const char* impact, float scale) {
+                    ComboAttackBehavior::ComboHit hh;
+                    hh.fDamage = dmg; hh.fWindupTime = w; hh.fHitTime = h; hh.fRecoveryTime = r;
+                    hh.fHitRange = range; hh.fConeAngle = cone; hh.strAnimation = clip;
+                    hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
+                    return hh;
+                };
+                // 풍속성 status 가 없어서 status_freeze (흰-청 글로우) 를 바람 톤으로 재활용
+                hits.push_back(Make("attack1", 35.0f, 0.18f, 0.10f, 0.08f, 8.5f, 120.0f, "status_freeze", "sub_speed_streak", 3.0f));
+                hits.push_back(Make("attack2", 35.0f, 0.14f, 0.10f, 0.08f, 8.5f, 120.0f, "status_freeze", "sub_speed_streak", 3.0f));
+                hits.push_back(Make("attack4", 55.0f, 0.18f, 0.15f, 0.22f, 9.0f, 140.0f, "status_freeze", "sub_speed_streak", 5.0f));
+                return std::make_unique<ComboAttackBehavior>(hits);
+            };
+            // Special: GaleSlash X자 진공파 — length 36, 4면 동시 발사
+            p.m_fnSpecialAttack = []() {
+                return std::make_unique<GaleSlashAttackBehavior>(
+                    GaleSlashAttackBehavior::SlashShape::XDiag,
+                    95.0f /*dmg*/, 36.0f /*length*/, 4.0f /*halfWidth*/,
+                    1.3f /*windup*/, 0.45f /*impact*/, 1.1f /*recovery*/,
+                    2.5f /*shake*/, 0.5f);
+            };
+            pConfig->AddPhase(p);
+        }
+
+        // ── Phase 3 (40→20% HP) : 불 / 공격적 2타 칼 + 메테오 폭격 ──────────
+        //   짤패: attack6 → attack9, windup 짧고 데미지 높은 burst 콤보 — 폭발적 칼질.
+        //   서명: RockFall 메테오 — 하늘에서 8발 화염 낙하.
+        {
+            BossPhaseData p;
+            p.m_fHealthThreshold = 0.40f;
+            p.m_fSpeedMultiplier = 1.35f;
+            p.m_fAttackSpeedMultiplier = 0.75f;
+            p.m_nSpecialAttackChance = 60;
+            p.m_bInvincibleDuringTransition = true;
+            p.m_fTransitionDuration = 1.6f;
+            p.m_strTransitionAnimation = "attack9";
+
+            // Primary: 공격적 2타 burst + 불 원소 VFX (R_MeteorSmallImpact / R_MeteorImpact + sub_strike_spark 불꽃)
+            p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
+                std::vector<ComboAttackBehavior::ComboHit> hits;
+                auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
+                               const char* vfx, const char* impact, float scale) {
+                    ComboAttackBehavior::ComboHit hh;
+                    hh.fDamage = dmg; hh.fWindupTime = w; hh.fHitTime = h; hh.fRecoveryTime = r;
+                    hh.fHitRange = range; hh.fConeAngle = cone; hh.strAnimation = clip;
+                    hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
+                    return hh;
+                };
+                hits.push_back(Make("attack6", 50.0f, 0.22f, 0.12f, 0.08f, 8.5f, 110.0f, "status_burn", "sub_strike_spark", 3.0f));
+                hits.push_back(Make("attack9", 85.0f, 0.25f, 0.18f, 0.30f, 9.5f, 160.0f, "status_burn", "sub_strike_spark", 5.0f));
+                return std::make_unique<ComboAttackBehavior>(hits);
+            };
+            // Special: 메테오 폭격 — 8발, 20~55 반경 사이 무작위 착탄
+            p.m_fnSpecialAttack = []() {
+                return std::make_unique<RockFallAttackBehavior>(
+                    8 /*count*/, 95.0f /*dmgPerRock*/, 9.0f /*aoeRadius*/,
+                    20.0f /*spawnMin*/, 55.0f /*spawnMax*/,
+                    2.1f /*windup*/, 0.85f /*drop*/, 2.0f /*recovery*/,
+                    3.5f /*shake*/, 0.6f,
+                    "Attack10" /*clipOverride*/);
+            };
+            pConfig->AddPhase(p);
+        }
+
+        // ── Phase 4 (20→0% HP) : Final / 순차 십자 + 메테오 + 충격파 랜덤 ────
+        //   가장 화려한 단계. 다단/광역 패턴 무작위로 쏟아낸다.
+        {
+            BossPhaseData p;
+            p.m_fHealthThreshold = 0.20f;
+            p.m_fSpeedMultiplier = 1.65f;
+            p.m_fAttackSpeedMultiplier = 0.55f;
+            p.m_nSpecialAttackChance = 80;
+            p.m_bInvincibleDuringTransition = true;
+            p.m_fTransitionDuration = 2.0f;
+            p.m_strTransitionAnimation = "attack9";
+
+            // Primary: 5타 분노 콤보 — 매 hit 마다 다른 원소 VFX 깃듦 (Final = 올원소)
+            //   1=물, 2=땅, 3=바람, 4=불, 5=대규모 화염 마무리. 마무리는 가장 큼.
+            p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
+                std::vector<ComboAttackBehavior::ComboHit> hits;
+                auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
+                               const char* vfx, const char* impact, float scale) {
+                    ComboAttackBehavior::ComboHit hh;
+                    hh.fDamage = dmg; hh.fWindupTime = w; hh.fHitTime = h; hh.fRecoveryTime = r;
+                    hh.fHitRange = range; hh.fConeAngle = cone; hh.strAnimation = clip;
+                    hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
+                    return hh;
+                };
+                hits.push_back(Make("attack1", 30.0f, 0.18f, 0.12f, 0.08f,  9.0f, 130.0f, "status_chill",    "sub_cool_mist",    3.0f));
+                hits.push_back(Make("attack2", 30.0f, 0.15f, 0.12f, 0.08f,  9.0f, 130.0f, "status_fracture", "sub_blast_wave",   3.0f));
+                hits.push_back(Make("attack4", 35.0f, 0.15f, 0.12f, 0.10f,  9.5f, 150.0f, "status_freeze",   "sub_speed_streak", 3.0f));
+                hits.push_back(Make("attack6", 35.0f, 0.18f, 0.12f, 0.10f,  9.5f, 150.0f, "status_burn",     "sub_strike_spark", 3.0f));
+                hits.push_back(Make("attack9", 75.0f, 0.30f, 0.22f, 0.35f, 11.0f, 240.0f, "status_burn",     "sub_blast_wave",   6.0f));   // 광역 마무리
+                return std::make_unique<ComboAttackBehavior>(hits);
+            };
+            // Special: 시그니처 풀맵 패턴 5종 중 랜덤
+            p.m_fnSpecialAttack = []() -> std::unique_ptr<IAttackBehavior> {
+                int choice = rand() % 5;
+                switch (choice)
+                {
+                case 0:
+                    // 순차 십자 폭발 (3개) — 가장 드라마틱
+                    return std::make_unique<SequentialCrossAttackBehavior>(
+                        80.0f /*dmgPerCross*/, 38.0f /*halfLen*/, 4.0f /*halfWidth*/,
+                        2.4f /*windup*/, 0.55f /*interval*/, 0.40f /*flash*/,
+                        1.5f /*recovery*/, 3.2f /*shake*/, 0.55f,
+                        "attack7");
+                case 1:
+                    // 메테오 폭격 (강화) — 10발
+                    return std::make_unique<RockFallAttackBehavior>(
+                        10, 95.0f, 9.5f, 20.0f, 60.0f,
+                        1.8f, 0.85f, 1.6f, 3.6f, 0.6f, "Attack10");
+                case 2:
+                    // 풀맵 충격파 링 (강화)
+                    return std::make_unique<ShockwaveRingAttackBehavior>(
+                        125.0f, 40.0f, 5.0f, 1.6f, 1.0f, 1.2f, 3.0f, 0.6f);
+                case 3:
+                    // X자 진공파 (강화)
+                    return std::make_unique<GaleSlashAttackBehavior>(
+                        GaleSlashAttackBehavior::SlashShape::XDiag,
+                        110.0f, 40.0f, 4.5f, 1.0f, 0.4f, 0.9f, 2.8f, 0.55f);
+                default:
+                    // 초대형 슬램 (Attack10) — 거의 풀맵
+                    return std::make_unique<JumpSlamAttackBehavior>(
+                        160.0f, 20.0f, 1.05f, 18.0f, 0.45f, 0.85f,
+                        true, 5.0f, 0.7f, "Attack10");
+                }
+            };
+            pConfig->AddPhase(p);
+        }
+
+        return pConfig;
     };
 
     RegisterEnemyPreset("DarkLord", darkLord);
@@ -1421,8 +1676,16 @@ GameObject* EnemySpawner::CreateMeshEnemy(CRoom* pRoom, const XMFLOAT3& position
     // Load texture if specified
     if (!data.m_strTexturePath.empty())
     {
+        // 보스 스폰 마커 — 세션 식별 쉬움
+        {
+            std::ofstream f("vfx_debug.log", std::ios::app);
+            if (f.is_open()) f << "\n=== Enemy spawn: default tex='" << data.m_strTexturePath
+                               << "' overrides=" << data.m_vTextureOverrides.size() << " ===\n";
+        }
         // m_xmf4Color 를 텍스처 위 tint 로 전달 (카테고리별 색 구분)
-        LoadTextureToHierarchy(pEnemy, data.m_strTexturePath, data.m_xmf4Color);
+        const std::vector<std::pair<std::string, std::string>>* pOv =
+            data.m_vTextureOverrides.empty() ? nullptr : &data.m_vTextureOverrides;
+        LoadTextureToHierarchy(pEnemy, data.m_strTexturePath, data.m_xmf4Color, pOv);
     }
     else
     {
@@ -1526,21 +1789,61 @@ void EnemySpawner::ApplyColorToHierarchy(GameObject* pGameObject, const XMFLOAT4
 }
 
 void EnemySpawner::LoadTextureToHierarchy(GameObject* pGameObject, const std::string& texturePath,
-                                          const XMFLOAT4& tint)
+                                          const XMFLOAT4& tint,
+                                          const std::vector<std::pair<std::string, std::string>>* pOverrides)
 {
     if (!pGameObject || !m_pDevice || !m_pCommandList || !m_pScene) return;
 
     // Load texture for objects with mesh
     if (pGameObject->GetMesh())
     {
-        pGameObject->SetTextureName(texturePath.c_str());
+        // 프레임명 substring 매칭으로 override 우선 선택
+        std::string actualPath = texturePath;
+        const char* matchedKey = "(default)";
+        if (pOverrides && pGameObject->m_pstrFrameName && pGameObject->m_pstrFrameName[0])
+        {
+            for (const auto& kv : *pOverrides)
+            {
+                if (strstr(pGameObject->m_pstrFrameName, kv.first.c_str()) != nullptr)
+                {
+                    actualPath = kv.second;
+                    matchedKey = kv.first.c_str();
+                    break;
+                }
+            }
+        }
+        // 파일 존재 확인 — 없으면 LoadTexture 가 fail-fallback 으로 mesh 내장 텍스처(skin3 등) 유지하기 쉬움
+        bool bFileExists = false;
+        {
+            std::ifstream check(actualPath);
+            bFileExists = check.good();
+        }
+        pGameObject->SetTextureName(actualPath.c_str());
 
         D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle;
         D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle;
         m_pScene->AllocateDescriptor(&cpuHandle, &gpuHandle);
 
+        // LoadTexture 호출 전후의 m_pd3dTexture 상태 + cpu/gpu handle 로그
+        bool bHadTexBefore = pGameObject->HasTexture();
         pGameObject->LoadTexture(m_pDevice, m_pCommandList, cpuHandle);
+        bool bHasTexAfter = pGameObject->HasTexture();
         pGameObject->SetSrvGpuDescriptorHandle(gpuHandle);
+
+        {
+            std::ofstream f("vfx_debug.log", std::ios::app);
+            if (f.is_open())
+            {
+                f << "[TexMap] frame='" << (pGameObject->m_pstrFrameName ? pGameObject->m_pstrFrameName : "(null)")
+                  << "' match='" << matchedKey
+                  << "' exists=" << (bFileExists ? 1 : 0)
+                  << " hadTex=" << (bHadTexBefore ? 1 : 0)
+                  << " hasTex=" << (bHasTexAfter ? 1 : 0)
+                  << " cpuH=" << cpuHandle.ptr
+                  << " gpuH=" << gpuHandle.ptr
+                  << " tex='" << actualPath << "'\n";
+            }
+        }
 
         // diffuse 에 tint 곱해 텍스처 위에 카테고리 색을 입힘.
         // tint == (1,1,1,1) 이면 기존 동작과 동일.
@@ -1569,12 +1872,62 @@ void EnemySpawner::LoadTextureToHierarchy(GameObject* pGameObject, const std::st
 
     if (pGameObject->m_pChild)
     {
-        LoadTextureToHierarchy(pGameObject->m_pChild, texturePath, tint);
+        LoadTextureToHierarchy(pGameObject->m_pChild, texturePath, tint, pOverrides);
     }
     if (pGameObject->m_pSibling)
     {
-        LoadTextureToHierarchy(pGameObject->m_pSibling, texturePath, tint);
+        LoadTextureToHierarchy(pGameObject->m_pSibling, texturePath, tint, pOverrides);
     }
+}
+
+// 검기 / 글로우 슬래시용 임시 메쉬 GameObject. CreateIndicatorObject 와 거의 동일하지만
+//   초기 emissive 를 호출자가 지정 (원소색). Behavior 가 lifetime/스케일/페이드 트래킹.
+GameObject* EnemySpawner::SpawnSlashMesh(CRoom* pRoom, Mesh* pMesh,
+                                          const XMFLOAT3& pos,
+                                          const XMFLOAT3& rotDeg,
+                                          const XMFLOAT3& scale,
+                                          const XMFLOAT4& emissive)
+{
+    if (!m_pDevice || !m_pCommandList || !m_pScene || !pMesh || !m_pShader) return nullptr;
+
+    CRoom* pPrev = m_pScene->GetCurrentRoom();
+    m_pScene->SetCurrentRoom(pRoom);
+    GameObject* pObj = m_pScene->CreateGameObject(m_pDevice, m_pCommandList);
+    m_pScene->SetCurrentRoom(pPrev);
+    if (!pObj) return nullptr;
+
+    TransformComponent* pT = pObj->GetTransform();
+    if (pT)
+    {
+        pT->SetPosition(pos);
+        pT->SetRotation(rotDeg.x, rotDeg.y, rotDeg.z);
+        pT->SetScale(scale);
+    }
+
+    pMesh->AddRef();
+    pObj->SetMesh(pMesh);
+
+    // diffuse / ambient 어둡게 → emissive 가 라이팅 무시하고 환하게 표시
+    MATERIAL mat;
+    mat.m_cAmbient  = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+    mat.m_cDiffuse  = XMFLOAT4(0.0f, 0.0f, 0.0f, emissive.w);
+    mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+    mat.m_cEmissive = emissive;
+    pObj->SetMaterial(mat);
+
+    auto* pRC = pObj->AddComponent<RenderComponent>();
+    pRC->SetMesh(pMesh);
+    pRC->SetCastsShadow(false);    // ellipse 들의 그림자가 ground 에 spike fan 형성하던 문제 차단
+    m_pShader->AddRenderComponent(pRC);
+
+    // 첫 프레임 CB 동기화 (Room 이 Inactive 일 때 Update skip 되어 ZeroMemory CB 방지)
+    pT->Update(0.0f);
+    pObj->Update(0.0f);
+
+    // SetDecal — 라이팅 우회 + emissive 가산 표시. 글로우 슬래시 핵심.
+    pObj->SetDecal(true);
+
+    return pObj;
 }
 
 GameObject* EnemySpawner::CreateIndicatorObject(CRoom* pRoom, Mesh* pMesh)

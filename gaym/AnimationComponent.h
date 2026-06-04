@@ -59,6 +59,53 @@ public:
     // 디버그용 — 현재 애니메이션 재생 시간을 확인한다.
     float GetCurrentTime() const { return m_fCurrentTime; }
 
+    // 본 트랜스폼 접근 — VFX 부착(검 끝 등) 시 사용. 캐시는 Init 의 BuildBoneCache 에서 채워짐.
+    TransformComponent* GetBoneTransform(const std::string& strBoneName) const
+    {
+        auto it = m_mapBoneTransforms.find(strBoneName);
+        return (it != m_mapBoneTransforms.end()) ? it->second : nullptr;
+    }
+    // 후보 본 이름 리스트 중 첫 매치 반환 — 검 본 이름이 모델마다 달라서 fallback 용
+    TransformComponent* FindBoneAny(const std::vector<std::string>& candidates) const
+    {
+        for (const auto& n : candidates)
+        {
+            auto it = m_mapBoneTransforms.find(n);
+            if (it != m_mapBoneTransforms.end()) return it->second;
+        }
+        return nullptr;
+    }
+    // 후보 중 매칭된 첫 이름 반환 (디버그용). 매칭 없으면 빈 문자열.
+    std::string FindBoneAnyName(const std::vector<std::string>& candidates) const
+    {
+        for (const auto& n : candidates)
+        {
+            if (m_mapBoneTransforms.find(n) != m_mapBoneTransforms.end()) return n;
+        }
+        return {};
+    }
+    // 디버그용 — 캐시된 본 이름들 OutputDebugString 으로 덤프
+    void DumpBoneNames(const char* tag = "Bones") const
+    {
+        char buf[256];
+        sprintf_s(buf, "[%s] bone cache size=%zu\n", tag, m_mapBoneTransforms.size());
+        OutputDebugStringA(buf);
+        for (const auto& kv : m_mapBoneTransforms)
+        {
+            sprintf_s(buf, "[%s]   %s\n", tag, kv.first.c_str());
+            OutputDebugStringA(buf);
+        }
+    }
+
+    // 캐시된 본 이름 전체 리스트 — 파일 로그 등 외부 덤프용
+    std::vector<std::string> GetBoneNames() const
+    {
+        std::vector<std::string> names;
+        names.reserve(m_mapBoneTransforms.size());
+        for (const auto& kv : m_mapBoneTransforms) names.push_back(kv.first);
+        return names;
+    }
+
 private:
     std::shared_ptr<AnimationSet> m_pAnimationSet;
     AnimationClip* m_pCurrentClip = nullptr;
