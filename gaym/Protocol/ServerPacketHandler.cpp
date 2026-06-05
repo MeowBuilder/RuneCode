@@ -289,16 +289,22 @@ bool Handle_S_SKILL(PacketSessionRef& session, Protocol::S_SKILL& pkt)
     float dirY = pkt.diry();
     float dirZ = pkt.dirz();
 
-    char buf[256];
-    sprintf_s(buf, "[Network] S_SKILL received: PlayerId=%llu SkillType=%d Pos=(%.1f, %.1f, %.1f) Dir=(%.2f, %.2f, %.2f)",
-        playerId, skillType, x, y, z, dirX, dirY, dirZ);
+    // 서버 룬 보정 필드 — 서버 권위 radius/damage 배율 (AMP_RAD3 등). 0 이면 기본값(1.0) 처리.
+    int32 skillSlot   = pkt.skillslot();
+    float radiusMult  = pkt.radiusmult();
+    float damageMult  = pkt.damagemult();
+
+    char buf[320];
+    sprintf_s(buf, "[Network] S_SKILL received: PlayerId=%llu SkillType=%d Pos=(%.1f, %.1f, %.1f) Dir=(%.2f, %.2f, %.2f) Slot=%d RadiusMult=%.2f DamageMult=%.2f",
+        playerId, skillType, x, y, z, dirX, dirY, dirZ, skillSlot, radiusMult, damageMult);
     WriteNetworkLog(buf);
 
     // NetworkManager를 통해 메인 스레드에서 처리
     NetworkManager* pNetMgr = NetworkManager::GetInstance();
     if (pNetMgr)
     {
-        pNetMgr->QueueSkill(playerId, skillType, x, y, z, dirX, dirY, dirZ);
+        pNetMgr->QueueSkill(playerId, skillType, x, y, z, dirX, dirY, dirZ,
+                            skillSlot, radiusMult, damageMult);
         WriteNetworkLog("[Network] QueueSkill called");
     }
 
