@@ -2062,6 +2062,9 @@ class S_SKILL final :
     kDirXFieldNumber = 6,
     kDirYFieldNumber = 7,
     kDirZFieldNumber = 8,
+    kSkillSlotFieldNumber = 9,
+    kRadiusMultFieldNumber = 10,
+    kDamageMultFieldNumber = 11,
   };
   // uint64 playerId = 1;
   void clear_playerid();
@@ -2135,6 +2138,33 @@ class S_SKILL final :
   void _internal_set_dirz(float value);
   public:
 
+  // int32 skillSlot = 9;
+  void clear_skillslot();
+  ::PROTOBUF_NAMESPACE_ID::int32 skillslot() const;
+  void set_skillslot(::PROTOBUF_NAMESPACE_ID::int32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::int32 _internal_skillslot() const;
+  void _internal_set_skillslot(::PROTOBUF_NAMESPACE_ID::int32 value);
+  public:
+
+  // float radiusMult = 10;
+  void clear_radiusmult();
+  float radiusmult() const;
+  void set_radiusmult(float value);
+  private:
+  float _internal_radiusmult() const;
+  void _internal_set_radiusmult(float value);
+  public:
+
+  // float damageMult = 11;
+  void clear_damagemult();
+  float damagemult() const;
+  void set_damagemult(float value);
+  private:
+  float _internal_damagemult() const;
+  void _internal_set_damagemult(float value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.S_SKILL)
  private:
   class _Internal;
@@ -2150,6 +2180,9 @@ class S_SKILL final :
   float dirx_;
   float diry_;
   float dirz_;
+  ::PROTOBUF_NAMESPACE_ID::int32 skillslot_;
+  float radiusmult_;
+  float damagemult_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -7861,6 +7894,66 @@ inline void S_SKILL::_internal_set_dirz(float value) {
 inline void S_SKILL::set_dirz(float value) {
   _internal_set_dirz(value);
   // @@protoc_insertion_point(field_set:Protocol.S_SKILL.dirZ)
+}
+
+// int32 skillSlot = 9;
+inline void S_SKILL::clear_skillslot() {
+  skillslot_ = 0;
+}
+inline ::PROTOBUF_NAMESPACE_ID::int32 S_SKILL::_internal_skillslot() const {
+  return skillslot_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::int32 S_SKILL::skillslot() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_SKILL.skillSlot)
+  return _internal_skillslot();
+}
+inline void S_SKILL::_internal_set_skillslot(::PROTOBUF_NAMESPACE_ID::int32 value) {
+  
+  skillslot_ = value;
+}
+inline void S_SKILL::set_skillslot(::PROTOBUF_NAMESPACE_ID::int32 value) {
+  _internal_set_skillslot(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_SKILL.skillSlot)
+}
+
+// float radiusMult = 10;
+inline void S_SKILL::clear_radiusmult() {
+  radiusmult_ = 0;
+}
+inline float S_SKILL::_internal_radiusmult() const {
+  return radiusmult_;
+}
+inline float S_SKILL::radiusmult() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_SKILL.radiusMult)
+  return _internal_radiusmult();
+}
+inline void S_SKILL::_internal_set_radiusmult(float value) {
+  
+  radiusmult_ = value;
+}
+inline void S_SKILL::set_radiusmult(float value) {
+  _internal_set_radiusmult(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_SKILL.radiusMult)
+}
+
+// float damageMult = 11;
+inline void S_SKILL::clear_damagemult() {
+  damagemult_ = 0;
+}
+inline float S_SKILL::_internal_damagemult() const {
+  return damagemult_;
+}
+inline float S_SKILL::damagemult() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_SKILL.damageMult)
+  return _internal_damagemult();
+}
+inline void S_SKILL::_internal_set_damagemult(float value) {
+  
+  damagemult_ = value;
+}
+inline void S_SKILL::set_damagemult(float value) {
+  _internal_set_damagemult(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_SKILL.damageMult)
 }
 
 // -------------------------------------------------------------------

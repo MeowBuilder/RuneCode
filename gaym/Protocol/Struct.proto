@@ -3,7 +3,7 @@ package Protocol;
 
 import "Enum.proto";
 
-message Player
+message Player // 플레이어 정보
 {
 	uint64 playerId = 1;
 	string name = 2;
@@ -12,4 +12,11 @@ message Player
 	float y = 5;
 	float z = 6;
 	// 스탯 정보...
+}
+
+message AttackEffectPosition // 공격 이펙트 위치 정보
+{
+	float x = 1; 
+	float y = 2;
+	float z = 3;
 }
