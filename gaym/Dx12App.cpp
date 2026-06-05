@@ -181,7 +181,40 @@ void Dx12App::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
         WaitForGpuComplete();
     }
 
-    m_eAppState = AppState::CharacterSelect;
+    // Title / Loading / GameOver / Ending 화면 초기화 (UI 텍스처 핸들/크기 주입)
+    {
+        auto texSize = [&](UISlot s) -> DirectX::XMUINT2 {
+            auto d = m_pUITex[(UINT)s]->GetDesc();
+            return { (UINT)d.Width, (UINT)d.Height };
+        };
+        m_pTitleScreen = std::make_unique<TitleScreen>();
+        m_pTitleScreen->Initialize(
+            m_hUI[(UINT)UISlot::TitleBg],   texSize(UISlot::TitleBg),
+            m_hUI[(UINT)UISlot::TitleLogo], texSize(UISlot::TitleLogo),
+            m_hUI[(UINT)UISlot::BtnNormal], texSize(UISlot::BtnNormal),
+            m_hUI[(UINT)UISlot::BtnHover],  texSize(UISlot::BtnHover));
+
+        m_pLoadingScreen = std::make_unique<LoadingScreen>();
+        m_pLoadingScreen->Initialize(
+            m_hUI[(UINT)UISlot::LoadingBg],      texSize(UISlot::LoadingBg),
+            m_hUI[(UINT)UISlot::LoadingSpinner], texSize(UISlot::LoadingSpinner));
+
+        m_pGameOverScreen = std::make_unique<GameOverScreen>();
+        m_pGameOverScreen->Initialize(
+            m_hUI[(UINT)UISlot::GameOverBg],    texSize(UISlot::GameOverBg),
+            m_hUI[(UINT)UISlot::GameOverTitle], texSize(UISlot::GameOverTitle),
+            m_hUI[(UINT)UISlot::BtnNormal],     texSize(UISlot::BtnNormal),
+            m_hUI[(UINT)UISlot::BtnHover],      texSize(UISlot::BtnHover));
+
+        m_pEndingScreen = std::make_unique<EndingScreen>();
+        m_pEndingScreen->Initialize(
+            m_hUI[(UINT)UISlot::EndingBg],    texSize(UISlot::EndingBg),
+            m_hUI[(UINT)UISlot::EndingTitle], texSize(UISlot::EndingTitle),
+            m_hUI[(UINT)UISlot::BtnNormal],   texSize(UISlot::BtnNormal),
+            m_hUI[(UINT)UISlot::BtnHover],    texSize(UISlot::BtnHover));
+    }
+
+    m_eAppState = AppState::Title;
 
     // 네트워크 초기화
     InitializeNetwork();
@@ -464,6 +497,76 @@ void Dx12App::FrameAdvance()
     m_GameTimer.Tick();
     float deltaTime = m_GameTimer.GetTimeElapsed();
 
+    // ── 타이틀 화면 ─────────────────────────────────────────────────────────
+    if (m_eAppState == AppState::Title)
+    {
+        if (m_pTitleScreen)
+            m_pTitleScreen->Update(m_inputSystem, (float)m_nWndClientWidth, (float)m_nWndClientHeight, deltaTime);
+
+        WaitForGpuComplete();
+        CHECK_HR(m_pd3dCommandAllocator->Reset());
+        CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
+
+        if (m_pTitleScreen)
+        {
+            TitleScreen::Result r = m_pTitleScreen->GetResult();
+            if (r == TitleScreen::Result::StartGame)
+            {
+                m_pTitleScreen->Reset();
+                if (m_pCharSelect) m_pCharSelect->Reset();
+                m_eAppState = AppState::CharacterSelect;
+            }
+            else if (r == TitleScreen::Result::Quit)
+            {
+                ::PostQuitMessage(0);
+            }
+        }
+
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        barrier.Transition.pResource   = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        m_pd3dCommandList->ResourceBarrier(1, &barrier);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = m_pd3dRtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        rtv.ptr += m_nSwapChainBufferIndex * m_nRtvDescriptorIncrementSize;
+        float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+        m_pd3dCommandList->ClearRenderTargetView(rtv, clearColor, 0, nullptr);
+        m_pd3dCommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+
+        D3D12_VIEWPORT vp = { 0, 0, (float)m_nWndClientWidth, (float)m_nWndClientHeight, 0, 1 };
+        m_pd3dCommandList->RSSetViewports(1, &vp);
+        D3D12_RECT sc = { 0, 0, (LONG)m_nWndClientWidth, (LONG)m_nWndClientHeight };
+        m_pd3dCommandList->RSSetScissorRects(1, &sc);
+
+        if (m_pTitleScreen && m_spriteBatch && m_spriteFont)
+        {
+            ID3D12DescriptorHeap* heaps[] = { m_fontDescriptorHeap->Heap() };
+            m_pd3dCommandList->SetDescriptorHeaps(1, heaps);
+            m_spriteBatch->Begin(m_pd3dCommandList.Get());
+            m_pTitleScreen->Render(m_spriteBatch.get(), m_spriteFont.get(),
+                (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+            m_spriteBatch->End();
+        }
+
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
+        m_pd3dCommandList->ResourceBarrier(1, &barrier);
+
+        CHECK_HR(m_pd3dCommandList->Close());
+        ID3D12CommandList* lists[] = { m_pd3dCommandList.Get() };
+        m_pd3dCommandQueue->ExecuteCommandLists(_countof(lists), lists);
+        m_pdxgiSwapChain->Present(1, 0);
+        m_nSwapChainBufferIndex = m_pdxgiSwapChain->GetCurrentBackBufferIndex();
+
+        if (m_graphicsMemory) m_graphicsMemory->Commit(m_pd3dCommandQueue.Get());
+        UpdateFrameRate();
+        return;
+    }
+
     // ── 캐릭터 선택 화면 ────────────────────────────────────────────────────
     if (m_eAppState == AppState::CharacterSelect)
     {
@@ -474,13 +577,18 @@ void Dx12App::FrameAdvance()
         CHECK_HR(m_pd3dCommandAllocator->Reset());
         CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
 
-        // 선택 확정 → 씬 초기화 (명령 리스트는 내부에서 열고 닫음)
+        // 선택 확정 → 즉시 init 하지 않고 Loading 화면 거치도록 전환
         if (m_pCharSelect && m_pCharSelect->IsConfirmed())
         {
-            ElementType selected = m_pCharSelect->GetSelectedElement();
-            CHECK_HR(m_pd3dCommandList->Close());  // 현재 열린 것 닫기
-            InitSceneWithElement(selected);        // 내부에서 열고 닫음
-            return;                                // 다음 프레임부터 Playing
+            m_ePendingElement = m_pCharSelect->GetSelectedElement();
+            if (m_pLoadingScreen) m_pLoadingScreen->Reset();
+            m_eAppState = AppState::Loading;
+
+            CHECK_HR(m_pd3dCommandList->Close());  // 빈 리스트 닫고 제출
+            ID3D12CommandList* lists[] = { m_pd3dCommandList.Get() };
+            m_pd3dCommandQueue->ExecuteCommandLists(_countof(lists), lists);
+            WaitForGpuComplete();
+            return;
         }
 
         // 배경을 단색으로 지우고 캐릭터 선택 UI만 렌더
@@ -530,6 +638,170 @@ void Dx12App::FrameAdvance()
         return;
     }
 
+    // ── 로딩 화면 ───────────────────────────────────────────────────────────
+    if (m_eAppState == AppState::Loading)
+    {
+        if (m_pLoadingScreen)
+            m_pLoadingScreen->Update(deltaTime);
+
+        // 최소 노출 시간 경과 → InitScene → Playing (InitScene 내부에서 Reset/Close)
+        if (m_pLoadingScreen && m_pLoadingScreen->GetElapsed() >= m_fLoadingMin
+            && m_ePendingElement != ElementType::None)
+        {
+            ElementType e = m_ePendingElement;
+            m_ePendingElement = ElementType::None;
+            InitSceneWithElement(e);   // 끝에서 m_eAppState = AppState::Playing
+            return;
+        }
+
+        WaitForGpuComplete();
+        CHECK_HR(m_pd3dCommandAllocator->Reset());
+        CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
+
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        barrier.Transition.pResource   = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        m_pd3dCommandList->ResourceBarrier(1, &barrier);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = m_pd3dRtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        rtv.ptr += m_nSwapChainBufferIndex * m_nRtvDescriptorIncrementSize;
+        float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+        m_pd3dCommandList->ClearRenderTargetView(rtv, clearColor, 0, nullptr);
+        m_pd3dCommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+
+        D3D12_VIEWPORT vp = { 0, 0, (float)m_nWndClientWidth, (float)m_nWndClientHeight, 0, 1 };
+        m_pd3dCommandList->RSSetViewports(1, &vp);
+        D3D12_RECT sc = { 0, 0, (LONG)m_nWndClientWidth, (LONG)m_nWndClientHeight };
+        m_pd3dCommandList->RSSetScissorRects(1, &sc);
+
+        if (m_pLoadingScreen && m_spriteBatch && m_spriteFont)
+        {
+            ID3D12DescriptorHeap* heaps[] = { m_fontDescriptorHeap->Heap() };
+            m_pd3dCommandList->SetDescriptorHeaps(1, heaps);
+            m_spriteBatch->Begin(m_pd3dCommandList.Get());
+            m_pLoadingScreen->Render(m_spriteBatch.get(), m_spriteFont.get(),
+                (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+            m_spriteBatch->End();
+        }
+
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
+        m_pd3dCommandList->ResourceBarrier(1, &barrier);
+
+        CHECK_HR(m_pd3dCommandList->Close());
+        ID3D12CommandList* lists[] = { m_pd3dCommandList.Get() };
+        m_pd3dCommandQueue->ExecuteCommandLists(_countof(lists), lists);
+        m_pdxgiSwapChain->Present(1, 0);
+        m_nSwapChainBufferIndex = m_pdxgiSwapChain->GetCurrentBackBufferIndex();
+
+        if (m_graphicsMemory) m_graphicsMemory->Commit(m_pd3dCommandQueue.Get());
+        UpdateFrameRate();
+        return;
+    }
+
+    // ── 게임 오버 / 엔딩 ────────────────────────────────────────────────────
+    if (m_eAppState == AppState::GameOver || m_eAppState == AppState::Ending)
+    {
+        if (m_eAppState == AppState::GameOver && m_pGameOverScreen)
+            m_pGameOverScreen->Update(m_inputSystem, (float)m_nWndClientWidth, (float)m_nWndClientHeight, deltaTime);
+        if (m_eAppState == AppState::Ending && m_pEndingScreen)
+            m_pEndingScreen->Update(m_inputSystem, (float)m_nWndClientWidth, (float)m_nWndClientHeight, deltaTime);
+
+        WaitForGpuComplete();
+        CHECK_HR(m_pd3dCommandAllocator->Reset());
+        CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
+
+        // 결과 처리 (이번 프레임에 어떤 화면을 그릴지는 renderAs 로 잠금)
+        AppState renderAs = m_eAppState;
+        if (m_eAppState == AppState::GameOver && m_pGameOverScreen)
+        {
+            auto r = m_pGameOverScreen->GetResult();
+            if (r == GameOverScreen::Result::Retry)
+            {
+                m_pGameOverScreen->Reset();
+                if (m_pCharSelect) m_ePendingElement = m_pCharSelect->GetSelectedElement();
+                if (m_pLoadingScreen) m_pLoadingScreen->Reset();
+                m_eAppState = AppState::Loading;
+            }
+            else if (r == GameOverScreen::Result::ToTitle)
+            {
+                m_pGameOverScreen->Reset();
+                if (m_pTitleScreen) m_pTitleScreen->Reset();
+                m_eAppState = AppState::Title;
+            }
+            else if (r == GameOverScreen::Result::Quit)
+            {
+                ::PostQuitMessage(0);
+            }
+        }
+        else if (m_eAppState == AppState::Ending && m_pEndingScreen)
+        {
+            auto r = m_pEndingScreen->GetResult();
+            if (r == EndingScreen::Result::ToTitle)
+            {
+                m_pEndingScreen->Reset();
+                if (m_pTitleScreen) m_pTitleScreen->Reset();
+                m_eAppState = AppState::Title;
+            }
+            else if (r == EndingScreen::Result::Quit)
+            {
+                ::PostQuitMessage(0);
+            }
+        }
+
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        barrier.Transition.pResource   = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        m_pd3dCommandList->ResourceBarrier(1, &barrier);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = m_pd3dRtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        rtv.ptr += m_nSwapChainBufferIndex * m_nRtvDescriptorIncrementSize;
+        float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+        m_pd3dCommandList->ClearRenderTargetView(rtv, clearColor, 0, nullptr);
+        m_pd3dCommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+
+        D3D12_VIEWPORT vp = { 0, 0, (float)m_nWndClientWidth, (float)m_nWndClientHeight, 0, 1 };
+        m_pd3dCommandList->RSSetViewports(1, &vp);
+        D3D12_RECT sc = { 0, 0, (LONG)m_nWndClientWidth, (LONG)m_nWndClientHeight };
+        m_pd3dCommandList->RSSetScissorRects(1, &sc);
+
+        if (m_spriteBatch && m_spriteFont)
+        {
+            ID3D12DescriptorHeap* heaps[] = { m_fontDescriptorHeap->Heap() };
+            m_pd3dCommandList->SetDescriptorHeaps(1, heaps);
+            m_spriteBatch->Begin(m_pd3dCommandList.Get());
+            if (renderAs == AppState::GameOver && m_pGameOverScreen)
+                m_pGameOverScreen->Render(m_spriteBatch.get(), m_spriteFont.get(),
+                    (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+            else if (renderAs == AppState::Ending && m_pEndingScreen)
+                m_pEndingScreen->Render(m_spriteBatch.get(), m_spriteFont.get(),
+                    (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+            m_spriteBatch->End();
+        }
+
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
+        m_pd3dCommandList->ResourceBarrier(1, &barrier);
+
+        CHECK_HR(m_pd3dCommandList->Close());
+        ID3D12CommandList* lists[] = { m_pd3dCommandList.Get() };
+        m_pd3dCommandQueue->ExecuteCommandLists(_countof(lists), lists);
+        m_pdxgiSwapChain->Present(1, 0);
+        m_nSwapChainBufferIndex = m_pdxgiSwapChain->GetCurrentBackBufferIndex();
+
+        if (m_graphicsMemory) m_graphicsMemory->Commit(m_pd3dCommandQueue.Get());
+        UpdateFrameRate();
+        return;
+    }
+
     // ── 게임 플레이 ─────────────────────────────────────────────────────────
 
     // 네트워크 업데이트 (GPU 대기 전에 수행)
@@ -556,6 +828,18 @@ void Dx12App::FrameAdvance()
 
     // Update scene first (calculates light matrices)
     m_pScene->Update(m_GameTimer.GetTimeElapsed(), &m_inputSystem);
+
+    // DarkLord 처치 → 엔딩 화면으로 전환 (한 번만 트리거)
+    if (m_pScene->IsGameClear() && m_eAppState == AppState::Playing)
+    {
+        if (m_pEndingScreen) m_pEndingScreen->Reset();
+        m_eAppState = AppState::Ending;
+        CHECK_HR(m_pd3dCommandList->Close());
+        ID3D12CommandList* lists[] = { m_pd3dCommandList.Get() };
+        m_pd3dCommandQueue->ExecuteCommandLists(_countof(lists), lists);
+        WaitForGpuComplete();
+        return;
+    }
 
     // 스킬 HUD (TAB 확대 보간 + 호버 판정)
     if (m_pSkillHud && m_pScene)
@@ -1080,11 +1364,12 @@ void Dx12App::InitializeText()
     // 폰트용 디스크립터 힙 생성
     //   [0] 폰트, [1] HP바 base, [2] HP바 fill, [3] 캐릭터선택 흰픽셀
     //   [4] VFX magic_03, [5] VFX skull, [6] VFX star_08, [7] VFX twirl_01, [8] VFX fire_01, [9] VFX flare_01
+    //   [10~26] UI 텍스처 (UISlot 매핑, kUIHeapBase=10)
     m_fontDescriptorHeap = std::make_unique<DirectX::DescriptorHeap>(
         m_pd3dDevice.Get(),
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-        10
+        30
     );
 
     // 리소스 업로드 배치
@@ -1210,11 +1495,92 @@ void Dx12App::InitializeText()
     ID3D12CommandList* iconCmdLists[] = { m_pd3dCommandList.Get() };
     m_pd3dCommandQueue->ExecuteCommandLists(_countof(iconCmdLists), iconCmdLists);
     WaitForGpuComplete();
+
+    // UI 텍스처 로드 (Title / Loading / Pause / GameOver / Ending / HUD / Avatars)
+    CHECK_HR(m_pd3dCommandAllocator->Reset());
+    CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
+    {
+        auto loadUITex = [&](const wchar_t* path, UISlot slot)
+        {
+            UINT idx      = (UINT)slot;
+            UINT heapSlot = kUIHeapBase + idx;
+
+            std::unique_ptr<uint8_t[]> decoded;
+            D3D12_SUBRESOURCE_DATA sub{};
+            if (FAILED(DirectX::LoadWICTextureFromFile(m_pd3dDevice.Get(), path,
+                m_pUITex[idx].ReleaseAndGetAddressOf(), decoded, sub)))
+            {
+                char buf[256];
+                sprintf_s(buf, "[UI] 텍스처 로드 실패: %ls\n", path);
+                OutputDebugStringA(buf);
+                return;
+            }
+            UINT64 sz = GetRequiredIntermediateSize(m_pUITex[idx].Get(), 0, 1);
+            CD3DX12_HEAP_PROPERTIES hp(D3D12_HEAP_TYPE_UPLOAD);
+            auto bd = CD3DX12_RESOURCE_DESC::Buffer(sz);
+            m_pd3dDevice->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd,
+                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                IID_PPV_ARGS(&m_pUIUpload[idx]));
+            UpdateSubresources(m_pd3dCommandList.Get(), m_pUITex[idx].Get(),
+                               m_pUIUpload[idx].Get(), 0, 0, 1, &sub);
+            auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(m_pUITex[idx].Get(),
+                D3D12_RESOURCE_STATE_COPY_DEST,
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            m_pd3dCommandList->ResourceBarrier(1, &barrier);
+
+            D3D12_SHADER_RESOURCE_VIEW_DESC sd{};
+            sd.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            sd.Format                  = m_pUITex[idx]->GetDesc().Format;
+            sd.ViewDimension           = D3D12_SRV_DIMENSION_TEXTURE2D;
+            sd.Texture2D.MipLevels     = m_pUITex[idx]->GetDesc().MipLevels;
+            m_pd3dDevice->CreateShaderResourceView(m_pUITex[idx].Get(), &sd,
+                m_fontDescriptorHeap->GetCpuHandle(heapSlot));
+            m_hUI[idx] = m_fontDescriptorHeap->GetGpuHandle(heapSlot);
+        };
+
+        loadUITex(L"Assets/Textures/UI/title_bg.png",         UISlot::TitleBg);
+        loadUITex(L"Assets/Textures/UI/title_logo.png",       UISlot::TitleLogo);
+        loadUITex(L"Assets/Textures/UI/btn_normal.png",       UISlot::BtnNormal);
+        loadUITex(L"Assets/Textures/UI/btn_hover.png",        UISlot::BtnHover);
+        loadUITex(L"Assets/Textures/UI/Loading.png",          UISlot::LoadingBg);
+        loadUITex(L"Assets/Textures/UI/loading_spinner.png",  UISlot::LoadingSpinner);
+        loadUITex(L"Assets/Textures/UI/pause_panel.png",      UISlot::PausePanel);
+        loadUITex(L"Assets/Textures/UI/gameover_bg.png",      UISlot::GameOverBg);
+        loadUITex(L"Assets/Textures/UI/gameover_title.png",   UISlot::GameOverTitle);
+        loadUITex(L"Assets/Textures/UI/ending_bg.png",        UISlot::EndingBg);
+        loadUITex(L"Assets/Textures/UI/ending_title.png",     UISlot::EndingTitle);
+        loadUITex(L"Assets/Textures/UI/hud_stage_badge.png",  UISlot::HudStageBadge);
+        loadUITex(L"Assets/Textures/UI/hud_boss_bar.png",     UISlot::HudBossBar);
+        loadUITex(L"Assets/Textures/UI/hud_boss_bar_fill.png",UISlot::HudBossBarFill);
+        loadUITex(L"Assets/Textures/UI/avatar_fire.png",      UISlot::AvatarFire);
+        loadUITex(L"Assets/Textures/UI/avatar_water.png",     UISlot::AvatarWater);
+        loadUITex(L"Assets/Textures/UI/avatar_wind.png",      UISlot::AvatarWind);
+        loadUITex(L"Assets/Textures/UI/avatar_earth.png",     UISlot::AvatarEarth);
+    }
+    CHECK_HR(m_pd3dCommandList->Close());
+    ID3D12CommandList* uiCmdLists[] = { m_pd3dCommandList.Get() };
+    m_pd3dCommandQueue->ExecuteCommandLists(_countof(uiCmdLists), uiCmdLists);
+    WaitForGpuComplete();
 }
 
 void Dx12App::RenderPauseMenu()
 {
     if (!m_bShowPauseMenu) return;
+
+    // 패널 배경 이미지 (RenderText 안에서 호출되므로 SpriteBatch begin 활성 상태)
+    if (m_pUITex[(UINT)UISlot::PausePanel])
+    {
+        auto desc = m_pUITex[(UINT)UISlot::PausePanel]->GetDesc();
+        DirectX::XMUINT2 panelSz = { (UINT)desc.Width, (UINT)desc.Height };
+        float panelH = (float)m_nWndClientHeight * 0.80f;
+        float panelScale = panelH / (float)panelSz.y;
+        float panelW = panelSz.x * panelScale;
+        float panelX = ((float)m_nWndClientWidth  - panelW) * 0.5f;
+        float panelY = ((float)m_nWndClientHeight - panelH) * 0.5f;
+        RECT panelDst = { (LONG)panelX, (LONG)panelY,
+                          (LONG)(panelX + panelW), (LONG)(panelY + panelH) };
+        m_spriteBatch->Draw(m_hUI[(UINT)UISlot::PausePanel], panelSz, panelDst);
+    }
 
     float cx = (float)m_nWndClientWidth  / 2.0f;
     float cy = (float)m_nWndClientHeight / 2.0f;
@@ -1507,6 +1873,20 @@ void Dx12App::RenderText()
             PlayerComponent* pPlayerComp = pPlayer->GetComponent<PlayerComponent>();
             if (pPlayerComp)
             {
+                // 선택한 원소에 맞는 아바타를 매 프레임 주입
+                ElementType e = m_pScene->GetSelectedElement();
+                UISlot avSlot = UISlot::AvatarWater;
+                if      (e == ElementType::Fire)  avSlot = UISlot::AvatarFire;
+                else if (e == ElementType::Water) avSlot = UISlot::AvatarWater;
+                else if (e == ElementType::Wind)  avSlot = UISlot::AvatarWind;
+                else if (e == ElementType::Earth) avSlot = UISlot::AvatarEarth;
+                if (m_pUITex[(UINT)avSlot])
+                {
+                    auto avDesc = m_pUITex[(UINT)avSlot]->GetDesc();
+                    m_pHealthBarUI->SetAvatar(m_hUI[(UINT)avSlot],
+                        DirectX::XMUINT2((UINT)avDesc.Width, (UINT)avDesc.Height));
+                }
+
                 m_pHealthBarUI->Render(m_spriteBatch.get(), pPlayerComp->GetHPRatio(),
                                         (float)m_nWndClientWidth, (float)m_nWndClientHeight);
             }

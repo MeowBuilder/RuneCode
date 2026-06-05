@@ -7,6 +7,10 @@
 #include "NetworkManager.h" // Added NetworkManager include
 #include "BloomPostProcess.h"
 #include "CharacterSelectScreen.h"
+#include "TitleScreen.h"
+#include "EndingScreen.h"
+#include "GameOverScreen.h"
+#include "LoadingScreen.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -18,7 +22,19 @@
 #include <GraphicsMemory.h>
 #include <DescriptorHeap.h>
 
-enum class AppState { CharacterSelect, Playing };
+enum class AppState { Title, CharacterSelect, Loading, Playing, GameOver, Ending };
+
+// UI 텍스처 슬롯 — m_fontDescriptorHeap 의 [kUIHeapBase + (UINT)UISlot::*]
+enum class UISlot : UINT {
+    TitleBg = 0, TitleLogo, BtnNormal, BtnHover,
+    LoadingBg, LoadingSpinner,
+    PausePanel, GameOverBg,
+    GameOverTitle,
+    EndingBg, EndingTitle,
+    HudStageBadge, HudBossBar, HudBossBarFill,
+    AvatarFire, AvatarWater, AvatarWind, AvatarEarth,
+    Count
+};
 
 class Dx12App
 {
@@ -137,6 +153,12 @@ private:
     ComPtr<ID3D12Resource> m_pFlareTex;
     ComPtr<ID3D12Resource> m_pFlareUpload;
 
+    // UI 텍스처 (Title / Loading / Pause / GameOver / Ending / HUD / Avatars)
+    static constexpr UINT kUIHeapBase = 10;
+    ComPtr<ID3D12Resource>      m_pUITex[(UINT)UISlot::Count]{};
+    ComPtr<ID3D12Resource>      m_pUIUpload[(UINT)UISlot::Count]{};
+    D3D12_GPU_DESCRIPTOR_HANDLE m_hUI[(UINT)UISlot::Count]{};
+
     // Bloom post-process (owns HDR scene RT + blur chain + tonemap composite)
     std::unique_ptr<BloomPostProcess> m_pBloom;
 
@@ -152,9 +174,18 @@ private:
     void UpdateNetwork(float deltaTime);
 
     // 앱 상태 (캐릭터 선택 → 게임 플레이)
-    AppState m_eAppState = AppState::CharacterSelect;
+    AppState m_eAppState = AppState::Title;
     std::unique_ptr<CharacterSelectScreen> m_pCharSelect;
+    std::unique_ptr<TitleScreen>           m_pTitleScreen;
+    std::unique_ptr<LoadingScreen>         m_pLoadingScreen;
+    std::unique_ptr<GameOverScreen>        m_pGameOverScreen;
+    std::unique_ptr<EndingScreen>          m_pEndingScreen;
+
+    ElementType m_ePendingElement = ElementType::None;  // Loading 대기 중 선택 원소
+    float       m_fLoadingMin     = 0.7f;                // 최소 로딩 노출 시간(초)
+
     void InitSceneWithElement(ElementType e);  // 선택 확정 후 씬 초기화
+    void RenderTitleScreen();                  // FrameAdvance 의 Title 분기에서 호출
 
     // Pause menu
     bool m_bShowPauseMenu = false;

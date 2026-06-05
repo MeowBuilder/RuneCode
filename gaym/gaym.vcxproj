@@ -287,6 +287,10 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClInclude Include="SkillHudUI.h" />
     <ClInclude Include="RuneRewardUI.h" />
     <ClInclude Include="CharacterSelectScreen.h" />
+    <ClInclude Include="TitleScreen.h" />
+    <ClInclude Include="EndingScreen.h" />
+    <ClInclude Include="GameOverScreen.h" />
+    <ClInclude Include="LoadingScreen.h" />
     <ClInclude Include="CharacterData.h" />
     <ClInclude Include="DebugRenderer.h" />
     <!-- ServerCore Headers -->
@@ -437,6 +441,10 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClCompile Include="SkillHudUI.cpp" />
     <ClCompile Include="RuneRewardUI.cpp" />
     <ClCompile Include="CharacterSelectScreen.cpp" />
+    <ClCompile Include="TitleScreen.cpp" />
+    <ClCompile Include="EndingScreen.cpp" />
+    <ClCompile Include="GameOverScreen.cpp" />
+    <ClCompile Include="LoadingScreen.cpp" />
     <ClCompile Include="DebugRenderer.cpp" />
     <!-- ServerCore Sources -->
     <ClCompile Include="ServerCore\Allocator.cpp" />

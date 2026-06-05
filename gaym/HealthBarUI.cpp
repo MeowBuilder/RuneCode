@@ -26,7 +26,7 @@ void HealthBarUI::Initialize(ID3D12Device* pDevice, ID3D12GraphicsCommandList* p
     D3D12_SUBRESOURCE_DATA baseSubresource = {};
     CHECK_HR(LoadWICTextureFromFile(
         pDevice,
-        L"Assets/Textures/HealthBar/base.png",
+        L"Assets/Textures/UI/base.png",
         m_pBaseTexture.ReleaseAndGetAddressOf(),
         baseData,
         baseSubresource
@@ -37,7 +37,7 @@ void HealthBarUI::Initialize(ID3D12Device* pDevice, ID3D12GraphicsCommandList* p
     D3D12_SUBRESOURCE_DATA fillSubresource = {};
     CHECK_HR(LoadWICTextureFromFile(
         pDevice,
-        L"Assets/Textures/HealthBar/large_bar.png",
+        L"Assets/Textures/UI/large_bar.png",
         m_pFillTexture.ReleaseAndGetAddressOf(),
         fillData,
         fillSubresource
@@ -142,43 +142,66 @@ void HealthBarUI::Render(DirectX::SpriteBatch* pSpriteBatch, float fHPRatio,
     basePos.x = PADDING_LEFT;
     basePos.y = PADDING_TOP;
 
-    // 1. Draw HP Fill bar (behind the frame, clipped by HP ratio)
+    // 1. Avatar — base 프레임 뒤에 (초승달 테두리가 위에 보이도록)
+    if (m_hAvatarGPU.ptr && m_avatarSize.x > 0)
+    {
+        XMFLOAT2 avatarCenter = {
+            basePos.x + AVATAR_CENTER_X * SCALE,
+            basePos.y + AVATAR_CENTER_Y * SCALE
+        };
+        float displayDiameter = AVATAR_RADIUS * 2.0f * SCALE;
+        float srcDim = (m_avatarSize.x < 1) ? 1.0f : (float)m_avatarSize.x;
+        float avatarScale = displayDiameter / srcDim;
+        XMFLOAT2 origin(
+            (float)m_avatarSize.x * 0.5f,
+            (float)m_avatarSize.y * 0.5f
+        );
+        pSpriteBatch->Draw(
+            m_hAvatarGPU,
+            m_avatarSize,
+            avatarCenter,
+            nullptr,
+            Colors::White,
+            0.0f,
+            origin,
+            XMFLOAT2(avatarScale, avatarScale)
+        );
+    }
+
+    // 2. Base frame
+    XMFLOAT2 baseScale = { SCALE, SCALE };
+    pSpriteBatch->Draw(
+        m_hBaseGPU,
+        XMUINT2(m_nBaseWidth, m_nBaseHeight),
+        basePos,
+        nullptr,
+        Colors::White,
+        0.0f,
+        XMFLOAT2(0.0f, 0.0f),
+        baseScale
+    );
+
+    // 3. HP Fill bar — base 의 HP 슬롯 위에 (위에서 그려야 슬롯 안쪽 검정 위로 빨강이 보임)
     if (fHPRatio > 0.0f)
     {
-        // Source rectangle: only draw portion based on HP ratio
         LONG fillWidthClipped = static_cast<LONG>(m_nFillWidth * fHPRatio);
         RECT srcRect = { 0, 0, fillWidthClipped, static_cast<LONG>(m_nFillHeight) };
 
-        // Destination position (offset within the base frame)
         XMFLOAT2 fillPos;
         fillPos.x = basePos.x + FILL_OFFSET_X * SCALE;
         fillPos.y = basePos.y + FILL_OFFSET_Y * SCALE;
 
-        // Scale the fill bar (apply FILL_SCALE_X to fit inside frame)
-        XMFLOAT2 fillScale = { SCALE * FILL_SCALE_X, SCALE };
+        XMFLOAT2 fillScale = { SCALE * FILL_SCALE_X, SCALE * FILL_SCALE_Y };
 
         pSpriteBatch->Draw(
             m_hFillGPU,
             XMUINT2(m_nFillWidth, m_nFillHeight),
             fillPos,
             &srcRect,
-            Colors::White,  // Original white color
+            Colors::White,
             0.0f,
             XMFLOAT2(0.0f, 0.0f),
             fillScale
         );
     }
-
-    // 2. Draw Base frame (on top, with transparency)
-    XMFLOAT2 baseScale = { SCALE, SCALE };
-    pSpriteBatch->Draw(
-        m_hBaseGPU,
-        XMUINT2(m_nBaseWidth, m_nBaseHeight),
-        basePos,
-        nullptr,  // Full texture
-        Colors::White,
-        0.0f,
-        XMFLOAT2(0.0f, 0.0f),
-        baseScale
-    );
 }
