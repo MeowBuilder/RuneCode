@@ -8,6 +8,9 @@
 #include "SkillData.h"
 #include "DropItemComponent.h"
 #include "RuneRegistry.h"
+#include "SkillIconRenderer.h"
+#include "SkillHudUI.h"
+#include "RuneRewardUI.h"
 #include "PlayerComponent.h"
 #include "TransformComponent.h"
 #include "Room.h"
@@ -554,6 +557,16 @@ void Dx12App::FrameAdvance()
     // Update scene first (calculates light matrices)
     m_pScene->Update(m_GameTimer.GetTimeElapsed(), &m_inputSystem);
 
+    // 스킬 HUD (TAB 확대 보간 + 호버 판정)
+    if (m_pSkillHud && m_pScene)
+    {
+        SkillComponent* pHudSkill = nullptr;
+        if (GameObject* pHudPlayer = m_pScene->GetPlayer())
+            pHudSkill = pHudPlayer->GetComponent<SkillComponent>();
+        m_pSkillHud->Update(&m_inputSystem, pHudSkill, deltaTime,
+                            (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+    }
+
     // Update damage number animations
     DamageNumberManager::Get().Update(m_GameTimer.GetTimeElapsed());
     VFXSpriteManager::Get().Update(m_GameTimer.GetTimeElapsed());
@@ -675,31 +688,14 @@ void Dx12App::FrameAdvance()
     }
     else if (dropState == DropInteractionState::SelectingRune)
     {
-        // In rune selection mode - handle mouse clicks on rune options
-        float screenCenterX = (float)m_nWndClientWidth / 2.0f;
-        float screenCenterY = (float)m_nWndClientHeight / 2.0f;
-
-        if (m_inputSystem.IsMouseButtonPressed(0))  // Left click
+        // 아이콘 모달 — RuneRewardUI 의 레이아웃과 동일한 히트테스트로 카드 클릭 판정
+        if (m_inputSystem.IsMouseButtonPressed(0) && m_pRuneRewardUI)  // Left click
         {
             XMFLOAT2 mousePos = m_inputSystem.GetMousePosition();
-
-            // Check if clicking on one of the 3 rune options
-            float optionLineHeight = 95.0f;  // 렌더링과 동일하게
-            for (int i = 0; i < 3; ++i)
-            {
-                float optionY = screenCenterY + i * optionLineHeight;
-                float optionHeight = 65.0f;
-                float optionWidth = 500.0f;
-
-                if (mousePos.x >= screenCenterX - optionWidth / 2.0f &&
-                    mousePos.x <= screenCenterX + optionWidth / 2.0f &&
-                    mousePos.y >= optionY - 4.0f &&
-                    mousePos.y <= optionY + optionHeight)
-                {
-                    m_pScene->SelectRuneByClick(i);
-                    break;
-                }
-            }
+            int idx = m_pRuneRewardUI->HitTestRuneOption(mousePos.x, mousePos.y,
+                                                         (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+            if (idx >= 0)
+                m_pScene->SelectRuneByClick(idx);
         }
 
         // Also keep keyboard support
@@ -722,34 +718,15 @@ void Dx12App::FrameAdvance()
     }
     else if (dropState == DropInteractionState::SelectingSkill)
     {
-        // In skill slot selection mode - handle mouse clicks on skill rune slots
-        if (m_inputSystem.IsMouseButtonPressed(0))  // Left click
+        // 아이콘 모달 — RuneRewardUI 레이아웃과 동일한 히트테스트로 룬 칸 클릭 판정
+        if (m_inputSystem.IsMouseButtonPressed(0) && m_pRuneRewardUI)  // Left click
         {
             XMFLOAT2 mousePos = m_inputSystem.GetMousePosition();
-
-            // Must match the UI rendering coordinates exactly!
-            float screenCenterX = (float)m_nWndClientWidth / 2.0f;
-            float screenCenterY = (float)m_nWndClientHeight / 2.0f;
-            float slotStartY = screenCenterY - 20.0f;
-            float lineHeight = 50.0f;  // 렌더링과 동일하게
-
-            for (int skillIdx = 0; skillIdx < static_cast<int>(SkillSlot::Count); ++skillIdx)
+            int skillIdx = -1, runeIdx = -1;
+            if (m_pRuneRewardUI->HitTestSkillSlot(mousePos.x, mousePos.y,
+                    (float)m_nWndClientWidth, (float)m_nWndClientHeight, skillIdx, runeIdx))
             {
-                float slotY = slotStartY + skillIdx * lineHeight;
-
-                for (int runeIdx = 0; runeIdx < RUNES_PER_SKILL; ++runeIdx)
-                {
-                    float runeX = screenCenterX - 140.0f + runeIdx * 140.0f;
-                    float runeWidth = 120.0f;
-                    float runeHeight = 35.0f;
-
-                    if (mousePos.x >= runeX && mousePos.x <= runeX + runeWidth &&
-                        mousePos.y >= slotY && mousePos.y <= slotY + runeHeight)
-                    {
-                        m_pScene->SelectSkillSlot(static_cast<SkillSlot>(skillIdx), runeIdx);
-                        break;
-                    }
-                }
+                m_pScene->SelectSkillSlot(static_cast<SkillSlot>(skillIdx), runeIdx);
             }
         }
 
@@ -1221,6 +1198,18 @@ void Dx12App::InitializeText()
     ID3D12CommandList* vfxCmdLists[] = { m_pd3dCommandList.Get() };
     m_pd3dCommandQueue->ExecuteCommandLists(_countof(vfxCmdLists), vfxCmdLists);
     WaitForGpuComplete();
+
+    // 스킬 아이콘 HUD 초기화 (자체 디스크립터힙/PSO + SkillIcons/RuneIcons PNG 일괄 로드)
+    CHECK_HR(m_pd3dCommandAllocator->Reset());
+    CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
+    m_pSkillIconRenderer = std::make_unique<SkillIconRenderer>();
+    m_pSkillIconRenderer->Initialize(m_pd3dDevice.Get(), m_pd3dCommandList.Get());
+    m_pSkillHud = std::make_unique<SkillHudUI>();
+    m_pRuneRewardUI = std::make_unique<RuneRewardUI>();
+    CHECK_HR(m_pd3dCommandList->Close());
+    ID3D12CommandList* iconCmdLists[] = { m_pd3dCommandList.Get() };
+    m_pd3dCommandQueue->ExecuteCommandLists(_countof(iconCmdLists), iconCmdLists);
+    WaitForGpuComplete();
 }
 
 void Dx12App::RenderPauseMenu()
@@ -1458,6 +1447,51 @@ void Dx12App::RenderDebugRuneUI()
 
 void Dx12App::RenderText()
 {
+    const float scrW = (float)m_nWndClientWidth;
+    const float scrH = (float)m_nWndClientHeight;
+
+    // 룬 획득 모달이 열려있는지 — 열려있으면 하단 스킬 HUD 는 숨긴다.
+    DropInteractionState dropStateTop = m_pScene ? m_pScene->GetDropInteractionState()
+                                                 : DropInteractionState::None;
+    bool runeModalActive = (dropStateTop == DropInteractionState::SelectingRune ||
+                            dropStateTop == DropInteractionState::SelectingSkill);
+
+    // ========== 아이콘 패스 — 자체 PSO/디스크립터힙 (폰트 힙 바인딩 전에 먼저) ==========
+    if (m_pScene && m_pSkillIconRenderer)
+    {
+        GameObject* pPlayer = m_pScene->GetPlayer();
+        SkillComponent* pSkill = pPlayer ? pPlayer->GetComponent<SkillComponent>() : nullptr;
+
+        // 하단 스킬 HUD (모달 중엔 숨김)
+        if (!runeModalActive && m_pSkillHud && pSkill)
+        {
+            m_pSkillHud->RenderIcons(m_pd3dCommandList.Get(), m_pSkillIconRenderer.get(),
+                                     pSkill, scrW, scrH);
+        }
+
+        // 룬 획득 모달 아이콘
+        if (runeModalActive && m_pRuneRewardUI)
+        {
+            XMFLOAT2 mp = m_inputSystem.GetMousePosition();
+            if (dropStateTop == DropInteractionState::SelectingRune)
+            {
+                CRoom* pRoom = m_pScene->GetCurrentRoom();
+                GameObject* pDrop = pRoom ? pRoom->GetDropItem() : nullptr;
+                DropItemComponent* pDropComp = pDrop ? pDrop->GetComponent<DropItemComponent>() : nullptr;
+                if (pDropComp)
+                {
+                    m_pRuneRewardUI->RenderRuneSelectIcons(m_pd3dCommandList.Get(), m_pSkillIconRenderer.get(),
+                                                           pDropComp->GetRuneOptions(), mp.x, mp.y, scrW, scrH);
+                }
+            }
+            else // SelectingSkill
+            {
+                m_pRuneRewardUI->RenderSkillSelectIcons(m_pd3dCommandList.Get(), m_pSkillIconRenderer.get(),
+                                                        m_pScene->GetSelectedRune(), pSkill, mp.x, mp.y, scrW, scrH);
+            }
+        }
+    }
+
     // Bind descriptor heap
     ID3D12DescriptorHeap* heaps[] = { m_fontDescriptorHeap->Heap() };
     m_pd3dCommandList->SetDescriptorHeaps(1, heaps);
@@ -1505,162 +1539,26 @@ void Dx12App::RenderText()
 
         if (dropState == DropInteractionState::SelectingRune)
         {
-            // Show rune selection UI with clickable buttons
+            // 아이콘 기반 룬 선택 모달 (텍스트 패스). 아이콘은 위쪽 아이콘 패스에서 그렸다.
             CRoom* pRoom = m_pScene->GetCurrentRoom();
-            if (pRoom)
+            GameObject* pDropItem = pRoom ? pRoom->GetDropItem() : nullptr;
+            DropItemComponent* pDropComp = pDropItem ? pDropItem->GetComponent<DropItemComponent>() : nullptr;
+            if (pDropComp && m_pRuneRewardUI)
             {
-                GameObject* pDropItem = pRoom->GetDropItem();
-                if (pDropItem)
-                {
-                    DropItemComponent* pDropComp = pDropItem->GetComponent<DropItemComponent>();
-                    if (pDropComp)
-                    {
-                        // Title
-                        const wchar_t* titleText = L"=== Click to Select a Rune ===";
-                        XMVECTOR titleSize = m_spriteFont->MeasureString(titleText);
-                        m_spriteFont->DrawString(m_spriteBatch.get(), titleText,
-                            XMFLOAT2(screenCenterX - XMVectorGetX(titleSize) / 2.0f, screenCenterY - 60.0f),
-                            DirectX::Colors::Gold);
-
-                        // Rune options (clickable)
-                        XMFLOAT2 mousePos = m_inputSystem.GetMousePosition();
-                        float optionLineHeight = 95.0f;
-                        float optionStartX = screenCenterX - 300.0f;
-                        for (int i = 0; i < 3; ++i)
-                        {
-                            EquippedRune er = pDropComp->GetRuneOption(i);
-                            const RuneDef* def = RuneRegistry::Get().Find(er.runeId);
-                            std::wstring wname = def
-                                ? Utf8ToWide(def->name)
-                                : Utf8ToWide(er.runeId);
-
-                            float optionY = screenCenterY + i * optionLineHeight;
-
-                            // Hover detection (fixed-width region)
-                            bool isHovered = (mousePos.x >= optionStartX &&
-                                              mousePos.x <= optionStartX + 600.0f &&
-                                              mousePos.y >= optionY - 4.0f &&
-                                              mousePos.y <= optionY + 44.0f);
-
-                            // Draw "> 룬이름"
-                            std::wstring nameText = L"> " + wname;
-                            m_spriteFont->DrawString(m_spriteBatch.get(), nameText.c_str(),
-                                XMFLOAT2(optionStartX, optionY),
-                                isHovered ? DirectX::Colors::Yellow : DirectX::Colors::White);
-
-                            if (def)
-                            {
-                                // Grade label in grade color, right after name
-                                XMVECTOR nameSize = m_spriteFont->MeasureString(nameText.c_str());
-                                const wchar_t* gradeLabel = GetRuneGradeLabel(def->grade);
-                                m_spriteFont->DrawString(m_spriteBatch.get(), gradeLabel,
-                                    XMFLOAT2(optionStartX + XMVectorGetX(nameSize) + 10.0f, optionY),
-                                    GetRuneGradeUIColor(def->grade));
-
-                                // Description on second line
-                                std::wstring desc = BuildRuneDesc(*def);
-                                m_spriteFont->DrawString(m_spriteBatch.get(), desc.c_str(),
-                                    XMFLOAT2(optionStartX + 20.0f, optionY + 45.0f),
-                                    DirectX::Colors::Gray);
-                            }
-                        }
-
-                        // Cancel hint
-                        const wchar_t* cancelText = L"[ESC] Cancel";
-                        XMVECTOR cancelSize = m_spriteFont->MeasureString(cancelText);
-                        m_spriteFont->DrawString(m_spriteBatch.get(), cancelText,
-                            XMFLOAT2(screenCenterX - XMVectorGetX(cancelSize) / 2.0f, screenCenterY + 295.0f),
-                            DirectX::Colors::Gray);
-                    }
-                }
+                m_pRuneRewardUI->RenderRuneSelectText(m_spriteBatch.get(), m_spriteFont.get(),
+                    m_fontDescriptorHeap->GetGpuHandle(3), pDropComp->GetRuneOptions(), scrW, scrH);
             }
         }
         else if (dropState == DropInteractionState::SelectingSkill)
         {
-            // Show skill slot selection UI
-            const wchar_t* titleText = L"=== Click a Rune Slot to Assign ===";
-            XMVECTOR titleSize = m_spriteFont->MeasureString(titleText);
-            m_spriteFont->DrawString(m_spriteBatch.get(), titleText,
-                XMFLOAT2(screenCenterX - XMVectorGetX(titleSize) / 2.0f, screenCenterY - 100.0f),
-                DirectX::Colors::Gold);
-
-            // Show selected rune info
-            const std::string& selId = m_pScene->GetSelectedRune();
-            const RuneDef* selDef = RuneRegistry::Get().Find(selId);
-            std::wstring wselName = selDef
-                ? Utf8ToWide(selDef->name)
-                : Utf8ToWide(selId);
-            std::wstringstream selectedText;
-            selectedText << L"Selected Rune: " << wselName;
-            XMVECTOR selectedSize = m_spriteFont->MeasureString(selectedText.str().c_str());
-            float selTextX = screenCenterX - XMVectorGetX(selectedSize) / 2.0f;
-            m_spriteFont->DrawString(m_spriteBatch.get(), selectedText.str().c_str(),
-                XMFLOAT2(selTextX, screenCenterY - 60.0f),
-                DirectX::Colors::Cyan);
-            // Grade label of selected rune
-            if (selDef)
+            // 아이콘 기반 스킬/룬 슬롯 선택 모달 (텍스트 패스)
+            GameObject* pSelPlayer = m_pScene->GetPlayer();
+            SkillComponent* pSelSkill = pSelPlayer ? pSelPlayer->GetComponent<SkillComponent>() : nullptr;
+            if (m_pRuneRewardUI)
             {
-                const wchar_t* selGrade = GetRuneGradeLabel(selDef->grade);
-                m_spriteFont->DrawString(m_spriteBatch.get(), selGrade,
-                    XMFLOAT2(selTextX + XMVectorGetX(selectedSize) + 8.0f, screenCenterY - 60.0f),
-                    GetRuneGradeUIColor(selDef->grade));
+                m_pRuneRewardUI->RenderSkillSelectText(m_spriteBatch.get(), m_spriteFont.get(),
+                    m_fontDescriptorHeap->GetGpuHandle(3), m_pScene->GetSelectedRune(), pSelSkill, scrW, scrH);
             }
-
-            // Show skill slots with rune slots (click on empty slot to assign)
-            const wchar_t* slotNames[] = { L"Q", L"E", L"R", L"RMB" };
-            GameObject* pPlayer = m_pScene->GetPlayer();
-            SkillComponent* pSkill = pPlayer ? pPlayer->GetComponent<SkillComponent>() : nullptr;
-
-            XMFLOAT2 mousePos = m_inputSystem.GetMousePosition();
-            float slotStartY = screenCenterY - 20.0f;
-            float lineHeight = 50.0f;  // 간격 넓힘 (40 -> 50)
-
-            for (int skillIdx = 0; skillIdx < static_cast<int>(SkillSlot::Count); ++skillIdx)
-            {
-                float slotY = slotStartY + skillIdx * lineHeight;
-
-                // Skill name
-                std::wstringstream skillText;
-                skillText << L"[" << slotNames[skillIdx] << L"] ";
-                m_spriteFont->DrawString(m_spriteBatch.get(), skillText.str().c_str(),
-                    XMFLOAT2(screenCenterX - 250.0f, slotY), DirectX::Colors::White);
-
-                // Rune slots (3 boxes)
-                for (int runeIdx = 0; runeIdx < RUNES_PER_SKILL; ++runeIdx)
-                {
-                    float runeX = screenCenterX - 140.0f + runeIdx * 140.0f;
-                    float runeWidth = 120.0f;
-                    float runeHeight = 35.0f;
-
-                    EquippedRune er = pSkill
-                        ? pSkill->GetRuneSlot(static_cast<SkillSlot>(skillIdx), runeIdx)
-                        : EquippedRune{};
-                    const RuneDef* rDef = RuneRegistry::Get().Find(er.runeId);
-                    std::wstring wRuneName = er.IsEmpty() ? L"[Empty]"
-                        : (rDef ? Utf8ToWide(rDef->name)
-                                : Utf8ToWide(er.runeId));
-
-                    bool isHovered = (mousePos.x >= runeX && mousePos.x <= runeX + runeWidth &&
-                                      mousePos.y >= slotY && mousePos.y <= slotY + runeHeight);
-
-                    XMVECTORF32 color;
-                    if (er.IsEmpty())
-                        color = isHovered ? DirectX::Colors::Yellow : DirectX::Colors::DarkGray;
-                    else if (rDef)
-                        color = GetRuneGradeUIColor(rDef->grade);
-                    else
-                        color = DirectX::Colors::Cyan;
-
-                    m_spriteFont->DrawString(m_spriteBatch.get(), wRuneName.c_str(), XMFLOAT2(runeX, slotY), color);
-                }
-            }
-
-            // Cancel hint
-            const wchar_t* cancelText = L"[ESC] Cancel";
-            XMVECTOR cancelSize = m_spriteFont->MeasureString(cancelText);
-            m_spriteFont->DrawString(m_spriteBatch.get(), cancelText,
-                XMFLOAT2(screenCenterX - XMVectorGetX(cancelSize) / 2.0f, slotStartY + 220.0f),
-                DirectX::Colors::Gray);
         }
         else if (m_pScene->IsNearDropItem())
         {
@@ -1682,8 +1580,8 @@ void Dx12App::RenderText()
         }
     }
 
-    // ========== Skill UI ==========
-    if (m_pScene)
+    // ========== Skill UI (아이콘 HUD 텍스트 오버레이) — 모달 중엔 숨김 ==========
+    if (m_pScene && m_pSkillHud && !runeModalActive)
     {
         GameObject* pPlayer = m_pScene->GetPlayer();
         if (pPlayer)
@@ -1691,183 +1589,42 @@ void Dx12App::RenderText()
             SkillComponent* pSkill = pPlayer->GetComponent<SkillComponent>();
             if (pSkill)
             {
-                float lineHeight = 48.0f;  // Increased line spacing
+                // 아이콘 위 조작키 라벨 + 쿨다운 남은 초 + (확대 시) 호버 툴팁
+                //   폰트 힙 슬롯 3 = 1x1 흰 픽셀 (툴팁 배경 사각형용)
+                m_pSkillHud->RenderText(m_spriteBatch.get(), m_spriteFont.get(),
+                                        pSkill, m_fontDescriptorHeap->GetGpuHandle(3),
+                                        (float)m_nWndClientWidth, (float)m_nWndClientHeight);
 
-                // ========== Left Side: Skill Slots ==========
-                float leftX = 20.0f;
-                float leftY = (float)m_nWndClientHeight - 240.0f;
-
-                const wchar_t* slotNames[] = { L"Q", L"E", L"R", L"RMB" };
-
-                for (size_t i = 0; i < static_cast<size_t>(SkillSlot::Count); ++i)
-                {
-                    SkillSlot slot = static_cast<SkillSlot>(i);
-                    ISkillBehavior* pBehavior = pSkill->GetSkill(slot);
-
-                    std::wstringstream slotText;
-                    slotText << L"[" << slotNames[i] << L"] ";
-
-                    if (pBehavior)
-                    {
-                        const SkillData& data = pBehavior->GetSkillData();
-                        std::wstring skillName(data.name.begin(), data.name.end());
-                        slotText << skillName;
-
-                        float cooldownRemaining = pSkill->GetCooldownRemaining(slot);
-                        if (cooldownRemaining > 0.0f)
-                        {
-                            slotText << L"  CD: " << std::fixed << std::setprecision(1) << cooldownRemaining << L"s";
-                            m_spriteFont->DrawString(m_spriteBatch.get(), slotText.str().c_str(),
-                                XMFLOAT2(leftX, leftY), DirectX::Colors::Gray);
-                        }
-                        else
-                        {
-                            SkillStats stats = pSkill->BuildSkillStats(slot, data.activationType);
-                            float baseDamage = data.damage * stats.damageMult;
-                            float finalDamage = baseDamage;
-                            std::wstringstream dmgNote;
-
-                            bool enhanceOnly = stats.IsEnhance();
-
-                            if (stats.IsCharge())
-                            {
-                                if (pSkill->IsCharging())
-                                {
-                                    float mult = 1.0f + pSkill->GetChargeProgress() * 2.0f;
-                                    finalDamage = baseDamage * mult;
-                                    dmgNote << L" (charging)";
-                                }
-                                else
-                                {
-                                    finalDamage = baseDamage * 3.0f;
-                                    dmgNote << L"~";
-                                }
-                            }
-                            else if (stats.IsChannel())
-                            {
-                                finalDamage = baseDamage * 0.3f;
-                                dmgNote << L"/tick";
-                            }
-                            else if (enhanceOnly)
-                            {
-                                finalDamage = baseDamage * 2.0f;
-                                dmgNote << L" (buff)";
-                            }
-                            else if (stats.IsPlace())
-                            {
-                                dmgNote << L" (trap)";
-                            }
-
-                            // Apply existing enhance buff
-                            if (pSkill->IsEnhanced() && !enhanceOnly)
-                                finalDamage *= 2.0f;
-
-                            // Element tags from equipped runes
-                            if (!stats.elementSet.empty())
-                            {
-                                dmgNote << L"  [";
-                                for (size_t ei = 0; ei < stats.elementSet.size(); ++ei)
-                                {
-                                    if (ei > 0) dmgNote << L"/";
-                                    dmgNote << GetElementName(stats.elementSet[ei]);
-                                }
-                                dmgNote << L"]";
-                            }
-                            else if (data.element != ElementType::None)
-                            {
-                                dmgNote << L"  [" << GetElementName(data.element) << L"]";
-                            }
-
-                            slotText << L"  DMG: " << (int)finalDamage << dmgNote.str();
-                            m_spriteFont->DrawString(m_spriteBatch.get(), slotText.str().c_str(),
-                                XMFLOAT2(leftX, leftY), DirectX::Colors::White);
-                        }
-                    }
-                    else
-                    {
-                        slotText << L"Empty";
-                        m_spriteFont->DrawString(m_spriteBatch.get(), slotText.str().c_str(),
-                            XMFLOAT2(leftX, leftY), DirectX::Colors::DarkGray);
-                    }
-
-                    leftY += lineHeight;
-                }
-
-                // ========== Rune Info (right bottom) ==========
-                float rightX = (float)m_nWndClientWidth - 400.0f;
-                float rightY = (float)m_nWndClientHeight - 240.0f;
-
-                const wchar_t* activationNames[] = { L"None", L"Instant", L"Charge", L"Channel", L"Place", L"Enhance", L"Split" };
-                const wchar_t* runeSlotNames[] = { L"Q", L"E", L"R", L"RMB" };
-
-                m_spriteFont->DrawString(m_spriteBatch.get(), L"[Rune Combos]",
-                    XMFLOAT2(rightX, rightY), DirectX::Colors::Cyan);
-                rightY += lineHeight * 0.8f;
-
-                // Per-skill rune combo display
-                for (size_t si = 0; si < static_cast<size_t>(SkillSlot::Count); ++si)
-                {
-                    SkillSlot sSlot = static_cast<SkillSlot>(si);
-                    RuneCombo combo = pSkill->GetRuneCombo(sSlot);
-
-                    std::wstringstream comboLine;
-                    comboLine << runeSlotNames[si] << L": ";
-
-                    if (combo.count == 0)
-                    {
-                        comboLine << L"(none)";
-                        m_spriteFont->DrawString(m_spriteBatch.get(), comboLine.str().c_str(),
-                            XMFLOAT2(rightX, rightY), DirectX::Colors::DarkGray);
-                    }
-                    else
-                    {
-                        // List equipped rune types
-                        bool first = true;
-                        if (combo.hasCharge)  { if (!first) comboLine << L"+"; comboLine << L"Charge"; first = false; }
-                        if (combo.hasChannel) { if (!first) comboLine << L"+"; comboLine << L"Channel"; first = false; }
-                        if (combo.hasPlace)   { if (!first) comboLine << L"+"; comboLine << L"Place"; first = false; }
-                        if (combo.hasEnhance) { if (!first) comboLine << L"+"; comboLine << L"Enhance"; first = false; }
-                        if (combo.hasSplit)   { if (!first) comboLine << L"+"; comboLine << L"Split";   first = false; }
-                        if (combo.hasInstant) { if (!first) comboLine << L"+"; comboLine << L"Instant"; first = false; }
-
-                        m_spriteFont->DrawString(m_spriteBatch.get(), comboLine.str().c_str(),
-                            XMFLOAT2(rightX, rightY), DirectX::Colors::LightGray);
-                    }
-                    rightY += lineHeight * 0.7f;
-                }
-
-                rightY += lineHeight * 0.3f;
-
-                // Status indicators
+                // 활성화 상태 표시 (차지/채널/강화) — 아이콘 줄 위
+                float statusX = 24.0f;
+                float statusY = (float)m_nWndClientHeight - 152.0f;
                 if (pSkill->IsCharging())
                 {
                     float chargeProgress = pSkill->GetChargeProgress();
                     float mult = 1.0f + chargeProgress * 2.0f;
-                    std::wstringstream chargeText;
-                    chargeText << L"CHARGING " << (int)(chargeProgress * 100) << L"% ("
-                        << std::fixed << std::setprecision(1) << mult << L"x)";
-                    m_spriteFont->DrawString(m_spriteBatch.get(), chargeText.str().c_str(),
-                        XMFLOAT2(rightX, rightY), DirectX::Colors::Orange);
-                    rightY += lineHeight;
+                    std::wstringstream s;
+                    s << L"CHARGING " << (int)(chargeProgress * 100) << L"% ("
+                      << std::fixed << std::setprecision(1) << mult << L"x)";
+                    m_spriteFont->DrawString(m_spriteBatch.get(), s.str().c_str(),
+                        XMFLOAT2(statusX, statusY), DirectX::Colors::Orange);
+                    statusY -= 30.0f;
                 }
-
                 if (pSkill->IsChanneling())
                 {
-                    float channelProgress = pSkill->GetChannelProgress();
-                    std::wstringstream channelText;
-                    channelText << L"CHANNELING " << (int)(channelProgress * 100) << L"%";
-                    m_spriteFont->DrawString(m_spriteBatch.get(), channelText.str().c_str(),
-                        XMFLOAT2(rightX, rightY), DirectX::Colors::LightBlue);
-                    rightY += lineHeight;
+                    float p = pSkill->GetChannelProgress();
+                    std::wstringstream s;
+                    s << L"CHANNELING " << (int)(p * 100) << L"%";
+                    m_spriteFont->DrawString(m_spriteBatch.get(), s.str().c_str(),
+                        XMFLOAT2(statusX, statusY), DirectX::Colors::LightBlue);
+                    statusY -= 30.0f;
                 }
-
                 if (pSkill->IsEnhanced())
                 {
-                    std::wstringstream enhanceText;
-                    enhanceText << L"ENHANCED 2x (" << std::fixed << std::setprecision(1)
-                        << pSkill->GetEnhanceTimeRemaining() << L"s)";
-                    m_spriteFont->DrawString(m_spriteBatch.get(), enhanceText.str().c_str(),
-                        XMFLOAT2(rightX, rightY), DirectX::Colors::Gold);
+                    std::wstringstream s;
+                    s << L"ENHANCED 2x (" << std::fixed << std::setprecision(1)
+                      << pSkill->GetEnhanceTimeRemaining() << L"s)";
+                    m_spriteFont->DrawString(m_spriteBatch.get(), s.str().c_str(),
+                        XMFLOAT2(statusX, statusY), DirectX::Colors::Gold);
                 }
             }
         }

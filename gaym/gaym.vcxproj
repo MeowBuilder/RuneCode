@@ -283,6 +283,9 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClInclude Include="MathUtils.h" />
     <ClInclude Include="InteractableComponent.h" />
     <ClInclude Include="HealthBarUI.h" />
+    <ClInclude Include="SkillIconRenderer.h" />
+    <ClInclude Include="SkillHudUI.h" />
+    <ClInclude Include="RuneRewardUI.h" />
     <ClInclude Include="CharacterSelectScreen.h" />
     <ClInclude Include="CharacterData.h" />
     <ClInclude Include="DebugRenderer.h" />
@@ -430,6 +433,9 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClCompile Include="RuneRegistry.cpp" />
     <ClCompile Include="InteractableComponent.cpp" />
     <ClCompile Include="HealthBarUI.cpp" />
+    <ClCompile Include="SkillIconRenderer.cpp" />
+    <ClCompile Include="SkillHudUI.cpp" />
+    <ClCompile Include="RuneRewardUI.cpp" />
     <ClCompile Include="CharacterSelectScreen.cpp" />
     <ClCompile Include="DebugRenderer.cpp" />
     <!-- ServerCore Sources -->

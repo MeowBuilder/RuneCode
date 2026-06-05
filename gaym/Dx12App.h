@@ -118,6 +118,11 @@ private:
     // Health Bar UI
     std::unique_ptr<HealthBarUI> m_pHealthBarUI;
 
+    // 스킬 아이콘 HUD (아이콘 렌더러 + 레이아웃)
+    std::unique_ptr<class SkillIconRenderer> m_pSkillIconRenderer;
+    std::unique_ptr<class SkillHudUI>         m_pSkillHud;
+    std::unique_ptr<class RuneRewardUI>       m_pRuneRewardUI;  // 룬 획득 모달
+
     // VFX 스프라이트 텍스처 (힙 슬롯 4: magic_03, 5: skull, 6: star_08, 7: twirl_01, 8: flame_04, 9: flare_01)
     ComPtr<ID3D12Resource> m_pMagicDecalTex;
     ComPtr<ID3D12Resource> m_pMagicDecalUpload;
