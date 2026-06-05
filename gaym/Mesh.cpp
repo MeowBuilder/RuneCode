@@ -630,9 +630,10 @@ void SwordTrailMesh::UpdateTrail(const std::vector<XMFLOAT3>& points, float half
         smoothed[i].z = (points[i0].z + points[i].z + points[i2].z) * (1.0f / 3.0f);
     }
 
-    // head 고정, tail 쪽 stretch — 시각 길이 swing path 보다 길게.
-    //   stretch 강하면 jitter 도 amplified — 적당히 2.0 으로 유지.
-    const float kStretchFactor = 2.0f;
+    // head 고정, tail 쪽 stretch — 1.0 이면 swing path 그대로 (검 끝 자취 자연).
+    //   이전 2.0 은 검 grip 위치 따라갈 때 검을 덮는 두꺼운 ribbon 만들어내는 원인이었음.
+    //   현재는 검 끝 위치 따라가므로 stretch 불필요 — swing path 자체가 호 곡선.
+    const float kStretchFactor = 1.0f;
     const XMFLOAT3& head = smoothed[n - 1];
 
     for (int i = 0; i < n; ++i)

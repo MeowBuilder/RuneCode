@@ -359,7 +359,9 @@ TransformComponent* ComboAttackBehavior::FindSwordBone(EnemyComponent* pEnemy)
 
     if (m_pCachedSwordBone)
     {
-        VFXLog("[ComboVFX] sword bone FOUND — VFX 가 검 끝 추종\n");
+        // 어느 후보가 실제 매치됐는지 확인 — Bone_Sword 가 아니면 다른 본 fallback 중.
+        std::string matchedName = pAnim->FindBoneAnyName(candidates);
+        VFXLogf("[ComboVFX] sword bone FOUND — matched=\"%s\"\n", matchedName.c_str());
     }
     else
     {
@@ -592,16 +594,25 @@ void ComboAttackBehavior::UpdateTrailMesh(float dt, EnemyComponent* pEnemy)
 
     if (m_bEmittingTrail)
     {
-        // hit phase 중: 매 frame 검 본 world pos 를 sub-step 으로 dense push.
-        //   swing hit phase 가 짧아 (0.10s) frame 당 1 point 면 history 가 6~9 point 만 쌓여 trail 짧음.
-        //   prev → current 사이를 3 등분해 3 point 씩 push → trail mesh 가 검 길이 만큼 길게.
+        // 검 본 (Bone_Sword = grip) 위치가 아니라 **검 끝** 위치를 trail head 로 사용.
+        //   검 본 worldMatrix 의 +Y axis 가 검 길이 방향 (DarkKnight2 모델 기준 추정).
+        //   안 맞으면 +Z 또는 -Y 시도 — 시각 확인 후 조정.
+        //   결과: trail 이 검을 덮는 게 아니라 검 끝에서 시작해 swing 자취를 호로 그림.
         const XMFLOAT4X4& w = m_pCachedSwordBone->GetWorldMatrix();
-        XMFLOAT3 cur = { w._41, w._42, w._43 };
+        XMFLOAT3 grip = { w._41, w._42, w._43 };
+
+        // 본 worldMatrix 의 +Y row 벡터 = 본의 local +Y axis × world scale (mesh 길이 자동 반영).
+        //   DarkLord 의 경우 row 벡터 길이 ≈ 10 (= 보스 scale × mesh local 1.0).
+        //   정규화 후 fixed 길이 곱하는 방식보다 직접 row 합산이 mesh 길이/scale 자동 매칭.
+        // 시각 진단 결과 — 본의 local +Y 는 grip→검 끝 의 반대 방향. -Y 가 검 끝.
+        XMFLOAT3 dirY = { w._21, w._22, w._23 };
+        XMFLOAT3 cur = { grip.x - dirY.x, grip.y - dirY.y, grip.z - dirY.z };
 
         if (m_bHasPrevSwordPos)
         {
             XMFLOAT3 prev = m_xmf3PrevSwordPos;
-            const int nSub = 3;
+            // sub-step 3→6 : 빠른 swing 의 호 누적 정확도 ↑ (frame 사이 곡선 보간 더 dense).
+            const int nSub = 6;
             for (int i = 1; i <= nSub; ++i)
             {
                 float t = (float)i / (float)nSub;
@@ -624,7 +635,8 @@ void ComboAttackBehavior::UpdateTrailMesh(float dt, EnemyComponent* pEnemy)
         while (m_vSwordHistory.size() > kMaxPoints)
             m_vSwordHistory.erase(m_vSwordHistory.begin());
 
-        const float halfWidth = m_fTrailPieceScale * 1.40f;   // 두툼하게 — 포스 ↑
+        // 검 끝 붓 자국 느낌 유지하면서 살짝 두툼 — fVFXScale 4~6 → halfWidth ~2.2~3.3.
+        const float halfWidth = m_fTrailPieceScale * 0.55f;
         m_pTrailMesh->UpdateTrail(m_vSwordHistory, halfWidth);
     }
     else
