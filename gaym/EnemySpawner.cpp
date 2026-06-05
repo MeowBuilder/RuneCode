@@ -992,11 +992,15 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     darkLord.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 
     // 테스트 편의 — 페이즈 진행을 빠르게 보기 위해 6000 → 1500. 추후 밸런스 잡힐 때 상향.
+    //   카멘 톤(로스트아크 군단장) — 천천히 다가오고, 검 사거리 길고, 공격 사이 정지 위협적.
+    //   moveSpeed 12→8 : 발걸음 묵직 (스킨 자체가 풀아머라 천천히 보여야 위엄).
+    //   attackRange 7→8 : 거대 검이 멀리 닿는 느낌 (cone 은 단발 풀에서 처리).
+    //   attackCooldown 1.0→1.4 : 공격 사이 1.4s 텔레그래프-정지 — 한 방 한 방이 위협적.
     darkLord.m_Stats.m_fMaxHP              = 1500.0f;
     darkLord.m_Stats.m_fCurrentHP          = 1500.0f;
-    darkLord.m_Stats.m_fMoveSpeed          = 12.0f;
-    darkLord.m_Stats.m_fAttackRange        = 7.0f;
-    darkLord.m_Stats.m_fAttackCooldown     = 1.0f;
+    darkLord.m_Stats.m_fMoveSpeed          = 8.0f;
+    darkLord.m_Stats.m_fAttackRange        = 8.0f;
+    darkLord.m_Stats.m_fAttackCooldown     = 1.4f;
     darkLord.m_Stats.m_fLongRangeThreshold = 35.0f;
     darkLord.m_Stats.m_fMidRangeThreshold  = 18.0f;
 
@@ -1047,13 +1051,15 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         {
             BossPhaseData p;
             p.m_fHealthThreshold = 1.0f;
-            p.m_fSpeedMultiplier = 0.95f;          // 시작은 느릿
-            p.m_fAttackSpeedMultiplier = 1.20f;    // 쿨다운 길게
+            // 카멘 톤 : 가장 묵직한 시작 — 발걸음 가장 느림, 공격 간격 가장 김.
+            p.m_fSpeedMultiplier = 0.80f;
+            p.m_fAttackSpeedMultiplier = 1.50f;
             p.m_nSpecialAttackChance = 45;
 
-            // Primary: 묵직 2타 칼 + 땅 원소 VFX (Q_StoneSpike + sub_blast_wave 충격파)
+            // Primary: 단발 짤패 풀 — rand() 로 1 클립 선택.
+            //   콤보 제거 → 클립 짤림·연속 클립 충돌 없음. 각 클립이 자연 길이로 처음~끝 재생.
+            //   원소 톤: 모두 status_fracture → 검기 자동 앰버.
             p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
-                std::vector<ComboAttackBehavior::ComboHit> hits;
                 auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
                                const char* vfx, const char* impact, float scale) {
                     ComboAttackBehavior::ComboHit hh;
@@ -1062,8 +1068,21 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
                     hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
                     return hh;
                 };
-                hits.push_back(Make("attack6", 55.0f, 0.55f, 0.25f, 0.20f, 10.0f, 180.0f, "status_fracture", "sub_blast_wave", 3.0f));
-                hits.push_back(Make("attack9", 80.0f, 0.45f, 0.25f, 0.45f, 10.5f, 220.0f, "status_fracture", "sub_blast_wave", 5.0f));
+                std::vector<ComboAttackBehavior::ComboHit> hits;
+                int choice = rand() % 3;
+                switch (choice)
+                {
+                // 카멘 톤 : 베기 cone 좁게 (전방 직사각 인디케이터), 회전/와이드 cone 넓게 (Circle 인디케이터).
+                case 0:  // Attack6 묵직 와이드 베기 (ForwardBox 160°)
+                    hits.push_back(Make("Attack6",  95.0f, 0.70f, 0.30f, 0.55f, 11.0f, 160.0f, "status_fracture", "sub_blast_wave", 4.5f));
+                    break;
+                case 1:  // attack9 묵직 오버헤드 (Circle 200° — 전방 광역)
+                    hits.push_back(Make("attack9", 110.0f, 0.75f, 0.30f, 0.60f, 11.5f, 200.0f, "status_fracture", "sub_blast_wave", 5.5f));
+                    break;
+                default: // attack4 광역 횡베기 (Circle 240° — 회전 톤)
+                    hits.push_back(Make("attack4",  85.0f, 0.60f, 0.25f, 0.50f, 10.5f, 240.0f, "status_fracture", "sub_blast_wave", 4.5f));
+                    break;
+                }
                 return std::make_unique<ComboAttackBehavior>(hits);
             };
             // Special: 십자 균열 — 광장 전체 가로/세로 4 가닥 솟구침
@@ -1084,16 +1103,17 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         {
             BossPhaseData p;
             p.m_fHealthThreshold = 0.80f;
-            p.m_fSpeedMultiplier = 1.05f;
-            p.m_fAttackSpeedMultiplier = 1.05f;
+            // 카멘 톤 : 여전히 느림, 공격 간격 짧지 않음.
+            p.m_fSpeedMultiplier = 0.90f;
+            p.m_fAttackSpeedMultiplier = 1.30f;
             p.m_nSpecialAttackChance = 50;
             p.m_bInvincibleDuringTransition = true;
             p.m_fTransitionDuration = 1.6f;
             p.m_strTransitionAnimation = "attack9";
 
-            // Primary: 흐르는 3타 + 물 원소 VFX (Q_WaveSlash + sub_cool_mist 한기)
+            // Primary: 단발 짤패 풀 — 흐르는 칼질 단발 3종.
+            //   원소 톤: status_chill → 검기 시안.
             p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
-                std::vector<ComboAttackBehavior::ComboHit> hits;
                 auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
                                const char* vfx, const char* impact, float scale) {
                     ComboAttackBehavior::ComboHit hh;
@@ -1102,9 +1122,21 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
                     hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
                     return hh;
                 };
-                hits.push_back(Make("attack1", 45.0f, 0.30f, 0.15f, 0.10f, 9.0f, 130.0f, "status_chill", "sub_cool_mist", 3.0f));
-                hits.push_back(Make("attack2", 45.0f, 0.22f, 0.15f, 0.10f, 9.0f, 130.0f, "status_chill", "sub_cool_mist", 3.0f));
-                hits.push_back(Make("spin",    60.0f, 0.25f, 0.30f, 0.30f, 9.5f, 280.0f, "status_chill", "sub_cool_mist", 5.0f));
+                std::vector<ComboAttackBehavior::ComboHit> hits;
+                int choice = rand() % 3;
+                switch (choice)
+                {
+                // 카멘 톤 : 베기 cone 110° ForwardBox, 회전 cone 220° Circle.
+                case 0:  // attack1 묵직 베기 (ForwardBox 110°)
+                    hits.push_back(Make("attack1", 65.0f, 0.42f, 0.18f, 0.35f, 10.0f, 110.0f, "status_chill", "sub_cool_mist", 3.5f));
+                    break;
+                case 1:  // attack2 묵직 베기 (대칭, ForwardBox 110°)
+                    hits.push_back(Make("attack2", 65.0f, 0.40f, 0.18f, 0.35f, 10.0f, 110.0f, "status_chill", "sub_cool_mist", 3.5f));
+                    break;
+                default: // attack4 광역 휩쓸기 (Circle 220°)
+                    hits.push_back(Make("attack4", 90.0f, 0.55f, 0.25f, 0.45f, 10.5f, 220.0f, "status_chill", "sub_cool_mist", 5.0f));
+                    break;
+                }
                 return std::make_unique<ComboAttackBehavior>(hits);
             };
             // Special: 풀맵 충격파 링 (36 반경)
@@ -1123,16 +1155,19 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         {
             BossPhaseData p;
             p.m_fHealthThreshold = 0.60f;
-            p.m_fSpeedMultiplier = 1.20f;
-            p.m_fAttackSpeedMultiplier = 0.90f;
+            // 카멘 톤 : 중간 단계 — 베이스 속도, 공격 간격 살짝 짧음.
+            p.m_fSpeedMultiplier = 1.00f;
+            p.m_fAttackSpeedMultiplier = 1.10f;
             p.m_nSpecialAttackChance = 55;
             p.m_bInvincibleDuringTransition = true;
             p.m_fTransitionDuration = 1.6f;
             p.m_strTransitionAnimation = "attack9";
 
-            // Primary: 빠른 3타 칼 + 바람 원소 VFX (Q_WindCutter + sub_speed_streak 속도 잔상)
+            // Primary: 단발 짤패 풀 — 빠른 칼바람 단발 3종.
+            //   원소 톤: status_freeze → 검기 연두/청록 (Gale 톤).
+            //   m_fAttackSpeedMultiplier 0.90 → 쿨다운 짧음 → 단발이 자주 갈리면서 칼바람 느낌.
+            //   windup/recovery 는 P0/P1 보다 짧게 — 그러나 trail 0.45s 보장 위해 0.20s 이상 유지.
             p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
-                std::vector<ComboAttackBehavior::ComboHit> hits;
                 auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
                                const char* vfx, const char* impact, float scale) {
                     ComboAttackBehavior::ComboHit hh;
@@ -1141,10 +1176,21 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
                     hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
                     return hh;
                 };
-                // 풍속성 status 가 없어서 status_freeze (흰-청 글로우) 를 바람 톤으로 재활용
-                hits.push_back(Make("attack1", 35.0f, 0.18f, 0.10f, 0.08f, 8.5f, 120.0f, "status_freeze", "sub_speed_streak", 3.0f));
-                hits.push_back(Make("attack2", 35.0f, 0.14f, 0.10f, 0.08f, 8.5f, 120.0f, "status_freeze", "sub_speed_streak", 3.0f));
-                hits.push_back(Make("attack4", 55.0f, 0.18f, 0.15f, 0.22f, 9.0f, 140.0f, "status_freeze", "sub_speed_streak", 5.0f));
+                std::vector<ComboAttackBehavior::ComboHit> hits;
+                int choice = rand() % 3;
+                switch (choice)
+                {
+                // 카멘 톤 : 바람 페이즈 — 빠른 베기 cone 100° (가장 좁음), 회전 200°.
+                case 0:  // attack1 빠른 베기 (ForwardBox 100°)
+                    hits.push_back(Make("attack1", 55.0f, 0.35f, 0.18f, 0.28f,  9.5f, 100.0f, "status_freeze", "sub_speed_streak", 3.5f));
+                    break;
+                case 1:  // attack2 빠른 베기 (대칭, ForwardBox 100°)
+                    hits.push_back(Make("attack2", 55.0f, 0.32f, 0.18f, 0.28f,  9.5f, 100.0f, "status_freeze", "sub_speed_streak", 3.5f));
+                    break;
+                default: // attack4 광역 횡베기 (Circle 200° — 칼바람 휩쓸기)
+                    hits.push_back(Make("attack4", 80.0f, 0.45f, 0.22f, 0.38f, 10.0f, 200.0f, "status_freeze", "sub_speed_streak", 4.5f));
+                    break;
+                }
                 return std::make_unique<ComboAttackBehavior>(hits);
             };
             // Special: GaleSlash X자 진공파 — length 36, 4면 동시 발사
@@ -1164,16 +1210,18 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         {
             BossPhaseData p;
             p.m_fHealthThreshold = 0.40f;
-            p.m_fSpeedMultiplier = 1.35f;
-            p.m_fAttackSpeedMultiplier = 0.75f;
+            // 카멘 톤 : 불 페이즈 — 살짝 빨라짐, 그러나 공격 간격은 여전히 0.95× (베이스에 가깝게).
+            p.m_fSpeedMultiplier = 1.05f;
+            p.m_fAttackSpeedMultiplier = 0.95f;
             p.m_nSpecialAttackChance = 60;
             p.m_bInvincibleDuringTransition = true;
             p.m_fTransitionDuration = 1.6f;
             p.m_strTransitionAnimation = "attack9";
 
-            // Primary: 공격적 2타 burst + 불 원소 VFX (R_MeteorSmallImpact / R_MeteorImpact + sub_strike_spark 불꽃)
+            // Primary: 단발 짤패 풀 — 폭발적 burst 단발 3종.
+            //   원소 톤: status_burn → 검기 노랑/빨강.
+            //   m_fAttackSpeedMultiplier 0.75 → 쿨다운 짧음 → burst 가 자주 갈림.
             p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
-                std::vector<ComboAttackBehavior::ComboHit> hits;
                 auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
                                const char* vfx, const char* impact, float scale) {
                     ComboAttackBehavior::ComboHit hh;
@@ -1182,8 +1230,21 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
                     hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
                     return hh;
                 };
-                hits.push_back(Make("attack6", 50.0f, 0.22f, 0.12f, 0.08f, 8.5f, 110.0f, "status_burn", "sub_strike_spark", 3.0f));
-                hits.push_back(Make("attack9", 85.0f, 0.25f, 0.18f, 0.30f, 9.5f, 160.0f, "status_burn", "sub_strike_spark", 5.0f));
+                std::vector<ComboAttackBehavior::ComboHit> hits;
+                int choice = rand() % 3;
+                switch (choice)
+                {
+                // 카멘 톤 : 불 페이즈 burst — Attack6 ForwardBox 160°, attack9 Circle 200°, attack4 Circle 240°.
+                case 0:  // Attack6 묵직 와이드 베기 (ForwardBox 160°)
+                    hits.push_back(Make("Attack6",  95.0f, 0.60f, 0.28f, 0.45f, 11.0f, 160.0f, "status_burn", "sub_strike_spark", 4.5f));
+                    break;
+                case 1:  // attack9 묵직 오버헤드 마무리 (Circle 200°)
+                    hits.push_back(Make("attack9", 115.0f, 0.60f, 0.28f, 0.50f, 11.5f, 200.0f, "status_burn", "sub_strike_spark", 5.5f));
+                    break;
+                default: // attack4 광역 횡베기 (Circle 240°)
+                    hits.push_back(Make("attack4",  85.0f, 0.55f, 0.25f, 0.40f, 10.5f, 240.0f, "status_burn", "sub_strike_spark", 4.5f));
+                    break;
+                }
                 return std::make_unique<ComboAttackBehavior>(hits);
             };
             // Special: 메테오 폭격 — 8발, 20~55 반경 사이 무작위 착탄
@@ -1203,17 +1264,18 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         {
             BossPhaseData p;
             p.m_fHealthThreshold = 0.20f;
-            p.m_fSpeedMultiplier = 1.65f;
-            p.m_fAttackSpeedMultiplier = 0.55f;
+            // 카멘 톤 : Final 각성 — 베이스보다 빠르지만 여전히 위엄. 공격 간격 0.75× 로 제한 (난사 X).
+            p.m_fSpeedMultiplier = 1.20f;
+            p.m_fAttackSpeedMultiplier = 0.75f;
             p.m_nSpecialAttackChance = 80;
             p.m_bInvincibleDuringTransition = true;
             p.m_fTransitionDuration = 2.0f;
             p.m_strTransitionAnimation = "attack9";
 
-            // Primary: 5타 분노 콤보 — 매 hit 마다 다른 원소 VFX 깃듦 (Final = 올원소)
-            //   1=물, 2=땅, 3=바람, 4=불, 5=대규모 화염 마무리. 마무리는 가장 큼.
+            // Primary: 단발 짤패 풀 — 올원소 단발 5종.
+            //   원소 톤: 매 짤패마다 다른 status_* → 검기 색이 짤패마다 자동 전환 (가장 화려한 단계).
+            //   m_fAttackSpeedMultiplier 0.55 → 쿨다운 매우 짧음 → 여러 클립이 빠르게 갈림.
             p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
-                std::vector<ComboAttackBehavior::ComboHit> hits;
                 auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
                                const char* vfx, const char* impact, float scale) {
                     ComboAttackBehavior::ComboHit hh;
@@ -1222,11 +1284,28 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
                     hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
                     return hh;
                 };
-                hits.push_back(Make("attack1", 30.0f, 0.18f, 0.12f, 0.08f,  9.0f, 130.0f, "status_chill",    "sub_cool_mist",    3.0f));
-                hits.push_back(Make("attack2", 30.0f, 0.15f, 0.12f, 0.08f,  9.0f, 130.0f, "status_fracture", "sub_blast_wave",   3.0f));
-                hits.push_back(Make("attack4", 35.0f, 0.15f, 0.12f, 0.10f,  9.5f, 150.0f, "status_freeze",   "sub_speed_streak", 3.0f));
-                hits.push_back(Make("attack6", 35.0f, 0.18f, 0.12f, 0.10f,  9.5f, 150.0f, "status_burn",     "sub_strike_spark", 3.0f));
-                hits.push_back(Make("attack9", 75.0f, 0.30f, 0.22f, 0.35f, 11.0f, 240.0f, "status_burn",     "sub_blast_wave",   6.0f));   // 광역 마무리
+                std::vector<ComboAttackBehavior::ComboHit> hits;
+                int choice = rand() % 5;
+                switch (choice)
+                {
+                // 카멘 톤 : Final 각성 — 검기 색은 hit 마다 다르지만 인디케이터 색은 통일 (빨강).
+                //   베기 cone 110~160° ForwardBox / 회전 cone 200~240° Circle.
+                case 0:  // attack1 + 물 (시안 검기) ForwardBox 110°
+                    hits.push_back(Make("attack1",  70.0f, 0.35f, 0.18f, 0.28f, 10.0f, 110.0f, "status_chill",    "sub_cool_mist",    3.5f));
+                    break;
+                case 1:  // attack2 + 땅 (앰버 검기) ForwardBox 110°
+                    hits.push_back(Make("attack2",  70.0f, 0.35f, 0.18f, 0.28f, 10.0f, 110.0f, "status_fracture", "sub_blast_wave",   3.5f));
+                    break;
+                case 2:  // attack4 + 바람 (silver 검기, 회전 Circle 220°)
+                    hits.push_back(Make("attack4",  90.0f, 0.45f, 0.22f, 0.35f, 10.5f, 220.0f, "status_freeze",   "sub_speed_streak", 4.5f));
+                    break;
+                case 3:  // Attack6 + 불 (주황빨강 검기) ForwardBox 160°
+                    hits.push_back(Make("Attack6", 100.0f, 0.50f, 0.25f, 0.40f, 11.0f, 160.0f, "status_burn",     "sub_strike_spark", 4.5f));
+                    break;
+                default: // attack9 + 화염 마무리 Circle 240°
+                    hits.push_back(Make("attack9", 115.0f, 0.55f, 0.28f, 0.50f, 11.5f, 240.0f, "status_burn",     "sub_blast_wave",   6.0f));
+                    break;
+                }
                 return std::make_unique<ComboAttackBehavior>(hits);
             };
             // Special: 시그니처 풀맵 패턴 5종 중 랜덤

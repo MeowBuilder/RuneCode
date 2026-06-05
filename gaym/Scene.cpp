@@ -1295,6 +1295,49 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         }
     }
 
+    // F9 / F10: [DEBUG] 현재 방의 보스 애니메이션 클립 사이클러.
+    //   안 쓰던 클립이 실제로 어떤 모션인지 in-game 으로 확인하기 위한 도구.
+    //   F9 = 다음 클립, F10 = 이전 클립. 보스 1마리 가정 (DarkLord 방).
+    //   클립명은 DarkKnight2_skin3 익스포트 기준. 새 보스 추가 시 클립명 별도 관리 필요.
+    {
+        static const std::vector<std::string> s_vBossClips = {
+            "fightidle", "Idle1", "Idle2", "Idle3",
+            "walk1", "walkback", "run",
+            "attack1", "attack2", "attack3", "attack4",
+            "Attack5", "Attack6", "attack7", "attack8", "attack9", "Attack10",
+            "gethit1", "gethit2", "gethit3",
+            "death1", "death2",
+        };
+        static int s_nClipIdx = 0;
+
+        auto cycleBossClip = [&](int delta)
+        {
+            if (!m_pCurrentRoom) return;
+            const auto& vEnemies = m_pCurrentRoom->GetEnemies();
+            EnemyComponent* pBoss = nullptr;
+            for (EnemyComponent* pE : vEnemies)
+            {
+                if (pE && pE->IsBoss()) { pBoss = pE; break; }
+            }
+            if (!pBoss) { OutputDebugString(L"[ClipCycler] no boss in current room\n"); return; }
+            AnimationComponent* pAnim = pBoss->GetAnimationComponent();
+            if (!pAnim) { OutputDebugString(L"[ClipCycler] boss has no AnimationComponent\n"); return; }
+
+            s_nClipIdx = (s_nClipIdx + delta + (int)s_vBossClips.size()) % (int)s_vBossClips.size();
+            const std::string& clip = s_vBossClips[s_nClipIdx];
+            // bForceRestart=true — 같은 클립 재선택 시에도 처음부터 재생되게 함
+            pAnim->CrossFade(clip, 0.10f, true, true);
+
+            char msg[160];
+            snprintf(msg, sizeof(msg), "[ClipCycler] (%d/%zu) %s\n",
+                     s_nClipIdx + 1, s_vBossClips.size(), clip.c_str());
+            OutputDebugStringA(msg);
+        };
+
+        if (pInputSystem && pInputSystem->IsKeyPressed(VK_F9))  cycleBossClip(+1);
+        if (pInputSystem && pInputSystem->IsKeyPressed(VK_F10)) cycleBossClip(-1);
+    }
+
     // B 키: 현재 테마에 맞는 보스전
     if (pInputSystem && pInputSystem->IsKeyPressed('B'))
     {

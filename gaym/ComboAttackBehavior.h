@@ -55,6 +55,14 @@ public:
         return m_vHits.empty() ? 0.0f : m_vHits[0].fWindupTime;
     }
 
+    // 단발/콤보 첫 hit 의 cone 이 충분히 넓으면 (≥120°) Circle 인디케이터로 override —
+    //   DarkLord ForwardBox 기본(4.5×9.0) 은 실제 hit cone/range 와 크게 어긋남.
+    //   좁은 cone 은 preset 의 ForwardBox 유지.
+    virtual int GetIndicatorTypeOverride() const override;
+    virtual float GetIndicatorRadius() const override;
+    virtual float GetIndicatorLength() const override;
+    virtual DirectX::XMFLOAT3 GetIndicatorTint() const override;
+
     // Builder helper for creating combos
     static ComboAttackBehavior* CreateLightCombo();   // Fast 3-hit combo
     static ComboAttackBehavior* CreateHeavyCombo();   // Slow 2-hit high damage
@@ -135,4 +143,6 @@ private:
     float m_fTimer = 0.0f;
     bool m_bHitDealt = false;
     bool m_bFinished = false;
+    // Trail 이 이번 hit 의 windup 후반부에 미리 켜졌는지 — true 면 Hit 진입 시 재시작 skip
+    bool m_bTrailStarted = false;
 };

@@ -390,7 +390,10 @@ void EnemyComponent::SpawnStatusVFX(const char* effectId, int& outId)
     if (m_pOwner && m_pOwner->GetTransform())
     {
         pos = m_pOwner->GetTransform()->GetPosition();
-        pos.y += 1.0f;
+        // 보스 scale 비례 y offset — scale 1 = +1, scale 10 = +12. 머리 위로 띄워
+        //   인디케이터 영역과 시각 분리 (status sphere 가 발치에 떠서 인디케이터로 오해되는 문제).
+        float yScale = m_pOwner->GetTransform()->GetScale().y;
+        pos.y += 1.0f + yScale * 1.1f;
     }
 
     EffectDef def = EffectRegistry::Get().GetEffect(effectId);
@@ -409,7 +412,9 @@ void EnemyComponent::TrackStatusVFX()
     if (!m_pStatusVFXMgr || !m_pOwner || !m_pOwner->GetTransform()) return;
 
     XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
-    pos.y += 1.0f;
+    // SpawnStatusVFX 와 동일 offset — 매 프레임 위치 트래킹.
+    float yScale = m_pOwner->GetTransform()->GetScale().y;
+    pos.y += 1.0f + yScale * 1.1f;
     XMFLOAT3 dir = { 0.f, 1.f, 0.f };
 
     if (m_vfxBurnId     >= 0) m_pStatusVFXMgr->TrackEffect(m_vfxBurnId,     pos, dir);

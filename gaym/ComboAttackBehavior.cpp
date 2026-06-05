@@ -97,6 +97,13 @@ void ComboAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
     switch (m_eHitPhase)
     {
     case HitPhase::Windup:
+        // Windup 후반(60%) 시점에 trail 미리 켬 — 검 swing arc 의 앞부분도 캡처해서 궤적 자연.
+        //   hit 순간 시작했던 기존 방식은 swing 의 끝자락만 보여서 "딱 번쩍" 처럼 어색했음.
+        if (!m_bTrailStarted && currentHit.fWindupTime > 0.0f &&
+            m_fTimer >= currentHit.fWindupTime * 0.60f)
+        {
+            SpawnHitVFX(pEnemy, currentHit);
+        }
         if (m_fTimer >= currentHit.fWindupTime)
         {
             m_eHitPhase = HitPhase::Hit;
@@ -134,6 +141,7 @@ void ComboAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
             else
             {
                 m_eHitPhase = HitPhase::Windup;
+                m_bTrailStarted = false;   // 다음 hit 의 windup 후반에 다시 prearm
 
                 const ComboHit& nextHit = m_vHits[m_nCurrentHit];
 
@@ -173,6 +181,7 @@ void ComboAttackBehavior::Reset()
     m_bHitDealt = false;
     m_bFinished = false;
     m_bEmittingTrail = false;
+    m_bTrailStarted = false;
     m_fTrailRemain = 0.0f;
     CleanupAllSlashPieces();
     StopSwordGlow();
@@ -336,6 +345,10 @@ TransformComponent* ComboAttackBehavior::FindSwordBone(EnemyComponent* pEnemy)
     }
 
     static const std::vector<std::string> candidates = {
+        // DarkLord (DarkKnight2_skin3) 실제 본명 — 손 본보다 검 본을 우선 매치해야 검기가 검 위치에서 시작.
+        //   Bone_Sword 는 검 grip 본. SM_DarkKnight2_Sword 는 검 mesh 본 (grip 와 같은 위치).
+        "Bone_Sword", "SM_DarkKnight2_Sword",
+        // 일반 후보 (다른 보스 호환)
         "Sword", "Weapon", "WeaponBone", "weapon",
         "RightHand", "right_hand", "hand_r", "hand_R", "RHand", "R_Hand", "Right_Hand",
         "Bip01_R_Hand", "Bip01_RHand", "Bip01 R Hand",
@@ -365,45 +378,86 @@ TransformComponent* ComboAttackBehavior::FindSwordBone(EnemyComponent* pEnemy)
 //   톤 다운된 채도 (형광 회피) — 코어가 너무 밝지 않게 ~1.6 (HDR 부드러운 발광).
 namespace
 {
-    // 원소별 (core, edge) 두 색 — 검기 가운데 밝은 코어 + 양 옆 saturated edge.
-    //   core 는 거의 white-tinted (광원같은 강도), edge 는 원소 채도 강한 색.
-    // 원소별 (core, edge) — 명확한 color contrast. core 거의 white-tinted, edge 매우 saturated.
+    // 원소별 (core, edge) — saturated 깊은 톤. HDR 강도 1.0 이하 → bloom 잡혀도 인디케이터 X.
+    //   원칙: core 는 원소의 "환한" 톤, edge 는 어둡고 진한 톤. 양쪽 다 색 자체로 식별 가능.
+    //   바람은 white-silver (초록 X) — 진짜 바람 톤은 청회/은빛.
     struct ColorPair { XMFLOAT4 core; XMFLOAT4 edge; };
     ColorPair PickColorPairForEffect(const std::string& effectName)
     {
-        // 불: 흰-노랑 core / 진한 빨강 edge — 강한 contrast
+        // 불: 깊은 주황 core / 진한 핏빛 edge — 용암같은 톤
         if (effectName.find("burn")  != std::string::npos ||
             effectName.find("fire")  != std::string::npos ||
             effectName.find("Meteor")!= std::string::npos)
-            return { XMFLOAT4(2.00f, 1.70f, 0.60f, 1.0f), XMFLOAT4(2.20f, 0.20f, 0.00f, 1.0f) };
+            return { XMFLOAT4(1.10f, 0.55f, 0.18f, 1.0f), XMFLOAT4(1.30f, 0.12f, 0.02f, 1.0f) };
 
-        // 물: 흰-시안 core / 짙은 파랑 edge
+        // 물: 코발트 core / 진한 deep blue edge — 깊은 바다 톤
         if (effectName.find("chill") != std::string::npos ||
             effectName.find("water") != std::string::npos ||
             effectName.find("Wave")  != std::string::npos ||
             effectName.find("Vortex")!= std::string::npos)
-            return { XMFLOAT4(0.80f, 1.60f, 2.00f, 1.0f), XMFLOAT4(0.00f, 0.30f, 1.80f, 1.0f) };
+            return { XMFLOAT4(0.30f, 0.55f, 1.05f, 1.0f), XMFLOAT4(0.08f, 0.20f, 0.90f, 1.0f) };
 
-        // 바람: 흰-초록 core / 짙은 청록 edge
+        // 바람: white-silver core / 옅은 청회 edge — 칼바람 톤 (초록 형광 X)
         if (effectName.find("freeze")!= std::string::npos ||
             effectName.find("wind")  != std::string::npos ||
             effectName.find("Wind")  != std::string::npos ||
             effectName.find("Gale")  != std::string::npos)
-            return { XMFLOAT4(1.00f, 1.80f, 1.20f, 1.0f), XMFLOAT4(0.10f, 1.20f, 0.40f, 1.0f) };
+            return { XMFLOAT4(0.95f, 1.00f, 1.05f, 1.0f), XMFLOAT4(0.55f, 0.75f, 0.90f, 1.0f) };
 
-        // 땅: 흰-앰버 core / 짙은 갈색 edge
+        // 땅: 황금 core / 깊은 갈색 edge — 부서진 돌 톤
         if (effectName.find("fracture")  != std::string::npos ||
             effectName.find("earth")     != std::string::npos ||
             effectName.find("Stone")     != std::string::npos ||
             effectName.find("EarthArmor")!= std::string::npos)
-            return { XMFLOAT4(2.00f, 1.50f, 0.70f, 1.0f), XMFLOAT4(1.60f, 0.40f, 0.00f, 1.0f) };
+            return { XMFLOAT4(1.00f, 0.65f, 0.20f, 1.0f), XMFLOAT4(0.70f, 0.28f, 0.05f, 1.0f) };
 
-        return { XMFLOAT4(1.50f, 1.30f, 1.00f, 1.0f), XMFLOAT4(1.00f, 0.50f, 0.20f, 1.0f) };
+        // 기본 (key 매치 X) — 따뜻한 amber 톤
+        return { XMFLOAT4(0.95f, 0.85f, 0.70f, 1.0f), XMFLOAT4(0.70f, 0.40f, 0.15f, 1.0f) };
     }
+}
+
+// 인디케이터 override — cone 폭에 따라 type 분기.
+//   cone ≤ 180° (베기) : ForwardBox (보스 전방 직사각 — 검 휘두름과 시각 매칭).
+//   cone > 180° (회전/와이드) : Circle (보스 발치 원 — 회전 모션과 매칭).
+//   색은 preset 기본 빨강 유지 (페이즈마다 색 바뀌는 게 거슬려서 tint 제거).
+int ComboAttackBehavior::GetIndicatorTypeOverride() const
+{
+    if (m_vHits.empty()) return -1;
+    if (m_vHits[0].fConeAngle > 180.0f)
+    {
+        return 1;   // IndicatorType::Circle
+    }
+    return 4;       // IndicatorType::ForwardBox (preset 일치하지만 명시 — preset 다른 보스 대비)
+}
+
+float ComboAttackBehavior::GetIndicatorRadius() const
+{
+    if (m_vHits.empty()) return 0.0f;
+    if (m_vHits[0].fConeAngle > 180.0f)
+    {
+        return m_vHits[0].fHitRange;   // Circle 반경 = hit range
+    }
+    // ForwardBox half-width = range * sin(cone/2) — 호 폭 근사.
+    float halfConeRad = XMConvertToRadians(m_vHits[0].fConeAngle * 0.5f);
+    return m_vHits[0].fHitRange * sinf(halfConeRad);
+}
+
+float ComboAttackBehavior::GetIndicatorLength() const
+{
+    if (m_vHits.empty()) return 0.0f;
+    return m_vHits[0].fHitRange;   // ForwardBox length = hit range
+}
+
+DirectX::XMFLOAT3 ComboAttackBehavior::GetIndicatorTint() const
+{
+    // 페이즈마다 색 변하는 게 거슬린다는 피드백 — preset 기본 빨강 유지.
+    return DirectX::XMFLOAT3(1.0f, 1.0f, 1.0f);
 }
 
 void ComboAttackBehavior::SpawnHitVFX(EnemyComponent* pEnemy, const ComboHit& hit)
 {
+    // 이미 windup 후반에 prearm 으로 시작했으면 hit 순간 재시작 skip — trail 끊김 방지.
+    if (m_bTrailStarted) return;
     if (hit.strVFXOnHit.empty() || !pEnemy) return;
 
     CRoom* pRoom = pEnemy->GetRoom();
@@ -427,8 +481,12 @@ void ComboAttackBehavior::SpawnHitVFX(EnemyComponent* pEnemy, const ComboHit& hi
         m_xmf4TrailEdgeColor = cp.edge;
     }
     m_fTrailPieceScale = hit.fVFXScale;
-    float baseEmit = (hit.fHitTime > 0.10f) ? hit.fHitTime : 0.10f;
-    m_fTrailRemain = baseEmit + hit.fRecoveryTime * 0.3f + 0.05f;
+    // 검기 지속시간 — recovery 동안 검 본 잔여 모션 계속 따라가야 swing arc 가 또렷.
+    //   기존 공식 (~0.15~0.25s) 은 너무 짧아서 "딱 번쩍" 느낌. 최소 0.45s 보장 + recovery 의 70% 포함.
+    //   sword glow 도 같은 길이로 연동 (아래 m_fSwordGlowMax).
+    float baseEmit = (hit.fHitTime > 0.12f) ? hit.fHitTime : 0.12f;
+    m_fTrailRemain = baseEmit + hit.fRecoveryTime * 0.70f + 0.18f;
+    if (m_fTrailRemain < 0.45f) m_fTrailRemain = 0.45f;
     m_fTrailEmitAccum = 0.0f;
     m_bEmittingTrail = true;
     m_bHasPrevSwordPos = false;
@@ -470,11 +528,14 @@ void ComboAttackBehavior::SpawnHitVFX(EnemyComponent* pEnemy, const ComboHit& hi
         if (m_pSwordObj)
         {
             m_xmf4SwordGlowColor = m_xmf4TrailColor;
-            m_fSwordGlowMax    = baseEmit + 0.20f;
+            // trail 과 같은 수명으로 통일 — 검 발광이 trail 보다 일찍 꺼지면 끝이 어색해짐.
+            m_fSwordGlowMax    = m_fTrailRemain + 0.10f;
             m_fSwordGlowRemain = m_fSwordGlowMax;
             m_bSwordGlowing    = true;
         }
     }
+
+    m_bTrailStarted = true;
 }
 
 void ComboAttackBehavior::UpdateSwordGlow(float dt)
@@ -490,8 +551,8 @@ void ComboAttackBehavior::UpdateSwordGlow(float dt)
     float intensity = (t > 0.7f) ? 1.0f : (t / 0.7f);
 
     MATERIAL mat = m_pSwordObj->GetMaterial();
-    // 검 자체 emissive 도 강하게 (HDR 3.5x) — trail 과 어우러져 포스 ↑
-    const float kSwordEmBoost = 3.5f;
+    // 검 자체 emissive — 검기 톤 다운에 맞춰 같이 다운 (인디케이터 회피).
+    const float kSwordEmBoost = 1.5f;
     mat.m_cEmissive.x = m_xmf4SwordGlowColor.x * intensity * kSwordEmBoost;
     mat.m_cEmissive.y = m_xmf4SwordGlowColor.y * intensity * kSwordEmBoost;
     mat.m_cEmissive.z = m_xmf4SwordGlowColor.z * intensity * kSwordEmBoost;
@@ -578,8 +639,9 @@ void ComboAttackBehavior::UpdateTrailMesh(float dt, EnemyComponent* pEnemy)
     MATERIAL mat;
     mat.m_cDiffuse  = XMFLOAT4(0.0f, 0.0f, 0.0f, m_fRibbonFadeT);
     mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-    const float kCoreBoost = 1.8f;   // HDR 적당히, bloom 강하지 않게
-    const float kEdgeBoost = 1.4f;
+    // HDR 톤 다운 — 색 자체로 식별, 인디케이터 느낌 회피.
+    const float kCoreBoost = 0.9f;
+    const float kEdgeBoost = 0.7f;
     mat.m_cEmissive = XMFLOAT4(m_xmf4TrailColor.x * kCoreBoost,
                                 m_xmf4TrailColor.y * kCoreBoost,
                                 m_xmf4TrailColor.z * kCoreBoost, 1.0f);
@@ -591,6 +653,13 @@ void ComboAttackBehavior::UpdateTrailMesh(float dt, EnemyComponent* pEnemy)
 
 void ComboAttackBehavior::StopRibbon()
 {
+    // Scene::MarkForDeletion 은 deferred (다음 frame 처리). 그 사이 mesh 는 마지막 vertex
+    //   데이터로 계속 render → "끝났는데 안 사라지는" 잔존이 한 frame 이상 보임.
+    //   UpdateTrail({}, 0) 로 m_nDrawVertices=0 set → Render() 즉시 skip → 그 frame 부터 invisible.
+    if (m_pTrailMesh)
+    {
+        m_pTrailMesh->UpdateTrail({}, 0.0f);   // <2 point → 즉시 invisible
+    }
     if (m_pTrailRibbon && m_pRibbonScene)
     {
         m_pRibbonScene->MarkForDeletion(m_pTrailRibbon);
