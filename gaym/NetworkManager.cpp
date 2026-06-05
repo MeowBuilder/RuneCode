@@ -485,7 +485,8 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             break;
 
         case NetworkCommand::Skill:
-            ProcessSkill(pScene, cmd.playerId, cmd.skillType, cmd.x, cmd.y, cmd.z, cmd.dirX, cmd.dirY, cmd.dirZ);
+            ProcessSkill(pScene, cmd.playerId, cmd.skillType, cmd.x, cmd.y, cmd.z, cmd.dirX, cmd.dirY, cmd.dirZ,
+                         cmd.skillSlot, cmd.skillRadiusMult, cmd.skillDamageMult);
             break;
 
         case NetworkCommand::PlayerAction:
@@ -1267,7 +1268,8 @@ void NetworkManager::QueueMovePlayer(uint64 playerId, float x, float y, float z,
     m_vCommandQueue.push_back(cmd);
 }
 
-void NetworkManager::QueueSkill(uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ)
+void NetworkManager::QueueSkill(uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ,
+                                int32 skillSlot, float radiusMult, float damageMult)
 {
     std::lock_guard<std::mutex> lock(m_queueMutex);
 
@@ -1281,6 +1283,9 @@ void NetworkManager::QueueSkill(uint64 playerId, int skillType, float x, float y
     cmd.dirX = dirX;
     cmd.dirY = dirY;
     cmd.dirZ = dirZ;
+    cmd.skillSlot       = skillSlot;
+    cmd.skillRadiusMult = (radiusMult > 0.0f) ? radiusMult : 1.0f;
+    cmd.skillDamageMult = (damageMult > 0.0f) ? damageMult : 1.0f;
 
     m_vCommandQueue.push_back(cmd);
 }
@@ -1961,7 +1966,8 @@ void NetworkManager::CheckRemotePlayerVFXTimeout(Scene* pScene, float deltaTime)
     }
 }
 
-void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ)
+void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ,
+                                  int32 serverSkillSlot, float serverRadiusMult, float serverDamageMult)
 {
     // 로컬 플레이어라면 무시 (로컬은 자체 처리)
     if (playerId == m_nLocalPlayerId.load())
@@ -2102,12 +2108,20 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
         }
     }
 
+    // 서버 권위 radiusMult — AMP_RAD3 같은 범위 룬은 서버가 계산해 보내준 값을 그대로 적용.
+    // 1.0 (=무지정/기본) 이면 추가 스케일 없음.
+    const float vfxRadiusScale = (serverRadiusMult > 0.0f) ? serverRadiusMult : 1.0f;
     auto spawnOneShot = [&](const char* effectName, const XMFLOAT3& origin, const XMFLOAT3& dir) -> int
     {
         if (!pVFXManager) return -1;
         EffectDef def = EffectRegistry::Get().GetEffect(effectName, remoteRuneFlags);
         if (visualElementOverride != ElementType::None)
             ApplyElementToEffectDef(def, visualElementOverride);
+        if (vfxRadiusScale != 1.0f)
+        {
+            for (auto& l : def.layers)
+                l.sizeScale *= vfxRadiusScale;
+        }
         return pVFXManager->SpawnEffectDef(origin, dir, def, true);
     };
 
@@ -6594,6 +6608,226 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
 
     const bool bLocalCaster = (playerId == GetLocalPlayerId());
     DecalManager* pDecals = pScene->GetDecalManager();
+
+    // 서버가 보낸 룬 이벤트의 타겟 몬스터 위치 — VFX 부착 기준점.
+    // 몬스터가 이미 despawn 됐거나 매핑 못 찾으면 패킷 좌표(pos) 로 fallback.
+    auto GetMonsterPos = [&](DirectX::XMFLOAT3& outPos) -> bool
+    {
+        if (targetMonsterId != 0)
+        {
+            if (GameObject* pMon = GetServerMonster(targetMonsterId))
+            {
+                if (auto* t = pMon->GetComponent<TransformComponent>())
+                {
+                    outPos = t->GetPosition();
+                    return true;
+                }
+            }
+        }
+        outPos = pos;
+        return false;
+    };
+
+    auto SpawnStatusSprite = [&](const std::string& tex, const DirectX::XMFLOAT3& origin,
+                                 float size, float lifetime, DirectX::XMFLOAT4 color,
+                                 float spin = 0.f)
+    {
+        DirectX::XMFLOAT3 p = origin;
+        p.y += 1.5f;
+        VFXSpriteManager::Get().Spawn(tex, p, size, lifetime, color, spin, VFXSpriteAnim::FadeOut);
+    };
+
+    // 서버 이벤트 코드는 float 로 오지만 정수 의미 — 안전한 라운드.
+    const int eventCode = static_cast<int>(value1 + 0.5f);
+
+    // ─── 🔥 FIR_1~FIR_4: 화속성 (화상 적용 / 틱 / 종료 / 업화) ─────────────────
+    if (runeId.rfind("FIR_", 0) == 0)
+    {
+        DirectX::XMFLOAT3 monsterPos; GetMonsterPos(monsterPos);
+        DirectX::XMFLOAT3 textPos = monsterPos; textPos.y += 2.0f;
+
+        switch (eventCode)
+        {
+        case 1: // 화상 적용/갱신 — value2 = 현재 화상 중첩 수
+            SpawnStatusSprite("fire1", monsterPos, 110.f, 0.55f,
+                              {1.0f, 0.55f, 0.15f, 1.0f}, 0.8f);
+            break;
+        case 2: // 틱 피해 — value2 = 실제 틱 피해량
+        {
+            wchar_t buf[24];
+            swprintf_s(buf, L"%.0f", value2);
+            DamageNumberManager::Get().AddText(textPos, buf,
+                {1.0f, 0.55f, 0.15f, 1.0f});
+            break;
+        }
+        case 3: // 화상 종료 — 별도 표시 없음 (오라가 자연 페이드)
+            break;
+        case 4: // 업화 폭발 — value2 = 실제 폭발 피해량
+        {
+            SpawnStatusSprite("flare1", monsterPos, 360.f, 0.65f,
+                              {1.0f, 0.4f, 0.1f, 1.0f}, 4.0f);
+            wchar_t buf[32];
+            swprintf_s(buf, L"BURN! %.0f", value2);
+            DamageNumberManager::Get().AddText(textPos, buf,
+                {1.0f, 0.35f, 0.1f, 1.0f});
+            break;
+        }
+        default: break;
+        }
+        return;
+    }
+
+    // ─── 💧 WAT_1~WAT_4: 수속성 (냉기 / 빙결 / 종료 / 동상 / 빙폭) ──────────────
+    if (runeId.rfind("WAT_", 0) == 0)
+    {
+        DirectX::XMFLOAT3 monsterPos; GetMonsterPos(monsterPos);
+        DirectX::XMFLOAT3 textPos = monsterPos; textPos.y += 2.0f;
+
+        switch (eventCode)
+        {
+        case 1: // 냉기 적용/갱신 — value2 = 현재 냉기 중첩 수
+            SpawnStatusSprite("twirl1", monsterPos, 120.f, 0.6f,
+                              {0.45f, 0.75f, 1.0f, 1.0f}, 2.5f);
+            break;
+        case 2: // 빙결 발생 — value2 = 빙결 지속시간 (실제 정지/UI 는 S_MONSTER_STAGGER 가 처리)
+            SpawnStatusSprite("star_08", monsterPos, 220.f, 0.5f,
+                              {0.7f, 0.9f, 1.0f, 1.0f}, 0.f);
+            break;
+        case 3: // 냉기 종료
+            break;
+        case 4: // 동상 추가 피해 — value2 = 실제 추가 피해량
+        {
+            wchar_t buf[32];
+            swprintf_s(buf, L"FROST %.0f", value2);
+            DamageNumberManager::Get().AddText(textPos, buf,
+                {0.6f, 0.85f, 1.0f, 1.0f});
+            break;
+        }
+        case 5: // 빙폭 광역 폭발 — value2 = 빙폭 피해량 (월드 위치 기준)
+        {
+            DirectX::XMFLOAT3 burstPos = pos; burstPos.y += 0.5f;
+            VFXSpriteManager::Get().Spawn("flare1", burstPos, 420.f, 0.65f,
+                {0.55f, 0.85f, 1.0f, 1.0f}, 3.0f, VFXSpriteAnim::FadeOut);
+            wchar_t buf[32];
+            swprintf_s(buf, L"FROST BURST %.0f", value2);
+            DirectX::XMFLOAT3 t2 = burstPos; t2.y += 1.5f;
+            DamageNumberManager::Get().AddText(t2, buf,
+                {0.6f, 0.9f, 1.0f, 1.0f});
+            break;
+        }
+        default: break;
+        }
+        return;
+    }
+
+    // ─── 🌀 WND_1~WND_4: 풍속성 (풍압 / 공중경직 / 종료 / 칼바람 / 폭풍) ─────────
+    if (runeId.rfind("WND_", 0) == 0)
+    {
+        DirectX::XMFLOAT3 monsterPos; GetMonsterPos(monsterPos);
+        DirectX::XMFLOAT3 textPos = monsterPos; textPos.y += 2.0f;
+
+        switch (eventCode)
+        {
+        case 1: // 풍압 적용/갱신 — value2 = 현재 풍압 중첩 수
+            SpawnStatusSprite("twirl1", monsterPos, 130.f, 0.55f,
+                              {0.75f, 1.0f, 0.7f, 1.0f}, 4.0f);
+            break;
+        case 2: // 공중 경직 / 회오리 — value2 = 경직 시간
+            SpawnStatusSprite("twirl1", monsterPos, 240.f, 0.7f,
+                              {0.85f, 1.0f, 0.85f, 1.0f}, 6.0f);
+            break;
+        case 3: // 풍압 종료
+            break;
+        case 4: // 칼바람 추가 피해 — value2 = 실제 추가 피해량
+        {
+            wchar_t buf[32];
+            swprintf_s(buf, L"BLADE %.0f", value2);
+            DamageNumberManager::Get().AddText(textPos, buf,
+                {0.8f, 1.0f, 0.75f, 1.0f});
+            break;
+        }
+        case 5: // 폭풍 광역 폭발 — value2 = 폭풍 피해량
+        {
+            DirectX::XMFLOAT3 burstPos = pos; burstPos.y += 0.5f;
+            VFXSpriteManager::Get().Spawn("flare1", burstPos, 440.f, 0.7f,
+                {0.7f, 1.0f, 0.7f, 1.0f}, 5.0f, VFXSpriteAnim::FadeOut);
+            wchar_t buf[32];
+            swprintf_s(buf, L"STORM %.0f", value2);
+            DirectX::XMFLOAT3 t2 = burstPos; t2.y += 1.5f;
+            DamageNumberManager::Get().AddText(t2, buf,
+                {0.75f, 1.0f, 0.75f, 1.0f});
+            break;
+        }
+        default: break;
+        }
+        return;
+    }
+
+    // ─── 🪨 ERT_1~ERT_4: 토속성 (균열 / 경직 / 종료 / 추가피해 / 냉기연계 / 붕괴) ─
+    if (runeId.rfind("ERT_", 0) == 0)
+    {
+        DirectX::XMFLOAT3 monsterPos; GetMonsterPos(monsterPos);
+        DirectX::XMFLOAT3 textPos = monsterPos; textPos.y += 2.0f;
+
+        switch (eventCode)
+        {
+        case 1: // 균열 적용/갱신 — value2 = 현재 균열 스택
+            SpawnStatusSprite("magic3", monsterPos, 150.f, 0.6f,
+                              {0.85f, 0.65f, 0.4f, 1.0f}, 1.2f);
+            break;
+        case 2: // 균열 경직 — value2 = 경직 시간
+            SpawnStatusSprite("flare1", monsterPos, 220.f, 0.55f,
+                              {0.85f, 0.7f, 0.4f, 1.0f}, 0.f);
+            break;
+        case 3: // 균열 종료
+            break;
+        case 4: // 균열 추가 피해 — value2 = 추가 피해량
+        {
+            wchar_t buf[32];
+            swprintf_s(buf, L"CRACK %.0f", value2);
+            DamageNumberManager::Get().AddText(textPos, buf,
+                {0.9f, 0.7f, 0.35f, 1.0f});
+            break;
+        }
+        case 5: // ERT_2 냉기 연계 — value2 = 냉기 지속시간
+            SpawnStatusSprite("twirl1", monsterPos, 110.f, 0.55f,
+                              {0.5f, 0.8f, 1.0f, 1.0f}, 2.0f);
+            break;
+        case 6: // ERT_4 붕괴 피해 — value2 = 붕괴 피해량
+        {
+            VFXSpriteManager::Get().Spawn("flare1",
+                DirectX::XMFLOAT3(monsterPos.x, monsterPos.y + 0.8f, monsterPos.z),
+                380.f, 0.65f, {0.95f, 0.55f, 0.25f, 1.0f}, 3.0f, VFXSpriteAnim::FadeOut);
+            wchar_t buf[32];
+            swprintf_s(buf, L"COLLAPSE %.0f", value2);
+            DamageNumberManager::Get().AddText(textPos, buf,
+                {1.0f, 0.6f, 0.25f, 1.0f});
+            break;
+        }
+        default: break;
+        }
+        return;
+    }
+
+    // ─── ABY_TIM: 시간 역행 — 적중 시 해당 skillSlot 쿨다운 value1 만큼 감소 ────
+    if (runeId == "ABY_TIM")
+    {
+        if (bLocalCaster && pCaster)
+        {
+            if (skillSlot >= 0 && skillSlot < static_cast<int32>(SkillSlot::Count))
+            {
+                if (SkillComponent* pSkill = pCaster->GetComponent<SkillComponent>())
+                {
+                    pSkill->ReduceCooldown(static_cast<SkillSlot>(skillSlot), value1);
+                }
+            }
+        }
+        wchar_t buf[32];
+        swprintf_s(buf, L"-%.1fs CD", value1);
+        DamageNumberManager::Get().AddText(GetDisplayPos(pCaster), buf,
+            DirectX::XMFLOAT4(0.7f, 0.9f, 1.0f, 1.0f));
+        return;
+    }
 
     // ─── ABY_INF: 무한 룬 — 적중 시 확률 발동, 해당 skillSlot 쿨다운 즉시 초기화 ──
     if (runeId == "ABY_INF")

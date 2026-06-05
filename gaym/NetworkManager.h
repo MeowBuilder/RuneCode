@@ -180,6 +180,11 @@ struct NetworkCommandData
     uint64 runeTriggerTargetPlayerId  = 0;
     float  runeTriggerValue1          = 0.0f;
     float  runeTriggerValue2          = 0.0f;
+
+    // S_SKILL 룬 보정 필드 — 서버 권위 radius/damage 배율을 원격 클라가 그대로 사용
+    int32  skillSlot                  = -1;
+    float  skillRadiusMult            = 1.0f;
+    float  skillDamageMult            = 1.0f;
 };
 
 // =============================================================================
@@ -281,7 +286,8 @@ public:
     void QueueSpawnPlayer(uint64 playerId, const std::string& name, int playerType, float x, float y, float z);
     void QueueDespawnPlayer(uint64 playerId);
     void QueueMovePlayer(uint64 playerId, float x, float y, float z, float dirX, float dirY, float dirZ);
-    void QueueSkill(uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ);
+    void QueueSkill(uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ,
+                    int32 skillSlot = -1, float radiusMult = 1.0f, float damageMult = 1.0f);
     void QueuePlayerAction(uint64 playerId, uint32 actionType, float x, float y, float z, float dirX, float dirY, float dirZ);
     void QueueSetLocalPlayerId(uint64 playerId);
     void QueueRoomTransition(uint32 stageIndex, uint32 roomIndex, bool isBossRoom, const std::string& mapId);
@@ -389,7 +395,8 @@ private:
     void ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList, uint64 playerId, const std::string& name, int playerType, float x, float y, float z);
     void ProcessDespawnPlayer(Scene* pScene, uint64 playerId);
     void ProcessMovePlayer(uint64 playerId, float x, float y, float z, float dirX, float dirY, float dirZ);
-    void ProcessSkill(Scene* pScene, uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ);
+    void ProcessSkill(Scene* pScene, uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ,
+                      int32 skillSlot = -1, float radiusMult = 1.0f, float damageMult = 1.0f);
     void ProcessPlayerAction(Scene* pScene, uint64 playerId, uint32 actionType, float x, float y, float z, float dirX, float dirY, float dirZ);
     void ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uint32 roomIndex, bool isBossRoom, const std::string& mapId);
 
