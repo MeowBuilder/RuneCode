@@ -98,6 +98,7 @@ message S_SKILL // 서버 -> 클라 스킬 사용 알림 패킷
 
 message C_PORTAL_INTERACT // 클라 -> 서버 포탈 상호작용 요청 패킷
 {
+    uint32 portalType = 1; // 0=메인/보라 포탈, 1=보조/빨간 포탈
 }
 
 message C_TORCH_INTERACT // 클라 -> 서버 횃불/전투 시작 오브젝트 상호작용 요청 패킷
@@ -110,6 +111,7 @@ message S_ROOM_TRANSITION // 서버 -> 클라 방 전환 알림 패킷
 	uint32 roomIndex = 2;  // 현재 방 번호
 	bool isBossRoom = 3;   // 보스방 여부
 	string mapId = 4;      // 클라가 로드할 맵 ID
+	uint32 cycleCount = 5; // 파밍 루프 회차. 보라 포탈로 Fire 회귀할 때 서버 기준 증가
 }
 
 message MonsterInfo // 서버 -> 클라 몬스터 기본 정보
@@ -291,6 +293,11 @@ message S_ROOM_REWARD_SPAWN // 서버 -> 클라 방 클리어 보상 오브젝�
 	float portalZ = 5;    // 공통 포탈 위치 Z
 
 	repeated RewardRuneObjectInfo runeObjects = 6; // 플레이어별 룬 오브젝트 위치 목록
+	bool hasSecondPortal = 7;   // true면 빨간 포탈도 생성
+
+    float secondPortalX = 8;
+    float secondPortalY = 9;
+    float secondPortalZ = 10;
 }
 
 message C_RUNE_REWARD_PICK // 클라 -> 서버 룬 보상 선택 완료 알림 패킷

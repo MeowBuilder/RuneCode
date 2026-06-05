@@ -499,6 +499,7 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
 
         case NetworkCommand::RoomTransition:
             ProcessRoomTransition(pScene, cmd.stageIndex, cmd.roomIndex, cmd.isBossRoom, cmd.mapId);
+            roomTransitionProcessedThisFrame = true;
             break;
 
         case NetworkCommand::RoomStart:
@@ -557,7 +558,7 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             break;
 
         case NetworkCommand::RoomRewardSpawn:
-            ProcessRoomRewardSpawn(pScene, cmd.stageIndex, cmd.roomIndex, DirectX::XMFLOAT3(cmd.rewardPortalX, cmd.rewardPortalY, cmd.rewardPortalZ), cmd.rewardRuneObjects);
+            ProcessRoomRewardSpawn(pScene, cmd.stageIndex, cmd.roomIndex, DirectX::XMFLOAT3(cmd.rewardPortalX, cmd.rewardPortalY, cmd.rewardPortalZ), cmd.rewardHasSecondPortal, DirectX::XMFLOAT3(cmd.rewardSecondPortalX, cmd.rewardSecondPortalY, cmd.rewardSecondPortalZ), cmd.rewardRuneObjects);
             break;
 
         case NetworkCommand::RuneRewardPicked:
@@ -735,7 +736,7 @@ void NetworkManager::SendPlayerAction(uint32 actionType,
     WriteNetworkLog(buf);
 }
 
-void NetworkManager::SendPortalInteract()
+void NetworkManager::SendPortalInteract(uint32 portalType)
 {
     if (!m_bConnected || !m_pSession)
     {
@@ -744,11 +745,16 @@ void NetworkManager::SendPortalInteract()
     }
 
     Protocol::C_PORTAL_INTERACT pkt;
+    pkt.set_portaltype(portalType);
+
     auto sendBuffer = ServerPacketHandler::MakeSendBuffer(pkt);
     m_pSession->Send(sendBuffer);
 
-    OutputDebugString(L"[Network] C_PORTAL_INTERACT sent\n");
-    WriteNetworkLog("[Network] C_PORTAL_INTERACT sent");
+    char buf[128];
+    sprintf_s(buf,
+        "[Network] C_PORTAL_INTERACT sent: portalType=%u",
+        portalType);
+    WriteNetworkLog(buf);
 }
 
 void NetworkManager::SendTorchInteract()
@@ -1023,6 +1029,8 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     if (!pScene)
         return;
 
+    bool shouldAutoStartRoom = true;
+
     // 중복 전환 방어
     if (m_bInRoomTransition)
     {
@@ -1116,9 +1124,26 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
         else if (mapId == "water_boss")     { pScene->TransitionToWaterBossRoom();   bHandled = true; }
         else if (mapId == "earth_boss")     { pScene->TransitionToEarthBossRoom();   bHandled = true; }
         else if (mapId == "grass_boss")     { pScene->TransitionToGrassBossRoom();   bHandled = true; }
+        else if (mapId == "dark_lord")
+        {
+            pScene->TransitionToDarkLordRoom();
+            bHandled = true;
+
+            // 현재 작업은 DarkLord 방 입장까지만.
+            // 서버 최종보스 스폰/패턴 동기화는 다음 단계이므로 자동 C_TORCH_INTERACT는 보내지 않는다.
+            shouldAutoStartRoom = false;
+        }
         else if (mapId.rfind("fire_room_", 0) == 0)
         {
-            pScene->TransitionToRoomByIndex(static_cast<int>(roomIndex));
+            if (stageIndex == 1 && roomIndex == 0)
+            {
+                pScene->TransitionToFireStage(0);
+            }
+            else
+            {
+                pScene->TransitionToRoomByIndex(static_cast<int>(roomIndex));
+            }
+
             bHandled = true;
         }
         else if (mapId.rfind("water_room_", 0) == 0)
@@ -1149,6 +1174,10 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
             case 2: pScene->TransitionToWaterBossRoom();   break;
             case 3: pScene->TransitionToEarthBossRoom();   break;
             case 4: pScene->TransitionToGrassBossRoom();   break;
+            case 5:
+                pScene->TransitionToDarkLordRoom();
+                shouldAutoStartRoom = false;
+                break;
             default: pScene->TransitionToBossRoom();       break;
             }
         }
@@ -1216,10 +1245,18 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     // 서버 Room 은 HandleTorchInteract 를 받아야만 몬스터를 스폰하도록 돼 있음 (최초 방 진입과 동일 플로우).
     // 오프라인에서는 방 Active 시 자동 스폰이지만, 네트워크 모드에서는 C_TORCH_INTERACT 가 스폰 트리거.
     // 첫 방에선 맵에 배치된 횃불/큐브를 F 로 눌러 시작했지만, 다음 방 이후에는 자동으로 요청해준다.
-    m_bPendingTorchInteract = true;
-    m_nPendingTorchInteractFrame = 30; // 약 0.5초 정도
-
-    WriteNetworkLog("[Network] Pending C_TORCH_INTERACT scheduled");
+    if (shouldAutoStartRoom)
+    {
+        m_bPendingTorchInteract = true;
+        m_nPendingTorchInteractFrame = 30;
+        WriteNetworkLog("[Network] Pending C_TORCH_INTERACT scheduled");
+    }
+    else
+    {
+        m_bPendingTorchInteract = false;
+        m_nPendingTorchInteractFrame = 0;
+        WriteNetworkLog("[Network] Pending C_TORCH_INTERACT skipped for dark_lord");
+    }
 
     m_bInRoomTransition = false;
 }
@@ -5290,7 +5327,7 @@ void NetworkManager::QueueRoomCleared(uint32 stageIndex, uint32 roomIndex)
     m_vCommandQueue.push_back(cmd);
 }
 
-void NetworkManager::QueueRoomRewardSpawn(uint32 stageIndex, uint32 roomIndex, const DirectX::XMFLOAT3& portalPos, const std::vector<NetworkRewardRuneObjectInfo>& runeObjects)
+void NetworkManager::QueueRoomRewardSpawn(uint32 stageIndex, uint32 roomIndex, const DirectX::XMFLOAT3& portalPos, bool hasSecondPortal, const DirectX::XMFLOAT3& secondPortalPos, const std::vector<NetworkRewardRuneObjectInfo>& runeObjects)
 {
     std::lock_guard<std::mutex> lock(m_queueMutex);
 
@@ -5302,6 +5339,12 @@ void NetworkManager::QueueRoomRewardSpawn(uint32 stageIndex, uint32 roomIndex, c
     cmd.rewardPortalX = portalPos.x;
     cmd.rewardPortalY = portalPos.y;
     cmd.rewardPortalZ = portalPos.z;
+
+    cmd.rewardHasSecondPortal = hasSecondPortal;
+    cmd.rewardSecondPortalX = secondPortalPos.x;
+    cmd.rewardSecondPortalY = secondPortalPos.y;
+    cmd.rewardSecondPortalZ = secondPortalPos.z;
+
     cmd.rewardRuneObjects = runeObjects;
 
     m_vCommandQueue.push_back(cmd);
@@ -6378,7 +6421,7 @@ void NetworkManager::ProcessRoomStart(Scene* pScene, uint64 starterPlayerId)
     WriteNetworkLog(buf);
 }
 
-void NetworkManager::ProcessRoomRewardSpawn(Scene* pScene, uint32 stageIndex, uint32 roomIndex, const DirectX::XMFLOAT3& portalPos, const std::vector<NetworkRewardRuneObjectInfo>& runeObjects)
+void NetworkManager::ProcessRoomRewardSpawn(Scene* pScene, uint32 stageIndex, uint32 roomIndex, const DirectX::XMFLOAT3& portalPos, bool hasSecondPortal, const DirectX::XMFLOAT3& secondPortalPos, const std::vector<NetworkRewardRuneObjectInfo>& runeObjects)
 {
     if (!pScene)
         return;
@@ -6392,12 +6435,25 @@ void NetworkManager::ProcessRoomRewardSpawn(Scene* pScene, uint32 stageIndex, ui
     if (pRoom->GetState() != RoomState::Cleared)
         pRoom->SetState(RoomState::Cleared);
 
-    // 기존 로컬 기준 보상 오브젝트가 남아있을 수 있으므로 먼저 정리한다.
     pRoom->ClearPortalCube();
+    pRoom->ClearSecondPortal();
     pRoom->ClearRewardRuneObjects();
 
-    // 서버가 계산한 공통 위치에 포탈 1개 생성
+    // 서버가 계산한 공통 위치에 메인/보라 포탈 생성
     pRoom->SpawnPortalCubeAt(portalPos);
+
+    // 서버가 보조 포탈을 내려준 경우 빨간 포탈도 생성
+    if (hasSecondPortal)
+    {
+        pRoom->SpawnSecondPortalAt(secondPortalPos, []()
+            {
+                NetworkManager* pNet = NetworkManager::GetInstance();
+                if (pNet && pNet->IsConnected())
+                {
+                    pNet->SendPortalInteract(1);
+                }
+            });
+    }
 
     // 서버가 계산한 각 플레이어 앞 위치와 서버가 결정한 룬 3개를 함께 적용한다.
     for (const auto& info : runeObjects)
@@ -6405,14 +6461,18 @@ void NetworkManager::ProcessRoomRewardSpawn(Scene* pScene, uint32 stageIndex, ui
         pRoom->SpawnRewardRuneObjectAt(info.ownerPlayerId, info.pos, info.runeIds);
     }
 
-    char buf[256];
+    char buf[320];
     sprintf_s(buf,
-        "[Network] RoomRewardSpawn applied: stage=%u room=%u portal=(%.2f, %.2f, %.2f) runeCount=%d",
+        "[Network] RoomRewardSpawn applied: stage=%u room=%u portal=(%.2f, %.2f, %.2f) hasSecondPortal=%d second=(%.2f, %.2f, %.2f) runeCount=%d",
         stageIndex,
         roomIndex,
         portalPos.x,
         portalPos.y,
         portalPos.z,
+        hasSecondPortal ? 1 : 0,
+        secondPortalPos.x,
+        secondPortalPos.y,
+        secondPortalPos.z,
         static_cast<int>(runeObjects.size()));
     WriteNetworkLog(buf);
 }

@@ -2295,6 +2295,18 @@ class C_PORTAL_INTERACT final :
 
   // accessors -------------------------------------------------------
 
+  enum : int {
+    kPortalTypeFieldNumber = 1,
+  };
+  // uint32 portalType = 1;
+  void clear_portaltype();
+  ::PROTOBUF_NAMESPACE_ID::uint32 portaltype() const;
+  void set_portaltype(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_portaltype() const;
+  void _internal_set_portaltype(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.C_PORTAL_INTERACT)
  private:
   class _Internal;
@@ -2302,6 +2314,7 @@ class C_PORTAL_INTERACT final :
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 portaltype_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -2538,6 +2551,7 @@ class S_ROOM_TRANSITION final :
     kStageIndexFieldNumber = 1,
     kRoomIndexFieldNumber = 2,
     kIsBossRoomFieldNumber = 3,
+    kCycleCountFieldNumber = 5,
   };
   // string mapId = 4;
   void clear_mapid();
@@ -2580,6 +2594,15 @@ class S_ROOM_TRANSITION final :
   void _internal_set_isbossroom(bool value);
   public:
 
+  // uint32 cycleCount = 5;
+  void clear_cyclecount();
+  ::PROTOBUF_NAMESPACE_ID::uint32 cyclecount() const;
+  void set_cyclecount(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  private:
+  ::PROTOBUF_NAMESPACE_ID::uint32 _internal_cyclecount() const;
+  void _internal_set_cyclecount(::PROTOBUF_NAMESPACE_ID::uint32 value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.S_ROOM_TRANSITION)
  private:
   class _Internal;
@@ -2591,6 +2614,7 @@ class S_ROOM_TRANSITION final :
   ::PROTOBUF_NAMESPACE_ID::uint32 stageindex_;
   ::PROTOBUF_NAMESPACE_ID::uint32 roomindex_;
   bool isbossroom_;
+  ::PROTOBUF_NAMESPACE_ID::uint32 cyclecount_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -5757,6 +5781,10 @@ class S_ROOM_REWARD_SPAWN final :
     kPortalXFieldNumber = 3,
     kPortalYFieldNumber = 4,
     kPortalZFieldNumber = 5,
+    kHasSecondPortalFieldNumber = 7,
+    kSecondPortalXFieldNumber = 8,
+    kSecondPortalYFieldNumber = 9,
+    kSecondPortalZFieldNumber = 10,
   };
   // repeated .Protocol.RewardRuneObjectInfo runeObjects = 6;
   int runeobjects_size() const;
@@ -5821,6 +5849,42 @@ class S_ROOM_REWARD_SPAWN final :
   void _internal_set_portalz(float value);
   public:
 
+  // bool hasSecondPortal = 7;
+  void clear_hassecondportal();
+  bool hassecondportal() const;
+  void set_hassecondportal(bool value);
+  private:
+  bool _internal_hassecondportal() const;
+  void _internal_set_hassecondportal(bool value);
+  public:
+
+  // float secondPortalX = 8;
+  void clear_secondportalx();
+  float secondportalx() const;
+  void set_secondportalx(float value);
+  private:
+  float _internal_secondportalx() const;
+  void _internal_set_secondportalx(float value);
+  public:
+
+  // float secondPortalY = 9;
+  void clear_secondportaly();
+  float secondportaly() const;
+  void set_secondportaly(float value);
+  private:
+  float _internal_secondportaly() const;
+  void _internal_set_secondportaly(float value);
+  public:
+
+  // float secondPortalZ = 10;
+  void clear_secondportalz();
+  float secondportalz() const;
+  void set_secondportalz(float value);
+  private:
+  float _internal_secondportalz() const;
+  void _internal_set_secondportalz(float value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.S_ROOM_REWARD_SPAWN)
  private:
   class _Internal;
@@ -5834,6 +5898,10 @@ class S_ROOM_REWARD_SPAWN final :
   float portalx_;
   float portaly_;
   float portalz_;
+  bool hassecondportal_;
+  float secondportalx_;
+  float secondportaly_;
+  float secondportalz_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -7960,6 +8028,26 @@ inline void S_SKILL::set_damagemult(float value) {
 
 // C_PORTAL_INTERACT
 
+// uint32 portalType = 1;
+inline void C_PORTAL_INTERACT::clear_portaltype() {
+  portaltype_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 C_PORTAL_INTERACT::_internal_portaltype() const {
+  return portaltype_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 C_PORTAL_INTERACT::portaltype() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_PORTAL_INTERACT.portalType)
+  return _internal_portaltype();
+}
+inline void C_PORTAL_INTERACT::_internal_set_portaltype(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  portaltype_ = value;
+}
+inline void C_PORTAL_INTERACT::set_portaltype(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_portaltype(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_PORTAL_INTERACT.portalType)
+}
+
 // -------------------------------------------------------------------
 
 // C_TORCH_INTERACT
@@ -8071,6 +8159,26 @@ inline void S_ROOM_TRANSITION::set_allocated_mapid(std::string* mapid) {
   mapid_.SetAllocated(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), mapid,
       GetArenaForAllocation());
   // @@protoc_insertion_point(field_set_allocated:Protocol.S_ROOM_TRANSITION.mapId)
+}
+
+// uint32 cycleCount = 5;
+inline void S_ROOM_TRANSITION::clear_cyclecount() {
+  cyclecount_ = 0u;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_ROOM_TRANSITION::_internal_cyclecount() const {
+  return cyclecount_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::uint32 S_ROOM_TRANSITION::cyclecount() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ROOM_TRANSITION.cycleCount)
+  return _internal_cyclecount();
+}
+inline void S_ROOM_TRANSITION::_internal_set_cyclecount(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  
+  cyclecount_ = value;
+}
+inline void S_ROOM_TRANSITION::set_cyclecount(::PROTOBUF_NAMESPACE_ID::uint32 value) {
+  _internal_set_cyclecount(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_ROOM_TRANSITION.cycleCount)
 }
 
 // -------------------------------------------------------------------
@@ -10155,6 +10263,86 @@ inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField< ::Protocol::RewardRuneOb
 S_ROOM_REWARD_SPAWN::runeobjects() const {
   // @@protoc_insertion_point(field_list:Protocol.S_ROOM_REWARD_SPAWN.runeObjects)
   return runeobjects_;
+}
+
+// bool hasSecondPortal = 7;
+inline void S_ROOM_REWARD_SPAWN::clear_hassecondportal() {
+  hassecondportal_ = false;
+}
+inline bool S_ROOM_REWARD_SPAWN::_internal_hassecondportal() const {
+  return hassecondportal_;
+}
+inline bool S_ROOM_REWARD_SPAWN::hassecondportal() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ROOM_REWARD_SPAWN.hasSecondPortal)
+  return _internal_hassecondportal();
+}
+inline void S_ROOM_REWARD_SPAWN::_internal_set_hassecondportal(bool value) {
+  
+  hassecondportal_ = value;
+}
+inline void S_ROOM_REWARD_SPAWN::set_hassecondportal(bool value) {
+  _internal_set_hassecondportal(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_ROOM_REWARD_SPAWN.hasSecondPortal)
+}
+
+// float secondPortalX = 8;
+inline void S_ROOM_REWARD_SPAWN::clear_secondportalx() {
+  secondportalx_ = 0;
+}
+inline float S_ROOM_REWARD_SPAWN::_internal_secondportalx() const {
+  return secondportalx_;
+}
+inline float S_ROOM_REWARD_SPAWN::secondportalx() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ROOM_REWARD_SPAWN.secondPortalX)
+  return _internal_secondportalx();
+}
+inline void S_ROOM_REWARD_SPAWN::_internal_set_secondportalx(float value) {
+  
+  secondportalx_ = value;
+}
+inline void S_ROOM_REWARD_SPAWN::set_secondportalx(float value) {
+  _internal_set_secondportalx(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_ROOM_REWARD_SPAWN.secondPortalX)
+}
+
+// float secondPortalY = 9;
+inline void S_ROOM_REWARD_SPAWN::clear_secondportaly() {
+  secondportaly_ = 0;
+}
+inline float S_ROOM_REWARD_SPAWN::_internal_secondportaly() const {
+  return secondportaly_;
+}
+inline float S_ROOM_REWARD_SPAWN::secondportaly() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ROOM_REWARD_SPAWN.secondPortalY)
+  return _internal_secondportaly();
+}
+inline void S_ROOM_REWARD_SPAWN::_internal_set_secondportaly(float value) {
+  
+  secondportaly_ = value;
+}
+inline void S_ROOM_REWARD_SPAWN::set_secondportaly(float value) {
+  _internal_set_secondportaly(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_ROOM_REWARD_SPAWN.secondPortalY)
+}
+
+// float secondPortalZ = 10;
+inline void S_ROOM_REWARD_SPAWN::clear_secondportalz() {
+  secondportalz_ = 0;
+}
+inline float S_ROOM_REWARD_SPAWN::_internal_secondportalz() const {
+  return secondportalz_;
+}
+inline float S_ROOM_REWARD_SPAWN::secondportalz() const {
+  // @@protoc_insertion_point(field_get:Protocol.S_ROOM_REWARD_SPAWN.secondPortalZ)
+  return _internal_secondportalz();
+}
+inline void S_ROOM_REWARD_SPAWN::_internal_set_secondportalz(float value) {
+  
+  secondportalz_ = value;
+}
+inline void S_ROOM_REWARD_SPAWN::set_secondportalz(float value) {
+  _internal_set_secondportalz(value);
+  // @@protoc_insertion_point(field_set:Protocol.S_ROOM_REWARD_SPAWN.secondPortalZ)
 }
 
 // -------------------------------------------------------------------

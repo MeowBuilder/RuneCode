@@ -151,6 +151,12 @@ struct NetworkCommandData
     float rewardPortalX = 0.0f;
     float rewardPortalY = 0.0f;
     float rewardPortalZ = 0.0f;
+
+    bool rewardHasSecondPortal = false;
+    float rewardSecondPortalX = 0.0f;
+    float rewardSecondPortalY = 0.0f;
+    float rewardSecondPortalZ = 0.0f;
+
     std::vector<NetworkRewardRuneObjectInfo> rewardRuneObjects;
 
     // 룬 장착 결과 필드
@@ -245,7 +251,7 @@ public:
     void SendPlayerAction(uint32 actionType, float x, float y, float z, float dirX, float dirY, float dirZ);
 
     // 포탈 상호작용 전송 (F키)
-    void SendPortalInteract();
+    void SendPortalInteract(uint32 portalType = 0);
 
     // 방 전투 시작 요청 전송 (상호작용 큐브 F키) — 서버가 몬스터 스폰 트리거
     void SendTorchInteract();
@@ -309,7 +315,7 @@ public:
     void QueueRoomCleared(uint32 stageIndex, uint32 roomIndex);
 
 	// 방 보상 스폰 큐잉
-    void QueueRoomRewardSpawn(uint32 stageIndex, uint32 roomIndex, const DirectX::XMFLOAT3& portalPos, const std::vector<NetworkRewardRuneObjectInfo>& runeObjects);
+    void QueueRoomRewardSpawn(uint32 stageIndex, uint32 roomIndex, const DirectX::XMFLOAT3& portalPos, bool hasSecondPortal, const DirectX::XMFLOAT3& secondPortalPos, const std::vector<NetworkRewardRuneObjectInfo>& runeObjects);
 
 	// 룬 보상 획득 큐잉
     void QueueRuneRewardPicked(uint64 ownerPlayerId);
@@ -411,7 +417,7 @@ private:
     void ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float damage, float currentHp, bool isDead, uint64 attackerPlayerId, int skillType);
     void ProcessRoomCleared(Scene* pScene, uint32 stageIndex, uint32 roomIndex);
     void ProcessRoomStart(Scene* pScene, uint64 starterPlayerId);
-    void ProcessRoomRewardSpawn(Scene* pScene, uint32 stageIndex, uint32 roomIndex, const DirectX::XMFLOAT3& portalPos, const std::vector<NetworkRewardRuneObjectInfo>& runeObjects);
+    void ProcessRoomRewardSpawn(Scene* pScene, uint32 stageIndex, uint32 roomIndex, const DirectX::XMFLOAT3& portalPos, bool hasSecondPortal, const DirectX::XMFLOAT3& secondPortalPos, const std::vector<NetworkRewardRuneObjectInfo>& runeObjects);
     void ProcessRuneRewardPicked(Scene* pScene, uint64 ownerPlayerId);
     void ProcessRuneEquip(Scene* pScene, uint64 playerId, uint32 skillSlot, uint32 runeSlotIndex, const std::string& runeId, uint32 stackCount);
     void ProcessRuneHomingTarget(Scene* pScene, uint64 playerId, int32 skillSlot, int32 skillType, uint64 targetMonsterId, const DirectX::XMFLOAT3& targetPos, const DirectX::XMFLOAT3& originPos);

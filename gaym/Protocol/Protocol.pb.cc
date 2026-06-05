@@ -193,7 +193,8 @@ struct S_SKILLDefaultTypeInternal {
 };
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT S_SKILLDefaultTypeInternal _S_SKILL_default_instance_;
 constexpr C_PORTAL_INTERACT::C_PORTAL_INTERACT(
-  ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized){}
+  ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
+  : portaltype_(0u){}
 struct C_PORTAL_INTERACTDefaultTypeInternal {
   constexpr C_PORTAL_INTERACTDefaultTypeInternal()
     : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
@@ -219,7 +220,8 @@ constexpr S_ROOM_TRANSITION::S_ROOM_TRANSITION(
   : mapid_(&::PROTOBUF_NAMESPACE_ID::internal::fixed_address_empty_string)
   , stageindex_(0u)
   , roomindex_(0u)
-  , isbossroom_(false){}
+  , isbossroom_(false)
+  , cyclecount_(0u){}
 struct S_ROOM_TRANSITIONDefaultTypeInternal {
   constexpr S_ROOM_TRANSITIONDefaultTypeInternal()
     : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
@@ -514,7 +516,11 @@ constexpr S_ROOM_REWARD_SPAWN::S_ROOM_REWARD_SPAWN(
   , roomindex_(0u)
   , portalx_(0)
   , portaly_(0)
-  , portalz_(0){}
+  , portalz_(0)
+  , hassecondportal_(false)
+  , secondportalx_(0)
+  , secondportaly_(0)
+  , secondportalz_(0){}
 struct S_ROOM_REWARD_SPAWNDefaultTypeInternal {
   constexpr S_ROOM_REWARD_SPAWNDefaultTypeInternal()
     : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
@@ -740,6 +746,7 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_Protocol_2eproto::offsets[] PR
   ~0u,  // no _extensions_
   ~0u,  // no _oneof_case_
   ~0u,  // no _weak_field_map_
+  PROTOBUF_FIELD_OFFSET(::Protocol::C_PORTAL_INTERACT, portaltype_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::C_TORCH_INTERACT, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -754,6 +761,7 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_Protocol_2eproto::offsets[] PR
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_TRANSITION, roomindex_),
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_TRANSITION, isbossroom_),
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_TRANSITION, mapid_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_TRANSITION, cyclecount_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::MonsterInfo, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -937,6 +945,10 @@ const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_Protocol_2eproto::offsets[] PR
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_REWARD_SPAWN, portaly_),
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_REWARD_SPAWN, portalz_),
   PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_REWARD_SPAWN, runeobjects_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_REWARD_SPAWN, hassecondportal_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_REWARD_SPAWN, secondportalx_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_REWARD_SPAWN, secondportaly_),
+  PROTOBUF_FIELD_OFFSET(::Protocol::S_ROOM_REWARD_SPAWN, secondportalz_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::Protocol::C_RUNE_REWARD_PICK, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -1017,32 +1029,32 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOB
   { 73, -1, sizeof(::Protocol::C_SKILL)},
   { 85, -1, sizeof(::Protocol::S_SKILL)},
   { 101, -1, sizeof(::Protocol::C_PORTAL_INTERACT)},
-  { 106, -1, sizeof(::Protocol::C_TORCH_INTERACT)},
-  { 111, -1, sizeof(::Protocol::S_ROOM_TRANSITION)},
-  { 120, -1, sizeof(::Protocol::MonsterInfo)},
-  { 136, -1, sizeof(::Protocol::S_MONSTER_SPAWN)},
-  { 142, -1, sizeof(::Protocol::S_MONSTER_MOVE)},
-  { 152, -1, sizeof(::Protocol::S_MONSTER_DESPAWN)},
-  { 158, -1, sizeof(::Protocol::S_MONSTER_ATTACK)},
-  { 173, -1, sizeof(::Protocol::S_PLAYER_DAMAGE)},
-  { 183, -1, sizeof(::Protocol::C_PLAYER_ATTACK)},
-  { 199, -1, sizeof(::Protocol::S_MONSTER_DAMAGE)},
-  { 210, -1, sizeof(::Protocol::S_ROOM_CLEARED)},
-  { 217, -1, sizeof(::Protocol::S_BOSS_EVENT)},
-  { 225, -1, sizeof(::Protocol::C_BOSS_CUTSCENE_END)},
-  { 233, -1, sizeof(::Protocol::S_MONSTER_STAGGER)},
-  { 240, -1, sizeof(::Protocol::S_MAP_TORNADO_EVENT)},
-  { 251, -1, sizeof(::Protocol::C_PLAYER_ACTION)},
-  { 263, -1, sizeof(::Protocol::S_PLAYER_ACTION)},
-  { 276, -1, sizeof(::Protocol::S_ROOM_START)},
-  { 282, -1, sizeof(::Protocol::RewardRuneObjectInfo)},
-  { 292, -1, sizeof(::Protocol::S_ROOM_REWARD_SPAWN)},
-  { 303, -1, sizeof(::Protocol::C_RUNE_REWARD_PICK)},
-  { 308, -1, sizeof(::Protocol::S_RUNE_REWARD_PICKED)},
-  { 314, -1, sizeof(::Protocol::C_RUNE_EQUIP)},
-  { 322, -1, sizeof(::Protocol::S_RUNE_EQUIP)},
-  { 332, -1, sizeof(::Protocol::S_RUNE_HOMING_TARGET)},
-  { 347, -1, sizeof(::Protocol::S_RUNE_TRIGGER)},
+  { 107, -1, sizeof(::Protocol::C_TORCH_INTERACT)},
+  { 112, -1, sizeof(::Protocol::S_ROOM_TRANSITION)},
+  { 122, -1, sizeof(::Protocol::MonsterInfo)},
+  { 138, -1, sizeof(::Protocol::S_MONSTER_SPAWN)},
+  { 144, -1, sizeof(::Protocol::S_MONSTER_MOVE)},
+  { 154, -1, sizeof(::Protocol::S_MONSTER_DESPAWN)},
+  { 160, -1, sizeof(::Protocol::S_MONSTER_ATTACK)},
+  { 175, -1, sizeof(::Protocol::S_PLAYER_DAMAGE)},
+  { 185, -1, sizeof(::Protocol::C_PLAYER_ATTACK)},
+  { 201, -1, sizeof(::Protocol::S_MONSTER_DAMAGE)},
+  { 212, -1, sizeof(::Protocol::S_ROOM_CLEARED)},
+  { 219, -1, sizeof(::Protocol::S_BOSS_EVENT)},
+  { 227, -1, sizeof(::Protocol::C_BOSS_CUTSCENE_END)},
+  { 235, -1, sizeof(::Protocol::S_MONSTER_STAGGER)},
+  { 242, -1, sizeof(::Protocol::S_MAP_TORNADO_EVENT)},
+  { 253, -1, sizeof(::Protocol::C_PLAYER_ACTION)},
+  { 265, -1, sizeof(::Protocol::S_PLAYER_ACTION)},
+  { 278, -1, sizeof(::Protocol::S_ROOM_START)},
+  { 284, -1, sizeof(::Protocol::RewardRuneObjectInfo)},
+  { 294, -1, sizeof(::Protocol::S_ROOM_REWARD_SPAWN)},
+  { 309, -1, sizeof(::Protocol::C_RUNE_REWARD_PICK)},
+  { 314, -1, sizeof(::Protocol::S_RUNE_REWARD_PICKED)},
+  { 320, -1, sizeof(::Protocol::C_RUNE_EQUIP)},
+  { 328, -1, sizeof(::Protocol::S_RUNE_EQUIP)},
+  { 338, -1, sizeof(::Protocol::S_RUNE_HOMING_TARGET)},
+  { 353, -1, sizeof(::Protocol::S_RUNE_TRIGGER)},
 };
 
 static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] = {
@@ -1109,11 +1121,12 @@ const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABL
   "Protocol.SkillType\022\t\n\001x\030\003 \001(\002\022\t\n\001y\030\004 \001(\002"
   "\022\t\n\001z\030\005 \001(\002\022\014\n\004dirX\030\006 \001(\002\022\014\n\004dirY\030\007 \001(\002\022"
   "\014\n\004dirZ\030\010 \001(\002\022\021\n\tskillSlot\030\t \001(\005\022\022\n\nradi"
-  "usMult\030\n \001(\002\022\022\n\ndamageMult\030\013 \001(\002\"\023\n\021C_PO"
-  "RTAL_INTERACT\"\022\n\020C_TORCH_INTERACT\"]\n\021S_R"
-  "OOM_TRANSITION\022\022\n\nstageIndex\030\001 \001(\r\022\021\n\tro"
-  "omIndex\030\002 \001(\r\022\022\n\nisBossRoom\030\003 \001(\010\022\r\n\005map"
-  "Id\030\004 \001(\t\"\273\001\n\013MonsterInfo\022\021\n\tmonsterId\030\001 "
+  "usMult\030\n \001(\002\022\022\n\ndamageMult\030\013 \001(\002\"\'\n\021C_PO"
+  "RTAL_INTERACT\022\022\n\nportalType\030\001 \001(\r\"\022\n\020C_T"
+  "ORCH_INTERACT\"q\n\021S_ROOM_TRANSITION\022\022\n\nst"
+  "ageIndex\030\001 \001(\r\022\021\n\troomIndex\030\002 \001(\r\022\022\n\nisB"
+  "ossRoom\030\003 \001(\010\022\r\n\005mapId\030\004 \001(\t\022\022\n\ncycleCou"
+  "nt\030\005 \001(\r\"\273\001\n\013MonsterInfo\022\021\n\tmonsterId\030\001 "
   "\001(\004\022\023\n\013monsterType\030\002 \001(\r\022\t\n\001x\030\003 \001(\002\022\t\n\001y"
   "\030\004 \001(\002\022\t\n\001z\030\005 \001(\002\022\013\n\003yaw\030\006 \001(\002\022\n\n\002hp\030\007 \001"
   "(\002\022\016\n\006isBoss\030\010 \001(\010\022\022\n\nstageIndex\030\t \001(\r\022\022"
@@ -1160,45 +1173,47 @@ const char descriptor_table_protodef_Protocol_2eproto[] PROTOBUF_SECTION_VARIABL
   "rZ\030\010 \001(\002\"\'\n\014S_ROOM_START\022\027\n\017starterplaye"
   "rid\030\001 \001(\004\"_\n\024RewardRuneObjectInfo\022\025\n\rown"
   "erPlayerId\030\001 \001(\004\022\t\n\001x\030\002 \001(\002\022\t\n\001y\030\003 \001(\002\022\t"
-  "\n\001z\030\004 \001(\002\022\017\n\007runeIds\030\005 \003(\t\"\244\001\n\023S_ROOM_RE"
+  "\n\001z\030\004 \001(\002\022\017\n\007runeIds\030\005 \003(\t\"\202\002\n\023S_ROOM_RE"
   "WARD_SPAWN\022\022\n\nstageIndex\030\001 \001(\r\022\021\n\troomIn"
   "dex\030\002 \001(\r\022\017\n\007portalX\030\003 \001(\002\022\017\n\007portalY\030\004 "
   "\001(\002\022\017\n\007portalZ\030\005 \001(\002\0223\n\013runeObjects\030\006 \003("
-  "\0132\036.Protocol.RewardRuneObjectInfo\"\024\n\022C_R"
-  "UNE_REWARD_PICK\"-\n\024S_RUNE_REWARD_PICKED\022"
-  "\025\n\rownerPlayerId\030\001 \001(\004\"S\n\014C_RUNE_EQUIP\022\031"
-  "\n\021rewardOptionIndex\030\001 \001(\r\022\021\n\tskillSlot\030\002"
-  " \001(\r\022\025\n\rruneSlotIndex\030\003 \001(\r\"n\n\014S_RUNE_EQ"
-  "UIP\022\020\n\010playerId\030\001 \001(\004\022\021\n\tskillSlot\030\002 \001(\r"
-  "\022\025\n\rruneSlotIndex\030\003 \001(\r\022\016\n\006runeId\030\004 \001(\t\022"
-  "\022\n\nstackCount\030\005 \001(\r\"\342\001\n\024S_RUNE_HOMING_TA"
-  "RGET\022\020\n\010playerId\030\001 \001(\004\022\021\n\tskillSlot\030\002 \001("
-  "\005\022&\n\tskillType\030\003 \001(\0162\023.Protocol.SkillTyp"
-  "e\022\027\n\017targetMonsterId\030\004 \001(\004\022\017\n\007targetX\030\005 "
-  "\001(\002\022\017\n\007targetY\030\006 \001(\002\022\017\n\007targetZ\030\007 \001(\002\022\017\n"
-  "\007originX\030\010 \001(\002\022\017\n\007originY\030\t \001(\002\022\017\n\007origi"
-  "nZ\030\n \001(\002\"\313\002\n\016S_RUNE_TRIGGER\022\020\n\010playerId\030"
-  "\001 \001(\004\022\021\n\tskillSlot\030\002 \001(\005\022&\n\tskillType\030\003 "
-  "\001(\0162\023.Protocol.SkillType\022\016\n\006runeId\030\004 \001(\t"
-  "\022.\n\013triggerType\030\005 \001(\0162\031.Protocol.RuneTri"
-  "ggerType\022\027\n\017targetMonsterId\030\006 \001(\004\022\026\n\016tar"
-  "getPlayerId\030\007 \001(\004\022\020\n\010objectId\030\010 \001(\004\022\t\n\001x"
-  "\030\t \001(\002\022\t\n\001y\030\n \001(\002\022\t\n\001z\030\013 \001(\002\022\014\n\004dirX\030\014 \001"
-  "(\002\022\014\n\004dirY\030\r \001(\002\022\014\n\004dirZ\030\016 \001(\002\022\016\n\006value1"
-  "\030\017 \001(\002\022\016\n\006value2\030\020 \001(\002*\360\003\n\017RuneTriggerTy"
-  "pe\022\025\n\021RUNE_TRIGGER_NONE\020\000\022\025\n\021RUNE_TRIGGE"
-  "R_PROC\020\001\022\032\n\026RUNE_TRIGGER_EXEC_KILL\020\002\022\032\n\026"
-  "RUNE_TRIGGER_LIFESTEAL\020\003\022\027\n\023RUNE_TRIGGER"
-  "_SHIELD\020\004\022\036\n\032RUNE_TRIGGER_ECHO_SCHEDULE\020"
-  "\n\022\032\n\026RUNE_TRIGGER_ECHO_FIRE\020\013\022\033\n\027RUNE_TR"
-  "IGGER_TRAP_SPAWN\020\024\022\032\n\026RUNE_TRIGGER_TRAP_"
-  "FIRE\020\025\022\034\n\030RUNE_TRIGGER_TRAP_REMOVE\020\026\022 \n\034"
-  "RUNE_TRIGGER_VENGEANCE_READY\020\036\022\"\n\036RUNE_T"
-  "RIGGER_VENGEANCE_CONSUME\020\037\022\037\n\033RUNE_TRIGG"
-  "ER_OVERHEAT_READY\020(\022!\n\035RUNE_TRIGGER_OVER"
-  "HEAT_CONSUME\020)\022 \n\034RUNE_TRIGGER_COOLDOWN_"
-  "REDUCE\0202\022\037\n\033RUNE_TRIGGER_COOLDOWN_RESET\020"
-  "3b\006proto3"
+  "\0132\036.Protocol.RewardRuneObjectInfo\022\027\n\017has"
+  "SecondPortal\030\007 \001(\010\022\025\n\rsecondPortalX\030\010 \001("
+  "\002\022\025\n\rsecondPortalY\030\t \001(\002\022\025\n\rsecondPortal"
+  "Z\030\n \001(\002\"\024\n\022C_RUNE_REWARD_PICK\"-\n\024S_RUNE_"
+  "REWARD_PICKED\022\025\n\rownerPlayerId\030\001 \001(\004\"S\n\014"
+  "C_RUNE_EQUIP\022\031\n\021rewardOptionIndex\030\001 \001(\r\022"
+  "\021\n\tskillSlot\030\002 \001(\r\022\025\n\rruneSlotIndex\030\003 \001("
+  "\r\"n\n\014S_RUNE_EQUIP\022\020\n\010playerId\030\001 \001(\004\022\021\n\ts"
+  "killSlot\030\002 \001(\r\022\025\n\rruneSlotIndex\030\003 \001(\r\022\016\n"
+  "\006runeId\030\004 \001(\t\022\022\n\nstackCount\030\005 \001(\r\"\342\001\n\024S_"
+  "RUNE_HOMING_TARGET\022\020\n\010playerId\030\001 \001(\004\022\021\n\t"
+  "skillSlot\030\002 \001(\005\022&\n\tskillType\030\003 \001(\0162\023.Pro"
+  "tocol.SkillType\022\027\n\017targetMonsterId\030\004 \001(\004"
+  "\022\017\n\007targetX\030\005 \001(\002\022\017\n\007targetY\030\006 \001(\002\022\017\n\007ta"
+  "rgetZ\030\007 \001(\002\022\017\n\007originX\030\010 \001(\002\022\017\n\007originY\030"
+  "\t \001(\002\022\017\n\007originZ\030\n \001(\002\"\313\002\n\016S_RUNE_TRIGGE"
+  "R\022\020\n\010playerId\030\001 \001(\004\022\021\n\tskillSlot\030\002 \001(\005\022&"
+  "\n\tskillType\030\003 \001(\0162\023.Protocol.SkillType\022\016"
+  "\n\006runeId\030\004 \001(\t\022.\n\013triggerType\030\005 \001(\0162\031.Pr"
+  "otocol.RuneTriggerType\022\027\n\017targetMonsterI"
+  "d\030\006 \001(\004\022\026\n\016targetPlayerId\030\007 \001(\004\022\020\n\010objec"
+  "tId\030\010 \001(\004\022\t\n\001x\030\t \001(\002\022\t\n\001y\030\n \001(\002\022\t\n\001z\030\013 \001"
+  "(\002\022\014\n\004dirX\030\014 \001(\002\022\014\n\004dirY\030\r \001(\002\022\014\n\004dirZ\030\016"
+  " \001(\002\022\016\n\006value1\030\017 \001(\002\022\016\n\006value2\030\020 \001(\002*\360\003\n"
+  "\017RuneTriggerType\022\025\n\021RUNE_TRIGGER_NONE\020\000\022"
+  "\025\n\021RUNE_TRIGGER_PROC\020\001\022\032\n\026RUNE_TRIGGER_E"
+  "XEC_KILL\020\002\022\032\n\026RUNE_TRIGGER_LIFESTEAL\020\003\022\027"
+  "\n\023RUNE_TRIGGER_SHIELD\020\004\022\036\n\032RUNE_TRIGGER_"
+  "ECHO_SCHEDULE\020\n\022\032\n\026RUNE_TRIGGER_ECHO_FIR"
+  "E\020\013\022\033\n\027RUNE_TRIGGER_TRAP_SPAWN\020\024\022\032\n\026RUNE"
+  "_TRIGGER_TRAP_FIRE\020\025\022\034\n\030RUNE_TRIGGER_TRA"
+  "P_REMOVE\020\026\022 \n\034RUNE_TRIGGER_VENGEANCE_REA"
+  "DY\020\036\022\"\n\036RUNE_TRIGGER_VENGEANCE_CONSUME\020\037"
+  "\022\037\n\033RUNE_TRIGGER_OVERHEAT_READY\020(\022!\n\035RUN"
+  "E_TRIGGER_OVERHEAT_CONSUME\020)\022 \n\034RUNE_TRI"
+  "GGER_COOLDOWN_REDUCE\0202\022\037\n\033RUNE_TRIGGER_C"
+  "OOLDOWN_RESET\0203b\006proto3"
   ;
 static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor_table_Protocol_2eproto_deps[2] = {
   &::descriptor_table_Enum_2eproto,
@@ -1206,7 +1221,7 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable*const descriptor
 };
 static ::PROTOBUF_NAMESPACE_ID::internal::once_flag descriptor_table_Protocol_2eproto_once;
 const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_Protocol_2eproto = {
-  false, false, 4409, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
+  false, false, 4543, descriptor_table_protodef_Protocol_2eproto, "Protocol.proto", 
   &descriptor_table_Protocol_2eproto_once, descriptor_table_Protocol_2eproto_deps, 2, 39,
   schemas, file_default_instances, TableStruct_Protocol_2eproto::offsets,
   file_level_metadata_Protocol_2eproto, file_level_enum_descriptors_Protocol_2eproto, file_level_service_descriptors_Protocol_2eproto,
@@ -4273,10 +4288,12 @@ C_PORTAL_INTERACT::C_PORTAL_INTERACT(::PROTOBUF_NAMESPACE_ID::Arena* arena)
 C_PORTAL_INTERACT::C_PORTAL_INTERACT(const C_PORTAL_INTERACT& from)
   : ::PROTOBUF_NAMESPACE_ID::Message() {
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  portaltype_ = from.portaltype_;
   // @@protoc_insertion_point(copy_constructor:Protocol.C_PORTAL_INTERACT)
 }
 
 void C_PORTAL_INTERACT::SharedCtor() {
+portaltype_ = 0u;
 }
 
 C_PORTAL_INTERACT::~C_PORTAL_INTERACT() {
@@ -4305,6 +4322,7 @@ void C_PORTAL_INTERACT::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  portaltype_ = 0u;
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -4313,6 +4331,16 @@ const char* C_PORTAL_INTERACT::_InternalParse(const char* ptr, ::PROTOBUF_NAMESP
   while (!ctx->Done(&ptr)) {
     ::PROTOBUF_NAMESPACE_ID::uint32 tag;
     ptr = ::PROTOBUF_NAMESPACE_ID::internal::ReadTag(ptr, &tag);
+    switch (tag >> 3) {
+      // uint32 portalType = 1;
+      case 1:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 8)) {
+          portaltype_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      default: {
+      handle_unusual:
         if ((tag == 0) || ((tag & 7) == 4)) {
           CHK_(ptr);
           ctx->SetLastTag(tag);
@@ -4323,6 +4351,8 @@ const char* C_PORTAL_INTERACT::_InternalParse(const char* ptr, ::PROTOBUF_NAMESP
             ptr, ctx);
         CHK_(ptr != nullptr);
         continue;
+      }
+    }  // switch
   }  // while
 success:
   return ptr;
@@ -4337,6 +4367,12 @@ failure:
   // @@protoc_insertion_point(serialize_to_array_start:Protocol.C_PORTAL_INTERACT)
   ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
+
+  // uint32 portalType = 1;
+  if (this->portaltype() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt32ToArray(1, this->_internal_portaltype(), target);
+  }
 
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
@@ -4353,6 +4389,13 @@ size_t C_PORTAL_INTERACT::ByteSizeLong() const {
   ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
+
+  // uint32 portalType = 1;
+  if (this->portaltype() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt32Size(
+        this->_internal_portaltype());
+  }
 
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     return ::PROTOBUF_NAMESPACE_ID::internal::ComputeUnknownFieldsSize(
@@ -4385,6 +4428,9 @@ void C_PORTAL_INTERACT::MergeFrom(const C_PORTAL_INTERACT& from) {
   ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  if (from.portaltype() != 0) {
+    _internal_set_portaltype(from._internal_portaltype());
+  }
 }
 
 void C_PORTAL_INTERACT::CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
@@ -4408,6 +4454,7 @@ bool C_PORTAL_INTERACT::IsInitialized() const {
 void C_PORTAL_INTERACT::InternalSwap(C_PORTAL_INTERACT* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(portaltype_, other->portaltype_);
 }
 
 ::PROTOBUF_NAMESPACE_ID::Metadata C_PORTAL_INTERACT::GetMetadata() const {
@@ -4595,8 +4642,8 @@ S_ROOM_TRANSITION::S_ROOM_TRANSITION(const S_ROOM_TRANSITION& from)
       GetArenaForAllocation());
   }
   ::memcpy(&stageindex_, &from.stageindex_,
-    static_cast<size_t>(reinterpret_cast<char*>(&isbossroom_) -
-    reinterpret_cast<char*>(&stageindex_)) + sizeof(isbossroom_));
+    static_cast<size_t>(reinterpret_cast<char*>(&cyclecount_) -
+    reinterpret_cast<char*>(&stageindex_)) + sizeof(cyclecount_));
   // @@protoc_insertion_point(copy_constructor:Protocol.S_ROOM_TRANSITION)
 }
 
@@ -4604,8 +4651,8 @@ void S_ROOM_TRANSITION::SharedCtor() {
 mapid_.UnsafeSetDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
 ::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
     reinterpret_cast<char*>(&stageindex_) - reinterpret_cast<char*>(this)),
-    0, static_cast<size_t>(reinterpret_cast<char*>(&isbossroom_) -
-    reinterpret_cast<char*>(&stageindex_)) + sizeof(isbossroom_));
+    0, static_cast<size_t>(reinterpret_cast<char*>(&cyclecount_) -
+    reinterpret_cast<char*>(&stageindex_)) + sizeof(cyclecount_));
 }
 
 S_ROOM_TRANSITION::~S_ROOM_TRANSITION() {
@@ -4637,8 +4684,8 @@ void S_ROOM_TRANSITION::Clear() {
 
   mapid_.ClearToEmpty();
   ::memset(&stageindex_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&isbossroom_) -
-      reinterpret_cast<char*>(&stageindex_)) + sizeof(isbossroom_));
+      reinterpret_cast<char*>(&cyclecount_) -
+      reinterpret_cast<char*>(&stageindex_)) + sizeof(cyclecount_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -4675,6 +4722,13 @@ const char* S_ROOM_TRANSITION::_InternalParse(const char* ptr, ::PROTOBUF_NAMESP
           auto str = _internal_mutable_mapid();
           ptr = ::PROTOBUF_NAMESPACE_ID::internal::InlineGreedyStringParser(str, ptr, ctx);
           CHK_(::PROTOBUF_NAMESPACE_ID::internal::VerifyUTF8(str, "Protocol.S_ROOM_TRANSITION.mapId"));
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // uint32 cycleCount = 5;
+      case 5:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 40)) {
+          cyclecount_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
           CHK_(ptr);
         } else goto handle_unusual;
         continue;
@@ -4735,6 +4789,12 @@ failure:
         4, this->_internal_mapid(), target);
   }
 
+  // uint32 cycleCount = 5;
+  if (this->cyclecount() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt32ToArray(5, this->_internal_cyclecount(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -4775,6 +4835,13 @@ size_t S_ROOM_TRANSITION::ByteSizeLong() const {
   // bool isBossRoom = 3;
   if (this->isbossroom() != 0) {
     total_size += 1 + 1;
+  }
+
+  // uint32 cycleCount = 5;
+  if (this->cyclecount() != 0) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt32Size(
+        this->_internal_cyclecount());
   }
 
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
@@ -4820,6 +4887,9 @@ void S_ROOM_TRANSITION::MergeFrom(const S_ROOM_TRANSITION& from) {
   if (from.isbossroom() != 0) {
     _internal_set_isbossroom(from._internal_isbossroom());
   }
+  if (from.cyclecount() != 0) {
+    _internal_set_cyclecount(from._internal_cyclecount());
+  }
 }
 
 void S_ROOM_TRANSITION::CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
@@ -4849,8 +4919,8 @@ void S_ROOM_TRANSITION::InternalSwap(S_ROOM_TRANSITION* other) {
       &other->mapid_, other->GetArenaForAllocation()
   );
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(S_ROOM_TRANSITION, isbossroom_)
-      + sizeof(S_ROOM_TRANSITION::isbossroom_)
+      PROTOBUF_FIELD_OFFSET(S_ROOM_TRANSITION, cyclecount_)
+      + sizeof(S_ROOM_TRANSITION::cyclecount_)
       - PROTOBUF_FIELD_OFFSET(S_ROOM_TRANSITION, stageindex_)>(
           reinterpret_cast<char*>(&stageindex_),
           reinterpret_cast<char*>(&other->stageindex_));
@@ -9829,16 +9899,16 @@ S_ROOM_REWARD_SPAWN::S_ROOM_REWARD_SPAWN(const S_ROOM_REWARD_SPAWN& from)
       runeobjects_(from.runeobjects_) {
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
   ::memcpy(&stageindex_, &from.stageindex_,
-    static_cast<size_t>(reinterpret_cast<char*>(&portalz_) -
-    reinterpret_cast<char*>(&stageindex_)) + sizeof(portalz_));
+    static_cast<size_t>(reinterpret_cast<char*>(&secondportalz_) -
+    reinterpret_cast<char*>(&stageindex_)) + sizeof(secondportalz_));
   // @@protoc_insertion_point(copy_constructor:Protocol.S_ROOM_REWARD_SPAWN)
 }
 
 void S_ROOM_REWARD_SPAWN::SharedCtor() {
 ::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
     reinterpret_cast<char*>(&stageindex_) - reinterpret_cast<char*>(this)),
-    0, static_cast<size_t>(reinterpret_cast<char*>(&portalz_) -
-    reinterpret_cast<char*>(&stageindex_)) + sizeof(portalz_));
+    0, static_cast<size_t>(reinterpret_cast<char*>(&secondportalz_) -
+    reinterpret_cast<char*>(&stageindex_)) + sizeof(secondportalz_));
 }
 
 S_ROOM_REWARD_SPAWN::~S_ROOM_REWARD_SPAWN() {
@@ -9869,8 +9939,8 @@ void S_ROOM_REWARD_SPAWN::Clear() {
 
   runeobjects_.Clear();
   ::memset(&stageindex_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&portalz_) -
-      reinterpret_cast<char*>(&stageindex_)) + sizeof(portalz_));
+      reinterpret_cast<char*>(&secondportalz_) -
+      reinterpret_cast<char*>(&stageindex_)) + sizeof(secondportalz_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -9925,6 +9995,34 @@ const char* S_ROOM_REWARD_SPAWN::_InternalParse(const char* ptr, ::PROTOBUF_NAME
             CHK_(ptr);
             if (!ctx->DataAvailable(ptr)) break;
           } while (::PROTOBUF_NAMESPACE_ID::internal::ExpectTag<50>(ptr));
+        } else goto handle_unusual;
+        continue;
+      // bool hasSecondPortal = 7;
+      case 7:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 56)) {
+          hassecondportal_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else goto handle_unusual;
+        continue;
+      // float secondPortalX = 8;
+      case 8:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 69)) {
+          secondportalx_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else goto handle_unusual;
+        continue;
+      // float secondPortalY = 9;
+      case 9:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 77)) {
+          secondportaly_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
+        } else goto handle_unusual;
+        continue;
+      // float secondPortalZ = 10;
+      case 10:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<::PROTOBUF_NAMESPACE_ID::uint8>(tag) == 85)) {
+          secondportalz_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<float>(ptr);
+          ptr += sizeof(float);
         } else goto handle_unusual;
         continue;
       default: {
@@ -9994,6 +10092,30 @@ failure:
       InternalWriteMessage(6, this->_internal_runeobjects(i), target, stream);
   }
 
+  // bool hasSecondPortal = 7;
+  if (this->hassecondportal() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteBoolToArray(7, this->_internal_hassecondportal(), target);
+  }
+
+  // float secondPortalX = 8;
+  if (!(this->secondportalx() <= 0 && this->secondportalx() >= 0)) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(8, this->_internal_secondportalx(), target);
+  }
+
+  // float secondPortalY = 9;
+  if (!(this->secondportaly() <= 0 && this->secondportaly() >= 0)) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(9, this->_internal_secondportaly(), target);
+  }
+
+  // float secondPortalZ = 10;
+  if (!(this->secondportalz() <= 0 && this->secondportalz() >= 0)) {
+    target = stream->EnsureSpace(target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteFloatToArray(10, this->_internal_secondportalz(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -10046,6 +10168,26 @@ size_t S_ROOM_REWARD_SPAWN::ByteSizeLong() const {
     total_size += 1 + 4;
   }
 
+  // bool hasSecondPortal = 7;
+  if (this->hassecondportal() != 0) {
+    total_size += 1 + 1;
+  }
+
+  // float secondPortalX = 8;
+  if (!(this->secondportalx() <= 0 && this->secondportalx() >= 0)) {
+    total_size += 1 + 4;
+  }
+
+  // float secondPortalY = 9;
+  if (!(this->secondportaly() <= 0 && this->secondportaly() >= 0)) {
+    total_size += 1 + 4;
+  }
+
+  // float secondPortalZ = 10;
+  if (!(this->secondportalz() <= 0 && this->secondportalz() >= 0)) {
+    total_size += 1 + 4;
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     return ::PROTOBUF_NAMESPACE_ID::internal::ComputeUnknownFieldsSize(
         _internal_metadata_, total_size, &_cached_size_);
@@ -10093,6 +10235,18 @@ void S_ROOM_REWARD_SPAWN::MergeFrom(const S_ROOM_REWARD_SPAWN& from) {
   if (!(from.portalz() <= 0 && from.portalz() >= 0)) {
     _internal_set_portalz(from._internal_portalz());
   }
+  if (from.hassecondportal() != 0) {
+    _internal_set_hassecondportal(from._internal_hassecondportal());
+  }
+  if (!(from.secondportalx() <= 0 && from.secondportalx() >= 0)) {
+    _internal_set_secondportalx(from._internal_secondportalx());
+  }
+  if (!(from.secondportaly() <= 0 && from.secondportaly() >= 0)) {
+    _internal_set_secondportaly(from._internal_secondportaly());
+  }
+  if (!(from.secondportalz() <= 0 && from.secondportalz() >= 0)) {
+    _internal_set_secondportalz(from._internal_secondportalz());
+  }
 }
 
 void S_ROOM_REWARD_SPAWN::CopyFrom(const ::PROTOBUF_NAMESPACE_ID::Message& from) {
@@ -10118,8 +10272,8 @@ void S_ROOM_REWARD_SPAWN::InternalSwap(S_ROOM_REWARD_SPAWN* other) {
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   runeobjects_.InternalSwap(&other->runeobjects_);
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(S_ROOM_REWARD_SPAWN, portalz_)
-      + sizeof(S_ROOM_REWARD_SPAWN::portalz_)
+      PROTOBUF_FIELD_OFFSET(S_ROOM_REWARD_SPAWN, secondportalz_)
+      + sizeof(S_ROOM_REWARD_SPAWN::secondportalz_)
       - PROTOBUF_FIELD_OFFSET(S_ROOM_REWARD_SPAWN, stageindex_)>(
           reinterpret_cast<char*>(&stageindex_),
           reinterpret_cast<char*>(&other->stageindex_));

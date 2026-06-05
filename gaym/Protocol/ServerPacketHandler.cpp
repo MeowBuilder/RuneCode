@@ -540,6 +540,14 @@ bool Handle_S_ROOM_REWARD_SPAWN(PacketSessionRef& session, Protocol::S_ROOM_REWA
         pkt.portalz()
     );
 
+    bool hasSecondPortal = pkt.hassecondportal();
+
+    DirectX::XMFLOAT3 secondPortalPos(
+        pkt.secondportalx(),
+        pkt.secondportaly(),
+        pkt.secondportalz()
+    );
+
     std::vector<NetworkRewardRuneObjectInfo> runeObjects;
     runeObjects.reserve(pkt.runeobjects_size());
 
@@ -561,21 +569,24 @@ bool Handle_S_ROOM_REWARD_SPAWN(PacketSessionRef& session, Protocol::S_ROOM_REWA
         runeObjects.push_back(info);
     }
 
-    char buf[256];
+    char buf[320];
     sprintf_s(buf,
-        "[Network] S_ROOM_REWARD_SPAWN received: stage=%u room=%u portal=(%.2f, %.2f, %.2f) runeCount=%d",
+        "[Network] S_ROOM_REWARD_SPAWN received: stage=%u room=%u portal=(%.2f, %.2f, %.2f) hasSecondPortal=%d second=(%.2f, %.2f, %.2f) runeCount=%d",
         stageIndex,
         roomIndex,
         portalPos.x,
         portalPos.y,
         portalPos.z,
+        hasSecondPortal ? 1 : 0,
+        secondPortalPos.x,
+        secondPortalPos.y,
+        secondPortalPos.z,
         static_cast<int>(runeObjects.size()));
-    WriteNetworkLog(buf);
 
     NetworkManager* pNetMgr = NetworkManager::GetInstance();
     if (pNetMgr)
     {
-        pNetMgr->QueueRoomRewardSpawn(stageIndex, roomIndex, portalPos, runeObjects);
+        pNetMgr->QueueRoomRewardSpawn(stageIndex, roomIndex, portalPos, hasSecondPortal, secondPortalPos, runeObjects);
     }
 
     return true;

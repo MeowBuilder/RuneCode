@@ -965,7 +965,7 @@ void CRoom::SpawnPortalCubeAt(const XMFLOAT3& spawnPos)
         NetworkManager* pNet = NetworkManager::GetInstance();
         if (pNet && pNet->IsConnected())
         {
-            pNet->SendPortalInteract();
+            pNet->SendPortalInteract(0);
         }
         else
         {
