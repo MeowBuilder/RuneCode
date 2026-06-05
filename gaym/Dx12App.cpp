@@ -49,7 +49,7 @@ static XMVECTORF32 GetRuneGradeUIColor(RuneGrade grade)
     case RuneGrade::Normal:    return DirectX::Colors::White;
     case RuneGrade::Rare:      return DirectX::Colors::CornflowerBlue;
     case RuneGrade::Epic:      return DirectX::Colors::MediumPurple;
-    case RuneGrade::Unique:    return DirectX::Colors::Orange;
+    case RuneGrade::Unique:    return DirectX::Colors::Red;
     case RuneGrade::Legendary: return DirectX::Colors::Gold;
     default:                   return DirectX::Colors::White;
     }

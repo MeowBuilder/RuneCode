@@ -141,7 +141,7 @@ XMFLOAT4 DropItemComponent::GetGradeColor(RuneGrade grade)
     case RuneGrade::Normal:    return { 0.80f, 0.80f, 0.80f, 1.f }; // 회백
     case RuneGrade::Rare:      return { 0.20f, 0.45f, 1.00f, 1.f }; // 파랑
     case RuneGrade::Epic:      return { 0.60f, 0.05f, 1.00f, 1.f }; // 보라
-    case RuneGrade::Unique:    return { 1.00f, 0.50f, 0.05f, 1.f }; // 주황
+    case RuneGrade::Unique:    return { 1.00f, 0.08f, 0.04f, 1.f }; // 빨강 
     case RuneGrade::Legendary: return { 1.00f, 0.85f, 0.00f, 1.f }; // 황금
     default:                   return { 1.00f, 1.00f, 1.00f, 1.f };
     }
