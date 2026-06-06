@@ -7,9 +7,33 @@
 using namespace DirectX;
 
 // Combo attack: boss performs a series of melee attacks in sequence
+// shape variant 호 1개 spawn 설정 — ComboAttackBehavior 외부에서도 접근 가능.
+struct ArcShapeCfg
+{
+    float coneDeg;
+    float halfWidthMul;
+    float radiusMul;
+    float yOffset;
+    float yawOffsetDeg;
+    bool  bVertical;
+};
+
 class ComboAttackBehavior : public IAttackBehavior
 {
 public:
+    // 검기 모양 variant — 같은 애니메이션이라도 다른 시각 효과.
+    //   Default 외: hit 별 호 굵기/반경/각도/높이/추가 호 변동.
+    enum class SwordEnergyShape : int
+    {
+        Default,    // 단일 호 (기본)
+        Wide,       // 굵고 짧은 호 (heavy slam, 묵직)
+        Slim,       // 좁고 가는 호 (quick jab, 잽)
+        Long,       // 멀리 뻗는 가는 호 (reach, 견제)
+        Double,     // 평행 2단 호 (위/아래 동시)
+        Cross,      // X 자 교차 호 (90° 회전 secondary)
+        Overhead,   // 수직 내려치기 — 호가 위→아래 plane
+    };
+
     struct ComboHit
     {
         float fDamage = 10.0f;
@@ -37,6 +61,9 @@ public:
         float fVFXYOffset       = 9.0f;
         // 파티클/사이즈 스케일 — 본체 감싸려면 5.0~8.0 추천
         float fVFXScale         = 6.0f;
+
+        // 검기 모양 — 같은 애니라도 hit 별로 다양화.
+        SwordEnergyShape eShape = SwordEnergyShape::Default;
     };
 
     ComboAttackBehavior(const std::vector<ComboHit>& hits);
@@ -130,8 +157,39 @@ private:
     float              m_fSwordGlowRemain  = 0.0f;
     float              m_fSwordGlowMax     = 0.30f;
     DirectX::XMFLOAT4  m_xmf4SwordGlowColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+    // 3단계 anticipation flash — prearm 시작 직후 흰색 부스트.
+    //   "검에 원소가 깃드는 순간" 표현 — 흰빛 → element 색 전이.
+    //   m_fSwordGlowFlashWhiteMax 는 set 한 초기값 보존 → 분모로 정확한 lerp.
+    float              m_fSwordGlowFlashWhite = 0.0f;
+    float              m_fSwordGlowFlashWhiteMax = 0.05f;
     void UpdateSwordGlow(float dt);
     void StopSwordGlow();
+
+    // ── 2단계 Static crescent flash — Hit 진입 순간 1프레임 호 mesh 번쩍.
+    //   동적 ribbon 과 별도의 static SwordTrailMesh 에 arc 점들을 미리 계산해 push.
+    //   같은 sword-trail 셰이더 path 사용 → 톤 일치.
+    class GameObject*       m_pCrescentObj    = nullptr;
+    class Scene*            m_pCrescentScene  = nullptr;
+    class SwordTrailMesh*   m_pCrescentMesh   = nullptr;
+    // Secondary 호 — Double/Cross/Overhead shape 에서 추가 spawn.
+    class GameObject*       m_pCrescentObj2   = nullptr;
+    class SwordTrailMesh*   m_pCrescentMesh2  = nullptr;
+    DirectX::XMFLOAT4       m_xmf4CrescentColor = { 1.0f, 1.0f, 1.0f, 3.0f };
+    // Crescent alpha envelope — 게이지 fill 효과 폐기. 단순 fade-in → hold → fade-out.
+    //   m_fCrescentTime    : spawn 후 경과 시간 (s).
+    //   m_fCrescentFadeInDur  : 0 → 1 부드러운 등장.
+    //   m_fCrescentHoldDur    : alpha 1 유지 (swing window).
+    //   m_fCrescentFadeOutDur : 1 → 0 사라짐.
+    float                   m_fCrescentTime        = 0.0f;
+    float                   m_fCrescentFadeInDur   = 0.06f;
+    float                   m_fCrescentHoldDur     = 0.30f;
+    float                   m_fCrescentFadeOutDur  = 0.15f;
+    void SpawnCrescentFlash(EnemyComponent* pEnemy, const ComboHit& hit);
+    void SpawnSingleCrescent(EnemyComponent* pEnemy, const ComboHit& hit,
+                              const struct ArcShapeCfg& cfg, float chestY, float yawDeg,
+                              class GameObject** outObj, class SwordTrailMesh** outMesh);
+    void UpdateCrescent(float dt);
+    void StopCrescent();
 
 private:
     std::vector<ComboHit> m_vHits;
@@ -145,4 +203,8 @@ private:
     bool m_bFinished = false;
     // Trail 이 이번 hit 의 windup 후반부에 미리 켜졌는지 — true 면 Hit 진입 시 재시작 skip
     bool m_bTrailStarted = false;
+    // 현재 hit 의 cone 각도 — UpdateTrailMesh 가 회전 공격(>180°) 시 history 짧게 캡 (자기 교차 차단).
+    float m_fCurrentConeAngle = 0.0f;
+    // Crescent prearm 트리거 가드 — windup 동안 한 번만 spawn.
+    bool m_bCrescentSpawned = false;
 };

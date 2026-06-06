@@ -791,15 +791,92 @@ float4 PS(PS_INPUT input) : SV_TARGET
         float  decalA   = albedoColor.a * gMaterial.m_cDiffuse.a;
         if (bHasTexture == 0)
         {
-            // UV.u 가로축 grade: 가운데(0.5) = emissive (core), 양 옆(0/1) = ambient (edge) lerp.
-            //   SwordTrailMesh 가 두 색 활용해 검기 코어/엣지 시각화. 다른 indicator 의 ambient 가
-            //   작은 값이라 lerp 영향 미미.
-            float edgeT = abs(input.uv.x - 0.5f) * 2.0f;
-            float3 colorMix = lerp(gMaterial.m_cEmissive.rgb, gMaterial.m_cAmbient.rgb, edgeT);
-            decalRGB += colorMix;
-            float v = input.uv.y;
-            float edgeFade = smoothstep(0.0f, 0.12f, v) * smoothstep(1.0f, 0.88f, v);
-            decalA *= edgeFade;
+            // 검기 crescent (anchored 정적 호) — emissive.w >= 1.5 sentinel.
+            //   diffuse.r = revealProgress (0→1 fadeIn), diffuse.g = dissolveProgress (0→1 fadeOut).
+            //   조직적 결과를 만드는 레이어: UV displacement(geometric 깨기) + multi-octave noise + wisp tendrils.
+            if (gMaterial.m_cEmissive.w >= 1.5f)
+            {
+                float u = input.uv.x;
+                float v = input.uv.y;
+                float revealProgress   = gMaterial.m_cDiffuse.r;
+                float dissolveProgress = gMaterial.m_cDiffuse.g;
+                float t = g_Time;
+
+                // 1) UV displacement — 호 모양 자체가 sin 으로 약간 흔들림. 완벽한 기하 형태 깨기.
+                float uDisp = (sin(v * 8.0f + t * 2.0f) + sin(v * 19.0f - t * 4.0f) * 0.8f) * 0.04f;
+                float vDisp = (sin(u * 14.0f + t * 3.5f) + sin(u * 7.0f - t * 5.0f) * 0.8f) * 0.03f;
+                float uW = u + uDisp;
+                float vW = saturate(v + vDisp);
+
+                // 2) UV.u 좌우 그라데이션 (displaced UV 사용).
+                float edgeT = abs(uW - 0.5f) * 2.0f;
+                float3 colorMix = lerp(gMaterial.m_cEmissive.rgb, gMaterial.m_cAmbient.rgb, edgeT);
+
+                // 3) Multi-octave panning noise — 4 sin 합성으로 sin 단조로움 해소.
+                float oct1 = sin((v * 22.0f + t * 9.0f) * 3.14159f) * 0.50f + 0.50f;
+                float oct2 = sin((v * 6.0f  - t * 4.0f + u * 2.0f) * 3.14159f) * 0.50f + 0.50f;
+                float oct3 = sin((v * 35.0f + t * 13.0f - u * 4.0f) * 3.14159f) * 0.50f + 0.50f;
+                float oct4 = sin((v * 11.0f + t * 6.0f + u * 8.0f) * 3.14159f) * 0.50f + 0.50f;
+                float noiseMix = saturate(oct1 * 0.45f + oct2 * 0.30f + oct3 * 0.15f + oct4 * 0.20f);
+
+                // 4) Reveal/dissolve threshold noise — 픽셀 별 임계값.
+                float thr = sin((v * 18.0f + u * 5.0f) * 3.14159f) * 0.25f
+                          + sin((v * 7.0f  - u * 9.0f) * 3.14159f) * 0.20f
+                          + sin((v * 31.0f + u * 13.0f) * 3.14159f) * 0.12f
+                          + 0.55f;
+                thr = saturate(thr);
+                float revealMask = smoothstep(thr - 0.08f, thr + 0.08f, revealProgress);
+                float dissolveMask = 1.0f - smoothstep(thr - 0.08f, thr + 0.08f, dissolveProgress);
+                float organicMask = revealMask * dissolveMask;
+
+                // 5) V 분포 — 대칭 bell + wobble (asymmetric brightness).
+                float vProfile = sin(saturate(vW) * 3.14159f);
+                vProfile *= 0.78f + sin(v * 4.0f + t * 2.5f) * 0.22f;
+
+                // 6) Edge fade (displaced V) — 양 끝 ragged 하게 fade.
+                float edgeFade = smoothstep(0.0f, 0.10f, vW) * smoothstep(1.0f, 0.88f, vW);
+
+                // 7) Wisp tendrils — sin wave bend 한 high-freq 좁은 광선 (에너지 가닥 느낌).
+                //    sin(u * 32 + wobble) → U 축 빠른 진동, wobble = V 따라 흐름.
+                float wispWobble = sin(v * 6.0f + t * 2.0f) * 2.5f;
+                float wisps = sin(u * 32.0f + wispWobble) * 0.5f + 0.5f;
+                wisps = pow(saturate(wisps), 5.0f);                       // pow 로 좁은 선만 남김
+                wisps *= sin(v * 9.0f + t * 5.0f) * 0.4f + 0.6f;          // V 따라 wisps 강도 변동
+
+                // 8) Core streak — 중앙 검날 (조금 약화 — wisps 와 합쳐 너무 환하지 않게).
+                float coreStreak = exp(-pow((uW - 0.5f) * 5.0f, 2.0f));
+
+                // 9) HDR — 다층 합성. 본체 + core + wisps.
+                const float kHDR = 5.0f;
+                float intensity = (0.50f + 0.55f * vProfile) * (0.65f + 0.45f * noiseMix);
+                decalRGB += colorMix * intensity * kHDR * organicMask;
+                decalRGB += colorMix * coreStreak * kHDR * 0.45f * organicMask;
+                decalRGB += colorMix * wisps * kHDR * 0.55f * organicMask;
+                decalA   *= edgeFade * organicMask;
+            }
+            else
+            {
+                // 일반 indicator 메쉬 (FloorBox/Circle/Ring 등) — 자연스러운 shimmer + 톤다운.
+                //   기존: emissive 가 raw 그대로 — 보스 시그니처(2.0+) blow-out, "스티커" 느낌.
+                //   신규: 시간 기반 sin shimmer 로 살아있는 표면 + colorMix 강도 0.65 로 다운.
+                float u = input.uv.x;
+                float v = input.uv.y;
+                float edgeT = abs(u - 0.5f) * 2.0f;
+                float3 colorMix = lerp(gMaterial.m_cEmissive.rgb, gMaterial.m_cAmbient.rgb, edgeT);
+
+                // 자연스러움 — 여러 주파수 sin 합성으로 표면 미세 변동 (눈에 띄지 않지만 살아있는 느낌).
+                float t = g_Time;
+                float shimmer1 = sin(t * 3.8f + v * 9.0f + u * 4.0f) * 0.10f + 0.90f;
+                float shimmer2 = sin(t * 6.2f - u * 6.0f + v * 3.0f) * 0.07f + 0.93f;
+                float natFactor = shimmer1 * shimmer2;
+
+                // 강도 다운 — 형광 blow-out 회피. 보스 emissive 2.0+ 도 1.3 수준으로 자연화.
+                decalRGB += colorMix * natFactor * 0.65f;
+
+                // Edge fade + 알파 약간 다운 (0.85) — "스티커" 부피감 줄이고 투명도 ↑.
+                float edgeFade = smoothstep(0.0f, 0.14f, v) * smoothstep(1.0f, 0.86f, v);
+                decalA *= edgeFade * (0.78f + natFactor * 0.15f);
+            }
         }
         else
         {

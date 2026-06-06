@@ -14,6 +14,11 @@ CollisionManager::~CollisionManager()
 {
 }
 
+void CollisionManager::ReserveCapacity(size_t nColliders)
+{
+    m_registeredColliders.reserve(nColliders);
+}
+
 void CollisionManager::RegisterCollider(ColliderComponent* pCollider)
 {
     if (pCollider)

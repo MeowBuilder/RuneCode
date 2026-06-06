@@ -149,6 +149,7 @@ void GroundRuptureAttackBehavior::SpawnIndicators(EnemyComponent* pEnemy)
             pRC->SetMesh(pBorderMesh);
             pRC->SetOverlay(true);
             pShader->AddRenderComponent(pRC);
+            pBorder->SetDecal(true);   // 셰이더 indicator path 활성화
             line.pBorder = pBorder;
         }
 
@@ -175,6 +176,7 @@ void GroundRuptureAttackBehavior::SpawnIndicators(EnemyComponent* pEnemy)
             pRC->SetMesh(pFillMesh);
             pRC->SetOverlay(true);
             pShader->AddRenderComponent(pRC);
+            pFill->SetDecal(true);   // 셰이더 indicator path 활성화
             line.pFill = pFill;
         }
     }

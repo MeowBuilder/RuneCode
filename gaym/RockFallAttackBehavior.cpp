@@ -256,6 +256,7 @@ void RockFallAttackBehavior::SpawnIndicators(EnemyComponent* pEnemy)
             pRC->SetMesh(pRingMesh);
             pRC->SetOverlay(true);  // 바닥에 겹쳐 그려지게
             pShader->AddRenderComponent(pRC);
+            pRing->SetDecal(true);   // 셰이더 indicator path 활성화
             rock.pIndicator = pRing;
         }
 
@@ -281,6 +282,7 @@ void RockFallAttackBehavior::SpawnIndicators(EnemyComponent* pEnemy)
             pRC->SetMesh(pDiscMesh);
             pRC->SetOverlay(true);
             pShader->AddRenderComponent(pRC);
+            pFill->SetDecal(true);   // 셰이더 indicator path 활성화
             rock.pIndicatorFill = pFill;
         }
     }

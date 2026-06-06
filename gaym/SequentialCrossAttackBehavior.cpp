@@ -151,6 +151,7 @@ void SequentialCrossAttackBehavior::MakeBar(
     pRC->SetMesh(pMesh);
     pRC->SetOverlay(true);
     pShader->AddRenderComponent(pRC);
+    pObj->SetDecal(true);   // 셰이더 indicator path 활성화
 
     *outObj = pObj;
 }

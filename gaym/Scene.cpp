@@ -67,6 +67,29 @@ Scene::~Scene()
     if (m_pd3dcbPass) m_pd3dcbPass->Unmap(0, NULL);
 }
 
+// ── 로딩 화면 워밍업 ──────────────────────────────────────────────────────
+//   런타임 hitch 방지: vector capacity 예약 (push_back realloc 0).
+//   호출 위치: Dx12App::InitSceneWithElement, Scene::Init 완료 직후.
+void Scene::PerformWarmup()
+{
+    // ── Tier 2-A/B: vector capacity 예약 ──
+    // 글로벌 GameObject — Player + 원격 플레이어(최대 4) + 룬 드랍 등.
+    m_vGameObjects.reserve(64);
+    m_vPendingDeletions.reserve(256);            // 임시 VFX 메쉬 (검기/crescent) 빈번 marking
+    m_vGrassClumpObjects.reserve(128);
+    m_vAmbientWindIds.reserve(16);
+    m_FlightBossBullets.reserve(64);
+
+    // 방 별 capacity — 일반 방 ~30 오브젝트, 보스방 ~100. 안전하게 96 / 24.
+    for (auto& room : m_vRooms)
+    {
+        if (room) room->ReserveCapacity(96, 24);
+    }
+
+    // CollisionManager — 글로벌 + 방 컬라이더 합산 추정. 256.
+    if (m_pCollisionManager) m_pCollisionManager->ReserveCapacity(256);
+}
+
 #include "MeshLoader.h"
 #include "MapLoader.h"
 #include "Dx12App.h"

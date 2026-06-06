@@ -161,6 +161,14 @@ void EnemyComponent::ChangeState(EnemyState newState)
     if (oldState == EnemyState::Attack)
     {
         HideIndicators();
+        // 활성 behavior 의 Reset 호출 — 보스 시그니처(GroundRupture/GaleSlash/Shockwave/Tornado/RockFall)
+        //   가 자체 indicator GameObject 들을 관리하므로, behavior.Reset → CleanupAll → MarkForDeletion.
+        //   ComboAttackBehavior 도 Reset 에서 검기 ribbon/crescent/sword glow 모두 정리.
+        //   누락 시: 보스가 stagger/dead/phase 전환으로 attack 중단되면 indicator 영구 잔존.
+        IAttackBehavior* pActiveBehavior = m_bUsingFlyingAttack  ? m_pFlyingAttackBehavior.get()
+                                         : m_bUsingSpecialAttack ? m_pSpecialAttackBehavior.get()
+                                         :                         m_pAttackBehavior.get();
+        if (pActiveBehavior) pActiveBehavior->Reset();
         // 공격 behavior 가 일시적으로 재생속도 override 했을 수 있으니 복원
         if (m_pAnimationComp && m_fBaseAnimPlaybackSpeed > 0.0f)
             m_pAnimationComp->SetPlaybackSpeed(m_fBaseAnimPlaybackSpeed);

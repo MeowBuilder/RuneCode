@@ -1040,10 +1040,55 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     darkLord.m_fnCreateBossPhaseConfig = []() {
         auto pConfig = std::make_unique<BossPhaseConfig>();
 
-        // 짤패 공통 헬퍼 — DarkLord 의 모든 짤패는 칼 휘두름(콤보) 으로 통일.
-        // 페이즈마다 hit 횟수 / 템포 / 사거리 / cone 각도만 다르게 잡아서 원소 톤 차이를 표현.
-        // (Phase Lambda 안에서 캡처할 일이 없으므로 free function 으로 두려면 별도 정의 필요해서
-        //  여기선 각 페이즈마다 인라인 Make 로 중복 해소함)
+        // 모든 페이즈가 공유하는 짤패 5종 — clip + shape + 데미지/타이밍/사거리/임팩트 VFX 통일.
+        //   페이즈는 사용 가능한 "원소 색상" 수만 다르다. 진행할수록 원소가 누적.
+        struct HitTpl {
+            const char* clip;
+            float dmg, w, h, r, range, cone;
+            float scale;
+            const char* impactVfx;
+            ComboAttackBehavior::SwordEnergyShape shape;
+        };
+        static const HitTpl kHitPool[5] = {
+            { "attack1",  70.0f, 0.35f, 0.18f, 0.28f, 10.0f, 110.0f, 3.5f, "sub_cool_mist",    ComboAttackBehavior::SwordEnergyShape::Slim    },
+            { "attack2",  70.0f, 0.35f, 0.18f, 0.28f, 10.0f, 110.0f, 3.5f, "sub_blast_wave",   ComboAttackBehavior::SwordEnergyShape::Wide    },
+            { "attack4",  90.0f, 0.45f, 0.22f, 0.35f, 10.5f, 220.0f, 4.5f, "sub_speed_streak", ComboAttackBehavior::SwordEnergyShape::Cross   },
+            { "Attack6", 100.0f, 0.50f, 0.25f, 0.40f, 11.0f, 160.0f, 4.5f, "sub_strike_spark", ComboAttackBehavior::SwordEnergyShape::Long    },
+            { "attack9", 115.0f, 0.55f, 0.28f, 0.50f, 11.5f, 240.0f, 6.0f, "sub_blast_wave",   ComboAttackBehavior::SwordEnergyShape::Double  },
+        };
+
+        // 원소 풀 — 페이즈 진행할수록 [0..nElements-1] 인덱스 사용. status_* 키워드로 검기 색 자동 매핑.
+        //   P0=1: 땅. P1=2: +물. P2=3: +바람. P3=4: +불. P4=4 (Final 각성 — stat boost).
+        static const char* kElementVfx[4] = {
+            "status_fracture",   // 땅 (P0~)
+            "status_chill",      // 물 (P1~)
+            "status_freeze",     // 바람 (P2~)
+            "status_burn",       // 불 (P3~)
+        };
+
+        // 통합 primary attack factory — 짤패 5종 풀 + 페이즈별 원소 수.
+        //   nElements: 1~4. 짤패는 랜덤, 원소도 랜덤 (허용 풀 내에서).
+        auto MakePrimaryAttack = [](int nElements) {
+            return [nElements]() -> std::unique_ptr<IAttackBehavior> {
+                int iHit = rand() % 5;
+                int iElement = rand() % nElements;
+                const HitTpl& t = kHitPool[iHit];
+                ComboAttackBehavior::ComboHit hh;
+                hh.fDamage = t.dmg;
+                hh.fWindupTime = t.w;
+                hh.fHitTime = t.h;
+                hh.fRecoveryTime = t.r;
+                hh.fHitRange = t.range;
+                hh.fConeAngle = t.cone;
+                hh.strAnimation = t.clip;
+                hh.strVFXOnHit = kElementVfx[iElement];
+                hh.strVFXImpact = t.impactVfx;
+                hh.fVFXScale = t.scale;
+                hh.eShape = t.shape;
+                std::vector<ComboAttackBehavior::ComboHit> hits{ hh };
+                return std::make_unique<ComboAttackBehavior>(hits);
+            };
+        };
 
         // ── Phase 0 (100→80% HP) : 땅 / 묵직 2타 칼 + 십자 균열 ──────────────
         //   짤패: attack6 → attack9 묵직 2타, windup 길게, 사거리 넓게 (광역 칼바람 느낌).
@@ -1056,35 +1101,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
             p.m_fAttackSpeedMultiplier = 1.50f;
             p.m_nSpecialAttackChance = 45;
 
-            // Primary: 단발 짤패 풀 — rand() 로 1 클립 선택.
-            //   콤보 제거 → 클립 짤림·연속 클립 충돌 없음. 각 클립이 자연 길이로 처음~끝 재생.
-            //   원소 톤: 모두 status_fracture → 검기 자동 앰버.
-            p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
-                auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
-                               const char* vfx, const char* impact, float scale) {
-                    ComboAttackBehavior::ComboHit hh;
-                    hh.fDamage = dmg; hh.fWindupTime = w; hh.fHitTime = h; hh.fRecoveryTime = r;
-                    hh.fHitRange = range; hh.fConeAngle = cone; hh.strAnimation = clip;
-                    hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
-                    return hh;
-                };
-                std::vector<ComboAttackBehavior::ComboHit> hits;
-                int choice = rand() % 3;
-                switch (choice)
-                {
-                // 카멘 톤 : 베기 cone 좁게 (전방 직사각 인디케이터), 회전/와이드 cone 넓게 (Circle 인디케이터).
-                case 0:  // Attack6 묵직 와이드 베기 (ForwardBox 160°)
-                    hits.push_back(Make("Attack6",  95.0f, 0.70f, 0.30f, 0.55f, 11.0f, 160.0f, "status_fracture", "sub_blast_wave", 4.5f));
-                    break;
-                case 1:  // attack9 묵직 오버헤드 (Circle 200° — 전방 광역)
-                    hits.push_back(Make("attack9", 110.0f, 0.75f, 0.30f, 0.60f, 11.5f, 200.0f, "status_fracture", "sub_blast_wave", 5.5f));
-                    break;
-                default: // attack4 광역 횡베기 (Circle 240° — 회전 톤)
-                    hits.push_back(Make("attack4",  85.0f, 0.60f, 0.25f, 0.50f, 10.5f, 240.0f, "status_fracture", "sub_blast_wave", 4.5f));
-                    break;
-                }
-                return std::make_unique<ComboAttackBehavior>(hits);
-            };
+            // Primary: 통합 짤패 풀 + 원소 1종 (땅) — P0 은 가장 단조로운 원소 톤.
+            p.m_fnPrimaryAttack = MakePrimaryAttack(1);
             // Special: 십자 균열 — 광장 전체 가로/세로 4 가닥 솟구침
             p.m_fnSpecialAttack = []() {
                 return std::make_unique<GroundRuptureAttackBehavior>(
@@ -1111,34 +1129,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
             p.m_fTransitionDuration = 1.6f;
             p.m_strTransitionAnimation = "attack9";
 
-            // Primary: 단발 짤패 풀 — 흐르는 칼질 단발 3종.
-            //   원소 톤: status_chill → 검기 시안.
-            p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
-                auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
-                               const char* vfx, const char* impact, float scale) {
-                    ComboAttackBehavior::ComboHit hh;
-                    hh.fDamage = dmg; hh.fWindupTime = w; hh.fHitTime = h; hh.fRecoveryTime = r;
-                    hh.fHitRange = range; hh.fConeAngle = cone; hh.strAnimation = clip;
-                    hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
-                    return hh;
-                };
-                std::vector<ComboAttackBehavior::ComboHit> hits;
-                int choice = rand() % 3;
-                switch (choice)
-                {
-                // 카멘 톤 : 베기 cone 110° ForwardBox, 회전 cone 220° Circle.
-                case 0:  // attack1 묵직 베기 (ForwardBox 110°)
-                    hits.push_back(Make("attack1", 65.0f, 0.42f, 0.18f, 0.35f, 10.0f, 110.0f, "status_chill", "sub_cool_mist", 3.5f));
-                    break;
-                case 1:  // attack2 묵직 베기 (대칭, ForwardBox 110°)
-                    hits.push_back(Make("attack2", 65.0f, 0.40f, 0.18f, 0.35f, 10.0f, 110.0f, "status_chill", "sub_cool_mist", 3.5f));
-                    break;
-                default: // attack4 광역 휩쓸기 (Circle 220°)
-                    hits.push_back(Make("attack4", 90.0f, 0.55f, 0.25f, 0.45f, 10.5f, 220.0f, "status_chill", "sub_cool_mist", 5.0f));
-                    break;
-                }
-                return std::make_unique<ComboAttackBehavior>(hits);
-            };
+            // Primary: 통합 짤패 풀 + 원소 2종 (땅+물) — 검기 색이 두 가지로 갈림.
+            p.m_fnPrimaryAttack = MakePrimaryAttack(2);
             // Special: 풀맵 충격파 링 (36 반경)
             p.m_fnSpecialAttack = []() {
                 return std::make_unique<ShockwaveRingAttackBehavior>(
@@ -1163,36 +1155,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
             p.m_fTransitionDuration = 1.6f;
             p.m_strTransitionAnimation = "attack9";
 
-            // Primary: 단발 짤패 풀 — 빠른 칼바람 단발 3종.
-            //   원소 톤: status_freeze → 검기 연두/청록 (Gale 톤).
-            //   m_fAttackSpeedMultiplier 0.90 → 쿨다운 짧음 → 단발이 자주 갈리면서 칼바람 느낌.
-            //   windup/recovery 는 P0/P1 보다 짧게 — 그러나 trail 0.45s 보장 위해 0.20s 이상 유지.
-            p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
-                auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
-                               const char* vfx, const char* impact, float scale) {
-                    ComboAttackBehavior::ComboHit hh;
-                    hh.fDamage = dmg; hh.fWindupTime = w; hh.fHitTime = h; hh.fRecoveryTime = r;
-                    hh.fHitRange = range; hh.fConeAngle = cone; hh.strAnimation = clip;
-                    hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
-                    return hh;
-                };
-                std::vector<ComboAttackBehavior::ComboHit> hits;
-                int choice = rand() % 3;
-                switch (choice)
-                {
-                // 카멘 톤 : 바람 페이즈 — 빠른 베기 cone 100° (가장 좁음), 회전 200°.
-                case 0:  // attack1 빠른 베기 (ForwardBox 100°)
-                    hits.push_back(Make("attack1", 55.0f, 0.35f, 0.18f, 0.28f,  9.5f, 100.0f, "status_freeze", "sub_speed_streak", 3.5f));
-                    break;
-                case 1:  // attack2 빠른 베기 (대칭, ForwardBox 100°)
-                    hits.push_back(Make("attack2", 55.0f, 0.32f, 0.18f, 0.28f,  9.5f, 100.0f, "status_freeze", "sub_speed_streak", 3.5f));
-                    break;
-                default: // attack4 광역 횡베기 (Circle 200° — 칼바람 휩쓸기)
-                    hits.push_back(Make("attack4", 80.0f, 0.45f, 0.22f, 0.38f, 10.0f, 200.0f, "status_freeze", "sub_speed_streak", 4.5f));
-                    break;
-                }
-                return std::make_unique<ComboAttackBehavior>(hits);
-            };
+            // Primary: 통합 짤패 풀 + 원소 3종 (땅+물+바람) — 검기 색 다양화 가속.
+            p.m_fnPrimaryAttack = MakePrimaryAttack(3);
             // Special: GaleSlash X자 진공파 — length 36, 4면 동시 발사
             p.m_fnSpecialAttack = []() {
                 return std::make_unique<GaleSlashAttackBehavior>(
@@ -1218,35 +1182,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
             p.m_fTransitionDuration = 1.6f;
             p.m_strTransitionAnimation = "attack9";
 
-            // Primary: 단발 짤패 풀 — 폭발적 burst 단발 3종.
-            //   원소 톤: status_burn → 검기 노랑/빨강.
-            //   m_fAttackSpeedMultiplier 0.75 → 쿨다운 짧음 → burst 가 자주 갈림.
-            p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
-                auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
-                               const char* vfx, const char* impact, float scale) {
-                    ComboAttackBehavior::ComboHit hh;
-                    hh.fDamage = dmg; hh.fWindupTime = w; hh.fHitTime = h; hh.fRecoveryTime = r;
-                    hh.fHitRange = range; hh.fConeAngle = cone; hh.strAnimation = clip;
-                    hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
-                    return hh;
-                };
-                std::vector<ComboAttackBehavior::ComboHit> hits;
-                int choice = rand() % 3;
-                switch (choice)
-                {
-                // 카멘 톤 : 불 페이즈 burst — Attack6 ForwardBox 160°, attack9 Circle 200°, attack4 Circle 240°.
-                case 0:  // Attack6 묵직 와이드 베기 (ForwardBox 160°)
-                    hits.push_back(Make("Attack6",  95.0f, 0.60f, 0.28f, 0.45f, 11.0f, 160.0f, "status_burn", "sub_strike_spark", 4.5f));
-                    break;
-                case 1:  // attack9 묵직 오버헤드 마무리 (Circle 200°)
-                    hits.push_back(Make("attack9", 115.0f, 0.60f, 0.28f, 0.50f, 11.5f, 200.0f, "status_burn", "sub_strike_spark", 5.5f));
-                    break;
-                default: // attack4 광역 횡베기 (Circle 240°)
-                    hits.push_back(Make("attack4",  85.0f, 0.55f, 0.25f, 0.40f, 10.5f, 240.0f, "status_burn", "sub_strike_spark", 4.5f));
-                    break;
-                }
-                return std::make_unique<ComboAttackBehavior>(hits);
-            };
+            // Primary: 통합 짤패 풀 + 원소 4종 (땅+물+바람+불) — 모든 원소 활성.
+            p.m_fnPrimaryAttack = MakePrimaryAttack(4);
             // Special: 메테오 폭격 — 8발, 20~55 반경 사이 무작위 착탄
             p.m_fnSpecialAttack = []() {
                 return std::make_unique<RockFallAttackBehavior>(
@@ -1272,42 +1209,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
             p.m_fTransitionDuration = 2.0f;
             p.m_strTransitionAnimation = "attack9";
 
-            // Primary: 단발 짤패 풀 — 올원소 단발 5종.
-            //   원소 톤: 매 짤패마다 다른 status_* → 검기 색이 짤패마다 자동 전환 (가장 화려한 단계).
-            //   m_fAttackSpeedMultiplier 0.55 → 쿨다운 매우 짧음 → 여러 클립이 빠르게 갈림.
-            p.m_fnPrimaryAttack = []() -> std::unique_ptr<IAttackBehavior> {
-                auto Make = [](const char* clip, float dmg, float w, float h, float r, float range, float cone,
-                               const char* vfx, const char* impact, float scale) {
-                    ComboAttackBehavior::ComboHit hh;
-                    hh.fDamage = dmg; hh.fWindupTime = w; hh.fHitTime = h; hh.fRecoveryTime = r;
-                    hh.fHitRange = range; hh.fConeAngle = cone; hh.strAnimation = clip;
-                    hh.strVFXOnHit = vfx; hh.strVFXImpact = impact; hh.fVFXScale = scale;
-                    return hh;
-                };
-                std::vector<ComboAttackBehavior::ComboHit> hits;
-                int choice = rand() % 5;
-                switch (choice)
-                {
-                // 카멘 톤 : Final 각성 — 검기 색은 hit 마다 다르지만 인디케이터 색은 통일 (빨강).
-                //   베기 cone 110~160° ForwardBox / 회전 cone 200~240° Circle.
-                case 0:  // attack1 + 물 (시안 검기) ForwardBox 110°
-                    hits.push_back(Make("attack1",  70.0f, 0.35f, 0.18f, 0.28f, 10.0f, 110.0f, "status_chill",    "sub_cool_mist",    3.5f));
-                    break;
-                case 1:  // attack2 + 땅 (앰버 검기) ForwardBox 110°
-                    hits.push_back(Make("attack2",  70.0f, 0.35f, 0.18f, 0.28f, 10.0f, 110.0f, "status_fracture", "sub_blast_wave",   3.5f));
-                    break;
-                case 2:  // attack4 + 바람 (silver 검기, 회전 Circle 220°)
-                    hits.push_back(Make("attack4",  90.0f, 0.45f, 0.22f, 0.35f, 10.5f, 220.0f, "status_freeze",   "sub_speed_streak", 4.5f));
-                    break;
-                case 3:  // Attack6 + 불 (주황빨강 검기) ForwardBox 160°
-                    hits.push_back(Make("Attack6", 100.0f, 0.50f, 0.25f, 0.40f, 11.0f, 160.0f, "status_burn",     "sub_strike_spark", 4.5f));
-                    break;
-                default: // attack9 + 화염 마무리 Circle 240°
-                    hits.push_back(Make("attack9", 115.0f, 0.55f, 0.28f, 0.50f, 11.5f, 240.0f, "status_burn",     "sub_blast_wave",   6.0f));
-                    break;
-                }
-                return std::make_unique<ComboAttackBehavior>(hits);
-            };
+            // Primary: 통합 짤패 풀 + 원소 4종 — Final 각성. 속도/공격 빈도 boost 는 위 m_fSpeedMultiplier 등으로.
+            p.m_fnPrimaryAttack = MakePrimaryAttack(4);
             // Special: 시그니처 풀맵 패턴 5종 중 랜덤
             p.m_fnSpecialAttack = []() -> std::unique_ptr<IAttackBehavior> {
                 int choice = rand() % 5;

@@ -18,6 +18,14 @@ CRoom::CRoom()
 {
 }
 
+void CRoom::ReserveCapacity(size_t nGameObjects, size_t nEnemies)
+{
+    m_vGameObjects.reserve(nGameObjects);
+    m_vPendingAdds.reserve(nGameObjects / 4);   // 단일 프레임 추가 max 추정
+    m_vEnemies.reserve(nEnemies);
+    m_vPendingSpawns.reserve(nEnemies);
+}
+
 CRoom::~CRoom()
 {
     // 미처 등장 못 한 웨이브 포탈 VFX 정리

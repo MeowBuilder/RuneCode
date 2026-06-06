@@ -47,6 +47,9 @@ public:
     // Clear all collision state (call when changing rooms)
     void ClearCollisionState();
 
+    // Warmup — 로딩 화면 중 호출. 컬라이더 벡터 capacity 예약 → 인게임 push_back 시 realloc 0.
+    void ReserveCapacity(size_t nColliders);
+
 private:
     void CheckCollision(ColliderComponent* pA, ColliderComponent* pB);
     // Push a dynamic object (Player/Enemy) out of a Wall collider on the XZ plane

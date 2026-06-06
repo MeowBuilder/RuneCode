@@ -129,6 +129,7 @@ void GaleSlashAttackBehavior::SpawnIndicators(EnemyComponent* pEnemy)
             pRC->SetMesh(pBorder);
             pRC->SetOverlay(true);
             pShader->AddRenderComponent(pRC);
+            pB->SetDecal(true);   // 셰이더 indicator path (shimmer + 톤다운) 활성화
             line.pBorder = pB;
         }
 
@@ -150,6 +151,7 @@ void GaleSlashAttackBehavior::SpawnIndicators(EnemyComponent* pEnemy)
             pRC->SetMesh(pFill);
             pRC->SetOverlay(true);
             pShader->AddRenderComponent(pRC);
+            pF->SetDecal(true);   // 셰이더 indicator path 활성화
             line.pFill = pF;
         }
     }

@@ -151,6 +151,7 @@ void TornadoFieldAttackBehavior::SpawnIndicators(EnemyComponent* pEnemy)
             pRC->SetMesh(pBorder);
             pRC->SetOverlay(true);
             pShader->AddRenderComponent(pRC);
+            pB->SetDecal(true);   // 셰이더 indicator path 활성화
             t.pBorder = pB;
         }
 
@@ -171,6 +172,7 @@ void TornadoFieldAttackBehavior::SpawnIndicators(EnemyComponent* pEnemy)
             pRC->SetMesh(pFill);
             pRC->SetOverlay(true);
             pShader->AddRenderComponent(pRC);
+            pF->SetDecal(true);   // 셰이더 indicator path 활성화
             t.pFill = pF;
         }
 
