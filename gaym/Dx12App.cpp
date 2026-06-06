@@ -2062,6 +2062,9 @@ void Dx12App::InitSceneWithElement(ElementType e)
     CreateShadowMapSRV();
     m_pScene->UpdatePersistentDescriptorEnd();
 
+    // 로딩 화면 동안 인게임 hitch 방지 워밍업 — vector capacity 예약 등.
+    m_pScene->PerformWarmup();
+
     CHECK_HR(m_pd3dCommandList->Close());
     ID3D12CommandList* ppd3dCommandLists[] = { m_pd3dCommandList.Get() };
     m_pd3dCommandQueue->ExecuteCommandLists(_countof(ppd3dCommandLists), ppd3dCommandLists);

@@ -665,11 +665,13 @@ void SwordTrailMesh::UpdateTrail(const std::vector<XMFLOAT3>& points, float half
 
         // Taper — bell curve: 가운데 두껍게, 양 끝 얇게. swing 의 중간이 가장 폭 넓어 dramatic.
         //   v = i/(n-1): 0 (tail) ~ 1 (head). bell = sin(πv) — v=0/1 에서 0, v=0.5 에서 1.
+        //   검기 호 강화 — sin(πv)^0.45 로 곡선 flatten → 호 대부분이 max 폭 근처 유지, 양 끝에서만 부드럽게 fade.
+        //   결과: 초승달처럼 두툼하고 길게 보임 (얇은 띠 X).
         float v = (float)i / (float)(n - 1);
         const float kPi = 3.14159265f;
-        float taper = sinf(v * kPi);    // 0 → 1 → 0
+        float taper = powf(sinf(v * kPi), 0.45f);    // 0 → 1 → 0, 가운데 plateau
         // head (검 본) 는 dramatic 양 끝 fade 와 별개로 잡아 — 검과 연결되어 끊김 없게
-        if (i == n - 1)  taper = 0.85f;
+        if (i == n - 1)  taper = 0.9f;
 
         float hw = halfWidth * taper;
 

@@ -103,6 +103,7 @@ void ShockwaveRingAttackBehavior::SpawnIndicators(EnemyComponent* pEnemy)
         pRC->SetMesh(pBorderMesh);
         pRC->SetOverlay(true);
         pShader->AddRenderComponent(pRC);
+        pB->SetDecal(true);   // 셰이더 indicator path 활성화
         m_pBorder = pB;
     }
 
@@ -123,6 +124,7 @@ void ShockwaveRingAttackBehavior::SpawnIndicators(EnemyComponent* pEnemy)
         pRC->SetMesh(pFillMesh);
         pRC->SetOverlay(true);
         pShader->AddRenderComponent(pRC);
+        pF->SetDecal(true);   // 셰이더 indicator path 활성화
         m_pFill = pF;
     }
 
@@ -171,6 +173,7 @@ void ShockwaveRingAttackBehavior::FireRingVFX(EnemyComponent* pEnemy)
         pRC->SetMesh(pBorderMesh);
         pRC->SetOverlay(true);
         pShader->AddRenderComponent(pRC);
+        pW->SetDecal(true);   // 셰이더 indicator path 활성화
         m_pWaveBorder = pW;
     }
 

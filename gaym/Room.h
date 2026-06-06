@@ -68,6 +68,9 @@ public:
     void SpawnEnemies();
     bool HasSpawnedEnemies() const { return m_bEnemiesSpawned; }
 
+    // Warmup — 로딩 화면 중 호출. 방 별 vector capacity 예약.
+    void ReserveCapacity(size_t nGameObjects, size_t nEnemies);
+
     // Drop item system
     void SetScene(Scene* pScene) { m_pScene = pScene; }
     Scene* GetScene() const { return m_pScene; }

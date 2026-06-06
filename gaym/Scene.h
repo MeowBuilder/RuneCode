@@ -134,6 +134,10 @@ public:
 
     void Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList);
     void LoadSceneFromFile(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList, const char* pstrFileName);
+    // Warmup — 로딩 화면 중 호출. 인게임 런타임 hitch 방지용.
+    //   Tier 2: vector capacity 예약 (Scene/Room/CollisionManager).
+    //   Tier 1: 가능 범위에서 enemy preset animation 클립 prewarm.
+    void PerformWarmup();
     void Update(float deltaTime, InputSystem* pInputSystem);
     void RenderShadowPass(ID3D12GraphicsCommandList* pCommandList);
     void Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR_HANDLE shadowSrvHandle,
