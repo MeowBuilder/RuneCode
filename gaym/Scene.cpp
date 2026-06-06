@@ -1660,18 +1660,62 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         }
     }
 
-    // Player input: allowed during FlyingIn so player can walk in,
-    // blocked during Landing/Roaring 및 Kraken 컷씬 (단, WaterRise는 일반 게임플레이)
-    bool bKrakenBlocking = (m_eKrakenStage != KrakenCutsceneStage::None)
-        && (m_eKrakenStage != KrakenCutsceneStage::WaterRise);
-    bool bBlockInput = bKrakenBlocking
-        || (m_pDragonIntroEnemy != nullptr
-            && m_eLastDragonPhase != BossIntroPhase::FlyingIn
-            && m_eLastDragonPhase != BossIntroPhase::None);
-    if (m_pPlayerGameObject && m_pPlayerGameObject->GetComponent<PlayerComponent>()
-        && !bBlockInput)
+    // Player input block during boss cutscenes.
+    // Dragon intro는 FlyingIn/Landing/Roaring 전체 입력 차단.
+    // Kraken 컷씬은 WaterRise를 제외하고 입력 차단.
+    // MegaBreath는 벽 이동/착지/엄폐물 등장 연출 5.8초 동안만 입력 차단.
+    bool bKrakenBlocking =
+        (m_eKrakenStage != KrakenCutsceneStage::None) &&
+        (m_eKrakenStage != KrakenCutsceneStage::WaterRise);
+
+    // Dragon intro는 m_pDragonIntroEnemy가 살아있는 동안 전체 입력 차단.
+    // m_eLastDragonPhase는 시작 직후 None일 수 있으므로 조건에 넣지 않는다.
+    bool bDragonIntroBlocking =
+        (m_pDragonIntroEnemy != nullptr);
+
+    NetworkManager* pNet = NetworkManager::GetInstance();
+
+    bool bNetworkDragonIntroBlocking =
+        (pNet != nullptr) &&
+        pNet->IsBlockingServerBossIntroActive();
+
+    bool bMegaBreathWallBlocking =
+        (pNet != nullptr) &&
+        pNet->IsMegaBreathInputLockActive();
+
+    bool bBlockInput =
+        bKrakenBlocking ||
+        bDragonIntroBlocking ||
+        bNetworkDragonIntroBlocking ||
+        bMegaBreathWallBlocking;
+
+    // 네트워크 패킷 전송도 같이 차단.
+    // SendMove / SendSkill / SendPlayerAttack 내부에서 m_bCutscenePlaying을 검사한다.
+    if (pNet)
     {
-        m_pPlayerGameObject->GetComponent<PlayerComponent>()->PlayerUpdate(deltaTime, pInputSystem, m_pCamera.get());
+        pNet->SetCutscenePlaying(bBlockInput);
+    }
+
+    if (m_pPlayerGameObject)
+    {
+        PlayerComponent* pPlayerComp =
+            m_pPlayerGameObject->GetComponent<PlayerComponent>();
+
+        if (pPlayerComp)
+        {
+            // 보스 인트로 때문에 입력은 막혀도,
+            // 방 전환 직후 포탈 낙하 인트로는 계속 업데이트해야 한다.
+            bool bAllowPortalIntroFlyUpdate = pPlayerComp->IsIntroFlyPlaying();
+
+            if (!bBlockInput || bAllowPortalIntroFlyUpdate)
+            {
+                pPlayerComp->PlayerUpdate(
+                    deltaTime,
+                    pInputSystem,
+                    m_pCamera.get()
+                );
+            }
+        }
     }
 
     // Update Projectile System
@@ -2939,10 +2983,8 @@ void Scene::TransitionToBossRoom()
 
     if (m_pPlayerGameObject)
     {
-        XMFLOAT3 pp = m_pPlayerGameObject->GetTransform()->GetPosition();
-        pp.y = 0.0f;
-        m_pPlayerGameObject->GetTransform()->SetPosition(pp);
-        if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>()) pPC->DisableFallZone();
+        if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
+            pPC->DisableFallZone();
     }
     m_eKrakenStage = KrakenCutsceneStage::None;
 
@@ -3073,14 +3115,17 @@ void Scene::TransitionToBossRoom()
         m_bInteractionCubeActive = false;
     }
 
-    // ── 10. 플레이어 지면 리셋 (공중에 뜨지 않도록 y=0 강제)
+    // ── 10. 플레이어 위치는 MapLoader가 세팅한 playerSpawn 높이를 유지한다.
+    // 온라인에서는 NetworkManager::ProcessRoomTransition()이 이 위치를 groundPos로 읽어서
+    // Portal Intro Fly를 시작하므로 여기서 y=0으로 강제하면 단상 안으로 파묻힌다.
     if (m_pPlayerGameObject)
     {
-        XMFLOAT3 pPos = m_pPlayerGameObject->GetTransform()->GetPosition();
-        pPos.y = 0.0f;
-        m_pPlayerGameObject->GetTransform()->SetPosition(pPos);
-        auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>();
-        if (pPC) pPC->ResetGroundY();
+        if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
+        {
+            pPC->DisableFallZone();
+            // ResetGroundY는 호출하지 않는다.
+            // StartIntroFly가 곧 호출되면서 groundY/standCenter/standRadius를 다시 세팅한다.
+        }
     }
 
     m_bInBossRoom = true;
@@ -3276,11 +3321,6 @@ void Scene::TransitionToFireStage(int roomIndex)
     // 플레이어 Y 복원 & 비행 모드 해제
     if (m_pPlayerGameObject)
     {
-        if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
-            if (pPC->IsFlightMode()) pPC->ExitFlightMode();
-        XMFLOAT3 pp = m_pPlayerGameObject->GetTransform()->GetPosition();
-        pp.y = 0.0f;
-        m_pPlayerGameObject->GetTransform()->SetPosition(pp);
         if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
             pPC->DisableFallZone();
     }

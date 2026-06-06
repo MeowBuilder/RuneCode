@@ -123,6 +123,22 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
         return;
     }
 
+    // 컷신 중에는 로컬 이동 / 대쉬 / 스킬 / 공격 입력 전부 차단.
+    // 서버 패킷은 이미 NetworkManager/Server에서 막지만,
+    // 화면상 로컬 캐릭터가 움직이는 문제를 여기서 막는다.
+    if (NetworkManager* pNet = NetworkManager::GetInstance())
+    {
+        if (pNet->IsConnected() && pNet->IsCutscenePlaying())
+        {
+            m_fDashTimer = 0.0f;
+            m_fSkillDashTimer = 0.0f;
+            m_fDashTrailAccum = 0.0f;
+
+            UpdateAnimation(deltaTime, false, false, false, false);
+            return;
+        }
+    }
+
     // 사망 상태: 중력/수면은 유지하되 입력·스킬·전송 모두 차단 (데스 애니만 재생 중)
     if (m_bNetworkDead)
     {

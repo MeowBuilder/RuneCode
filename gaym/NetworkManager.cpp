@@ -44,6 +44,8 @@
 #include "Dx12App.h"
 #include "MapLoader.h"
 #include "CharacterData.h"
+#include "ColliderComponent.h"
+#include "CollisionLayer.h"
 #include <cmath>
 #include <random>
 #include <cstring>
@@ -92,14 +94,74 @@ namespace
         ApplyNetworkPlayerMaterial(go->m_pChild, playerColor);
         ApplyNetworkPlayerMaterial(go->m_pSibling, playerColor);
     }
+
+    static float NormalizeYaw(float yaw)
+    {
+        while (yaw < 0.0f) yaw += 360.0f;
+        while (yaw >= 360.0f) yaw -= 360.0f;
+        return yaw;
+    }
+
+    // Red Dragon 모델 forward가 코드 기준 forward와 180도 반대로 보여서
+    // "보여주는 회전"만 180도 보정한다.
+    // 서버 판정/브레스 방향 계산에는 이 값을 직접 쓰지 말 것.
+    static float DragonVisualYaw(float logicalYaw)
+    {
+        return NormalizeYaw(logicalYaw + 180.0f);
+    }
+
+    static float YawToTargetXZ(const DirectX::XMFLOAT3& from, const DirectX::XMFLOAT3& to)
+    {
+        float dx = to.x - from.x;
+        float dz = to.z - from.z;
+
+        if (fabsf(dx) + fabsf(dz) <= 0.001f)
+            return 0.0f;
+
+        return atan2f(dx, dz) * (180.0f / 3.14159265f);
+    }
+
+    // 드래곤 시각 회전 세팅용.
+    // 앞으로 Dragon 회전은 pT->SetRotation 직접 쓰지 말고 이걸 쓰는 게 안전함.
+    static void SetDragonVisualYaw(TransformComponent* pT, float logicalYaw)
+    {
+        if (!pT) return;
+
+        pT->SetRotation(
+            0.0f,
+            DragonVisualYaw(logicalYaw),
+            0.0f
+        );
+    }
+
+    // 드래곤이 특정 지점을 바라보게 하는 함수.
+    // MoveToWall / Windup / ReturnFly에서 사용.
+    static void SetDragonFaceTarget(
+        TransformComponent* pT,
+        const DirectX::XMFLOAT3& from,
+        const DirectX::XMFLOAT3& to
+    )
+    {
+        if (!pT) return;
+
+        float dx = to.x - from.x;
+        float dz = to.z - from.z;
+
+        if (fabsf(dx) + fabsf(dz) <= 0.001f)
+            return;
+
+        float logicalYaw = YawToTargetXZ(from, to);
+        SetDragonVisualYaw(pT, logicalYaw);
+    }
 }
 
 // ServerPacketHandler.cpp에 정의된 파일 로그 함수 — network_log.txt에 append
 extern void WriteNetworkLog(const std::string& msg);
 
 // 네트워크 전용 RushFront 연출 Behavior
-// 오프라인 RushFrontAttackBehavior는 건드리지 않고,
-// 서버 권위 일반 몬스터에서만 RushCone(FanMesh) telegraph를 사용한다.
+// 오프라인 RushFrontAttackBehavior의 인디케이터 타입을 그대로 따른다.
+// 서버 권위 일반 몬스터는 클라에서 직접 이동/데미지 처리하지 않고,
+// 원본 AttackBehavior의 telegraph / animation 연출만 재생한다.
 class NetworkRushFrontVisualBehavior : public RushFrontAttackBehavior
 {
 public:
@@ -107,31 +169,7 @@ public:
 
     virtual int GetIndicatorTypeOverride() const override
     {
-        return static_cast<int>(IndicatorType::RushCone);
-    }
-};
-
-// 네트워크 중간보스 RushAoE 연출 Behavior
-// 일반 RushAoEEnemy는 RushCircle / radius 5를 쓰지만,
-// 클라 단독 중간보스는 Circle / radius 10을 사용한다.
-class NetworkMiniBossRushAoEVisualBehavior : public RushAoEAttackBehavior
-{
-public:
-    using RushAoEAttackBehavior::RushAoEAttackBehavior;
-
-    virtual int GetIndicatorTypeOverride() const override
-    {
-        return static_cast<int>(IndicatorType::Circle);
-    }
-
-    virtual float GetIndicatorRadius() const override
-    {
-        return 10.0f;
-    }
-
-    virtual float GetTimeToHit() const override
-    {
-        return 0.45f;
+        return RushFrontAttackBehavior::GetIndicatorTypeOverride();
     }
 };
 
@@ -387,6 +425,13 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
 
     // 네트워크 시간 누적 — 채널 throttle 등 비교용
     m_fNetworkAccumulatedTime += deltaTime;
+
+    if (m_fMegaBreathInputLockTimer > 0.0f)
+    {
+        m_fMegaBreathInputLockTimer -= deltaTime;
+        if (m_fMegaBreathInputLockTimer < 0.0f)
+            m_fMegaBreathInputLockTimer = 0.0f;
+    }
 
     // 이번 Update에서 방 전환이 처리됐는지 확인
     // 같은 프레임에 TorchInteract까지 보내지 않기 위한 방어
@@ -1259,6 +1304,30 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     }
 
     m_bInRoomTransition = false;
+}
+
+bool NetworkManager::IsBlockingServerBossIntroActive() const
+{
+    for (const auto& pair : m_mapServerBossIntros)
+    {
+        uint64 monsterId = pair.first;
+        const ServerBossIntroState& st = pair.second;
+
+        if (!st.active)
+            continue;
+
+        auto clipIt = m_mapServerMonsterClips.find(monsterId);
+        uint32 mt = (clipIt != m_mapServerMonsterClips.end())
+            ? clipIt->second.monsterType
+            : 0;
+
+        // Red Dragon만 입력 차단.
+        // BlueDragon(mt==10)은 현재 가벼운 등장 연출이라 제외.
+        if (mt == 6)
+            return true;
+    }
+
+    return false;
 }
 
 void NetworkManager::QueueSpawnPlayer(uint64 playerId, const std::string& name, int playerType, float x, float y, float z)
@@ -2751,6 +2820,64 @@ void NetworkManager::ProcessPlayerAction(Scene* pScene, uint64 playerId, uint32 
         break;
     }
 
+    case PLAYER_ACTION_R_MAGIC_CIRCLE:
+    {
+        DecalManager* pDecals = pScene ? pScene->GetDecalManager() : nullptr;
+        if (!pDecals)
+            break;
+
+        // dirY에는 revealDuration을 실어 보낸다.
+        float revealDuration = (dirY > 0.0f) ? dirY : 0.6f;
+
+        // 현재 로컬 R 마법진과 동일한 값
+        constexpr float kMagicCircleSize = 12.0f;
+        constexpr float kMagicCircleLifetime = 3.5f;
+        constexpr float kMagicCircleRotateSpeed = 2.0f;
+
+        // 원격 플레이어 원소 색상 적용
+        ElementType elem = ElementType::Fire;
+        auto eIt = m_mapRemotePlayerElement.find(playerId);
+        if (eIt != m_mapRemotePlayerElement.end())
+            elem = eIt->second;
+
+        DirectX::XMFLOAT4 color(1.0f, 0.55f, 0.30f, 1.0f);
+        switch (elem)
+        {
+        case ElementType::Fire:
+            color = DirectX::XMFLOAT4(1.0f, 0.55f, 0.30f, 1.0f);
+            break;
+        case ElementType::Water:
+            color = DirectX::XMFLOAT4(0.35f, 0.85f, 0.95f, 1.0f);
+            break;
+        case ElementType::Wind:
+            color = DirectX::XMFLOAT4(0.65f, 0.95f, 0.55f, 1.0f);
+            break;
+        case ElementType::Earth:
+            color = DirectX::XMFLOAT4(0.95f, 0.75f, 0.40f, 1.0f);
+            break;
+        default:
+            break;
+        }
+
+        pDecals->Spawn(
+            DecalTexture::MagicCircle,
+            DirectX::XMFLOAT3(x, y, z),
+            kMagicCircleSize,
+            0.0f,
+            kMagicCircleLifetime,
+            color,
+            kMagicCircleRotateSpeed,
+            revealDuration);
+
+        char buf[224];
+        sprintf_s(buf,
+            "[Network] Remote R MagicCircle spawned: playerId=%llu pos=(%.2f, %.2f, %.2f) reveal=%.2f",
+            playerId, x, y, z, revealDuration);
+        WriteNetworkLog(buf);
+
+        break;
+    }
+
     case PLAYER_ACTION_PLACE_FIRE:
     {
         int slot = static_cast<int>(dirX);
@@ -3005,6 +3132,45 @@ static bool IsNetworkMiniBossVisualType(uint32 visualType)
         visualType <= static_cast<uint32>(NetworkMonsterVisualType::MiniBoss_MagmaElemental_Rd);
 }
 
+// 중간보스 공격 스케일
+// 중간보스는 일반 몬스터 AttackBehavior를 그대로 사용하되,
+// 몸집이 커진 비율만큼 인디케이터 / 공격 범위를 함께 키운다.
+static float GetNetworkMiniBossAttackScaleRatio(uint32 visualType)
+{
+    return IsNetworkMiniBossVisualType(visualType) ? 2.0f : 1.0f;
+}
+
+// 클라 MapLoader.cpp의 공격 카테고리별 색상과 동일하게 맞춘다.
+// JSON visual.color가 아니라 attackType 기준 색상을 사용한다.
+static XMFLOAT3 GetNetworkMonsterTintByAttackType(uint32 attackType)
+{
+    switch (attackType)
+    {
+    case 1:  // Melee
+    case 36: // QuickJab
+        // 근접: 주황
+        return XMFLOAT3(1.00f, 0.55f, 0.20f);
+
+    case 3:  // RushAoE
+    case 4:  // RushFront
+        // 돌진: 빨강
+        return XMFLOAT3(1.00f, 0.35f, 0.30f);
+
+    case 2:  // Ranged
+    case 37: // ChargedShot
+        // 원거리: 청록
+        return XMFLOAT3(0.30f, 0.95f, 0.85f);
+
+    case 38: // GrenadeThrow
+    case 39: // SuicideExplode
+        // 공중 / 탄막: 보라
+        return XMFLOAT3(0.75f, 0.40f, 1.00f);
+
+    default:
+        return XMFLOAT3(1.0f, 1.0f, 1.0f);
+    }
+}
+
 // visualType → 클라 프리셋 메쉬 / 애니메이션 / 스케일 매핑
 // visualType이 없으면 기존 monsterType 기준 매핑으로 fallback한다.
 // visualType → 클라 프리셋 메쉬 / 애니메이션 / 스케일 매핑
@@ -3014,14 +3180,28 @@ static MonsterPreset GetMonsterPresetByVisualType(uint32 visualType, uint32 mons
     switch (static_cast<NetworkMonsterVisualType>(visualType))
     {
     case NetworkMonsterVisualType::FireGolem_Rd:
-    case NetworkMonsterVisualType::FireGolem_Rd_Bomber:
-    case NetworkMonsterVisualType::FireGolem_Rd_Jabber:
         return { "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd.bin",
                  "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd_Anim.bin",
                  5.5f, "idle", "Run_Forward",
                  "Assets/Enemies/Elementals/FireGolem_Rd/Textures/T_FireGolem_Rd_D.png",
                  "Combat_Unarmed_Attack", "Death",
-                 1.00f, 0.55f, 0.20f };
+                 1.00f, 1.00f, 1.00f };
+
+    case NetworkMonsterVisualType::FireGolem_Rd_Bomber:
+        return { "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd.bin",
+                 "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd_Anim.bin",
+                 4.5f, "idle", "Run_Forward",
+                 "Assets/Enemies/Elementals/FireGolem_Rd/Textures/T_FireGolem_Rd_D.png",
+                 "Combat_Unarmed_Attack", "Death",
+                 1.00f, 0.16f, 0.12f };
+
+    case NetworkMonsterVisualType::FireGolem_Rd_Jabber:
+        return { "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd.bin",
+                 "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd_Anim.bin",
+                 4.0f, "idle", "Run_Forward",
+                 "Assets/Enemies/Elementals/FireGolem_Rd/Textures/T_FireGolem_Rd_D.png",
+                 "Combat_Unarmed_Attack", "Death",
+                 0.31f, 0.90f, 0.90f };
 
     case NetworkMonsterVisualType::ChaosElemental_Rd:
         return { "Assets/Enemies/Elementals/ChaosElemental_Rd/ChaosElemental_Rd.bin",
@@ -3048,14 +3228,28 @@ static MonsterPreset GetMonsterPresetByVisualType(uint32 visualType, uint32 mons
                  1.00f, 0.35f, 0.30f };
 
     case NetworkMonsterVisualType::MagmaElemental_Rd:
-    case NetworkMonsterVisualType::MagmaElemental_Rd_Grenadier:
-    case NetworkMonsterVisualType::MagmaElemental_Rd_Sniper:
         return { "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd.bin",
                  "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd_Anim.bin",
                  5.5f, "idle", "Run_Forward",
                  "Assets/Enemies/Elementals/MagmaElemental_Rd/Textures/T_MagmaElemental_Rd_D.png",
                  "Combat_Unarmed_Attack", "Death",
-                 0.30f, 0.95f, 0.85f };
+                 1.00f, 1.00f, 1.00f };
+
+    case NetworkMonsterVisualType::MagmaElemental_Rd_Grenadier:
+        return { "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd.bin",
+                 "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd_Anim.bin",
+                 7.5f, "idle", "Run_Forward",
+                 "Assets/Enemies/Elementals/MagmaElemental_Rd/Textures/T_MagmaElemental_Rd_D.png",
+                 "Combat_Unarmed_Attack", "Death",
+                 0.96f, 0.55f, 0.16f };
+
+    case NetworkMonsterVisualType::MagmaElemental_Rd_Sniper:
+        return { "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd.bin",
+                 "Assets/Enemies/Elementals/MagmaElemental_Rd/MagmaElemental_Rd_Anim.bin",
+                 6.8f, "idle", "Run_Forward",
+                 "Assets/Enemies/Elementals/MagmaElemental_Rd/Textures/T_MagmaElemental_Rd_D.png",
+                 "Combat_Unarmed_Attack", "Death",
+                 0.82f, 0.31f, 0.92f };
 
     case NetworkMonsterVisualType::MiniBoss_FireGolem_Rd:
         return { "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd.bin",
@@ -3185,9 +3379,6 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
     }
 
     // attackType은 현재 스폰 외형 선택에는 직접 사용하지 않지만,
-    // 로그 / 이후 스폰 연출 분기에서 사용할 수 있도록 같이 전달받는다.
-    (void)attackType;
-
     MonsterPreset preset = GetMonsterPresetByVisualType(visualType, monsterType);
     
     // 서버 몬스터는 로컬 Room에 속하지 않는 전역 오브젝트로 생성
@@ -3273,11 +3464,26 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
         m_mapServerMonsterCurrentAnimClip[monsterId] = preset.idleClip;
     }
 
-    // 머티리얼 + 텍스처 강제 적용 (MeshLoader가 .bin에서 세팅 안 했을 경우 대비)
-    // → 서버 권위 스폰에서 유일하게 빠져 있던 스텝. EnemySpawner::LoadTextureToHierarchy 미러.
-    // tint 는 카테고리 색 (EnemySpawner 프리셋과 동일) → 호스트/게스트 시각 일치.
-    ApplyWhiteMaterialAndTextureToHierarchy(pScene, pDevice, pCommandList, pMonster, preset.texturePath,
-                                            preset.colorR, preset.colorG, preset.colorB);
+    // 일반 몬스터 / 중간보스 색상은 클라 MapLoader 기준과 동일하게 attackType으로 결정한다.
+ // 보스는 기존 preset 색상을 유지한다.
+    XMFLOAT3 monsterTint = XMFLOAT3(preset.colorR, preset.colorG, preset.colorB);
+
+    if (!isBoss &&
+        (monsterType == 2 || monsterType == 3 || monsterType == 4 || monsterType == 5 ||
+            IsNetworkMiniBossVisualType(visualType)))
+    {
+        monsterTint = GetNetworkMonsterTintByAttackType(attackType);
+    }
+
+    ApplyWhiteMaterialAndTextureToHierarchy(
+        pScene,
+        pDevice,
+        pCommandList,
+        pMonster,
+        preset.texturePath,
+        monsterTint.x,
+        monsterTint.y,
+        monsterTint.z);
 
     // 쉐이더 등록 (렌더링)
     Shader* pDefaultShader = pScene->GetDefaultShader();
@@ -3320,52 +3526,115 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
 
             AttackIndicatorConfig config;
 
-            if (IsNetworkMiniBossVisualType(visualType))
+            // 네트워크 일반 몬스터 인디케이터는 monsterType이 아니라 attackType 기준으로 만든다.
+            // 클라 단독 MapLoader는 room_Room*.json의 attackType / indicator 값을 기준으로
+            // AttackBehavior와 인디케이터를 구성하므로, 서버 네트워크도 같은 기준을 따른다.
+            switch (attackType)
             {
-                // 중간보스는 클라 단독 MapLoader 기준
-                // RushAoE 공격을 쓰지만 indicator는 RushCircle이 아니라 큰 원형 Circle이다.
-                config.m_eType = IndicatorType::Circle;
-                config.m_fHitRadius = 10.0f;
-                config.m_fRushDistance = 0.0f;
-                config.m_fConeAngle = 0.0f;
-                config.m_fHitLength = 0.0f;
-            }
-            else if (monsterType == 2)
+            case 1: // Melee
             {
-                // AirElemental: 클라 원본과 동일
+                // 기본 근접 원형 공격
                 config.m_eType = IndicatorType::Circle;
                 config.m_fHitRadius = 4.0f;
                 config.m_fRushDistance = 0.0f;
                 config.m_fConeAngle = 0.0f;
                 config.m_fHitLength = 0.0f;
+                break;
             }
-            else if (monsterType == 3)
+
+            case 36: // QuickJab
             {
-                // RangedEnemy: 클라 원본은 지면 telegraph 없음
+                // FireGolem_Rd_Jabber — 빠른 3연타
+                // 클라 QuickJabAttackBehavior 기준 hitRange=3.2
+                config.m_eType = IndicatorType::Circle;
+                config.m_fHitRadius = 3.2f;
+                config.m_fRushDistance = 0.0f;
+                config.m_fConeAngle = 0.0f;
+                config.m_fHitLength = 0.0f;
+                break;
+            }
+
+            case 37: // ChargedShot
+            {
+                // MagmaElemental_Rd_Sniper — 노란 직선 조준선
+                // 클라 ChargedShotAttackBehavior 기준: ForwardBox length=34, halfWidth=1.2
+                config.m_eType = IndicatorType::ForwardBox;
+                config.m_fHitRadius = 1.2f;
+                config.m_fRushDistance = 0.0f;
+                config.m_fConeAngle = 0.0f;
+                config.m_fHitLength = 34.0f;
+                break;
+            }
+
+            case 38: // GrenadeThrow
+            {
+                // MagmaElemental_Rd_Grenadier — 착탄 위치 원형 예고
+                // 클라 GrenadeThrowAttackBehavior 기준: Circle radius=4.5
+                config.m_eType = IndicatorType::Circle;
+                config.m_fHitRadius = 4.5f;
+                config.m_fRushDistance = 0.0f;
+                config.m_fConeAngle = 0.0f;
+                config.m_fHitLength = 0.0f;
+                break;
+            }
+
+            case 39: // SuicideExplode
+            {
+                // FireGolem_Rd_Bomber — 자폭 원형 예고
+                config.m_eType = IndicatorType::Circle;
+                config.m_fHitRadius = 4.5f;
+                config.m_fRushDistance = 0.0f;
+                config.m_fConeAngle = 0.0f;
+                config.m_fHitLength = 0.0f;
+                break;
+            }
+
+            case 3: // RushAoE
+            {
+                // MoltenElemental_Rd — 돌진 AoE
+                // 클라 MapLoader 경로는 RushAoEAttackBehavior 기본값을 사용한다.
+                // 기본값: rushSpeed=15, rushDuration=0.5, aoeRadius=5 → length=12.5
+                config.m_eType = IndicatorType::ForwardBox;
+                config.m_fHitRadius = 5.0f;
+                config.m_fRushDistance = 0.0f;
+                config.m_fConeAngle = 0.0f;
+                config.m_fHitLength = 12.5f;
+                break;
+            }
+
+            case 4: // RushFront
+            {
+                // ChaosElemental_Rd — 전방 돌진
+                // 클라 RushFrontAttackBehavior 기본값 기준:
+                // rushSpeed=18, rushDuration=0.4, hitRange=4 → length=11.2
+                config.m_eType = IndicatorType::ForwardBox;
+                config.m_fHitRadius = 4.5f;
+                config.m_fRushDistance = 0.0f;
+                config.m_fConeAngle = 0.0f;
+                config.m_fHitLength = 11.2f;
+                break;
+            }
+
+            case 2: // Ranged
+            default:
+            {
+                // 기본 원거리 투사체는 지면 telegraph 없음
                 config.m_eType = IndicatorType::None;
                 config.m_fHitRadius = 0.0f;
                 config.m_fRushDistance = 0.0f;
                 config.m_fConeAngle = 0.0f;
                 config.m_fHitLength = 0.0f;
+                break;
             }
-            else if (monsterType == 4)
-            {
-                // RushAoEEnemy: 클라 원본과 동일
-                config.m_eType = IndicatorType::RushCircle;
-                config.m_fRushDistance = 18.0f;
-                config.m_fHitRadius = 5.0f;
-                config.m_fConeAngle = 0.0f;
-                config.m_fHitLength = 0.0f;
             }
-            else
-            {
-                // RushFrontEnemy: 클라 원본과 동일
-                config.m_eType = IndicatorType::RushCone;
-                config.m_fRushDistance = 18.0f;
-                config.m_fHitRadius = 4.0f;
-                config.m_fConeAngle = 90.0f;
-                config.m_fHitLength = 0.0f;
-            }
+
+            // 중간보스는 일반 몬스터 패턴을 그대로 쓰되,
+            // 몸집이 커진 비율만큼 지면 인디케이터 크기를 키운다.
+            const float attackScale = GetNetworkMiniBossAttackScaleRatio(visualType);
+
+            config.m_fHitRadius *= attackScale;
+            config.m_fRushDistance *= attackScale;
+            config.m_fHitLength *= attackScale;
 
             if (EnemySpawner* pSpawner = pScene ? pScene->GetEnemySpawner() : nullptr)
             {
@@ -4902,6 +5171,25 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
         //   서버 windupSec 는 데미지 타이밍이고 클라 애니 peak 와 다름. 위 GetVfxStartDelay 참고.
         const float startDelay = GetVfxStartDelay(mt, attackType, windupSec);
 
+        // [DEBUG] Red Dragon 공격 패턴 클라 수신 로그
+        if (mt == 6)
+        {
+            char dbg[256];
+            sprintf_s(dbg,
+                "[CLIENT][RedDragonAttack RECV] monsterId=%llu attackType=%u targetPlayerId=%llu windup=%.2f startDelay=%.2f clip=%s pos=(%.1f,%.1f,%.1f) effectCount=%zu option=%u",
+                monsterId,
+                attackType,
+                targetPlayerId,
+                windupSec,
+                startDelay,
+                attackClip ? attackClip : "null",
+                atkX, atkY, atkZ,
+                effectPositions.size(),
+                effectOption
+            );
+            WriteNetworkLog(dbg);
+        }
+
         switch (attackType)
         {
         case 1:
@@ -5002,6 +5290,14 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
                 cs.bossSpawnPos = XMFLOAT3{ -30.0f, 0.0f, 6.71f }; // 룸 중심 game world = cover/카메라 기준
                 cs.active = true;
                 m_mapServerMegaBreathCutscenes[monsterId] = std::move(cs);
+
+                // MegaBreath 동안 Fire boss room 맵 기믹 메테오/용암기둥 정지.
+                // 플레이어가 엄폐해야 하는 핵심 패턴 중 랜덤 기믹이 겹치지 않게 한다.
+                if (pScene && pScene->GetCurrentRoom())
+                {
+                    pScene->GetCurrentRoom()->SetLavaGeyserEnabled(false);
+                    WriteNetworkLog("[Network] LavaGeyser disabled during MegaBreath");
+                }
 
                 // 이륙 애니 — 오프라인 MegaBreath::Execute 동일
                 {
@@ -5478,6 +5774,15 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
     uint32 mt = (clipIt != m_mapServerMonsterClips.end()) ? clipIt->second.monsterType : 0;
     const char* roarClip = GetBossRoarClip(mt);
 
+    // Red Dragon phase transition MegaBreath.
+    // 서버는 Dragon phase 2 / phase 3 진입 시 MegaBreath를 시작한다.
+    // 클라 로컬 입력은 벽 이동/착지/엄폐물 등장 연출까지만 5.8초 잠근다.
+    if (mt == 6 && eventType == 2 && (phaseIndex == 2 || phaseIndex == 3))
+    {
+        StartMegaBreathInputLock(5.8f);
+        WriteNetworkLog("[Network] RedDragon MegaBreath input lock started: 5.8s");
+    }
+
     // 카메라 쉐이크 — 이벤트 타입별로 강도/지속 다르게
     CCamera* pCam = pScene->GetCamera();
 
@@ -5520,6 +5825,7 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
                 }
 
                 m_mapServerBossIntros[monsterId] = st;
+                
 
                 if (auto* pAnim = pBoss->GetComponent<AnimationComponent>())
                     pAnim->CrossFade("Fly Glide", 0.15f, true, true);
@@ -5547,9 +5853,20 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
                 st.groundY = p.y;            // 스폰 좌표 = 지면 y
                 st.curY    = p.y + st.startHeight; // 시작은 25u 위
                 pT->SetPosition(p.x, st.curY, p.z);
+
+                // Red Dragon intro 시작 시 정면이 보이도록 고정
+                SetDragonVisualYaw(pT, 0.0f);
             }
             st.active = true;
             m_mapServerBossIntros[monsterId] = st;
+
+            // Red Dragon intro 중에는 플레이어가 움직일 수 없으므로
+                // Fire boss room 맵 기믹(메테오/용암기둥)을 잠시 정지한다.
+            if (mt == 6 && pScene && pScene->GetCurrentRoom())
+            {
+                pScene->GetCurrentRoom()->SetLavaGeyserEnabled(false);
+                WriteNetworkLog("[Network] LavaGeyser disabled during RedDragon intro");
+            }
 
             // 강하 시작 — "Fly Glide" 애니 (오프라인 동일)
             if (auto* pAnim = pBoss->GetComponent<AnimationComponent>())
@@ -5987,6 +6304,10 @@ void NetworkManager::PlayNetworkNormalMonsterAttackBehavior(
         isMiniBoss = clipIt->second.isMiniBoss;
     }
 
+    // 중간보스는 일반 몬스터 AttackBehavior를 그대로 쓰되,
+    // 몸집이 커진 비율만큼 인디케이터 / 공격 범위를 함께 키운다.
+    const float attackScale = GetNetworkMiniBossAttackScaleRatio(visualType);
+
     switch (attackType)
     {
     case 1:
@@ -6034,60 +6355,42 @@ void NetworkManager::PlayNetworkNormalMonsterAttackBehavior(
 
     case 3:
     {
-        if (isMiniBoss)
-        {
-            // 중간보스는 클라 단독 MapLoader 기준:
-            // RushAoEAttackBehavior를 쓰되 indicator는 RushCircle이 아니라 Circle radius 10이다.
-            auto rushAoE = std::make_unique<NetworkMiniBossRushAoEVisualBehavior>(
-                15.0f,  // damage
-                0.0f,   // rushSpeed - 서버 권위 모드에서는 클라 직접 이동 금지
-                0.0f,   // rushDuration
-                0.3f,   // windupTime
-                0.2f,   // hitTime
-                0.3f,   // recoveryTime
-                10.0f,  // aoeRadius
-                0.45f   // telegraphTime
-            );
+        // RushAoEEnemy
+        // 일반 몬스터 / 중간보스 모두 같은 RushAoEAttackBehavior를 사용한다.
+        // 중간보스는 몸집 비율만큼 rushSpeed / aoeRadius만 키운다.
+        auto rushAoE = std::make_unique<RushAoEAttackBehavior>(
+            15.0f,                // damage
+            15.0f * attackScale,  // rushSpeed
+            0.5f,                 // rushDuration
+            0.3f,                 // windupTime
+            0.2f,                 // hitTime
+            0.3f,                 // recoveryTime
+            5.0f * attackScale,   // aoeRadius
+            0.45f                 // telegraphTime
+        );
 
-            rushAoE->SetNetworkVisualOnly(true);
+        // 서버 권위 모드: 클라 직접 이동/데미지 금지
+        rushAoE->SetNetworkVisualOnly(true);
 
-            behavior = std::move(rushAoE);
-        }
-        else
-        {
-            // 일반 RushAoEEnemy
-            auto rushAoE = std::make_unique<RushAoEAttackBehavior>(
-                15.0f,  // damage
-                15.0f,  // rushSpeed
-                1.2f,   // rushDuration
-                0.3f,   // windupTime
-                0.2f,   // hitTime
-                0.3f,   // recoveryTime
-                5.0f,   // aoeRadius
-                0.45f   // telegraphTime
-            );
-
-            rushAoE->SetNetworkVisualOnly(true);
-
-            behavior = std::move(rushAoE);
-        }
+        behavior = std::move(rushAoE);
         break;
     }
 
     case 4:
     {
         // RushFrontEnemy
-        // 클라 RushFrontAttackBehavior preset과 동일 수치
-        auto rushFront = std::make_unique<NetworkRushFrontVisualBehavior>(
-            20.0f,  // damage
-            18.0f,  // rushSpeed
-            1.0f,   // rushDuration
-            0.2f,   // windupTime
-            0.2f,   // hitTime
-            0.3f,   // recoveryTime
-            4.0f,   // hitRange
-            90.0f,  // coneAngleDeg
-            0.45f   // telegraphTime
+        // 일반 몬스터 / 중간보스 모두 같은 RushFrontAttackBehavior를 사용한다.
+        // 중간보스는 몸집 비율만큼 rushSpeed / hitRange만 키운다.
+        auto rushFront = std::make_unique<RushFrontAttackBehavior>(
+            20.0f,                // damage
+            18.0f * attackScale,  // rushSpeed
+            0.4f,                 // rushDuration
+            0.2f,                 // windupTime
+            0.2f,                 // hitTime
+            0.3f,                 // recoveryTime
+            4.0f * attackScale,   // hitRange
+            90.0f,                // coneAngleDeg
+            0.45f                 // telegraphTime
         );
 
         // 서버 권위 모드: 클라 직접 이동/데미지 금지
@@ -6102,12 +6405,12 @@ void NetworkManager::PlayNetworkNormalMonsterAttackBehavior(
         // QuickJab — 서버 권위 일반 몬스터 잽 3연타 연출
         // 실제 데미지는 서버 S_PLAYER_DAMAGE를 따르고, 클라는 모션 / 인디케이터만 재생한다.
         auto quickJab = std::make_unique<QuickJabAttackBehavior>(
-            8.0f,   // damage
-            0.18f,  // windupTime
-            0.18f,  // hitInterval
-            3,      // hitCount
-            0.35f,   // recoveryTime
-            3.2f    // hitRange
+            8.0f,                 // damage
+            0.18f,                // windupTime
+            0.18f,                // hitInterval
+            3,                    // hitCount
+            0.35f,                // recoveryTime
+            3.2f * attackScale    // hitRange
         );
 
         quickJab->SetNetworkVisualOnly(true);
@@ -6126,10 +6429,12 @@ void NetworkManager::PlayNetworkNormalMonsterAttackBehavior(
 
         auto chargedShot = std::make_unique<ChargedShotAttackBehavior>(
             pProjMgr,
-            28.0f,  // damage
-            32.0f,  // projectileSpeed
-            1.6f,   // chargeTime
-            0.8f    // recoveryTime
+            28.0f,                // damage
+            32.0f,                // projectileSpeed
+            1.6f,                 // chargeTime
+            0.8f,                 // recoveryTime
+            34.0f * attackScale,  // indicatorLength
+            1.2f * attackScale    // indicatorHalfW
         );
 
         chargedShot->SetNetworkVisualOnly(true);
@@ -6148,11 +6453,11 @@ void NetworkManager::PlayNetworkNormalMonsterAttackBehavior(
 
         auto grenadeThrow = std::make_unique<GrenadeThrowAttackBehavior>(
             pProjMgr,
-            32.0f,  // damage
-            4.5f,   // aoeRadius
-            0.5f,   // windupTime
-            1.1f,   // airTime
-            0.6f    // recoveryTime
+            32.0f,                // damage
+            4.5f * attackScale,   // aoeRadius
+            0.5f,                 // windupTime
+            1.1f,                 // airTime
+            0.6f                  // recoveryTime
         );
 
         grenadeThrow->SetNetworkVisualOnly(true);
@@ -6171,9 +6476,9 @@ void NetworkManager::PlayNetworkNormalMonsterAttackBehavior(
 
         auto suicideExplode = std::make_unique<SuicideExplodeAttackBehavior>(
             pProjMgr,
-            45.0f,  // damage
-            4.5f,   // aoeRadius
-            1.0f    // countdownTime
+            45.0f,                // damage
+            4.5f * attackScale,   // aoeRadius
+            1.0f                  // countdownTime
         );
 
         suicideExplode->SetNetworkVisualOnly(true);
@@ -7428,10 +7733,8 @@ void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaT
             p.y = cs.phaseStartPos.y;
             p.z = cs.phaseStartPos.z + (cs.wallPos.z - cs.phaseStartPos.z) * ease;
             pT->SetPosition(p);
-            // 이동 방향 바라봄
-            float dx = cs.wallPos.x - p.x, dz = cs.wallPos.z - p.z;
-            if (fabsf(dx) + fabsf(dz) > 0.01f)
-                pT->SetRotation(0.f, atan2f(dx, dz) * (180.f / 3.14159265f), 0.f);
+            // 벽으로 날아가는 동안에는 이동 방향을 바라보게 한다.
+            SetDragonFaceTarget(pT, cs.wallPos, p);
 
             float dxc = p.x - roomCenter.x, dzc = p.z - roomCenter.z;
             float radius = sqrtf(dxc*dxc + dzc*dzc);
@@ -7513,6 +7816,15 @@ void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaT
                         auto* pRC = pCover->AddComponent<RenderComponent>();
                         if (pMesh) pRC->SetMesh(pMesh);
                         pShader->AddRenderComponent(pRC);
+
+                        // MegaBreath 엄폐 기둥 충돌체.
+                        // MapLoader의 벽/장애물과 같은 Wall 레이어로 둬서 플레이어가 통과하지 못하게 한다.
+                        auto* pCol = pCover->AddComponent<ColliderComponent>();
+                        pCol->SetExtents(1.5f, 6.0f, 1.5f);
+                        pCol->SetCenter(0.0f, 3.0f, 0.0f);
+                        pCol->SetLayer(CollisionLayer::Wall);
+                        pCol->SetCollisionMask(CollisionMask::Wall);
+
                         cs.covers.push_back(pCover);
                     }
                 }
@@ -7530,10 +7842,12 @@ void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaT
             {
                 cs.phase = MegaBreathPhase::Windup;
                 cs.phaseTimer = 0.f;
-                // 보스 회전 — 방 중심 향함 (cover/wall 기준)
+                // 브레스 준비 자세가 반대로 보여서 시각 방향만 180도 반전
                 float dxc = roomCenter.x - dragonPos.x, dzc = roomCenter.z - dragonPos.z;
                 if (fabsf(dxc) + fabsf(dzc) > 0.01f)
-                    pT->SetRotation(0.f, atan2f(dxc, dzc) * (180.f / 3.14159265f), 0.f);
+                {
+                    SetDragonFaceTarget(pT, roomCenter, dragonPos);
+                }
             }
             break;
         }
@@ -7556,9 +7870,24 @@ void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaT
                 if (auto* pFluidVFX = pScene ? pScene->GetFluidVFXManager() : nullptr)
                 {
                     // 오프라인 SpawnFireWave: 보스 yaw 기준 입 위치 (전방 17u, 머리 7u 위)
-                    XMFLOAT3 bossRot = pT->GetRotation();
-                    float yawRad = bossRot.y * (3.14159265f / 180.f);
-                    XMFLOAT3 forward{ sinf(yawRad), 0.f, cosf(yawRad) };
+                   // MegaBreath 실제 빔 방향은 보스 시각 yaw가 아니라 wall → roomCenter 기준.
+// 모델 yaw에 +180 보정을 넣어도 빔 방향이 틀어지지 않게 분리한다.
+                    XMFLOAT3 forward{
+                        roomCenter.x - dragonPos.x,
+                        0.0f,
+                        roomCenter.z - dragonPos.z
+                    };
+
+                    float fLen = sqrtf(forward.x * forward.x + forward.z * forward.z);
+                    if (fLen < 0.001f)
+                    {
+                        forward = XMFLOAT3{ 0.0f, 0.0f, 1.0f };
+                    }
+                    else
+                    {
+                        forward.x /= fLen;
+                        forward.z /= fLen;
+                    }
                     XMFLOAT3 mouth{
                         dragonPos.x + forward.x * 17.0f,
                         dragonPos.y + 7.0f,
@@ -7696,7 +8025,10 @@ void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaT
             pT->SetPosition(p);
             float dx = targetAir.x - p.x, dz = targetAir.z - p.z;
             if (fabsf(dx) + fabsf(dz) > 0.01f)
-                pT->SetRotation(0.f, atan2f(dx, dz) * (180.f / 3.14159265f), 0.f);
+            {
+                SetDragonFaceTarget(pT, targetAir, p);
+            }
+
             if (cs.phaseTimer >= RETFLY_TIME)
             {
                 if (pAnim) pAnim->CrossFade("Land", 0.15f, false);
@@ -7727,6 +8059,14 @@ void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaT
             auto tIt = m_mapServerMonsterTarget.find(it->first);
             if (tIt != m_mapServerMonsterTarget.end())
             { tIt->second.px = cs.originalPos.x; tIt->second.py = cs.originalPos.y; tIt->second.pz = cs.originalPos.z; }
+            
+            // MegaBreath 종료 후 맵 기믹 재개
+            if (pScene && pScene->GetCurrentRoom())
+            {
+                pScene->GetCurrentRoom()->SetLavaGeyserEnabled(true);
+                WriteNetworkLog("[Network] LavaGeyser re-enabled after MegaBreath");
+            }
+
             it = m_mapServerMegaBreathCutscenes.erase(it);
             continue;
         }
@@ -7778,6 +8118,7 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
             {
                 st.curY = st.groundY;
                 pBoss->GetTransform()->SetPosition(st.bossX, st.curY, st.bossZ);
+                SetDragonVisualYaw(pBoss->GetTransform(), 0.0f);
 
                 auto clipIt = m_mapServerMonsterClips.find(it->first);
                 uint32 mt = (clipIt != m_mapServerMonsterClips.end()) ? clipIt->second.monsterType : 0;
@@ -7802,6 +8143,7 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
             else
             {
                 pBoss->GetTransform()->SetPosition(st.bossX, st.curY, st.bossZ);
+                SetDragonVisualYaw(pBoss->GetTransform(), 0.0f);
             }
 
             auto clipItCam = m_mapServerMonsterClips.find(it->first);
@@ -7819,6 +8161,7 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
         {
             // 1.5s 정지 (오프라인 동일)
             pBoss->GetTransform()->SetPosition(st.bossX, st.groundY, st.bossZ);
+            SetDragonVisualYaw(pBoss->GetTransform(), 0.0f);
             // 카메라는 phase 전환 시 한 번만 설정 (오프라인 동일) — 매 프레임 변경 X
             if (st.phaseTimer >= 1.5f)
             {
@@ -7849,6 +8192,7 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
         {
             // 2.0s 포효 — 카메라 phase 전환 시 한 번만 (오프라인 동일)
             pBoss->GetTransform()->SetPosition(st.bossX, st.groundY, st.bossZ);
+            SetDragonVisualYaw(pBoss->GetTransform(), 0.0f);
             if (st.phaseTimer >= 2.0f)
             {
                 st.phase = BossIntroPhase::Done; // 오프라인은 즉시 StopCinematic
@@ -7871,6 +8215,13 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
 
             if (mtDone != 10 && pCam)
                 pCam->StopCinematic();
+
+            // Red Dragon intro 종료 후 Fire boss room 맵 기믹 재개
+            if (mtDone == 6 && pScene && pScene->GetCurrentRoom())
+            {
+                pScene->GetCurrentRoom()->SetLavaGeyserEnabled(true);
+                WriteNetworkLog("[Network] LavaGeyser re-enabled after RedDragon intro");
+            }
 
             // 보간 타겟을 ground 위치(스폰)로 동기화 — 인트로 종료 후 보스가 다른 위치로 튀는 것 방지
             auto tIt = m_mapServerMonsterTarget.find(it->first);
@@ -8074,6 +8425,7 @@ void NetworkManager::InterpolateServerMonsters(float deltaTime)
     // 큰 거리 차이는 방 전환 / 컷신 / 비정상 위치 보정으로 보고 즉시 스냅한다.
     constexpr float POS_SMOOTH_RATE = 10.0f;
     constexpr float YAW_SMOOTH_RATE = 10.0f;
+    constexpr float BOSS_JUMP_POS_SMOOTH_RATE = 3.0f;
 
     // 너무 멀리 벌어진 경우만 텔레포트성 보정으로 스냅
     constexpr float TELEPORT_SNAP_DIST_SQ = 100.0f; // 10m 이상
@@ -8123,23 +8475,37 @@ void NetworkManager::InterpolateServerMonsters(float deltaTime)
         float dz = tgt.pz - cur.z;
         float distSq = dx * dx + dy * dy + dz * dz;
 
+        bool bBossJumpAction = false;
+        auto actIt = m_mapServerBossActions.find(monsterId);
+        if (actIt != m_mapServerBossActions.end() &&
+            actIt->second.kind == BossActionKind::Jump)
+        {
+            bBossJumpAction = true;
+        }
+
+        float localPosAlpha = posAlpha;
+        if (bBossJumpAction)
+        {
+            localPosAlpha = 1.0f - expf(-BOSS_JUMP_POS_SMOOTH_RATE * deltaTime);
+        }
+
         // 1. 비정상적으로 많이 벌어진 경우만 스냅
-        if (distSq >= TELEPORT_SNAP_DIST_SQ)
+        // 단, Boss JumpSlam 연출 중에는 10m 이상 벌어져도 스냅하지 않는다.
+        // 서버는 JumpSlam 때 타겟 위치로 즉시 이동시키므로, 여기서 스냅하면 순간이동처럼 보인다.
+        if (distSq >= TELEPORT_SNAP_DIST_SQ && !bBossJumpAction)
         {
             pT->SetPosition(tgt.px, tgt.py, tgt.pz);
         }
-        // 2. 거의 같은 위치면 미세 떨림 방지용으로 정착
         else if (distSq <= TINY_SNAP_DIST_SQ)
         {
             pT->SetPosition(tgt.px, tgt.py, tgt.pz);
         }
-        // 3. 일반 이동은 무조건 부드럽게 보간
         else
         {
             XMFLOAT3 next;
-            next.x = cur.x + dx * posAlpha;
-            next.y = cur.y + dy * posAlpha;
-            next.z = cur.z + dz * posAlpha;
+            next.x = cur.x + dx * localPosAlpha;
+            next.y = cur.y + dy * localPosAlpha;
+            next.z = cur.z + dz * localPosAlpha;
 
             pT->SetPosition(next);
         }

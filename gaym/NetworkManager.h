@@ -62,6 +62,8 @@ enum : uint32
 
     PLAYER_ACTION_CHANNEL_BEGIN      = 40, // dirX = skillSlot
     PLAYER_ACTION_CHANNEL_END        = 41, // dirX = skillSlot
+
+	PLAYER_ACTION_R_MAGIC_CIRCLE     = 50, // R 스킬 시전 시 마법진 소환 연출  
 };
 
 // 패킷 처리를 위한 명령 타입
@@ -283,6 +285,7 @@ public:
     // 컷신 중 입력/패킷 차단용
     void SetCutscenePlaying(bool playing) { m_bCutscenePlaying = playing; }
     bool IsCutscenePlaying() const { return m_bCutscenePlaying; }
+    bool IsBlockingServerBossIntroActive() const;
 
     // 세션 참조 설정 (GameSession::OnConnected에서 호출)
     void SetSession(std::shared_ptr<GameSession> session) { m_pSession = session; }
@@ -481,6 +484,7 @@ private:
 
     // 보스 이벤트 중복 방지
     bool m_bCutscenePlaying = false;
+    float m_fMegaBreathInputLockTimer = 0.0f;
 
     // 서버 MOVE 패킷 간격이 띄엄띄엄해서 직접 SetPosition하면 순간이동처럼 보임.
     // 타겟 pos/yaw 저장 → 매 프레임 exponential smoothing으로 접근.
@@ -598,6 +602,16 @@ public:
     void UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaTime);
     // 매 프레임 보스 액션(Jump/Flying) yOffset 적용 + 종료 처리.
     void UpdateServerBossActions(Scene* pScene, float deltaTime);
+
+    void StartMegaBreathInputLock(float duration)
+    {
+        m_fMegaBreathInputLockTimer = duration;
+    }
+
+    bool IsMegaBreathInputLockActive() const
+    {
+        return m_fMegaBreathInputLockTimer > 0.0f;
+    }
 private:
 
 public:

@@ -109,6 +109,35 @@ void SkillComponent::SpawnChargeGatherVFX(int step)
 
 void SkillComponent::Update(float deltaTime)
 {
+    NetworkManager* pNet = NetworkManager::GetInstance();
+    if (pNet && pNet->IsConnected() && pNet->IsCutscenePlaying())
+    {
+        if (m_bIsCharging)
+        {
+            size_t idx = static_cast<size_t>(m_ChargingSlot);
+            if (m_pVFXManager && idx < m_chargeGatherVFXIds.size() && m_chargeGatherVFXIds[idx] >= 0)
+            {
+                m_pVFXManager->StopEffect(m_chargeGatherVFXIds[idx]);
+                m_chargeGatherVFXIds[idx] = -1;
+            }
+
+            m_bIsCharging = false;
+            m_fChargeTime = 0.0f;
+            m_ChargingSlot = SkillSlot::Count;
+        }
+
+        if (m_bIsChanneling)
+        {
+            m_bIsChanneling = false;
+            m_fChannelTime = 0.0f;
+            m_fChannelTickAccum = 0.0f;
+            m_bChannelTickFiredThisFrame = false;
+            m_ActiveSkillSlot = SkillSlot::Count;
+        }
+
+        return;
+    }
+    
     // 무한 룬 VFX 위치 추적
     if (m_infRuneVFXSlot >= 0)
     {
@@ -539,6 +568,10 @@ void SkillComponent::Update(float deltaTime)
 
 void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCamera)
 {
+    NetworkManager* pNet = NetworkManager::GetInstance();
+    if (pNet && pNet->IsConnected() && pNet->IsCutscenePlaying())
+        return;
+
     if (!pInputSystem || !pCamera) return;
 
     // Process rune input (1-5 keys to change activation type)
@@ -1502,14 +1535,30 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
         constexpr float kRevealDuration = 0.6f;
 
         auto* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
+        XMFLOAT3 feetPos = m_pOwner->GetTransform()->GetPosition();
+
         if (pScene && pScene->GetDecalManager())
         {
-            XMFLOAT3 feetPos = m_pOwner->GetTransform()->GetPosition();
             ElementType elem = m_Skills[index] ? m_Skills[index]->GetSkillData().element : ElementType::None;
             FluidElementColor ec = FluidElementColors::Get(elem);
+
             pScene->GetDecalManager()->Spawn(
-                DecalTexture::MagicCircle, feetPos, 12.f, 0.f, 3.5f, ec.coreColor, 2.0f, kRevealDuration);
+                DecalTexture::MagicCircle,
+                feetPos,
+                12.f,
+                0.f,
+                3.5f,
+                ec.coreColor,
+                2.0f,
+                kRevealDuration);
         }
+
+        // 원격 클라에도 R 스킬 발동 마법진 표시
+        NotifyActionNetAt(
+            PLAYER_ACTION_R_MAGIC_CIRCLE,
+            slot,
+            feetPos,
+            kRevealDuration);
 
         // 실제 발동은 reveal 완료 후
         m_delayedCasts.push_back({ slot, index, targetPosition, kRevealDuration });
@@ -1684,6 +1733,9 @@ void SkillComponent::SendSkillNet(
     NetworkManager* pNetMgr = NetworkManager::GetInstance();
 
     if (!pNetMgr || !pNetMgr->IsConnected())
+        return;
+
+    if (pNetMgr->IsCutscenePlaying())
         return;
 
     if (!m_pOwner)

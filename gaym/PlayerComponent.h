@@ -75,6 +75,13 @@ public:
     void StartIntroFly(float duration, float groundY = 0.0f,
                        const XMFLOAT3& standCenter = XMFLOAT3(0,0,0), float standRadius = 0.0f);
 
+    // 포탈 Intro Fly 낙하/착지 연출 중인지 확인.
+    // 보스 컷신 입력 차단 중에도 이 연출 업데이트는 허용해야 한다.
+    bool IsIntroFlyPlaying() const
+    {
+        return m_fIntroFlyTimer > 0.0f || m_fLandingHoldTimer > 0.0f;
+    }
+
     // Flight Mode (4스테이지 바람 보스 비행 슈팅): 보스 중심 구면 좌표 비행
     void EnterFlightMode(GameObject* pFlightCenter);
     void ExitFlightMode();
