@@ -5548,6 +5548,28 @@ void NetworkManager::ProcessPlayerDamage(Scene* pScene, uint64 playerId, float d
 
         if (isDead)
             pPC->OnServerDeath();
+
+        // ABY_RVG 보복 — 서버는 READY 패킷 미발송, 같은 조건을 클라가 자체 검사해서 오라 활성화.
+        //   조건: 환경 데미지(attackerMonsterId==0) 제외 + 사망 제외 + 4개 슬롯 중 ABY_RVG 장착 (서버 TryActivateRevengeRuneOnDamage 와 일치).
+        //   서버도 자체 변수만 켜고 CONSUME 시점에 패킷 보내므로, 동일 조건 검사로 클라/서버 동기화 유지.
+        if (!isDead && damage > 0.f && attackerMonsterId != 0)
+        {
+            if (auto* pSkill = pPlayerGO->GetComponent<SkillComponent>())
+            {
+                bool hasRvg = false;
+                for (int s = 0; s < static_cast<int>(SkillSlot::Count); ++s)
+                {
+                    if (pSkill->HasRuneEquipped(static_cast<SkillSlot>(s), "ABY_RVG"))
+                    {
+                        hasRvg = true;
+                        break;
+                    }
+                }
+                // 이미 활성 상태(IsVengeancePrimed)면 서버가 중복 처리 안 하므로 클라도 중복 활성 skip
+                if (hasRvg && !pPC->IsVengeancePrimed())
+                    pPC->TriggerVengeance(10.f);
+            }
+        }
     }
     else
     {
@@ -7207,7 +7229,14 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
                 }
             }
         }
-        // 본인/원격 모두 발동 텍스트
+        // 본인/원격 모두 발동 — 텍스트 + twirl 폭발 (오프라인 TryTriggerInfiniteRune 과 동일 톤)
+        if (pCaster && pCaster->GetTransform())
+        {
+            DirectX::XMFLOAT3 pos = pCaster->GetTransform()->GetPosition();
+            pos.y += 1.4f;
+            VFXSpriteManager::Get().Spawn("twirl1", pos, 230.f, 0.65f,
+                DirectX::XMFLOAT4(1.0f, 0.88f, 0.25f, 1.0f), 9.0f, VFXSpriteAnim::FadeOut);
+        }
         DamageNumberManager::Get().AddText(
             GetDisplayPos(pCaster), L"INFINITE!",
             DirectX::XMFLOAT4(1.0f, 0.95f, 0.4f, 1.0f));
@@ -7217,11 +7246,13 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
     // ─── ABY_VMP: 흡혈 — value1 회복량, value2 회복 후 HP ────────────────────────
     if (runeId == "ABY_VMP")
     {
-        if (bLocalCaster && pCaster)
+        if (pCaster)
         {
             if (PlayerComponent* pPlayer = pCaster->GetComponent<PlayerComponent>())
             {
-                pPlayer->SetCurrentHP(value2);
+                if (bLocalCaster) pPlayer->SetCurrentHP(value2);
+                // 회복 펄스 — 로컬/원격 모두 표시 (다른 플레이어 흡혈도 보이게)
+                pPlayer->TriggerLifestealVFX(value1);
             }
         }
         wchar_t buf[32];
@@ -7251,11 +7282,30 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
     }
 
     // ─── ABY_RVG: 보복 — value1 비율, value2 최종 데미지 ─────────────────────────
+    //   현재 서버는 CONSUME 시점에만 ABY_RVG 패킷을 보내며 triggerType 을 세팅하지 않는다.
+    //     (Room.cpp BroadcastRevengeRuneTrigger 주석: "나중에 proto에 RUNE_TRIGGER_REVENGE를 추가하면…")
+    //   READY 활성화는 ProcessPlayerDamage 에서 클라가 자체 추적(서버와 동일 조건)으로 처리.
+    //   따라서 ABY_RVG runeId 자체를 CONSUME 으로 해석한다. triggerType 명시되면 그쪽 우선.
     if (runeId == "ABY_RVG")
     {
-        DamageNumberManager::Get().AddText(
-            GetDisplayPos(pCaster), L"REVENGE!",
-            DirectX::XMFLOAT4(1.0f, 0.55f, 0.2f, 1.0f));
+        const bool bConsume = (triggerType == 31 /* VENGEANCE_CONSUME */)
+                              || (triggerType == 0  /* NONE — 현재 서버 동작 */);
+        if (bConsume)
+        {
+            // 소모 — 활성 오라 정리. 서버가 데미지에 이미 +30% 반영했으므로 클라는 표시만.
+            if (pCaster)
+                if (auto* pPC = pCaster->GetComponent<PlayerComponent>())
+                    pPC->ConsumeVengeance();
+            DamageNumberManager::Get().AddText(
+                GetDisplayPos(pCaster), L"REVENGE!",
+                DirectX::XMFLOAT4(1.0f, 0.55f, 0.2f, 1.0f));
+        }
+        else if (triggerType == 30 /* VENGEANCE_READY — 서버가 향후 보내올 경우 대비 */)
+        {
+            if (pCaster)
+                if (auto* pPC = pCaster->GetComponent<PlayerComponent>())
+                    pPC->TriggerVengeance(10.f);
+        }
         return;
     }
 

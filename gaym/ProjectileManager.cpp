@@ -697,10 +697,25 @@ void ProjectileManager::ApplyDamage(Projectile& projectile, EnemyComponent* pEne
     float dmg = projectile.damage;
 
     // 처형자: HP 30% 이하 시 추가 피해 (데미지 보너스 조건)
-    if (projectile.execDamageBonus > 0.f && pEnemy->GetHpRatio() < 0.3f)
+    bool bExecTriggered = (projectile.execDamageBonus > 0.f && pEnemy->GetHpRatio() < 0.3f);
+    if (bExecTriggered)
         dmg *= (1.f + projectile.execDamageBonus);
 
     pEnemy->TakeDamage(dmg, false, projectile.execDamageBonus > 0.f);
+
+    // 처형 트리거 시각효과 — 오프라인 한정 (멀티는 NetworkManager 가 별도 처리).
+    // 적이 사망한 경우엔 이미 EnemyComponent::TakeDamage 에서 skull 표시 → 중복 방지 위해 살아남았을 때만.
+    if (bExecTriggered && !pEnemy->IsDead())
+    {
+        NetworkManager* pNet = NetworkManager::GetInstance();
+        if (!(pNet && pNet->IsConnected()) && pEnemy->GetOwner() && pEnemy->GetOwner()->GetTransform())
+        {
+            DirectX::XMFLOAT3 ep = pEnemy->GetOwner()->GetTransform()->GetPosition();
+            ep.y += 1.6f;
+            VFXSpriteManager::Get().Spawn("flare1", ep, 180.f, 0.40f,
+                DirectX::XMFLOAT4(1.0f, 0.20f, 0.20f, 1.0f), 2.5f, VFXSpriteAnim::FadeOut);
+        }
+    }
 
     // 처형자: 룬이 장착된 상태에서 적이 죽으면 skull 표시 (HP 조건 무관)
 
@@ -708,7 +723,15 @@ void ProjectileManager::ApplyDamage(Projectile& projectile, EnemyComponent* pEne
     if (projectile.lifestealRatio > 0.f && projectile.owner)
     {
         PlayerComponent* pPlayer = projectile.owner->GetComponent<PlayerComponent>();
-        if (pPlayer) pPlayer->Heal(dmg * projectile.lifestealRatio);
+        if (pPlayer)
+        {
+            float healAmount = dmg * projectile.lifestealRatio;
+            pPlayer->Heal(healAmount);
+            // 흡혈 회복 펄스 — 멀티에서는 서버 권위 RUNE_TRIGGER 가 따로 시각화하므로 오프라인 한정
+            NetworkManager* pNet = NetworkManager::GetInstance();
+            if (!(pNet && pNet->IsConnected()) && healAmount > 0.f)
+                pPlayer->TriggerLifestealVFX(healAmount);
+        }
     }
 
     // 무한 룬 (ABY_INF) — TryTriggerInfiniteRune 에서 RNG/VFX 일괄 처리

@@ -73,6 +73,7 @@ struct SkillStats
     int   orbitalCount          = 0;    // 선회/성좌: 궤도 파티클 다단히트 수
     int   spawnOnHitCount       = 0;    // 반향/폭발반향: 적중 시 생성할 추가 투사체 수
     bool  randomElementOnCast   = false; // 원소 변환(L04): 시전 시 원소 무작위 변경
+    bool  resonanceActive       = false; // ABY_RES: 공명 보너스가 실제로 적용됨 (장착 + 원소 2종↑)
 
     // Unique element types from all equipped runes on this slot (ordered; used for VFX color)
     std::vector<ElementType> elementSet;

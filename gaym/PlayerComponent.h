@@ -64,6 +64,12 @@ public:
     // 서버 사망 알림 — 데스 애니 + 입력 차단
     void OnServerDeath();
 
+    // 심연 룬 단발 VFX 트리거 (오프라인 ProjectileManager 와 멀티 NetworkManager 양쪽에서 호출)
+    //   흡혈 회복 펄스 — 플레이어 머리 위 초록 파티클
+    void TriggerLifestealVFX(float healAmount);
+    //   보호막 흡수 펄스 — 플레이어 주변 청백 충격파 (피격 흡수 순간)
+    void TriggerShieldBreakVFX();
+
     // Reset velocity when teleported — 중력이 플레이어를 바닥까지 끌어내리도록 onGround=false
     // (텔레포트 Y가 바닥보다 높으면 gravity가 자연스럽게 스냅; Y=0이면 즉시 ground 판정)
     void ResetGroundY() { m_fVelocityY = 0.0f; m_bOnGround = false; }
@@ -124,6 +130,17 @@ private:
 
     bool  m_bVengeancePrimed = false;
     float m_fVengeanceTimer  = 0.f;
+
+    // ─── 심연 룬 추적 VFX (보호막 오라 / 보복 오라) ──────────────────────────
+    //   짧은 lifetime 으로 매 프레임 위치 추적 + 만료 직전 재스폰 패턴 (m_overheatStackVFX 와 동일).
+    int   m_shieldVFXSlot         = -1;
+    float m_shieldRefreshTimer    = 0.f;   // 0이 되면 다음 프레임에서 재스폰
+    float m_prevShieldAmount      = 0.f;   // 흡수 펄스 트리거용 (TakeDamage 후 감소 감지)
+    int   m_vengeanceVFXSlot      = -1;
+    float m_vengeanceRefreshTimer = 0.f;
+
+    // 보호막/보복 오라 추적 — PlayerUpdate 에서 매 프레임 호출
+    void UpdateAbyssAuraVFX(float deltaTime);
 
     // Gravity system
     float m_fVelocityY = 0.0f;

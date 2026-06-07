@@ -881,10 +881,21 @@ void SkillComponent::ReduceCooldown(SkillSlot slot, float seconds)
 {
     size_t index = static_cast<size_t>(slot);
     if (index >= m_CooldownTimers.size()) return;
+    float prev = m_CooldownTimers[index];
     m_CooldownTimers[index] = max(0.f, m_CooldownTimers[index] - seconds);
     if (m_CooldownTimers[index] == 0.f && index < m_SkillStates.size()
         && m_SkillStates[index] == SkillState::Cooldown)
         m_SkillStates[index] = SkillState::Ready;
+
+    // 시간 역행 룬 VFX — 실제로 쿨다운이 줄어든 경우에만 표시 (이미 0 이거나 변화 없으면 skip)
+    if (prev > m_CooldownTimers[index] && m_pOwner && m_pOwner->GetTransform())
+    {
+        DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+        pos.y += 1.0f;
+        // magic3 — 청록 시계 후광, 빠른 역회전(음수 회전 = 시간 역행 느낌)
+        VFXSpriteManager::Get().Spawn("magic3", pos, 200.f, 0.55f,
+            DirectX::XMFLOAT4(0.45f, 0.95f, 1.0f, 1.0f), -3.5f, VFXSpriteAnim::FadeOut);
+    }
 }
 
 float SkillComponent::GetCooldownProgress(SkillSlot slot) const
@@ -1091,7 +1102,10 @@ SkillStats SkillComponent::BuildSkillStats(SkillSlot skill, ActivationType defau
 
     // 원소 공명(ABY_RES): 2개 이상 다른 원소 장착 시 +25% 데미지
     if (hasABY_RES && uniqueElements.size() >= 2)
-        stats.damageMult *= 1.25f;
+    {
+        stats.damageMult     *= 1.25f;
+        stats.resonanceActive = true;  // ExecuteOrSplit 에서 공명 펄스 트리거용
+    }
 
     // elementSet: VFX 색상 오버라이드용 (순서 보존)
     stats.elementSet.assign(uniqueElements.begin(), uniqueElements.end());
@@ -1414,13 +1428,19 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
     mult *= stats.damageMult;
 
     // 과열 보너스 (ABY_OVL): 동일 스킬 연속 3회 누적 → 4회째 +60% 발동
+    //   멀티 게이트: BuildSkillStats 가 overheatBonus 를 0 으로 만들므로 클라는 데미지 mult 를
+    //   적용하지 않는다 (서버 권위). 단 스택/READY/Burst 시각 누적은 ABY_RVG 와 마찬가지로
+    //   서버와 동일한 동기 카운트 규칙이므로 클라가 자체 추적해도 desync 없다.
     {
         size_t slotIdx = static_cast<size_t>(slot);
-        if (m_overheatReady[slotIdx] && stats.overheatBonus > 0.f)
+        const bool hasOVL = HasRuneEquipped(slot, "ABY_OVL");
+        const bool applyDmg = (stats.overheatBonus > 0.f);  // 멀티에서는 false
+
+        if (m_overheatReady[slotIdx] && hasOVL)
         {
-            // ─ 발동(4회째): 데미지 +60% + 스킬 VFX 강화(크기/파티클/강도) + 폭발 연출 ─
-            //   발동 회차는 카운트에 넣지 않음(아래 누적 분기 skip) → 다음 발동까지 정확히 4회.
-            mult *= (1.f + stats.overheatBonus);
+            // ─ 발동(4회째): 시각 burst + VFX 강화. 데미지 +60% 는 오프라인만 ─
+            if (applyDmg)
+                mult *= (1.f + stats.overheatBonus);
             m_overheatReady[slotIdx] = false;
             m_overheatConsecutive[slotIdx] = 0;
 
@@ -1428,20 +1448,20 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
             m_activationVFXMod.particleCountMult *= 1.4f;
             m_activationVFXMod.strengthMult      *= 1.6f;
 
-            SpawnOverheatBurstVFX();  // 내부에서 기존 스택 불꽃 정리 → 겹침 없음
+            SpawnOverheatBurstVFX();
         }
-        else if (stats.overheatBonus > 0.f)
+        else if (hasOVL)
         {
             int cnt = ++m_overheatConsecutive[slotIdx];
             if (cnt >= 3)
             {
                 m_overheatReady[slotIdx] = true;
                 m_overheatConsecutive[slotIdx] = 0;
-                SpawnOverheatStackVFX(3);  // 3스택 — 다음 발동 준비 완료
+                SpawnOverheatStackVFX(3);
             }
             else
             {
-                SpawnOverheatStackVFX(cnt);  // 1~2스택 누적 표시
+                SpawnOverheatStackVFX(cnt);
             }
         }
         else
@@ -1456,6 +1476,17 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
         auto* pPlayer = m_pOwner->GetComponent<PlayerComponent>();
         if (pPlayer && pPlayer->ConsumeVengeance())
             mult *= (1.f + stats.revengeBonus);
+    }
+
+    // 원소 공명(ABY_RES) 시각 펄스 — 시전 시점에 캐스터 머리 위 무지개 펄스 한 번.
+    //   채널 틱마다 중복 안 뜨도록 wasChannelTick 가드.
+    if (stats.resonanceActive && !wasChannelTick && m_pOwner && m_pOwner->GetTransform())
+    {
+        DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+        pos.y += 2.0f;
+        // star_08 — 다색 펄스, 빠른 회전, 짧은 lifetime
+        VFXSpriteManager::Get().Spawn("star_08", pos, 180.f, 0.40f,
+            DirectX::XMFLOAT4(0.85f, 0.75f, 1.0f, 1.0f), 5.0f, VFXSpriteAnim::FadeOut);
     }
 
     auto invokeOnCast = [&]() {

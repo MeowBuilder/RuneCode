@@ -12,6 +12,7 @@
 #include "Scene.h"
 #include "VFXManager.h"
 #include "VFXTypes.h"
+#include "VFXSpriteManager.h"
 #include "DamageNumberManager.h"
 
 PlayerComponent::PlayerComponent(GameObject* pOwner)
@@ -73,6 +74,9 @@ void PlayerComponent::PlayerUpdate(float deltaTime, InputSystem* pInputSystem, C
             m_bVengeancePrimed = false;
         }
     }
+
+    // 심연 룬 오라 갱신 (보호막 / 보복) — 활성 상태 동안 머리 위 추적 VFX 유지
+    UpdateAbyssAuraVFX(deltaTime);
 
     // Hit flash 페이드 — 대쉬 중이 아닐 때만 (대쉬는 자기 플래시 적용)
     if (m_fHitFlashTimer > 0.0f)
@@ -699,6 +703,9 @@ void PlayerComponent::TakeDamage(float fDamage)
         float absorbed = min(m_fShield, fDamage);
         m_fShield  -= absorbed;
         fDamage    -= absorbed;
+        // 흡수가 실제로 일어났을 때 깨짐 펄스 표시 (Update 의 prevShield 추적과 별개로 즉시 큐)
+        if (absorbed > 0.f)
+            TriggerShieldBreakVFX();
         if (fDamage <= 0.f) return;
     }
 
@@ -807,6 +814,101 @@ void PlayerComponent::Heal(float fAmount)
     if (m_fCurrentHP > m_fMaxHP)
     {
         m_fCurrentHP = m_fMaxHP;
+    }
+}
+
+// ─── 심연 룬 단발 VFX ─────────────────────────────────────────────────────────
+void PlayerComponent::TriggerLifestealVFX(float healAmount)
+{
+    // 흡혈 회복 — 플레이어 머리 위 초록 펄스 + 회복량 텍스트.
+    // 오프라인 ProjectileManager 및 멀티 NetworkManager 양쪽에서 호출되므로
+    // 텍스트는 호출자가 별도로 추가하고 여기서는 시각 펄스만.
+    if (!m_pOwner || !m_pOwner->GetTransform() || healAmount <= 0.f) return;
+    DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+    pos.y += 2.4f;
+    // twirl1 — 초록 톤, 빠른 회전, 짧은 lifetime
+    VFXSpriteManager::Get().Spawn("twirl1", pos, 110.f, 0.45f,
+        DirectX::XMFLOAT4(0.30f, 1.0f, 0.45f, 1.0f), 6.0f, VFXSpriteAnim::FadeOut);
+}
+
+void PlayerComponent::TriggerShieldBreakVFX()
+{
+    if (!m_pOwner || !m_pOwner->GetTransform()) return;
+    DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+    pos.y += 1.4f;
+    // flare1 — 청백 충격파, 회전 없음, 큰 사이즈 → 보호막 균열 표현
+    VFXSpriteManager::Get().Spawn("flare1", pos, 260.f, 0.35f,
+        DirectX::XMFLOAT4(0.55f, 0.85f, 1.0f, 1.0f), 0.f, VFXSpriteAnim::FadeOut);
+}
+
+void PlayerComponent::UpdateAbyssAuraVFX(float deltaTime)
+{
+    // 매 프레임 위치 추적이 필요한 지속 VFX 두 가지:
+    //   1) 보호막 오라 (m_fShield > 0 동안)
+    //   2) 보복 오라 (m_bVengeancePrimed 동안)
+    // VFXSpriteManager 의 Spawn 은 lifetime 만료 후 자동 해제이므로
+    // 짧은 lifetime + 매 프레임 SetPosition + 만료 직전 재스폰 패턴 사용
+    // (m_overheatStackVFX 와 동일).
+    if (!m_pOwner || !m_pOwner->GetTransform()) return;
+    DirectX::XMFLOAT3 base = m_pOwner->GetTransform()->GetPosition();
+
+    constexpr float kAuraLife = 0.6f;     // 짧게 잡고
+    constexpr float kRefresh  = 0.4f;     // 만료 직전 재스폰
+
+    // ─ 보호막 오라 ────────────────────────────────────────────────────────────
+    if (m_fShield > 0.f)
+    {
+        m_shieldRefreshTimer -= deltaTime;
+        if (m_shieldVFXSlot < 0 || m_shieldRefreshTimer <= 0.f)
+        {
+            if (m_shieldVFXSlot >= 0) VFXSpriteManager::Get().Stop(m_shieldVFXSlot);
+            DirectX::XMFLOAT3 pos = base; pos.y += 1.6f;
+            // twirl1 — 청백, 느린 회전, 큰 사이즈로 몸 전체 감싸기
+            m_shieldVFXSlot = VFXSpriteManager::Get().Spawn(
+                "twirl1", pos, 260.f, kAuraLife,
+                DirectX::XMFLOAT4(0.50f, 0.85f, 1.0f, 0.85f), 1.2f, VFXSpriteAnim::FadeOut);
+            m_shieldRefreshTimer = kRefresh;
+        }
+        else if (m_shieldVFXSlot >= 0)
+        {
+            DirectX::XMFLOAT3 pos = base; pos.y += 1.6f;
+            VFXSpriteManager::Get().SetPosition(m_shieldVFXSlot, pos);
+        }
+    }
+    else if (m_shieldVFXSlot >= 0)
+    {
+        // 보호막이 소진되면 즉시 정리
+        VFXSpriteManager::Get().Stop(m_shieldVFXSlot);
+        m_shieldVFXSlot      = -1;
+        m_shieldRefreshTimer = 0.f;
+    }
+    m_prevShieldAmount = m_fShield;
+
+    // ─ 보복 오라 ──────────────────────────────────────────────────────────────
+    if (m_bVengeancePrimed)
+    {
+        m_vengeanceRefreshTimer -= deltaTime;
+        if (m_vengeanceVFXSlot < 0 || m_vengeanceRefreshTimer <= 0.f)
+        {
+            if (m_vengeanceVFXSlot >= 0) VFXSpriteManager::Get().Stop(m_vengeanceVFXSlot);
+            DirectX::XMFLOAT3 pos = base; pos.y += 1.4f;
+            // fire1 — 진한 자주/빨강, 빠른 회전 (피의 분노 톤)
+            m_vengeanceVFXSlot = VFXSpriteManager::Get().Spawn(
+                "fire1", pos, 200.f, kAuraLife,
+                DirectX::XMFLOAT4(1.0f, 0.25f, 0.45f, 0.9f), 3.5f, VFXSpriteAnim::FadeOut);
+            m_vengeanceRefreshTimer = kRefresh;
+        }
+        else if (m_vengeanceVFXSlot >= 0)
+        {
+            DirectX::XMFLOAT3 pos = base; pos.y += 1.4f;
+            VFXSpriteManager::Get().SetPosition(m_vengeanceVFXSlot, pos);
+        }
+    }
+    else if (m_vengeanceVFXSlot >= 0)
+    {
+        VFXSpriteManager::Get().Stop(m_vengeanceVFXSlot);
+        m_vengeanceVFXSlot      = -1;
+        m_vengeanceRefreshTimer = 0.f;
     }
 }
 
