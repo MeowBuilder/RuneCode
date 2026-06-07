@@ -68,12 +68,30 @@ void AnimationComponent::CollectHierarchyNodes(GameObject* pGameObject)
     if (pGameObject->m_pSibling) CollectHierarchyNodes(pGameObject->m_pSibling);
 }
 
+// AnimationSet 공유 캐시 — function-local static 에서 namespace 스코프로 승격.
+//   ClearAnimationCache 가 명시적으로 비울 수 있도록 분리. 종료 시 static 디이니트 순서가
+//   다른 translation unit 의 객체보다 늦으면 shared_ptr decref 에서 freed memory 액세스
+//   → VS 디버거 break. OnDestroy 시점에서 cache 를 비우면 모든 shared_ptr 의 control block
+//   destruct 가 제어된 시점에 일어남.
+namespace
+{
+    std::unordered_map<std::string, std::shared_ptr<AnimationSet>>& GetAnimCache()
+    {
+        static std::unordered_map<std::string, std::shared_ptr<AnimationSet>> s_animCache;
+        return s_animCache;
+    }
+}
+
+void AnimationComponent::ClearAnimationCache()
+{
+    GetAnimCache().clear();
+}
+
 void AnimationComponent::LoadAnimation(const char* pstrFileName)
 {
-    // AnimationSet 공유 캐시 — 같은 .Anim.bin 은 한 번만 로드 후 모든 enemy 인스턴스가 공유.
-    //   shared_ptr 이므로 마지막 enemy 가 해제되면 자동 정리. 별도 lifetime 관리 불필요.
+    // 같은 .Anim.bin 은 한 번만 로드 후 모든 enemy 인스턴스가 공유.
     //   Demon_Anim.bin 등 수 MB 짜리 파일 N회 디스크 읽기 + 파싱을 1회로 압축.
-    static std::unordered_map<std::string, std::shared_ptr<AnimationSet>> s_animCache;
+    auto& s_animCache = GetAnimCache();
 
     std::string key = pstrFileName ? pstrFileName : "";
     if (key.empty()) return;

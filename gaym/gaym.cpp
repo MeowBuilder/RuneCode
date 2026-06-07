@@ -58,6 +58,15 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     }
 
     delete g_pDx12App;
+    g_pDx12App = nullptr;
+
+    // ServerCore static GCoreGlobal destructor 와 ucrtbase 의 stream 정리가 이 시점 이후
+    //   서로 호출 순서가 뒤엉켜 SendBuffer 쪽에서 access violation / fatal exception 을 일으킴.
+    //   우리 OnDestroy 가 NetworkManager / Scene / GPU / 폰트 / 오디오 자원을 모두 명시 정리했으니
+    //   잔여 cleanup 은 OS 가 프로세스 자원 회수하게 맡김. TerminateProcess 는 가장 강력한 즉시
+    //   종료 — C/C++ runtime cleanup 일체 skip, DLL_PROCESS_DETACH 도 정상 발생하지 않음.
+    //   파일/소켓 핸들은 OS 가 자동 회수하므로 게임 종료에 부작용 없음.
+    ::TerminateProcess(::GetCurrentProcess(), 0);
 
     return (int) msg.wParam;
 }

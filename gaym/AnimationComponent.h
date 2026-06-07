@@ -37,6 +37,10 @@ public:
     static bool s_bDebugStaticPose;
     bool m_bBoneLogDone = false;  // per-instance bone match log flag
 
+    // 종료 시 명시적으로 호출 — 공유 AnimationSet 캐시(s_animCache) 를 비워 static 디이니트
+    //   순서에 의존하지 않고 모든 shared_ptr<AnimationSet> 해제. Dx12App::OnDestroy 에서 호출.
+    static void ClearAnimationCache();
+
     // ── LOD / Culling 상태 ──────────────────────────────────────────────
     // Phase offset: 모든 AnimationComponent 가 매 프레임 전부 본 계산하면 부담 크니
     //   monster/npc 를 N 그룹으로 나눠 프레임마다 한 그룹씩만 돌림.

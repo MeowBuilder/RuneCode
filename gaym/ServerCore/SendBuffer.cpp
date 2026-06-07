@@ -72,7 +72,7 @@ SendBufferRef SendBufferManager::Open(uint32 size)
 
 	ASSERT_CRASH(LSendBufferChunk->IsOpen() == false);
 
-	// �� ������ ������ ���ŷ� ��ü
+	// �� ������ ������ ���ŷ� ��ü
 	if (LSendBufferChunk->FreeSize() < size)
 	{
 		LSendBufferChunk = Pop(); // WRITE_LOCK
@@ -105,7 +105,8 @@ void SendBufferManager::Push(SendBufferChunkRef buffer)
 
 void SendBufferManager::PushGlobal(SendBufferChunk* buffer)
 {
-	cout << "PushGlobal SENDBUFFERCHUNK" << endl;
-
+	// cout/endl 제거 — 이 함수는 SendBufferChunk shared_ptr 의 custom deleter 로 등록되어
+	//   refcount→0 시 어느 컨텍스트에서든 호출됨. 프로세스 종료 정리 중 cout 스트림이 이미
+	//   무효화된 상태에서 endl flush 가 fatal exception (ucrtbase) 을 던지는 사례 있음.
 	GSendBufferManager->Push(SendBufferChunkRef(buffer, PushGlobal));
 }
