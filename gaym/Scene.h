@@ -217,6 +217,12 @@ public:
     //   설계 페이즈/타이밍은 DarkLordIntroStage / DLI_T_* 상수 참조.
     void UpdateDarkLordIntro(float dt);
     bool IsDarkLordIntroPlaying() const { return m_eDarkLordIntroStage != DarkLordIntroStage::None; }
+
+    // 방/스테이지 전환 직전 호출 — 이전 방의 잔여 컷씬/카메라/효과 상태를 강제 정리.
+    //   해결 문제: DarkLord(또는 Red Dragon) 입장 컷씬 도중 디버그 키(B/N/0/9)로 방 이동 시
+    //   raw pointer 가 dangling 되어 다음 프레임 UpdateDarkLordIntro / Dragon intro 블록에서 UAF.
+    //   추가로 카메라 cinematic / shake / boss grace / drop 상호작용 / Sanctum decal 도 함께 reset.
+    void CancelTransientStateBeforeTransition();
     // 컷씬 Sever 페이즈의 스크린 베기 오버레이 — 카멘/메이플 히어로 타임라인을 다중 envelope 로 분해.
     //   Dx12App::RenderText 가 매 프레임 호출해 SpriteBatch 로 각 레이어를 합성.
     //   타임라인 (t = Sever 진행도 0~1):

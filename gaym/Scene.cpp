@@ -2807,6 +2807,7 @@ void Scene::ReAddRenderComponentsToShader(GameObject* pGO)
 void Scene::TransitionToNextRoom()
 {
     OutputDebugString(L"[Scene] Transitioning to next room...\n");
+    CancelTransientStateBeforeTransition();   // 컷씬/카메라/raw ptr 일괄 정리 — 크래시 가드
     CleanupWindAmbient();   // 다음 방으로 가기 전 ambient 정리 (다음 방에서 다시 spawn)
 
     // 보스방에서 포탈 탄 경우 → 다음 스테이지로 (방 카운트 증가 X)
@@ -2984,6 +2985,7 @@ void Scene::TransitionToNextRoom()
 void Scene::TransitionToRoomByIndex(int index)
 {
     if (m_vMapPool.empty()) return;
+    CancelTransientStateBeforeTransition();   // 컷씬/카메라/raw ptr 일괄 정리 — 크래시 가드
 
     int poolSize = (int)m_vMapPool.size();
     index = ((index % poolSize) + poolSize) % poolSize; // 안전한 wrapping
@@ -3088,13 +3090,13 @@ void Scene::TransitionToBossRoom()
 {
     OutputDebugString(L"[Scene] ========== BOSS ROOM ==========\n");
     if (!IsReadyForTransition()) return;
+    CancelTransientStateBeforeTransition();   // 컷씬/카메라/raw ptr 일괄 정리 — 크래시 가드
 
     if (m_pPlayerGameObject)
     {
         if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
             pPC->DisableFallZone();
     }
-    m_eKrakenStage = KrakenCutsceneStage::None;
 
     // ── 1. 셰이더 RC 목록 전체 클리어
     m_vShaders[0]->ClearRenderComponents();
@@ -3423,6 +3425,7 @@ void Scene::TransitionToFireStage(int roomIndex)
 {
     OutputDebugString(L"[Scene] ========== FIRE STAGE (cycle restart) ==========\n");
     if (!IsReadyForTransition()) return;
+    CancelTransientStateBeforeTransition();   // 컷씬/카메라/raw ptr 일괄 정리 — 크래시 가드
 
     CleanupWindAmbient();
 
@@ -3533,6 +3536,7 @@ void Scene::TransitionToWaterStage(int roomIndex)
 {
     OutputDebugString(L"[Scene] ========== WATER STAGE ==========\n");
     if (!IsReadyForTransition()) return;
+    CancelTransientStateBeforeTransition();   // 컷씬/카메라/raw ptr 일괄 정리 — 크래시 가드
 
     // ── 0. 플레이어 Y 복원 (이전 스테이지에서 리프트 됐을 가능성 방어)
     //    MapLoader가 playerSpawn 정의하면 이후 덮어씀
@@ -3955,6 +3959,7 @@ void Scene::TransitionToWaterBossRoom()
 {
     OutputDebugString(L"[Scene] ========== WATER BOSS ROOM (KRAKEN) ==========\n");
     if (!IsReadyForTransition()) return;
+    CancelTransientStateBeforeTransition();   // 컷씬/카메라/raw ptr 일괄 정리 — 크래시 가드
 
     // 플레이어 Y 복원 (이전 리프트 상태 방어)
     if (m_pPlayerGameObject)
@@ -3964,7 +3969,6 @@ void Scene::TransitionToWaterBossRoom()
         m_pPlayerGameObject->GetTransform()->SetPosition(pp);
         if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>()) pPC->DisableFallZone();
     }
-    m_eKrakenStage = KrakenCutsceneStage::None;
 
     // ── 1. 테마를 Water로 유지
     m_eCurrentTheme = StageTheme::Water;
@@ -4295,6 +4299,7 @@ void Scene::TransitionToEarthStage(int roomIndex)
 {
     OutputDebugString(L"[Scene] ========== EARTH STAGE ==========\n");
     if (!IsReadyForTransition()) return;
+    CancelTransientStateBeforeTransition();   // 컷씬/카메라/raw ptr 일괄 정리 — 크래시 가드
 
     if (m_pPlayerGameObject)
     {
@@ -4303,7 +4308,6 @@ void Scene::TransitionToEarthStage(int roomIndex)
         m_pPlayerGameObject->GetTransform()->SetPosition(pp);
         if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>()) pPC->DisableFallZone();
     }
-    m_eKrakenStage = KrakenCutsceneStage::None;
 
     m_eCurrentTheme = StageTheme::Earth;
     m_bInBossRoom = false;
@@ -4389,6 +4393,7 @@ void Scene::TransitionToGrassStage(int roomIndex)
 {
     OutputDebugString(L"[Scene] ========== GRASS STAGE ==========\n");
     if (!IsReadyForTransition()) return;
+    CancelTransientStateBeforeTransition();   // 컷씬/카메라/raw ptr 일괄 정리 — 크래시 가드
 
     if (m_pPlayerGameObject)
     {
@@ -4397,7 +4402,6 @@ void Scene::TransitionToGrassStage(int roomIndex)
         m_pPlayerGameObject->GetTransform()->SetPosition(pp);
         if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>()) pPC->DisableFallZone();
     }
-    m_eKrakenStage = KrakenCutsceneStage::None;
 
     m_eCurrentTheme = StageTheme::Grass;
     m_bInBossRoom = false;
@@ -4476,6 +4480,7 @@ void Scene::TransitionToEarthBossRoom()
 {
     OutputDebugString(L"[Scene] ========== EARTH BOSS ROOM (GOLEM) ==========\n");
     if (!IsReadyForTransition()) return;
+    CancelTransientStateBeforeTransition();   // 컷씬/카메라/raw ptr 일괄 정리 — 크래시 가드
 
     if (m_pPlayerGameObject)
     {
@@ -4484,7 +4489,6 @@ void Scene::TransitionToEarthBossRoom()
         m_pPlayerGameObject->GetTransform()->SetPosition(pp);
         if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>()) pPC->DisableFallZone();
     }
-    m_eKrakenStage = KrakenCutsceneStage::None;
 
     m_eCurrentTheme = StageTheme::Earth;
 
@@ -4573,6 +4577,7 @@ void Scene::TransitionToGrassBossRoom()
 {
     OutputDebugString(L"[Scene] ========== GRASS BOSS ROOM (DEMON) ==========\n");
     if (!IsReadyForTransition()) return;
+    CancelTransientStateBeforeTransition();   // 컷씬/카메라/raw ptr 일괄 정리 — 크래시 가드
 
     // 이전 비행 테스트 상태(F6 등) 초기화
     if (m_pPlayerGameObject)
@@ -4841,6 +4846,7 @@ void Scene::TransitionToDarkLordRoom()
 {
     OutputDebugString(L"[Scene] ========== DARK LORD ROOM (FINAL BOSS) ==========\n");
     if (!IsReadyForTransition()) return;
+    CancelTransientStateBeforeTransition();   // 컷씬/카메라/raw ptr 일괄 정리 — 크래시 가드
 
     CleanupWindAmbient();
 
@@ -5212,11 +5218,90 @@ Scene::IntroSeverState Scene::GetIntroSeverState() const
     return s;
 }
 
+// ── 방/스테이지 전환 직전 일괄 정리 ─────────────────────────────────────────
+//   모든 TransitionTo* 진입부에서 호출. 이전 방의 컷씬 driver 들이 raw pointer 로
+//   곧 파기될 GameObject 를 들고 있는 패턴이 핵심 크래시 원인 — 여기서 한 번에 끊는다.
+//   레퍼런스 케이스:
+//     1) Red Dragon 입장 중 'B'/'N'/'0'/'9' → m_pDragonIntroEnemy dangling → Update 에서 UAF.
+//     2) DarkLord Sanctum/Sever 중 강제 전환 → m_pDarkLordCutsceneObject + m_pCurrentRoom dangling.
+//     3) 컷씬 카메라가 StartCinematic 상태로 남아 다음 방 진입 후 stale lookAt 으로 회전.
+//     4) Boss grace timer 가 사라진 보스 기준으로 카운트만 흐름.
+void Scene::CancelTransientStateBeforeTransition()
+{
+    // ── Red Dragon (Fire boss) intro ────────────────────────────────────────
+    //   m_pDragonIntroEnemy 는 EnemyComponent* raw pointer. 보스가 다음 m_vRooms.clear() 에서
+    //   파기되므로 여기서 null 로 끊지 않으면 다음 Scene::Update 의 (1700) IsInIntro() 가 UAF.
+    m_pDragonIntroEnemy = nullptr;
+    m_eLastDragonPhase  = BossIntroPhase::None;
+
+    // ── DarkLord 입장 컷씬 ─────────────────────────────────────────────────
+    //   state machine 을 None 으로 끊고 raw pointer 도 해제. 안 그러면 다음 프레임
+    //   UpdateDarkLordIntro() 가 여전히 phase 를 살려둔 채 m_pDarkLordCutsceneObject 또는
+    //   m_pCurrentRoom (이미 nullptr) 을 dereference.
+    if (m_eDarkLordIntroStage != DarkLordIntroStage::None)
+    {
+        OutputDebugString(L"[Scene] CancelTransientStateBeforeTransition: aborting DarkLord intro\n");
+    }
+    m_eDarkLordIntroStage         = DarkLordIntroStage::None;
+    m_fDarkLordIntroTimer         = 0.0f;
+    m_fSanctumBlend               = 1.0f;   // dark 톤 기본값 복귀
+    m_bIntroSeverShakeTriggered   = false;
+    m_bIntroBossSpawned           = false;
+    m_nIntroAbsorbCount           = 0;
+    m_pDarkLordCutsceneObject     = nullptr;
+    m_pIntroSlashOverlay          = nullptr;
+    m_pIntroSlashMesh             = nullptr;
+    CleanupElementalSanctum();   // sigil / aura / pillar decal+VFX 정리
+
+    // ── Kraken (Water boss) 컷씬 ───────────────────────────────────────────
+    m_eKrakenStage              = KrakenCutsceneStage::None;
+    m_fKrakenEmergeTimer        = 0.0f;
+    m_bSlamShakeTriggered       = false;
+    m_bKrakenRoarFadedToIdle    = false;
+
+    // ── 보스 grace period — 보스가 사라지면 카운트도 의미 없음 ────────────
+    m_fBossGracePeriodRemain    = 0.0f;
+
+    // ── Drop 상호작용 — 다음 방으로 raw drop pointer 가 새지 않게 ────────
+    m_pCurrentDropItem          = nullptr;
+    m_eDropState                = DropInteractionState::None;
+    m_sSelectedRuneId.clear();
+    m_nSelectedRuneOptionIndex  = -1;
+
+    // ── 카메라: cinematic / shake / extra orbit 부스트 즉시 종료 ─────────
+    //   StopCinematic 미호출 시 다음 방의 player 추적이 stale lookAt 으로 흔들림.
+    if (m_pCamera)
+    {
+        if (m_pCamera->IsCinematic()) m_pCamera->StopCinematic();
+        if (m_pCamera->IsShaking())   m_pCamera->StopShake();
+        m_pCamera->SetExtraOrbitDistanceTarget(0.0f);
+    }
+
+    // ── flight 모드 보스 추적 — 보스가 사라지면 raw pointer 끊기 ───────
+    m_pFlightBossDummy          = nullptr;
+}
+
 // ── DarkLord 입장 컷씬 driver — Kraken 패턴의 cumulative-timer state machine.
 //   매 프레임 Scene::Update 에서 호출. m_eDarkLordIntroStage 가 None 이면 즉시 return.
 void Scene::UpdateDarkLordIntro(float dt)
 {
     if (m_eDarkLordIntroStage == DarkLordIntroStage::None) return;
+
+    // 안전망 — Devour/Dominion 진입 후 cutscene 보스가 사라졌거나 방 자체가 날아간 상태면
+    //   다음 dereference 가 UAF/NPE. CancelTransientStateBeforeTransition() 이 누락된 경로
+    //   (예: 외부 코드가 m_vRooms 를 직접 건드린 경우) 의 안전망.
+    bool bNeedBoss = (m_eDarkLordIntroStage == DarkLordIntroStage::Devour
+                   || m_eDarkLordIntroStage == DarkLordIntroStage::Dominion);
+    if ((bNeedBoss && !m_pDarkLordCutsceneObject) || !m_pCurrentRoom)
+    {
+        OutputDebugString(L"[Scene] UpdateDarkLordIntro: state stale (boss/room gone) — aborting\n");
+        m_eDarkLordIntroStage     = DarkLordIntroStage::None;
+        m_fDarkLordIntroTimer     = 0.0f;
+        m_pDarkLordCutsceneObject = nullptr;
+        if (m_pCamera && m_pCamera->IsCinematic()) m_pCamera->StopCinematic();
+        return;
+    }
+
     m_fDarkLordIntroTimer += dt;
     const float T = m_fDarkLordIntroTimer;
 
