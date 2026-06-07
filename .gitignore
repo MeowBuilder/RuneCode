@@ -431,3 +431,5 @@ FodyWeavers.xsd
 
 # Windows shell folder settings
 desktop.ini
+# Runtime network log (was tracked; now ignored)
+gaym/network_log.txt
