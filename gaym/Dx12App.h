@@ -33,6 +33,7 @@ enum class UISlot : UINT {
     EndingBg, EndingTitle,
     HudStageBadge, HudBossBar, HudBossBarFill,
     AvatarFire, AvatarWater, AvatarWind, AvatarEarth,
+    IntroSlash,   // 최종 보스 입장 컷씬 — 화면 대각선 베기 스크린 오버레이
     Count
 };
 

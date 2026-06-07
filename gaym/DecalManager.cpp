@@ -128,6 +128,20 @@ void DecalManager::SetPosition(int slotIdx, const XMFLOAT3& pos)
     m_pool[slotIdx].pos = pos;
 }
 
+void DecalManager::SetColor(int slotIdx, const XMFLOAT4& color)
+{
+    if (slotIdx < 0 || slotIdx >= MAX_DECALS) return;
+    if (!m_pool[slotIdx].active) return;
+    m_pool[slotIdx].color = color;
+}
+
+void DecalManager::SetSize(int slotIdx, float size)
+{
+    if (slotIdx < 0 || slotIdx >= MAX_DECALS) return;
+    if (!m_pool[slotIdx].active) return;
+    m_pool[slotIdx].size = size;
+}
+
 void DecalManager::Stop(int slotIdx)
 {
     if (slotIdx < 0 || slotIdx >= MAX_DECALS) return;

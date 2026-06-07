@@ -15,6 +15,7 @@
 #include "TransformComponent.h"
 #include "Room.h"
 #include "EnemyComponent.h"
+#include "AnimationComponent.h"   // ClearAnimationCache (종료 시 호출)
 #include <DescriptorHeap.h>  // DirectXTK12
 #include <sstream>
 #include <iomanip>
@@ -224,6 +225,13 @@ void Dx12App::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
 
 void Dx12App::OnDestroy()
 {
+    // 중복 호출 가드 — WM_DESTROY 가 다양한 경로(pause menu Quit / Title Quit / Alt+F4 등)에서
+    //   재진입할 수 있고, 중복 실행 시 이미 reset 된 컨테이너의 stale state 가 shared_ptr 더블
+    //   decref 같은 UAF 를 유발. 첫 호출만 실제 정리, 이후엔 no-op.
+    static bool s_bDestroyed = false;
+    if (s_bDestroyed) return;
+    s_bDestroyed = true;
+
     // 네트워크 정리
     if (m_pNetworkManager)
     {
@@ -233,6 +241,21 @@ void Dx12App::OnDestroy()
     }
 
     WaitForGpuComplete();
+
+    // ClearAnimationCache 를 m_pScene.reset() **전에** 호출.
+    //   m_pScene.reset() 가 Scene::~Scene 을 트리거하면서 모든 GameObject → AnimationComponent
+    //   → shared_ptr<AnimationSet> 가 decref. 캐시 가 마지막 참조라면 그 시점에 AnimationSet
+    //   destruct → m_vClips/m_mapClips 의 shared_ptr<AnimationClip> 도 destruct.
+    //   순서를 바꿔서 캐시 먼저 비우면 — 캐시 가 decref 한 AnimationSet 은 Scene 안에 같은
+    //   shared_ptr 참조 (refcount ≥ 1) 가 살아있어 destruct 안 함. 그 후 Scene 해제 때
+    //   마지막 refcount 0 되는 시점이 통일된 한 곳 → 더블 destruct 위험 X.
+    AnimationComponent::ClearAnimationCache();
+
+    // Scene 명시적으로 해제 — GameObject → AnimationComponent → shared_ptr<AnimationSet>
+    //   체인 정리. 위의 캐시 클리어 덕분에 캐시가 보유한 refcount 는 이미 풀려 있어, 여기서
+    //   Scene 안의 마지막 ref 가 풀리면 AnimationSet/Clip 들이 destruct.
+    m_pScene.reset();
+
     if (m_pdxgiSwapChain)
     {
         m_pdxgiSwapChain->SetFullscreenState(FALSE, NULL);
@@ -518,7 +541,13 @@ void Dx12App::FrameAdvance()
             }
             else if (r == TitleScreen::Result::Quit)
             {
-                ::PostQuitMessage(0);
+                // DestroyWindow 는 동기 호출 — WndProc::WM_DESTROY → OnDestroy → m_pScene.reset()
+                //   이 그 자리에서 즉시 실행됨. 그 후 FrameAdvance 가 계속 흐르면 후속 Update/Render
+                //   에서 null Scene 디레퍼런스 → UAF 크래시. return 으로 즉시 빠져나가야 함.
+                //   PostQuitMessage 직접 호출이 아니라 DestroyWindow 인 이유: OnDestroy 안에서
+                //   NetworkManager 스레드 / GPU 커맨드큐 / fullscreen / 오디오 리소스 정상 종료.
+                ::DestroyWindow(m_hWnd);
+                return;
             }
         }
 
@@ -735,7 +764,13 @@ void Dx12App::FrameAdvance()
             }
             else if (r == GameOverScreen::Result::Quit)
             {
-                ::PostQuitMessage(0);
+                // DestroyWindow 는 동기 호출 — WndProc::WM_DESTROY → OnDestroy → m_pScene.reset()
+                //   이 그 자리에서 즉시 실행됨. 그 후 FrameAdvance 가 계속 흐르면 후속 Update/Render
+                //   에서 null Scene 디레퍼런스 → UAF 크래시. return 으로 즉시 빠져나가야 함.
+                //   PostQuitMessage 직접 호출이 아니라 DestroyWindow 인 이유: OnDestroy 안에서
+                //   NetworkManager 스레드 / GPU 커맨드큐 / fullscreen / 오디오 리소스 정상 종료.
+                ::DestroyWindow(m_hWnd);
+                return;
             }
         }
         else if (m_eAppState == AppState::Ending && m_pEndingScreen)
@@ -749,7 +784,13 @@ void Dx12App::FrameAdvance()
             }
             else if (r == EndingScreen::Result::Quit)
             {
-                ::PostQuitMessage(0);
+                // DestroyWindow 는 동기 호출 — WndProc::WM_DESTROY → OnDestroy → m_pScene.reset()
+                //   이 그 자리에서 즉시 실행됨. 그 후 FrameAdvance 가 계속 흐르면 후속 Update/Render
+                //   에서 null Scene 디레퍼런스 → UAF 크래시. return 으로 즉시 빠져나가야 함.
+                //   PostQuitMessage 직접 호출이 아니라 DestroyWindow 인 이유: OnDestroy 안에서
+                //   NetworkManager 스레드 / GPU 커맨드큐 / fullscreen / 오디오 리소스 정상 종료.
+                ::DestroyWindow(m_hWnd);
+                return;
             }
         }
 
@@ -966,7 +1007,13 @@ void Dx12App::FrameAdvance()
             }
             else if (inBtn(quitY))
             {
-                ::PostQuitMessage(0);
+                // DestroyWindow 는 동기 호출 — WndProc::WM_DESTROY → OnDestroy → m_pScene.reset()
+                //   이 그 자리에서 즉시 실행됨. 그 후 FrameAdvance 가 계속 흐르면 후속 Update/Render
+                //   에서 null Scene 디레퍼런스 → UAF 크래시. return 으로 즉시 빠져나가야 함.
+                //   PostQuitMessage 직접 호출이 아니라 DestroyWindow 인 이유: OnDestroy 안에서
+                //   NetworkManager 스레드 / GPU 커맨드큐 / fullscreen / 오디오 리소스 정상 종료.
+                ::DestroyWindow(m_hWnd);
+                return;
             }
         }
     }
@@ -1556,6 +1603,9 @@ void Dx12App::InitializeText()
         loadUITex(L"Assets/Textures/UI/avatar_water.png",     UISlot::AvatarWater);
         loadUITex(L"Assets/Textures/UI/avatar_wind.png",      UISlot::AvatarWind);
         loadUITex(L"Assets/Textures/UI/avatar_earth.png",     UISlot::AvatarEarth);
+        // 최종 보스 입장 컷씬용 화면 대각 베기 — Kenney slash_02 (깔끔 호) 를 스크린 오버레이로 사용.
+        //   파일 위치는 UI 폴더가 아니라 VFX 폴더지만 WIC 로더는 경로 무관.
+        loadUITex(L"Assets/Textures/VFX/slash_02.png",        UISlot::IntroSlash);
     }
     CHECK_HR(m_pd3dCommandList->Close());
     ID3D12CommandList* uiCmdLists[] = { m_pd3dCommandList.Get() };
@@ -1864,8 +1914,12 @@ void Dx12App::RenderText()
 
     m_spriteBatch->Begin(m_pd3dCommandList.Get());
 
+    // 입장 컷씬 중에는 HUD / HP / 스킬 / 디버그 일체 숨김 — 화면 베기 연출에 집중.
+    //   슬래시 오버레이와 pause 메뉴는 컷씬 중에도 그려야 하므로 마지막 단계에서 별도 처리.
+    bool bCinematic = m_pScene && m_pScene->IsDarkLordIntroPlaying();
+
     // ========== Player Health Bar ==========
-    if (m_pScene && m_pHealthBarUI)
+    if (!bCinematic && m_pScene && m_pHealthBarUI)
     {
         GameObject* pPlayer = m_pScene->GetPlayer();
         if (pPlayer)
@@ -1911,7 +1965,7 @@ void Dx12App::RenderText()
     }
 
     // ========== Drop Interaction UI ==========
-    if (m_pScene)
+    if (!bCinematic && m_pScene)
     {
         DropInteractionState dropState = m_pScene->GetDropInteractionState();
         float screenCenterX = (float)m_nWndClientWidth / 2.0f;
@@ -1961,7 +2015,7 @@ void Dx12App::RenderText()
     }
 
     // ========== Skill UI (아이콘 HUD 텍스트 오버레이) — 모달 중엔 숨김 ==========
-    if (m_pScene && m_pSkillHud && !runeModalActive)
+    if (!bCinematic && m_pScene && m_pSkillHud && !runeModalActive)
     {
         GameObject* pPlayer = m_pScene->GetPlayer();
         if (pPlayer)
@@ -2011,7 +2065,7 @@ void Dx12App::RenderText()
     }
 
     // Floating damage numbers (world → screen projection)
-    if (m_pScene && m_pScene->GetCamera())
+    if (!bCinematic && m_pScene && m_pScene->GetCamera())
     {
         CCamera* pCam = m_pScene->GetCamera();
         XMMATRIX vp = XMLoadFloat4x4(&pCam->GetViewMatrix()) *
@@ -2028,7 +2082,7 @@ void Dx12App::RenderText()
     RenderDebugRuneUI();
 
     // ========== Flight Mode Crosshair + Hit Counter (4스테이지 바람 보스) ==========
-    if (m_pScene && m_pScene->IsFlightHUDActive())
+    if (!bCinematic && m_pScene && m_pScene->IsFlightHUDActive())
     {
         const wchar_t* crosshair = L"+";
         XMVECTOR sz = m_spriteFont->MeasureString(crosshair);
@@ -2041,6 +2095,252 @@ void Dx12App::RenderText()
         swprintf_s(hitBuf, L"HITS: %d", m_pScene->GetFlightHitCount());
         m_spriteFont->DrawString(m_spriteBatch.get(), hitBuf,
             XMFLOAT2(20.0f, 20.0f), DirectX::Colors::Cyan);
+    }
+
+    // ========== DarkLord 입장 컷씬 — 화면 베기 (카멘/메이플 히어로 톤) ==========
+    //   레퍼런스 핵심: 큰 슬래시 이미지가 아니라 "화면이 잘렸다" 는 시각.
+    //   색 절제: 검정 / 순백 / 어두운 진홍 만. 황금·시안 폐기.
+    //   레이어 (모두 같은 -45°, 두께만 다름):
+    //     - predark : 화면 전체 살짝 어둡게 (warning 단계 긴장감)
+    //     - warning : 얇은 흰 예고선 (베기 직전)
+    //     - flash   : 풀스크린 화이트 (실제 흰 사각형, slash 텍스처 X)
+    //     - redGlow : 컷 가장자리 어두운 진홍 잔광 (slash 텍스처)
+    //     - void    : 검은 균열 갭 (slash 텍스처 검정 tint)
+    //     - core    : 가장 얇은 흰 절단선 (메인 cut line)
+    //     - after   : recovery 단계 옅은 잔광
+    if (m_pScene)
+    {
+        Scene::IntroSeverState st = m_pScene->GetIntroSeverState();
+        if (st.active)
+        {
+            float scrW = (float)m_nWndClientWidth;
+            float scrH = (float)m_nWndClientHeight;
+            float diag = sqrtf(scrW * scrW + scrH * scrH);
+
+            // 풀스크린 흰 픽셀 핸들 — CharacterSelectScreen 이 보유한 1×1 white texture 재사용.
+            D3D12_GPU_DESCRIPTOR_HANDLE whitePx = {};
+            if (m_pCharSelect) whitePx = m_pCharSelect->GetWhitePixelGpuHandle();
+
+            // (a) predark — 풀스크린 검정 사각형, 알파만 조절. 화면 어둡게.
+            if (whitePx.ptr && st.predarkAlpha > 0.001f)
+            {
+                RECT full = { 0, 0, (LONG)scrW, (LONG)scrH };
+                DirectX::XMVECTORF32 darkTint{ 0.02f, 0.0f, 0.02f, st.predarkAlpha };
+                m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1), full, darkTint);
+            }
+
+            // 슬래시 텍스처 기반 레이어 헬퍼.
+            if (m_pUITex[(UINT)UISlot::IntroSlash])
+            {
+                auto desc = m_pUITex[(UINT)UISlot::IntroSlash]->GetDesc();
+                DirectX::XMUINT2 slashSz = { (UINT)desc.Width, (UINT)desc.Height };
+                DirectX::XMFLOAT2 pos(scrW * 0.5f, scrH * 0.5f);
+                DirectX::XMFLOAT2 origin((float)slashSz.x * 0.5f, (float)slashSz.y * 0.5f);
+                constexpr float kRotation = -0.7853982f;   // -π/4
+
+                // ── Static layers — 시간 기반 wobble 제거. 모든 레이어가 정적 -45° 고정.
+                //   echo trails 는 시간 변동 없는 FIXED 오프셋이라 떨림이 아니라
+                //   가장자리 motion-blur 느낌만 남음.
+                constexpr float kEchoA = -0.013f;   // -0.75° 고정
+                constexpr float kEchoB = +0.013f;   // +0.75° 고정
+
+                auto drawSlashLayer = [&](float lengthMul, float thicknessFrac,
+                                          float layerAlpha, float extraRot,
+                                          const DirectX::XMVECTORF32& color) {
+                    if (layerAlpha < 0.001f) return;
+                    float scaleX = (diag * lengthMul) / (float)slashSz.x;
+                    float scaleY = (scrH * thicknessFrac) / (float)slashSz.y;
+                    DirectX::XMFLOAT2 scale(scaleX, scaleY);
+                    DirectX::FXMVECTOR alphaVec = DirectX::XMVectorSet(
+                        layerAlpha, layerAlpha, layerAlpha, layerAlpha);
+                    DirectX::XMVECTOR finalTint = DirectX::XMVectorMultiply(color, alphaVec);
+                    m_spriteBatch->Draw(
+                        m_hUI[(UINT)UISlot::IntroSlash], slashSz, pos, nullptr,
+                        finalTint, kRotation + extraRot, origin, scale,
+                        DirectX::SpriteEffects_None, 0.0f);
+                };
+
+                // 카멘 톤 — 검정/흰빛/핏빛 3겹 구조 강화:
+                //   core 더 얇고 강하게 / void 더 분명하게 / red glow 더 좁게.
+                //   비율: core 0.6 / void 1.0 / glow 2.0 (이전 1.2 / 6.0 / 14.0 에서 대비 강조).
+
+                // (b) warning line — 두께 1.5%, 어두운 흰. 베기 직전 얇은 예고.
+                drawSlashLayer(1.18f, 0.015f, st.warningLineAlpha * 0.90f, 0.0f,
+                               DirectX::XMVECTORF32{ 0.85f, 0.88f, 0.95f, 1.0f });
+
+                // (c) red glow — 두께 7% (이전 14%), 어두운 진홍. echo 도 더 좁게 + 살짝 어둡게.
+                drawSlashLayer(1.32f, 0.070f, st.redGlowAlpha * 0.85f, 0.0f,
+                               DirectX::XMVECTORF32{ 0.60f, 0.03f, 0.02f, 1.0f });
+                drawSlashLayer(1.30f, 0.050f, st.redGlowAlpha * 0.45f, kEchoA,
+                               DirectX::XMVECTORF32{ 0.70f, 0.04f, 0.03f, 1.0f });
+                drawSlashLayer(1.30f, 0.050f, st.redGlowAlpha * 0.45f, kEchoB,
+                               DirectX::XMVECTORF32{ 0.45f, 0.02f, 0.01f, 1.0f });
+
+                // (d) void gap (검은 균열) — 두께 9% (이전 6%), 거의 검정. void 가 핵심.
+                //   알파 boost 1.2× — core 와 glow 사이를 또렷이 끊어줘야 "절단" 느낌.
+                {
+                    float voidBoost = st.voidAlpha * 1.2f;
+                    if (voidBoost > 1.0f) voidBoost = 1.0f;
+                    drawSlashLayer(1.28f, 0.090f, voidBoost, 0.0f,
+                                   DirectX::XMVECTORF32{ 0.00f, 0.0f, 0.00f, 1.0f });
+                }
+                drawSlashLayer(1.25f, 0.060f, st.voidAlpha * 0.65f, kEchoA * 0.6f,
+                               DirectX::XMVECTORF32{ 0.01f, 0.0f, 0.01f, 1.0f });
+                drawSlashLayer(1.25f, 0.060f, st.voidAlpha * 0.65f, kEchoB * 0.6f,
+                               DirectX::XMVECTORF32{ 0.01f, 0.0f, 0.01f, 1.0f });
+
+                // (e) core (메인 절단선) — 두께 0.6% (이전 1.2%). 매우 얇고 뜨거운 흰빛.
+                //   alpha 1.0 그대로지만 두께 절반이라 인상이 훨씬 더 sharp.
+                drawSlashLayer(1.15f, 0.006f, st.coreAlpha, 0.0f,
+                               DirectX::XMVECTORF32{ 1.0f, 0.97f, 0.92f, 1.0f });
+                drawSlashLayer(1.14f, 0.004f, st.coreAlpha * 0.55f, kEchoA * 0.45f,
+                               DirectX::XMVECTORF32{ 1.0f, 0.95f, 0.85f, 1.0f });
+                drawSlashLayer(1.14f, 0.004f, st.coreAlpha * 0.55f, kEchoB * 0.45f,
+                               DirectX::XMVECTORF32{ 1.0f, 0.95f, 0.85f, 1.0f });
+
+                // (f) afterglow — 두께 5% (이전 8%), 더 어두운 적갈색 잔광.
+                drawSlashLayer(1.20f, 0.050f, st.afterGlowAlpha,  0.0f,
+                               DirectX::XMVECTORF32{ 0.18f, 0.02f, 0.06f, 1.0f });
+
+                // (k) ★ Strike head — 슬래시 직선 위를 좌하 → 우상 sweep 하는 밝은 점.
+                //   카멘/히어로식 "칼이 지나갔다" 의 인과. headT 0→1 동안 한 점이 직선을 그림.
+                //   화면 좌표계 -45° 방향 = (cos -45°, sin -45°) = (0.707, -0.707)
+                //   즉 우상으로 이동 시 X 증가 / Y 감소.
+                if (st.slashHeadAlpha > 0.001f)
+                {
+                    constexpr float kInvSqrt2 = 0.7071068f;
+                    float headLen = diag * 0.78f;   // sweep 폭 — 화면 모서리 근처까지.
+                    float u = (st.slashHeadT - 0.5f) * 2.0f;   // -1 → +1
+                    float hx = scrW * 0.5f + u * headLen * kInvSqrt2;
+                    float hy = scrH * 0.5f - u * headLen * kInvSqrt2;
+
+                    DirectX::XMFLOAT2 headPos(hx, hy);
+                    // 작은 코멧 head — slash 텍스처 같은 회전 + 매우 작은 elongated 스케일.
+                    float headThick = scrH * 0.030f / (float)slashSz.y;
+                    float headLong  = scrH * 0.120f / (float)slashSz.x;
+                    DirectX::XMFLOAT2 headScale(headLong, headThick);
+                    DirectX::XMVECTORF32 headTint{
+                        1.0f, 0.96f, 0.88f, st.slashHeadAlpha
+                    };
+                    m_spriteBatch->Draw(
+                        m_hUI[(UINT)UISlot::IntroSlash], slashSz, headPos, nullptr,
+                        headTint, kRotation, origin, headScale,
+                        DirectX::SpriteEffects_None, 0.0f);
+
+                    // 그리고 head 중심에 더 작고 더 강한 코어 점 — 풀화이트.
+                    float bright = scrH * 0.012f;
+                    RECT brightRect = {
+                        (LONG)(hx - bright), (LONG)(hy - bright),
+                        (LONG)(hx + bright), (LONG)(hy + bright)
+                    };
+                    if (whitePx.ptr)
+                    {
+                        DirectX::XMVECTORF32 brightTint{
+                            1.0f, 1.0f, 1.0f, st.slashHeadAlpha
+                        };
+                        m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1),
+                                             brightRect, brightTint);
+                    }
+                }
+            }
+
+            // (g) flash — 진짜 풀스크린 화이트 사각형. slash texture 가 아니라 1×1 흰 픽셀.
+            if (whitePx.ptr && st.flashAlpha > 0.001f)
+            {
+                RECT full = { 0, 0, (LONG)scrW, (LONG)scrH };
+                DirectX::XMVECTORF32 whiteTint{ 1.0f, 1.0f, 1.0f, st.flashAlpha };
+                m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1), full, whiteTint);
+            }
+        }
+    }
+
+    // ========== Post-Sever 시네마틱 보강 — 암전 / letterbox / 보스 이름 / vignette ==========
+    if (m_pScene && m_pCharSelect)
+    {
+        D3D12_GPU_DESCRIPTOR_HANDLE whitePx = m_pCharSelect->GetWhitePixelGpuHandle();
+        float scrW = (float)m_nWndClientWidth;
+        float scrH = (float)m_nWndClientHeight;
+
+        // (h0) 풀스크린 암전 — 슬래시 직후 한 박자 검정으로 꺼졌다가 보스 솟구침과 함께 fade.
+        //   레터박스/보스이름은 이 위에 그려야 하므로 가장 먼저 출력.
+        float blackoutAlpha = m_pScene->GetIntroBlackoutAlpha();
+        if (whitePx.ptr && blackoutAlpha > 0.001f)
+        {
+            RECT full = { 0, 0, (LONG)scrW, (LONG)scrH };
+            DirectX::XMVECTORF32 blackTint{ 0.0f, 0.0f, 0.0f, blackoutAlpha };
+            m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1), full, blackTint);
+        }
+
+        // (h) 레터박스 — 위/아래 검정 띠. amt 1.0 일 때 화면 H 의 11% 두께씩.
+        float letterAmt = m_pScene->GetIntroLetterboxAmt();
+        if (whitePx.ptr && letterAmt > 0.001f)
+        {
+            float barH = scrH * 0.11f * letterAmt;
+            DirectX::XMVECTORF32 black{ 0.0f, 0.0f, 0.0f, 1.0f };
+            RECT top    = { 0, 0, (LONG)scrW, (LONG)barH };
+            RECT bottom = { 0, (LONG)(scrH - barH), (LONG)scrW, (LONG)scrH };
+            m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1), top,    black);
+            m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1), bottom, black);
+        }
+
+        // (i) Edge vignette — 가장자리 어둡게 (좌/우 띠 + 위/아래 살짝 더). 시선 보스 집중.
+        float vigAmt = m_pScene->GetIntroEdgeVignetteAmt();
+        if (whitePx.ptr && vigAmt > 0.001f)
+        {
+            // 좌우 vignette 띠 — 알파 점진 (단순 단색 사각형 4겹으로 fake gradient).
+            DirectX::XMVECTORF32 vigCol{ 0.0f, 0.0f, 0.02f, 1.0f };
+            const int kSteps = 5;
+            const float kMaxAlpha = 0.38f * vigAmt;
+            float maxBarW = scrW * 0.18f;
+            for (int i = 0; i < kSteps; ++i)
+            {
+                float frac = (float)(i + 1) / (float)kSteps;
+                float w = maxBarW * frac;
+                float a = kMaxAlpha * (1.0f - frac);
+                DirectX::XMVECTORF32 c{ vigCol[0], vigCol[1], vigCol[2], a };
+                RECT left  = { 0, 0, (LONG)w, (LONG)scrH };
+                RECT right = { (LONG)(scrW - w), 0, (LONG)scrW, (LONG)scrH };
+                m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1), left,  c);
+                m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1), right, c);
+            }
+        }
+
+        // (j) 보스 이름 — Devour 동안 중앙에 큼지막하게 표시.
+        float nameAlpha = m_pScene->GetIntroBossNameAlpha();
+        if (m_spriteFont && nameAlpha > 0.001f)
+        {
+            const wchar_t* kBossName  = L"DARK LORD";
+            const wchar_t* kBossTitle = L"심연을 베어낸 자";
+
+            float cx = scrW * 0.5f;
+            float cy = scrH * 0.62f;   // 화면 중하단 (보스 윗쪽 비우고 자막 라인)
+
+            // 메인 이름 — 크고 흰빛.
+            XMVECTOR sz = m_spriteFont->MeasureString(kBossName);
+            float bigScale = (scrH / 720.0f) * 2.4f;   // 화면 H 720 기준 2.4×
+            DirectX::XMFLOAT2 namePos(cx - XMVectorGetX(sz) * 0.5f * bigScale,
+                                       cy - XMVectorGetY(sz) * 0.5f * bigScale);
+            DirectX::XMVECTORF32 nameTint{ 0.96f, 0.95f, 0.94f, nameAlpha };
+            // 살짝 빨간 그림자 — 좌상 +2px / 우하 +2px shadow.
+            DirectX::XMVECTORF32 shadowTint{ 0.45f, 0.02f, 0.01f, nameAlpha * 0.8f };
+            DirectX::XMFLOAT2 shadowPos1(namePos.x + 3.0f, namePos.y + 3.0f);
+            DirectX::XMFLOAT2 shadowPos2(namePos.x - 3.0f, namePos.y + 3.0f);
+            m_spriteFont->DrawString(m_spriteBatch.get(), kBossName, shadowPos1,
+                                      shadowTint, 0.0f, XMFLOAT2(0,0), bigScale);
+            m_spriteFont->DrawString(m_spriteBatch.get(), kBossName, shadowPos2,
+                                      shadowTint, 0.0f, XMFLOAT2(0,0), bigScale);
+            m_spriteFont->DrawString(m_spriteBatch.get(), kBossName, namePos,
+                                      nameTint, 0.0f, XMFLOAT2(0,0), bigScale);
+
+            // 부제 — 메인 아래 작게.
+            XMVECTOR tSz = m_spriteFont->MeasureString(kBossTitle);
+            float smallScale = (scrH / 720.0f) * 0.95f;
+            DirectX::XMFLOAT2 titlePos(cx - XMVectorGetX(tSz) * 0.5f * smallScale,
+                                       cy + XMVectorGetY(sz) * 0.5f * bigScale + 12.0f);
+            DirectX::XMVECTORF32 titleTint{ 0.85f, 0.70f, 0.72f, nameAlpha * 0.90f };
+            m_spriteFont->DrawString(m_spriteBatch.get(), kBossTitle, titlePos,
+                                      titleTint, 0.0f, XMFLOAT2(0,0), smallScale);
+        }
     }
 
     // ========== Pause Menu (topmost overlay) ==========

@@ -25,6 +25,9 @@ public:
     ElementType GetSelectedElement() const;
     void        Reset();
 
+    // 다른 모듈(Dx12App 의 컷씬 fullscreen flash 등) 이 같은 1×1 흰 픽셀을 재사용하기 위한 접근자.
+    D3D12_GPU_DESCRIPTOR_HANDLE GetWhitePixelGpuHandle() const { return m_hWhiteGPU; }
+
 private:
     static constexpr int kCharCount = 4;
 

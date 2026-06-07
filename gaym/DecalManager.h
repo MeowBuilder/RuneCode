@@ -48,6 +48,10 @@ public:
     // 활성 데칼의 위치를 갱신 (캐릭터 추적 등에 사용)
     void SetPosition(int slotIdx, const DirectX::XMFLOAT3& pos);
 
+    // 색상 / 크기 동적 갱신 — fade-out 연출용 (DarkLord 입장 컷씬의 sigil 흡수 등).
+    void SetColor(int slotIdx, const DirectX::XMFLOAT4& color);
+    void SetSize(int slotIdx, float size);
+
     // 조기 종료
     void Stop(int slotIdx);
 

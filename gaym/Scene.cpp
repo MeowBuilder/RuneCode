@@ -64,6 +64,35 @@ Scene::Scene()
 
 Scene::~Scene()
 {
+    // ── 명시적 destruction 순서 강제 ──────────────────────────────────────────
+    //   Scene 멤버 선언 순서상 m_vGameObjects(366) / m_vRooms(368) 가
+    //   m_pVFXManager(561) / m_vShaders 보다 먼저 선언 → reverse 순서 destruct 시
+    //   VFXManager / Shader 가 먼저 죽고 Room / GameObject Component 가 dangling
+    //   포인터로 FluidParticleSystem 슬롯 Clear() 또는 Shader 의 iterator 를 건드려 UAF.
+    //   해결: 본격 멤버 destruction 시작 전에 의존 관계 큰 컨테이너를 수동으로 비움.
+    //     1) 일회성 전투 이펙트 (투사체, 플라잉 보스 탄막) 정리
+    //     2) Pending deletion 큐 flush
+    //     3) Room 비우기 (LavaGeyser/Component 가 VFXManager 참조)
+    //     4) Global GameObject 비우기 (Player/Drop Component 가 VFXManager 참조)
+    //     5) Shader 의 RenderComponent 리스트 비우기 — 이후 m_vShaders 자체는 자동 destruct.
+    //        시점 상 모든 GameObject / Component 가 이미 destruct → 남은 raw 포인터는 dangling 이므로
+    //        리스트를 비워야 함. 비우지 않으면 m_vShaders 멤버 destruct 시 미사용 dangling 잔존.
+    //     6) VFXManager 모든 슬롯 graceful stop
+    //   이 시점에 m_pVFXManager / m_pDecalManager / m_vShaders 는 아직 alive 한 상태라 safe.
+
+    ClearTransientCombatEffects();
+    ProcessPendingDeletions();
+
+    m_pCurrentRoom = nullptr;
+    m_vRooms.clear();
+    m_vGameObjects.clear();
+
+    for (auto& pShader : m_vShaders)
+    {
+        if (pShader) pShader->ClearRenderComponents();
+    }
+    if (m_pVFXManager) m_pVFXManager->ClearAll();
+
     if (m_pd3dcbPass) m_pd3dcbPass->Unmap(0, NULL);
 }
 
@@ -768,7 +797,9 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     // ── InteractionCube 포탈 회오리 VFX 관리 ──────────────────────────────────
     //   큐브가 활성(보임) 동안 Demon_Tornado 회오리를 큐브 위치에 매 프레임 추적.
     //   인터랙트되어 Hide 되면 stop. 다시 Show 되면 재 spawn.
-    if (m_pInteractionCube && m_pVFXManager)
+    //   최종 보스방(Dark) 에선 포탈 회오리 일체 금지 — 입장 직후 VFX 정리 후에도
+    //   큐브가 잠깐 active 로 남는 frame 동안 다시 spawn 되는 잔존 회오리 차단.
+    if (m_pInteractionCube && m_pVFXManager && m_eCurrentTheme != StageTheme::Dark)
     {
         bool bActive = m_bInteractionCubeActive;
         if (auto* pInteractable = m_pInteractionCube->GetComponent<InteractableComponent>())
@@ -1481,6 +1512,20 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         //   warm Fire 라이트가 Skin1 청-회색 텍스처를 황금톤으로 보이게 하던 문제 해소.
         m_pcbMappedPass->m_xmf4LightColor = XMFLOAT4(1.0f, 1.1f, 1.5f, 1.0f);
         lightDir = XMVector3Normalize(XMVectorSet(-0.5f, -0.7f, 0.4f, 0.0f));
+        // 입장 컷씬 동안 sanctum(vivid 4원소) 톤 ↔ dark 톤 lerp.
+        //   m_fSanctumBlend = 0 → 완전 sanctum, 1 → 완전 dark.
+        if (m_eDarkLordIntroStage != DarkLordIntroStage::None)
+        {
+            // Sanctum 팔레트 — 4원소 평균 vivid 톤 (warm gold + cool cyan 블렌드, 밝게).
+            XMFLOAT4 sanctumLight(2.0f, 1.75f, 1.45f, 1.0f);
+            XMVECTOR sanctumLightDir = XMVector3Normalize(XMVectorSet(-0.3f, -0.85f, 0.3f, 0.0f));
+            float b = m_fSanctumBlend;   // 0 → sanctum, 1 → dark
+            XMFLOAT4& dst = m_pcbMappedPass->m_xmf4LightColor;
+            dst.x = sanctumLight.x + (dst.x - sanctumLight.x) * b;
+            dst.y = sanctumLight.y + (dst.y - sanctumLight.y) * b;
+            dst.z = sanctumLight.z + (dst.z - sanctumLight.z) * b;
+            lightDir = XMVectorLerp(sanctumLightDir, lightDir, b);
+        }
         break;
     default: // Fire
         m_pcbMappedPass->m_xmf4LightColor = XMFLOAT4(2.0f, 1.3f, 0.8f, 1.0f);
@@ -1546,6 +1591,18 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     default: // Fire
         m_pcbMappedPass->m_xmf4AmbientLight = XMFLOAT4(0.35f, 0.2f, 0.1f, 1.0f);
         break;
+    }
+
+    // DarkLord 입장 컷씬 중 sanctum 톤 ↔ dark(=Fire fallback) 톤 lerp — light color 와 동일 규칙.
+    if (m_eCurrentTheme == StageTheme::Dark &&
+        m_eDarkLordIntroStage != DarkLordIntroStage::None)
+    {
+        XMFLOAT4 sanctumAmbient(0.55f, 0.55f, 0.55f, 1.0f);   // 밝은 중립 — vivid 4원소 평균
+        XMFLOAT4& dst = m_pcbMappedPass->m_xmf4AmbientLight;
+        float b = m_fSanctumBlend;
+        dst.x = sanctumAmbient.x + (dst.x - sanctumAmbient.x) * b;
+        dst.y = sanctumAmbient.y + (dst.y - sanctumAmbient.y) * b;
+        dst.z = sanctumAmbient.z + (dst.z - sanctumAmbient.z) * b;
     }
 
     // Set Camera Position for Specular Calculation
@@ -1683,13 +1740,40 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         }
     }
 
+    // ── DarkLord 입장 컷씬 driver — Sanctum→Dread→Sever→Devour→Dominion ───────
+    //   m_eDarkLordIntroStage 가 None 이면 즉시 return. cutscene 동안 입력/네트워크 차단.
+    UpdateDarkLordIntro(deltaTime);
+
+    // ── 컷씬 종료 후 보스 공격 grace period 카운트다운 ───────────────────────
+    //   Dominion 종료 시점에 m_fBossGracePeriodRemain 이 3초로 세팅됨. 이 시간 동안 보스는 정지·무적.
+    //   0 도달 시점에 한 번만 AI/무적 풀어 전투 시작.
+    if (m_fBossGracePeriodRemain > 0.0f)
+    {
+        m_fBossGracePeriodRemain -= deltaTime;
+        if (m_fBossGracePeriodRemain <= 0.0f)
+        {
+            m_fBossGracePeriodRemain = 0.0f;
+            if (m_pDarkLordCutsceneObject)
+            {
+                if (auto* pEC = m_pDarkLordCutsceneObject->GetComponent<EnemyComponent>())
+                {
+                    pEC->SetAIPaused(false);
+                    pEC->SetInvincible(false);
+                }
+            }
+            OutputDebugString(L"[Scene] DarkLord grace period END — combat starts\n");
+        }
+    }
+
     // Player input block during boss cutscenes.
     // Dragon intro는 FlyingIn/Landing/Roaring 전체 입력 차단.
     // Kraken 컷씬은 WaterRise를 제외하고 입력 차단.
     // MegaBreath는 벽 이동/착지/엄폐물 등장 연출 5.8초 동안만 입력 차단.
+    // DarkLord 입장은 전체 5 페이즈 모두 입력 차단 (~11s).
     bool bKrakenBlocking =
         (m_eKrakenStage != KrakenCutsceneStage::None) &&
         (m_eKrakenStage != KrakenCutsceneStage::WaterRise);
+    bool bDarkLordIntroBlocking = IsDarkLordIntroPlaying();
 
     // Dragon intro는 m_pDragonIntroEnemy가 살아있는 동안 전체 입력 차단.
     // m_eLastDragonPhase는 시작 직후 None일 수 있으므로 조건에 넣지 않는다.
@@ -1710,7 +1794,8 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         bKrakenBlocking ||
         bDragonIntroBlocking ||
         bNetworkDragonIntroBlocking ||
-        bMegaBreathWallBlocking;
+        bMegaBreathWallBlocking ||
+        bDarkLordIntroBlocking;
 
     // 네트워크 패킷 전송도 같이 차단.
     // SendMove / SendSkill / SendPlayerAttack 내부에서 m_bCutscenePlaying을 검사한다.
@@ -4759,6 +4844,12 @@ void Scene::TransitionToDarkLordRoom()
 
     CleanupWindAmbient();
 
+    // 최종 보스방 — 이전 스테이지에서 살아있던 모든 VFX (Demon_Tornado / Wind_Petals / Wind_DustMotes
+    //   / Wind_DriftLeaves / 보스 spell ambient 등) 강제 종료. CleanupWindAmbient 는 ambient ID 만
+    //   stop 하지만, 보스 스킬 / 일회성 spawn 은 별도 ID로 살아남는다. 결과: Dark 아레나에 입장
+    //   직후 회오리·꽃잎 등이 잔존하는 시각 오염 제거.
+    if (m_pVFXManager) m_pVFXManager->ClearAll();
+
     if (m_pPlayerGameObject)
     {
         if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
@@ -4823,25 +4914,15 @@ void Scene::TransitionToDarkLordRoom()
             pGO->Update(0.0f);
     }
 
-    if (m_pCurrentRoom && m_pEnemySpawner)
+    // ── 보스 spawn 은 컷씬 Phase 4 진입 시점으로 지연.
+    //   룸 자체는 Active 로 둬야 CRoom::Update 가 돌며 모든 GameObject 의 transform CB 가 매 프레임
+    //   갱신됨 — 안 그러면 Sanctum decals / 슬래시 / 보스 등 cutscene 동안 spawn 된 모든 오브젝트가
+    //   stale/zero CB 로 렌더돼 안 보이거나 (0,0,0) 에 박힘.
+    //   빈 spawnConfig + 보스 미스폰 상태라 m_bEnemiesSpawned 가 false → CheckClearCondition 트리거 X.
+    if (m_pCurrentRoom)
     {
         RoomSpawnConfig emptyConfig;
         m_pCurrentRoom->SetSpawnConfig(emptyConfig);
-
-        const BoundingBox& bb = m_pCurrentRoom->GetBoundingBox();
-        XMFLOAT3 spawnPos = XMFLOAT3(bb.Center.x, 0.0f, bb.Center.z);
-
-        GameObject* pDarkLord = m_pEnemySpawner->SpawnEnemy(
-            m_pCurrentRoom, "DarkLord", spawnPos, m_pPlayerGameObject);
-
-        if (pDarkLord)
-        {
-            if (auto* pA = pDarkLord->GetComponent<AnimationComponent>())
-                pA->SetCullEnabled(false);
-            pDarkLord->GetTransform()->SetRotation(0.0f, 180.0f, 0.0f);
-        }
-
-        // 룸을 Active 로 전환 — 그래야 CRoom::Update/Render 가 돌고 보스 AI 와 렌더 모두 동작.
         m_pCurrentRoom->SetState(RoomState::Active);
     }
 
@@ -4857,8 +4938,482 @@ void Scene::TransitionToDarkLordRoom()
         if (pPC) pPC->ResetGroundY();
     }
 
+    // ── 입장 컷씬 시작 ───────────────────────────────────────────────────────
+    //   Sanctum 페이즈로 진입 → vivid 4원소 sigil + 빛 기둥 spawn + 카메라 cinematic orbit.
+    //   m_fSanctumBlend = 0.0 (vivid 톤). Phase 3 의 Sever 에서 1.0 로 점프.
+    if (m_pCurrentRoom)
+    {
+        const BoundingBox& bb = m_pCurrentRoom->GetBoundingBox();
+        SetupElementalSanctum(bb);
+
+        m_eDarkLordIntroStage = DarkLordIntroStage::Sanctum;
+        m_fDarkLordIntroTimer = 0.0f;
+        m_fSanctumBlend       = 0.0f;
+        m_bIntroSeverShakeTriggered = false;
+        m_bIntroBossSpawned         = false;
+        m_nIntroAbsorbCount         = 0;
+
+        if (m_pCamera)
+        {
+            // Sanctum 카메라 — 방 중심 약간 위, 거리 70, pitch 28°, yaw 0° (정면).
+            XMFLOAT3 camFocus = bb.Center; camFocus.y = 3.0f;
+            m_pCamera->StartCinematic(camFocus, 70.0f, 28.0f, 0.0f);
+        }
+    }
+
     m_bInBossRoom = true;
-    OutputDebugString(L"[Scene] DarkLord room ready - final boss spawned!\n");
+    OutputDebugString(L"[Scene] DarkLord room ready — entering intro cutscene (Sanctum phase)\n");
+}
+
+// ── 4원소 Sanctum 자동 배치 ─────────────────────────────────────────────────
+//   방 BB 의 cardinal 4방 (N/E/S/W) 에 원소 sigil 데칼 + 빛 기둥 VFX spawn.
+//   결과: Phase 1 동안 vivid 4원소 성소 분위기. Phase 3~4 에서 흡수 + cleanup.
+void Scene::SetupElementalSanctum(const BoundingBox& roomBB)
+{
+    if (!m_pDecalManager || !m_pVFXManager) return;
+
+    CleanupElementalSanctum();   // 안전 — 직전 spawn 잔존 제거.
+
+    XMFLOAT3 center = roomBB.Center;
+    center.y = 0.05f;
+
+    // BB 반경의 60% 위치에 4방향 배치.
+    const float r = ((roomBB.Extents.x < roomBB.Extents.z)
+                     ? roomBB.Extents.x : roomBB.Extents.z) * 0.60f;
+    // ★ 4 원소 모두 동일 VFX 타입 — 통일감 우선. 색 차이는 sigil + aura 데칼이 담당.
+    //   "마법진 위쪽에 많은 양의 원소 파티클" — 같은 효과를 dense 하게 스택해 두꺼운 column.
+    struct Slot { XMFLOAT3 offset; XMFLOAT4 color; };
+    Slot slots[4] = {
+        { {  0.0f, 0.0f, +r }, { 0.30f, 1.05f, 0.70f, 1.0f } },   // 북 — 바람 색
+        { { +r,    0.0f, 0.0f}, { 1.20f, 0.45f, 0.15f, 1.0f } },   // 동 — 불 색
+        { {  0.0f, 0.0f, -r }, { 1.10f, 0.65f, 0.18f, 1.0f } },   // 남 — 땅 색
+        { { -r,    0.0f, 0.0f}, { 0.22f, 0.68f, 1.20f, 1.0f } },   // 서 — 물 색
+    };
+    // 통일된 VFX: Wind_UpdraftSmall — 위로 떠오르는 작은 입자 컬럼 (원소 중립적 외형).
+    const char* kUnifiedPillarFX = "Wind_UpdraftSmall";
+
+    const float kAuraSize    = 55.0f;     // zone 한가운데 큰 색 wash
+    const float kAuraRotSpd  = 0.15f;
+    const float kLifetime    = 1e9f;
+    const float kRevealDur   = 1.2f;
+    const int   kSigilsPerZone   = 4;     // zone 당 흩뿌릴 작은 sigil 수
+    const int   kPillarsPerZone  = 6;     // zone 당 흩뿌릴 파티클 컬럼 수
+    const float kZoneScatterRadius = 14.0f;  // 흩뿌림 반경 — zone 한 칸 안에서
+
+    // 결정론적 PRNG — 매 실행 동일 패턴, 단 cardinal 직선 배치 아니라 organic.
+    auto frand = [seed = (uint32_t)0u](float lo, float hi) mutable {
+        seed = seed * 1664525u + 1013904223u;
+        float u = (float)(seed >> 8) / (float)(1u << 24);
+        return lo + (hi - lo) * u;
+    };
+
+    for (const Slot& s : slots)
+    {
+        XMFLOAT3 zoneCenter = { center.x + s.offset.x, center.y, center.z + s.offset.z };
+
+        SanctumElement el{};
+
+        // (1) Zone 한가운데 큰 aura wash — 색조명 느낌. 알파 0.65 (조금 더 진하게).
+        XMFLOAT4 auraColor(s.color.x * 0.65f, s.color.y * 0.65f, s.color.z * 0.65f, 0.65f);
+        el.auraDecalSlot = m_pDecalManager->Spawn(
+            DecalTexture::MagicCircle, zoneCenter, kAuraSize,
+            0.0f, kLifetime, auraColor, kAuraRotSpd, kRevealDur * 1.3f);
+
+        // (2) 작은 sigil 들을 zone 안에 흩뿌리기 — 크기·각도·위치 무작위.
+        for (int k = 0; k < kSigilsPerZone; ++k)
+        {
+            float ang = frand(0.0f, 6.2832f);
+            float dist = frand(0.2f, 1.0f) * kZoneScatterRadius;
+            XMFLOAT3 sp = {
+                zoneCenter.x + cosf(ang) * dist,
+                zoneCenter.y,
+                zoneCenter.z + sinf(ang) * dist
+            };
+            float size = frand(8.0f, 16.0f);
+            float rot  = frand(0.0f, 360.0f);
+            float spd  = frand(0.3f, 0.7f);
+            int slot = m_pDecalManager->Spawn(
+                DecalTexture::MagicCircle, sp, size,
+                rot, kLifetime, s.color, spd, kRevealDur);
+            if (slot >= 0) el.sigilDecalSlots.push_back(slot);
+        }
+
+        // (3) 통일 파티클 컬럼 — zone 안에 흩뿌리기. 색 차이는 ground decal 이 담당.
+        const char* kUnifiedPillarFX = "Wind_UpdraftSmall";
+        for (int k = 0; k < kPillarsPerZone; ++k)
+        {
+            float ang = frand(0.0f, 6.2832f);
+            float dist = frand(0.0f, 1.0f) * kZoneScatterRadius;
+            XMFLOAT3 pp = {
+                zoneCenter.x + cosf(ang) * dist,
+                zoneCenter.y,
+                zoneCenter.z + sinf(ang) * dist
+            };
+            int fxId = m_pVFXManager->Spawn(kUnifiedPillarFX, pp,
+                                             XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
+            if (fxId >= 0) el.pillarVFXIds.push_back(fxId);
+        }
+
+        // (4) 진입 임팩트 — zone 중앙에 burst 1발 (통일).
+        m_pVFXManager->Spawn("Wind_GustBurst", zoneCenter,
+                              XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
+
+        m_vSanctumElements.push_back(el);
+    }
+}
+
+void Scene::CleanupElementalSanctum()
+{
+    for (auto& el : m_vSanctumElements)
+    {
+        if (m_pDecalManager)
+        {
+            if (el.auraDecalSlot >= 0) m_pDecalManager->Stop(el.auraDecalSlot);
+            for (int slot : el.sigilDecalSlots)
+                if (slot >= 0) m_pDecalManager->Stop(slot);
+        }
+        if (m_pVFXManager)
+        {
+            for (int id : el.pillarVFXIds)
+                if (id >= 0) m_pVFXManager->Stop(id);
+        }
+    }
+    m_vSanctumElements.clear();
+}
+
+// ── 스크린 베기 envelope 분해 — Dx12App::RenderText 가 다중 레이어 합성.
+//   단일 alpha 대신 각 레이어 (predark / warning / flash / core / void / red glow / afterglow)
+//   가 시간 축에서 독립 envelope 을 가짐. 카멘/히어로 타임라인 (~1.2s) 을 0~1 progress 로 정규화.
+namespace
+{
+    static inline float SmoothStep01(float a, float b, float x)
+    {
+        float u = std::clamp((x - a) / (b - a), 0.0f, 1.0f);
+        return u * u * (3.0f - 2.0f * u);
+    }
+    // Gaussian 펄스 — center 부근에서 1, 양쪽으로 빠르게 감쇠. width 는 반치폭 근사.
+    static inline float Pulse(float t, float center, float width)
+    {
+        float w = (width > 1e-4f) ? width : 1e-4f;
+        float x = (t - center) / w;
+        return expf(-x * x * 4.0f);
+    }
+}
+
+float Scene::GetIntroLetterboxAmt() const
+{
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::None) return 0.0f;
+    // Sever 후반(0.50~1.0) slide in.
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Sever)
+    {
+        float t = (m_fDarkLordIntroTimer - DLI_T_DREAD) / (DLI_T_SEVER - DLI_T_DREAD);
+        return SmoothStep01(0.50f, 1.0f, t);
+    }
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Devour) return 1.0f;
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Dominion)
+    {
+        float t = (m_fDarkLordIntroTimer - DLI_T_DEVOUR) / (DLI_T_DOMINION - DLI_T_DEVOUR);
+        return 1.0f - SmoothStep01(0.55f, 1.0f, t);
+    }
+    return 0.0f;
+}
+
+float Scene::GetIntroBossNameAlpha() const
+{
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Devour)
+    {
+        float t = (m_fDarkLordIntroTimer - DLI_T_SEVER) / (DLI_T_DEVOUR - DLI_T_SEVER);
+        // Devour 전반부 fade in (0.15→0.40), 후반 hold.
+        return SmoothStep01(0.20f, 0.45f, t);
+    }
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Dominion)
+    {
+        float t = (m_fDarkLordIntroTimer - DLI_T_DEVOUR) / (DLI_T_DOMINION - DLI_T_DEVOUR);
+        // Dominion 후반 fade out.
+        return 1.0f - SmoothStep01(0.50f, 0.95f, t);
+    }
+    return 0.0f;
+}
+
+float Scene::GetIntroBlackoutAlpha() const
+{
+    // Sever 후반 ~ Devour 중반의 풀스크린 암전 envelope.
+    //   타임라인:
+    //     Sever t = 0.86 → 1.0  : 0 → 1 (빠른 ramp up, flash 직후)
+    //     Devour t = 0.00 → 0.18: 1.0 hold (완전 검정)
+    //     Devour t = 0.18 → 0.60: 1.0 → 0.0 (보스 솟구침과 동기화 fade out)
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Sever)
+    {
+        float t = (m_fDarkLordIntroTimer - DLI_T_DREAD) / (DLI_T_SEVER - DLI_T_DREAD);
+        return SmoothStep01(0.86f, 1.0f, t);
+    }
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Devour)
+    {
+        float t = (m_fDarkLordIntroTimer - DLI_T_SEVER) / (DLI_T_DEVOUR - DLI_T_SEVER);
+        if (t < 0.18f) return 1.0f;
+        // ease-out — 처음엔 빠르게 풀리고 끝에서 부드럽게.
+        float fadeT = SmoothStep01(0.18f, 0.60f, t);
+        return 1.0f - fadeT;
+    }
+    return 0.0f;
+}
+
+float Scene::GetIntroEdgeVignetteAmt() const
+{
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Sever)
+    {
+        float t = (m_fDarkLordIntroTimer - DLI_T_DREAD) / (DLI_T_SEVER - DLI_T_DREAD);
+        return SmoothStep01(0.55f, 0.85f, t);
+    }
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Devour) return 1.0f;
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Dominion)
+    {
+        float t = (m_fDarkLordIntroTimer - DLI_T_DEVOUR) / (DLI_T_DOMINION - DLI_T_DEVOUR);
+        return 1.0f - SmoothStep01(0.55f, 1.0f, t);
+    }
+    return 0.0f;
+}
+
+Scene::IntroSeverState Scene::GetIntroSeverState() const
+{
+    IntroSeverState s{};
+    if (m_eDarkLordIntroStage != DarkLordIntroStage::Sever) return s;
+    float t = (m_fDarkLordIntroTimer - DLI_T_DREAD) / (DLI_T_SEVER - DLI_T_DREAD);
+    if (t < 0.0f || t > 1.0f) return s;
+    s.active   = true;
+    s.progress = t;
+
+    // pre-dark — 0.0 ~ 0.45 까지 점점 어두워졌다가 flash 직전에 max,
+    //   flash 후엔 0.55~0.80 사이에서 부드럽게 사라짐.
+    s.predarkAlpha = SmoothStep01(0.00f, 0.40f, t) * (1.0f - SmoothStep01(0.55f, 0.85f, t)) * 0.55f;
+
+    // warning line — 0.27 ~ 0.40 사이에 얇게 떴다가 flash 직전 사라짐.
+    s.warningLineAlpha = SmoothStep01(0.27f, 0.38f, t) * (1.0f - SmoothStep01(0.40f, 0.46f, t));
+
+    // flash — 0.45 부근 매우 짧은 풀스크린 화이트 (~70ms 폭).
+    s.flashAlpha = Pulse(t, 0.46f, 0.05f);
+
+    // core (얇은 흰 절단선) — flash 와 함께 등장, recovery 까지 천천히 fade.
+    s.coreAlpha = SmoothStep01(0.40f, 0.48f, t) * (1.0f - SmoothStep01(0.70f, 0.95f, t));
+
+    // void gap (검은 균열) — flash 이후 0.50 ~ 0.85 사이 강하게.
+    s.voidAlpha = SmoothStep01(0.48f, 0.58f, t) * (1.0f - SmoothStep01(0.80f, 0.95f, t)) * 0.85f;
+
+    // red glow (가장자리 진홍) — flash 직후 가장 강, recovery 까지 잔광 유지.
+    s.redGlowAlpha = SmoothStep01(0.45f, 0.55f, t) * (1.0f - SmoothStep01(0.85f, 1.00f, t));
+
+    // afterglow (recovery 단계의 옅은 잔광) — 0.75 이후 부드럽게 fade out.
+    s.afterGlowAlpha = SmoothStep01(0.55f, 0.75f, t) * (1.0f - SmoothStep01(0.92f, 1.00f, t)) * 0.50f;
+
+    // strike head — 0.18 ~ 0.48 동안 좌하 → 우상 sweep. flash 전후로 가시.
+    s.slashHeadT     = std::clamp((t - 0.18f) / 0.30f, 0.0f, 1.0f);
+    s.slashHeadAlpha = SmoothStep01(0.18f, 0.24f, t) * (1.0f - SmoothStep01(0.46f, 0.55f, t));
+
+    return s;
+}
+
+// ── DarkLord 입장 컷씬 driver — Kraken 패턴의 cumulative-timer state machine.
+//   매 프레임 Scene::Update 에서 호출. m_eDarkLordIntroStage 가 None 이면 즉시 return.
+void Scene::UpdateDarkLordIntro(float dt)
+{
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::None) return;
+    m_fDarkLordIntroTimer += dt;
+    const float T = m_fDarkLordIntroTimer;
+
+    auto lerp = [](float a, float b, float t) { return a + (b - a) * t; };
+    auto easeOutCubic = [](float t) { return 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t); };
+    auto easeInQuad   = [](float t) { return t * t; };
+
+    GameObject* pBoss = m_pDarkLordCutsceneObject;
+
+    // ── Phase 1: Sanctum (0 ~ DLI_T_SANCTUM) ────────────────────────────────
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Sanctum)
+    {
+        m_fSanctumBlend = 0.0f;   // 완전 vivid 톤 고정.
+        // 카메라 — yaw 0° → +60° 로 슬로 팬, distance 70 → 60 으로 천천히 다가옴.
+        float t = T / DLI_T_SANCTUM;
+        float e = easeOutCubic(std::clamp(t, 0.0f, 1.0f));
+        float dist = lerp(70.0f, 60.0f, e);
+        float yaw  = lerp(0.0f, 60.0f, e);
+        if (m_pCamera) m_pCamera->SetCinematicOrbit(dist, 28.0f, yaw);
+
+        if (T >= DLI_T_SANCTUM)
+        {
+            m_eDarkLordIntroStage = DarkLordIntroStage::Dread;
+            if (m_pCamera) m_pCamera->StartShake(0.35f, DLI_T_DREAD - DLI_T_SANCTUM);
+            OutputDebugString(L"[Scene] DarkLord intro: DREAD\n");
+        }
+        return;
+    }
+
+    // ── Phase 2: Dread (DLI_T_SANCTUM ~ DLI_T_DREAD) ────────────────────────
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Dread)
+    {
+        float t = (T - DLI_T_SANCTUM) / (DLI_T_DREAD - DLI_T_SANCTUM);
+        t = std::clamp(t, 0.0f, 1.0f);
+        // sanctum → dim 으로 0.0 → 0.35 까지만 dim. 본격 dark 는 Sever 에서.
+        m_fSanctumBlend = lerp(0.0f, 0.35f, easeInQuad(t));
+        // 카메라 — 더 zoom in. yaw 60° → 90° 로 회전 (원소 4방 둘러보는 느낌).
+        float dist = lerp(60.0f, 52.0f, t);
+        float yaw  = lerp(60.0f, 90.0f, t);
+        if (m_pCamera) m_pCamera->SetCinematicOrbit(dist, 26.0f, yaw);
+
+        if (T >= DLI_T_DREAD)
+        {
+            m_eDarkLordIntroStage = DarkLordIntroStage::Sever;
+            // ★ Sever 진입 — 강력한 카메라 셰이크 + 슬래시 빌보드 spawn.
+            if (m_pCamera) m_pCamera->StartShake(3.8f, 0.45f);
+            m_bIntroSeverShakeTriggered = true;
+
+            // ★ 화면 베기는 월드 메쉬 X — Dx12App::RenderText 가 SpriteBatch 로 스크린 공간
+            //   대각선 슬래시 오버레이를 그림 (GetIntroSlashScreenAlpha() 로 강도 조회).
+            //   카메라 각도와 무관하게 화면 사각형 정확히 대각선 풀스케일 보장.
+            //   여기선 카메라 셰이크 + 라이팅 spike 만 처리. m_pIntroSlashOverlay 는 nullptr 유지.
+
+            // 테마 라이팅은 슬래시 flash 도중 빠르게 전환되지만 4원소 sigil/pillar 는
+            //   유지 — Devour 페이즈에서 보스가 하나씩 "흡수"하는 연출로 사용됨.
+            //   m_fSanctumBlend 는 Sever 동안 0.35→1.0 으로 lerp (아래 phase 처리).
+
+            OutputDebugString(L"[Scene] DarkLord intro: SEVER\n");
+        }
+        return;
+    }
+
+    // ── Phase 3: Sever (DLI_T_DREAD ~ DLI_T_SEVER) ──────────────────────────
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Sever)
+    {
+        float severT = (T - DLI_T_DREAD) / (DLI_T_SEVER - DLI_T_DREAD);
+        severT = std::clamp(severT, 0.0f, 1.0f);
+        // 라이팅: 0.35 → 1.0 으로 빠르게 lerp (전반부 0.5 에서 거의 도달).
+        m_fSanctumBlend = lerp(0.35f, 1.0f, easeOutCubic(std::clamp(severT * 2.0f, 0.0f, 1.0f)));
+
+        // 스크린 슬래시 오버레이는 GetIntroSlashScreenAlpha() 가 매 프레임 계산해서 SpriteBatch
+        //   로 그림. 여기선 별도 처리 불필요 — 라이팅 lerp 만 위에서 진행.
+
+        if (T >= DLI_T_SEVER)
+        {
+            m_eDarkLordIntroStage = DarkLordIntroStage::Devour;
+
+            // ★ 4 원소 sigil + aura + pillar 즉시 일괄 정리 — 블랙아웃 hold 중이라 시각 무관.
+            //   사용자 요구: "암전 풀리면 원소들 다 사라져 있어야 함".
+            CleanupElementalSanctum();
+            m_nIntroAbsorbCount = 4;   // Devour 안에서 absorb tick 추가 처리 차단.
+
+            // ★ DarkLord spawn — 방 중앙, scale 1.0 (작게 시작), Y=-6 (지하 깊이 잠복).
+            //   프리셋 기본 scale = 10.0 (EnemySpawner.cpp:989). Devour 동안 1.0 → 10.0 으로 lerp.
+            if (m_pCurrentRoom && m_pEnemySpawner && !m_bIntroBossSpawned)
+            {
+                const BoundingBox& bb = m_pCurrentRoom->GetBoundingBox();
+                XMFLOAT3 spawnPos(bb.Center.x, -6.0f, bb.Center.z);
+                GameObject* pDarkLord = m_pEnemySpawner->SpawnEnemy(
+                    m_pCurrentRoom, "DarkLord", spawnPos, m_pPlayerGameObject);
+                if (pDarkLord)
+                {
+                    if (auto* pA = pDarkLord->GetComponent<AnimationComponent>())
+                        pA->SetCullEnabled(false);
+                    pDarkLord->GetTransform()->SetRotation(0.0f, 180.0f, 0.0f);
+                    pDarkLord->GetTransform()->SetScale(1.0f, 1.0f, 1.0f);
+                    // ★ AI 일시정지 + 무적 — 컷씬 동안 보스가 공격 하거나 피격 안 됨.
+                    //   Dominion 종료 시점에 풀어 정상 전투 시작.
+                    if (auto* pEC = pDarkLord->GetComponent<EnemyComponent>())
+                    {
+                        pEC->SetAIPaused(true);
+                        pEC->SetInvincible(true);
+                    }
+                    m_pDarkLordCutsceneObject = pDarkLord;
+                    m_bIntroBossSpawned = true;
+                }
+
+                // 카메라 — 보스 등장 ¾ 각도 reveal. 프리셋 scale 10 보스는 전체 높이 ~25 단위 추정.
+                //   focus y=14 (보스 chest 중앙), distance 140, pitch 18° (낮춰서 위압감 ↑), yaw 180 정면.
+                XMFLOAT3 camFocus = bb.Center; camFocus.y = 14.0f;
+                if (m_pCamera) m_pCamera->StartCinematic(camFocus, 140.0f, 18.0f, 180.0f);
+            }
+
+            OutputDebugString(L"[Scene] DarkLord intro: DEVOUR\n");
+        }
+        return;
+    }
+
+    // ── Phase 4: Devour (DLI_T_SEVER ~ DLI_T_DEVOUR) ────────────────────────
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Devour)
+    {
+        float t = (T - DLI_T_SEVER) / (DLI_T_DEVOUR - DLI_T_SEVER);
+        t = std::clamp(t, 0.0f, 1.0f);
+        float e = easeOutCubic(t);
+
+        // 보스 — scale 1.0 → 10.0 (프리셋 기본값) / Y -6 → 0 으로 lerp. 솟구침 dramatic.
+        if (pBoss)
+        {
+            float s = lerp(1.0f, 10.0f, e);
+            float y = lerp(-6.0f, 0.0f, e);
+            pBoss->GetTransform()->SetScale(s, s, s);
+            const BoundingBox& bb = m_pCurrentRoom ? m_pCurrentRoom->GetBoundingBox() : BoundingBox{};
+            XMFLOAT3 pos(bb.Center.x, y, bb.Center.z);
+            pBoss->GetTransform()->SetPosition(pos);
+        }
+
+        // 카메라 — yaw 180 유지, distance 140 → 115 천천히 zoom in. pitch 18 유지.
+        float dist = lerp(140.0f, 115.0f, t);
+        if (m_pCamera) m_pCamera->SetCinematicOrbit(dist, 18.0f, 180.0f);
+
+        // ── 4 박자 셰이크 — 원소들은 이미 Sever→Devour 전환에서 일괄 정리됨.
+        //   여기선 블랙아웃 너머로 "쾅 쾅 쾅 쾅" 전달용 camera shake 만 발사.
+        static const float kAbsorbTickFrac[4] = { 0.02f, 0.06f, 0.10f, 0.14f };
+        while (m_nIntroAbsorbCount < 4 && t >= kAbsorbTickFrac[m_nIntroAbsorbCount])
+        {
+            if (m_pCamera) m_pCamera->StartShake(0.9f, 0.18f);
+            m_nIntroAbsorbCount++;
+        }
+        if (T >= DLI_T_DEVOUR)
+        {
+            m_eDarkLordIntroStage = DarkLordIntroStage::Dominion;
+            // ★ 보스 포효 — Unreal Take 또는 Roar 클립.
+            if (pBoss)
+            {
+                if (auto* pAnim = pBoss->GetComponent<AnimationComponent>())
+                    pAnim->CrossFade("Unreal Take", 0.15f, false);
+            }
+            if (m_pCamera) m_pCamera->StartShake(1.5f, 0.6f);
+            OutputDebugString(L"[Scene] DarkLord intro: DOMINION\n");
+        }
+        return;
+    }
+
+    // ── Phase 5: Dominion (DLI_T_DEVOUR ~ DLI_T_DOMINION) → 입력 복구 ─────────
+    if (m_eDarkLordIntroStage == DarkLordIntroStage::Dominion)
+    {
+        // 카메라 — 천천히 zoom out 으로 전투 자세 잡기. 거대 보스 풀바디 framing 유지.
+        float t = (T - DLI_T_DEVOUR) / (DLI_T_DOMINION - DLI_T_DEVOUR);
+        t = std::clamp(t, 0.0f, 1.0f);
+        float dist = lerp(115.0f, 135.0f, t);
+        float pitch = lerp(18.0f, 24.0f, t);
+        if (m_pCamera) m_pCamera->SetCinematicOrbit(dist, pitch, 180.0f);
+
+        if (T >= DLI_T_DOMINION)
+        {
+            // 컷씬 종료 — 카메라 해제, 룸 Active, 보스 Idle 전환, 입력 복구.
+            m_eDarkLordIntroStage = DarkLordIntroStage::None;
+            m_fDarkLordIntroTimer = 0.0f;
+
+            if (m_pCamera) m_pCamera->StopCinematic();
+            if (m_pCurrentRoom) m_pCurrentRoom->SetState(RoomState::Active);
+            if (pBoss)
+            {
+                if (auto* pAnim = pBoss->GetComponent<AnimationComponent>())
+                    pAnim->CrossFade("Idle", 0.25f, true);
+                // ★ 보스 AI / 무적 즉시 풀지 않음 — 사용자 요구: "보스 공격 타이밍 늦춰서 억까 X".
+                //   m_fBossGracePeriodRemain 으로 추가 3초 동안 정지·무적 유지. 입력은 복구된 상태라
+                //   플레이어가 위치 잡고 전투 준비 가능. Scene::Update 가 매 프레임 카운트다운하다
+                //   0 도달 시 SetAIPaused(false) + SetInvincible(false) 호출.
+                m_fBossGracePeriodRemain = DLI_T_BOSS_GRACE_AFTER_CUTSCENE;
+            }
+            // 흡수 못한 sigil/pillar 가 남아있을 경우 안전 정리 (정상 흐름이면 no-op).
+            CleanupElementalSanctum();
+            OutputDebugString(L"[Scene] DarkLord intro: COMPLETE — gameplay starts\n");
+        }
+        return;
+    }
 }
 
 // ────────────────────────────────────────────────────────────────────────────

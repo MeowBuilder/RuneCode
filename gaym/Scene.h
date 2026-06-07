@@ -212,6 +212,50 @@ public:
     // 4스테이지 바람 ambient — 모든 grass 방에 공통 spawn (배경 토네이도/업드래프트/잎 드리프트)
     void SetupWindAmbient(const DirectX::BoundingBox& roomBB);
     void CleanupWindAmbient();
+
+    // 최종 보스(DarkLord) 입장 컷씬 — 5 페이즈 state machine. Update 안에서 매 프레임 호출.
+    //   설계 페이즈/타이밍은 DarkLordIntroStage / DLI_T_* 상수 참조.
+    void UpdateDarkLordIntro(float dt);
+    bool IsDarkLordIntroPlaying() const { return m_eDarkLordIntroStage != DarkLordIntroStage::None; }
+    // 컷씬 Sever 페이즈의 스크린 베기 오버레이 — 카멘/메이플 히어로 타임라인을 다중 envelope 로 분해.
+    //   Dx12App::RenderText 가 매 프레임 호출해 SpriteBatch 로 각 레이어를 합성.
+    //   타임라인 (t = Sever 진행도 0~1):
+    //     0.00 ~ 0.27 : pre-dark (화면 어둡게)
+    //     0.27 ~ 0.40 : warning line (얇은 흰 선)
+    //     0.40 ~ 0.50 : flash (풀스크린 화이트)
+    //     0.45 ~ 0.85 : 화면 균열 (검은 갭 + 붉은 glow)
+    //     0.85 ~ 1.00 : recovery (붉은 잔광만 남음)
+    struct IntroSeverState {
+        bool  active           = false;
+        float progress         = 0.0f;   // 0~1 전체 진행률
+        float predarkAlpha     = 0.0f;   // 화면 어둡게 덮는 black 알파
+        float warningLineAlpha = 0.0f;   // 얇은 예고 흰 선
+        float flashAlpha       = 0.0f;   // 풀스크린 화이트
+        float coreAlpha        = 0.0f;   // 얇은 흰 절단선 (main)
+        float voidAlpha        = 0.0f;   // 검은 갭 (검정 균열)
+        float redGlowAlpha     = 0.0f;   // 가장자리 어두운 진홍 잔광
+        float afterGlowAlpha   = 0.0f;   // recovery 단계의 옅은 잔광
+        // ── Strike head — 슬래시 위를 지나가는 밝은 점.
+        //   slashHeadT 가 0→1 로 sweep 하는 동안 한 점이 화면 좌하 → 우상 직선을 따라 이동.
+        //   카멘/히어로식 "칼이 지나갔다" 의 인과를 만든다. headAlpha 는 warning~flash 동안만 visible.
+        float slashHeadT       = 0.0f;
+        float slashHeadAlpha   = 0.0f;
+    };
+    IntroSeverState GetIntroSeverState() const;
+
+    // 후속 연출 — Sever 이후 ~ Dominion 동안의 시네마틱 보강.
+    //   letterbox : 위/아래 검은 띠 (0 = 없음, 1 = 풀 두께). Sever 후반 slide in → Dominion 후반 slide out.
+    //   bossName  : 중앙 보스 이름 텍스트 알파 (0~1). Devour 초반 fade in, hold, Dominion 후반 fade out.
+    //   edgeVignette : 가장자리 어둡게 (0~1). Sever 직후 ramp, Dominion 후반 fade.
+    float GetIntroLetterboxAmt() const;
+    float GetIntroBossNameAlpha() const;
+    float GetIntroEdgeVignetteAmt() const;
+    // 풀스크린 암전 — Sever 끝~Devour 초반. 슬래시 이후 화면이 한 박자 검정으로 꺼졌다가
+    //   보스 솟구침과 함께 천천히 fade out. Devour 페이즈의 정적인 느낌 해소.
+    float GetIntroBlackoutAlpha() const;
+    // Phase 1 시작 시 4 원소 sigil + 빛기둥 spawn — 보스방 BB 의 cardinal 4방에 자동 배치.
+    void SetupElementalSanctum(const DirectX::BoundingBox& roomBB);
+    void CleanupElementalSanctum();
     // 네트워크 맵 토네이도 이벤트 시작
     void StartNetworkMapTornadoEvent(const DirectX::XMFLOAT3& pos, float warningSec, float activeSec);
     // 스테이지 테마별 sky/clear color 적용 (Dx12App 의 m_fClearColor 갱신)
@@ -475,6 +519,45 @@ private:
     // 물 상승: 기존 맵 타일(Y=0)보다 훨씬 위로 → "더 높은 곳에서 전투" 연출
     static constexpr float KRAKEN_WATER_Y_START = -4.0f;
     static constexpr float KRAKEN_WATER_Y_END   = 28.0f;   // 15 → 28: 확실한 고지대 상승
+
+    // ── DarkLord 입장 컷씬 ────────────────────────────────────────────────────
+    // Phase 1 Sanctum(화려한 4원소 맵 + 카메라 팬인) → 2 Dread(라이팅 dim + tremor)
+    //       → 3 Sever(슬래시 + 카메라 셰이크 + 즉시 테마 스왑) → 4 Devour(보스 솟구침 + 4원소 흡수)
+    //       → 5 Dominion(보스 포효 + 카메라 홀드 → 입력 복구).
+    // 보스 SpawnEnemy 는 TransitionToDarkLordRoom 에서 즉시 호출되지 않고 Phase 4 진입 시점에 호출.
+    enum class DarkLordIntroStage {
+        None,
+        Sanctum, Dread, Sever, Devour, Dominion
+    };
+    DarkLordIntroStage m_eDarkLordIntroStage = DarkLordIntroStage::None;
+    float    m_fDarkLordIntroTimer = 0.0f;
+    // 0.0 = 화려한 Sanctum 톤, 1.0 = 어두운 Dark 톤. Sever 페이즈에서 빠르게 1.0 로 lerp.
+    //   PassConstants 의 light/ambient 가 이 값으로 sanctum 팔레트 ↔ 기존 Dark 팔레트 사이를 보간.
+    float    m_fSanctumBlend       = 1.0f;   // Dark 비활성 디폴트 (이전 동작 유지)
+    bool     m_bIntroSeverShakeTriggered = false;
+    bool     m_bIntroBossSpawned         = false;
+    int      m_nIntroAbsorbCount         = 0;   // Phase 4 에서 0~3 으로 카운트 (4 원소 차례로 흡수)
+    GameObject*           m_pDarkLordCutsceneObject = nullptr;   // Phase 4 에서 spawn 된 보스 — driver 가 scale/pos 트래킹
+    GameObject*           m_pIntroSlashOverlay      = nullptr;   // legacy — 스크린 SpriteBatch 오버레이로 대체, nullptr 유지
+    SwordTrailMesh*       m_pIntroSlashMesh         = nullptr;   // legacy
+    // ── Sanctum 4 zone 트래킹 — 각 zone (방 사분면) 마다 다수 sigil + aura + pillar 무작위 흩뿌림.
+    //   인위적 cardinal 배치 대신 organic scatter — "그 구역에 그 원소 색이 확 보임".
+    struct SanctumElement {
+        int              auraDecalSlot = -1;     // zone 한가운데 큰 색 wash (조명 느낌)
+        std::vector<int> sigilDecalSlots;        // zone 안에 흩뿌린 작은 마법진들
+        std::vector<int> pillarVFXIds;           // zone 안에 흩뿌린 파티클 컬럼들
+    };
+    std::vector<SanctumElement> m_vSanctumElements;
+
+    // Cumulative timings — Kraken 패턴.
+    static constexpr float DLI_T_SANCTUM  = 3.0f;     // 0   ~ 3.0s  : vivid 4원소 reveal + camera 슬로 팬인
+    static constexpr float DLI_T_DREAD    = 5.0f;     // 3.0 ~ 5.0s  : 라이팅 dim + 가벼운 tremor + edge vignette
+    static constexpr float DLI_T_SEVER    = 7.2f;     // 5.0 ~ 7.2s  : 슬래시 + flash + 테마 즉시 스왑 (2.2s 로 늘려 베기 연출 여유)
+    static constexpr float DLI_T_DEVOUR   = 10.8f;    // 7.2 ~ 10.8s : 보스 솟구침 + 4원소 흡수
+    static constexpr float DLI_T_DOMINION = 12.0f;    // 10.8 ~ 12.0s : 보스 포효 + 카메라 홀드 (1.2s) → 입력 복구
+    // 컷씬 종료 후 보스 공격 grace — 입력 / AI 풀리지만 보스는 이 시간 동안 정지·무적 유지.
+    static constexpr float DLI_T_BOSS_GRACE_AFTER_CUTSCENE = 3.0f;
+    float m_fBossGracePeriodRemain = 0.0f;
 
     // Drop interaction
     DropInteractionState m_eDropState = DropInteractionState::None;
