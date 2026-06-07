@@ -112,5 +112,6 @@ public:
                                 const DirectX::XMFLOAT3& pos,
                                 const DirectX::XMFLOAT3& rotDeg,
                                 const DirectX::XMFLOAT3& scale,
-                                const DirectX::XMFLOAT4& emissive);
+                                const DirectX::XMFLOAT4& emissive,
+                                const std::string& strSlashTexture = "");
 };

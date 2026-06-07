@@ -99,19 +99,13 @@ void ComboAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
     switch (m_eHitPhase)
     {
     case HitPhase::Windup:
-        // Windup 후반(75%) prearm — sword glow / anticipation flash 시작.
+        // Windup 후반(75%) prearm — sword glow / 검 본 trail 활성 (실제 검 궤적 ribbon 시작).
         if (!m_bTrailStarted && currentHit.fWindupTime > 0.0f &&
             m_fTimer >= currentHit.fWindupTime * 0.75f)
         {
             SpawnHitVFX(pEnemy, currentHit);
         }
-        // Crescent prearm — windup 65% 부터 spawn. sweep duration 이 길어 다양한 swing timing 흡수.
-        if (!m_bCrescentSpawned && currentHit.fWindupTime > 0.0f &&
-            m_fTimer >= currentHit.fWindupTime * 0.65f)
-        {
-            SpawnCrescentFlash(pEnemy, currentHit);
-            m_bCrescentSpawned = true;
-        }
+        // 검기는 미리 안 띄움 — 텔레그래프는 indicator 만, crescent 는 휘두르는 순간 정확히.
         if (m_fTimer >= currentHit.fWindupTime)
         {
             m_eHitPhase = HitPhase::Hit;
@@ -124,12 +118,14 @@ void ComboAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
         {
             DealConeDamage(pEnemy, currentHit);
             SpawnHitVFX(pEnemy, currentHit);
-            // windup 0 인 경우 prearm 못 거니까 여기서 fallback spawn.
-            if (!m_bCrescentSpawned)
+            // 검기는 strVFXOnHit 가 명시된 hit 만 (= 보스 opt-in). goblin/일반 적은 amber 디폴트 호 안 뜸.
+            if (!m_bCrescentSpawned && !currentHit.strVFXOnHit.empty())
             {
                 SpawnCrescentFlash(pEnemy, currentHit);
                 m_bCrescentSpawned = true;
+                TriggerCrescentBurst();
             }
+            SpawnImpactVFX(pEnemy, currentHit);   // 원소별 impact particle (불꽃/물방울/먼지/속도선)
             m_bHitDealt = true;
         }
 
@@ -340,6 +336,22 @@ namespace
     }
 }
 
+// 원소별 검기 베이스 텍스처 — namu 3×3 톱니 시트 대신 Kenney 깔끔 호 + Free Slash 노이즈 호.
+//   ribbon / crescent 양쪽이 같은 매핑을 공유 → 원소 색 + 텍스처 결이 일관.
+//   셰이더는 full-UV (sub-UV X) 로 단일 호를 샘플.
+static const char* PickSlashTextureForElement(int elemId)
+{
+    switch (elemId)
+    {
+    case 1: return "Assets/Textures/VFX/slash_02.png";          // fire — 깔끔 둥근 호, hot core overlay 가 카오스 담당
+    case 2: return "Assets/Textures/VFX/free_slash_noise.png";  // water — 파란 노이즈 결이 호 자체에 박혀 있음
+    case 3: return "Assets/Textures/VFX/slash_04.png";          // earth — 넓은 평평 호, chunky stepped V 와 매칭
+    case 4: return "Assets/Textures/VFX/slash_03.png";          // wind — 수직 슬림 호, multi-strand 3 가닥과 결 일치
+    case 0:
+    default: return "Assets/Textures/VFX/slash_02.png";         // default — 범용 깔끔 호
+    }
+}
+
 // 흔히 쓰이는 칼 든 손 본 이름 후보 — DarkLord 모델 본명 정확히는 모르니 광역 매칭.
 //   첫 매치를 사용. 없으면 nullptr → fallback.
 TransformComponent* ComboAttackBehavior::FindSwordBone(EnemyComponent* pEnemy)
@@ -397,42 +409,40 @@ TransformComponent* ComboAttackBehavior::FindSwordBone(EnemyComponent* pEnemy)
 //   톤 다운된 채도 (형광 회피) — 코어가 너무 밝지 않게 ~1.6 (HDR 부드러운 발광).
 namespace
 {
-    // 원소별 (core, edge) — 다크 RPG 톤. 채도 ↑ 밝기 ↓ 로 보스 위엄.
-    //   원칙: 각 원소가 한눈에 식별. pastel/white 회피 (이전 톤 피드백).
-    //   shader 가 HDR ×N 부스트하므로 raw 값은 0.2~0.7 범위로 유지 → bloom 후 적절한 발광.
-    struct ColorPair { XMFLOAT4 core; XMFLOAT4 edge; };
+    // 원소별 (core, edge, elementId) — AAA 스타일 vivid 팔레트 (Undead Lord 레퍼런스).
+    //   elementId : 셰이더가 원소별 stylization (fire yellow core / wind multi-strand 등) 분기에 사용.
+    //   0=default, 1=fire, 2=water, 3=earth, 4=wind.
+    struct ColorPair { XMFLOAT4 core; XMFLOAT4 edge; int elementId; };
     ColorPair PickColorPairForEffect(const std::string& effectName)
     {
-        // 불 — 진한 주황빨강 core / 핏빛 검정에 가까운 edge. 용암 톤.
+        // 불 — vivid 주황빨강 core / 핏빛 edge. 셰이더가 hot yellow core overlay 추가.
         if (effectName.find("burn")  != std::string::npos ||
             effectName.find("fire")  != std::string::npos ||
             effectName.find("Meteor")!= std::string::npos)
-            return { XMFLOAT4(0.75f, 0.18f, 0.04f, 1.0f), XMFLOAT4(0.30f, 0.02f, 0.00f, 1.0f) };
+            return { XMFLOAT4(1.10f, 0.40f, 0.10f, 1.0f), XMFLOAT4(0.55f, 0.08f, 0.00f, 1.0f), 1 };
 
-        // 물 — 깊은 코발트 core / 거의 검정에 가까운 군청 edge. 바닷속 톤.
+        // 물 — vivid 코발트/시안 core / 깊은 군청 edge. 밝은 cyan highlight.
         if (effectName.find("chill") != std::string::npos ||
             effectName.find("water") != std::string::npos ||
             effectName.find("Wave")  != std::string::npos ||
             effectName.find("Vortex")!= std::string::npos)
-            return { XMFLOAT4(0.08f, 0.25f, 0.72f, 1.0f), XMFLOAT4(0.00f, 0.05f, 0.25f, 1.0f) };
+            return { XMFLOAT4(0.18f, 0.60f, 1.10f, 1.0f), XMFLOAT4(0.05f, 0.25f, 0.55f, 1.0f), 2 };
 
-        // 바람 — 깊은 에메랄드 core / 짙은 녹청 edge. 형광끼 제거 (HDR ×5 와 곱하면 blow-out 위험).
-        //   "검풍" 톤 — 채도는 유지하되 brightness 만 낮춰 다크 톤.
+        // 바람 — vivid 민트/에메랄드 core / 짙은 녹청 edge. 셰이더가 multi-strand 3 parallel.
         if (effectName.find("freeze")!= std::string::npos ||
             effectName.find("wind")  != std::string::npos ||
             effectName.find("Wind")  != std::string::npos ||
             effectName.find("Gale")  != std::string::npos)
-            return { XMFLOAT4(0.12f, 0.50f, 0.28f, 1.0f), XMFLOAT4(0.01f, 0.18f, 0.10f, 1.0f) };
+            return { XMFLOAT4(0.25f, 0.95f, 0.65f, 1.0f), XMFLOAT4(0.05f, 0.50f, 0.30f, 1.0f), 4 };
 
-        // 땅 — 진한 황토/앰버 core / 흙갈색 edge. 마른 흙·녹슨 광물 톤.
+        // 땅 — vivid 황금/앰버 core / 흙갈색 edge. 셰이더가 chunky edge stepped.
         if (effectName.find("fracture")  != std::string::npos ||
             effectName.find("earth")     != std::string::npos ||
             effectName.find("Stone")     != std::string::npos ||
             effectName.find("EarthArmor")!= std::string::npos)
-            return { XMFLOAT4(0.60f, 0.30f, 0.05f, 1.0f), XMFLOAT4(0.18f, 0.06f, 0.00f, 1.0f) };
+            return { XMFLOAT4(1.05f, 0.55f, 0.10f, 1.0f), XMFLOAT4(0.45f, 0.15f, 0.02f, 1.0f), 3 };
 
-        // 기본 (key 매치 X) — 어두운 amber. 식별 되도록 saturated.
-        return { XMFLOAT4(0.55f, 0.40f, 0.20f, 1.0f), XMFLOAT4(0.20f, 0.10f, 0.02f, 1.0f) };
+        return { XMFLOAT4(0.80f, 0.55f, 0.25f, 1.0f), XMFLOAT4(0.30f, 0.12f, 0.02f, 1.0f), 0 };
     }
 }
 
@@ -489,37 +499,57 @@ void ComboAttackBehavior::SpawnHitVFX(EnemyComponent* pEnemy, const ComboHit& hi
     if (!pOwner) return;
     TransformComponent* pBossT = pOwner->GetTransform();
     if (!pBossT) return;
+    EnemySpawner* pSpawner = pScene->GetEnemySpawner();
+    if (!pSpawner) return;
 
     // 검 본 존재 확인 — trail 모드는 본 위치 추적이 핵심
     FindSwordBone(pEnemy);
 
-    // Trail emission 시작 — Hit phase + recovery 일부까지 길게 emit.
-    //   실제 swing 끝나도 검 본 잔여 모션 동안 piece 계속 emit → 호 누적.
+    // 원소 색은 가장 먼저 — Crescent / Ribbon / SwordGlow 모두 이 값을 참조.
     {
         ColorPair cp = PickColorPairForEffect(hit.strVFXOnHit);
         m_xmf4TrailColor     = cp.core;
         m_xmf4TrailEdgeColor = cp.edge;
+        m_nCurrentElementId  = cp.elementId;
     }
     m_fTrailPieceScale = hit.fVFXScale;
-    m_fCurrentConeAngle = hit.fConeAngle;   // UpdateTrailMesh 가 회전 여부 판단에 사용
-    // 검기 지속시간 — recovery 동안 검 본 잔여 모션 계속 따라가야 swing arc 가 또렷.
-    //   기존 공식 (~0.15~0.25s) 은 너무 짧아서 "딱 번쩍" 느낌. 최소 0.45s 보장 + recovery 의 70% 포함.
-    //   sword glow 도 같은 길이로 연동 (아래 m_fSwordGlowMax).
+    m_fCurrentConeAngle = hit.fConeAngle;
+    // Trail life — windup 후반 시작 ~ recovery 80% 까지 emit. 검 본 실제 궤적 따라가는 메인 검기.
     float baseEmit = (hit.fHitTime > 0.12f) ? hit.fHitTime : 0.12f;
-    // Trail life — 짧은 swing 일수록 trail 도 짧게. recovery 0.45 → 0.32, 버퍼 0.18 → 0.10.
-    //   기존: 0.18s hit 에 0.486s trail (2.7배) → swing 끝나도 환한 trail 잔존.
-    //   신규: 0.18s hit 에 0.39s trail (2.1배) — swing 과 시간 균형.
-    m_fTrailRemain = baseEmit + hit.fRecoveryTime * 0.32f + 0.10f;
-    if (m_fTrailRemain < 0.32f) m_fTrailRemain = 0.32f;
+    m_fTrailRemain = baseEmit + hit.fRecoveryTime * 0.55f + 0.15f;
+    if (m_fTrailRemain < 0.40f) m_fTrailRemain = 0.40f;
     m_fTrailEmitAccum = 0.0f;
-    m_bEmittingTrail = false;            // 동적 ribbon 비활성화 — anchored crescent + sweep mask 가 primary
     m_bHasPrevSwordPos = false;
     m_bYawInitialized  = false;
     CleanupAllSlashPieces();
     StopRibbon();   // 이전 hit 잔여 ribbon 즉시 정리
 
-    // 동적 검 본 추적 ribbon 은 제거됨 — jitter / self-intersect / 짧은 swing 빈약함 모두 원인.
-    //   대신 SpawnCrescentFlash 가 anchored 정적 호 + 셰이더 sweep mask 로 "그려나가는" 효과 표현.
+    // Dynamic ribbon 활성화 — 검 본이 잡혀 있을 때만. 메인 검기 = 실제 검 궤적.
+    //   m_pTrailRibbon GameObject + SwordTrailMesh 새로 생성, m_bEmittingTrail = true.
+    //   UpdateTrailMesh 가 매 frame 검 본 worldMatrix 따라 history push + vertex 갱신.
+    if (m_pCachedSwordBone)
+    {
+        ID3D12Device* pDev = Dx12App::GetInstance()->GetDevice();
+        if (pDev)
+        {
+            m_pTrailMesh = new SwordTrailMesh(pDev, 64);
+            m_pTrailMesh->AddRef();
+            XMFLOAT4 emi(m_xmf4TrailColor.x, m_xmf4TrailColor.y, m_xmf4TrailColor.z, 2.0f);
+            // Ribbon = 원소별 단일 호 텍스처 (Kenney slash_02/03/04 + Free Slash noise).
+            //   셰이더가 full-UV 로 슬래시 silhouette 샘플 → arcWindow soft 가장자리.
+            m_pTrailRibbon = pSpawner->SpawnSlashMesh(
+                pRoom, m_pTrailMesh,
+                XMFLOAT3(0.0f, 0.0f, 0.0f),
+                XMFLOAT3(0.0f, 0.0f, 0.0f),
+                XMFLOAT3(1.0f, 1.0f, 1.0f),
+                emi,
+                PickSlashTextureForElement(m_nCurrentElementId));
+
+            m_pRibbonScene = pScene;
+            m_vSwordHistory.clear();
+            m_bEmittingTrail = (m_pTrailRibbon != nullptr);
+        }
+    }
 
     // 검 자체 emissive 발광 — 검 본의 owner GameObject material.m_cEmissive 를 동적 boost.
     if (m_pCachedSwordBone)
@@ -540,6 +570,50 @@ void ComboAttackBehavior::SpawnHitVFX(EnemyComponent* pEnemy, const ComboHit& hi
     }
 
     m_bTrailStarted = true;
+}
+
+// 원소별 impact particle — sub_blast_wave / sub_strike_spark / sub_cool_mist / sub_speed_streak.
+//   검 끝 (m_pCachedSwordBone 의 -Y axis tip) 위치에서 발사. 본 없으면 보스 forward + chest.
+void ComboAttackBehavior::SpawnImpactVFX(EnemyComponent* pEnemy, const ComboHit& hit)
+{
+    if (!pEnemy || hit.strVFXImpact.empty()) return;
+    if (!EffectRegistry::Get().HasEffect(hit.strVFXImpact)) return;
+
+    Dx12App* pApp = Dx12App::GetInstance();
+    if (!pApp) return;
+    Scene* pScene = pApp->GetScene();
+    if (!pScene) return;
+    VFXManager* pVFX = pScene->GetVFXManager();
+    if (!pVFX) return;
+
+    GameObject* pOwner = pEnemy->GetOwner();
+    if (!pOwner) return;
+    TransformComponent* pBossT = pOwner->GetTransform();
+    if (!pBossT) return;
+
+    XMFLOAT3 pos;
+    XMFLOAT3 dir;
+    if (m_pCachedSwordBone)
+    {
+        const XMFLOAT4X4& w = m_pCachedSwordBone->GetWorldMatrix();
+        XMFLOAT3 grip = { w._41, w._42, w._43 };
+        XMFLOAT3 dirY = { w._21, w._22, w._23 };
+        // -Y = tip (UpdateTrailMesh 와 같은 convention).
+        pos = { grip.x - dirY.x, grip.y - dirY.y, grip.z - dirY.z };
+    }
+    else
+    {
+        XMFLOAT3 bossPos = pBossT->GetPosition();
+        float yawRad = XMConvertToRadians(pBossT->GetRotation().y);
+        pos = { bossPos.x + sinf(yawRad) * hit.fHitRange * 0.6f,
+                bossPos.y + 5.0f,
+                bossPos.z + cosf(yawRad) * hit.fHitRange * 0.6f };
+    }
+    // 보스 정면 방향 = effect 발산 방향
+    float yawRad = XMConvertToRadians(pBossT->GetRotation().y);
+    dir = { sinf(yawRad), 0.0f, cosf(yawRad) };
+
+    pVFX->Spawn(hit.strVFXImpact, pos, dir, 0u, false);
 }
 
 void ComboAttackBehavior::UpdateSwordGlow(float dt)
@@ -670,9 +744,10 @@ void ComboAttackBehavior::UpdateTrailMesh(float dt, EnemyComponent* pEnemy)
                 m_vSwordHistory.erase(m_vSwordHistory.begin());
         }
 
-        // 검기 호 강화 — halfWidth 배수 0.55 → 0.95 로 키워 두께도 같이 ↑.
-        //   fVFXScale 4~6 → halfWidth ~3.8~5.7. taper 곡선이 양 끝 자연 fade.
-        const float halfWidth = m_fTrailPieceScale * 0.95f * widthScale;
+        // Dynamic ribbon 은 실제 검 궤적을 따라가는 본체. 큰 임팩트는 crescent burst 가 담당.
+        //   0.30 → 0.60 — 이전엔 시각이 너무 얇아 검기 자체가 잘 안 보임. 두 배로 키우되
+        //   부채꼴 덩어리 느낌은 텍스처 silhouette 가 잡아주므로 안전.
+        const float halfWidth = m_fTrailPieceScale * 0.60f * widthScale;
         m_pTrailMesh->UpdateTrail(m_vSwordHistory, halfWidth);
     }
     else
@@ -682,18 +757,18 @@ void ComboAttackBehavior::UpdateTrailMesh(float dt, EnemyComponent* pEnemy)
         return;
     }
 
-    // material: emissive = core, ambient = edge.
-    //   emissive.w = 2.0 센티넬 → 셰이더가 sword-trail 특수 path (panning noise + leading edge mask + HDR ×8) 활성화.
-    //   기존 0.9/0.7 톤다운은 셰이더 HDR 부스트로 대체됨 (raw 색을 그대로 셰이더에 넘김).
+    // material: emissive.w = 2.0 ribbon sentinel, ambient.w = elementId (정수).
+    //   diffuse.r = 1 (revealProgress) — ribbon 은 reveal mask 통과해야 visible. crescent 와 셰이더 공유.
+    //   diffuse.g = 0 (dissolveProgress 미사용), diffuse.b = 0 (burst 미사용), diffuse.a = fadeT.
     MATERIAL mat;
-    mat.m_cDiffuse  = XMFLOAT4(0.0f, 0.0f, 0.0f, m_fRibbonFadeT);
+    mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.0f, 0.0f, m_fRibbonFadeT);
     mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
     mat.m_cEmissive = XMFLOAT4(m_xmf4TrailColor.x,
                                 m_xmf4TrailColor.y,
-                                m_xmf4TrailColor.z, 2.0f);   // .w = 2.0 = sword-trail sentinel
+                                m_xmf4TrailColor.z, 2.0f);
     mat.m_cAmbient  = XMFLOAT4(m_xmf4TrailEdgeColor.x,
                                 m_xmf4TrailEdgeColor.y,
-                                m_xmf4TrailEdgeColor.z, 1.0f);
+                                m_xmf4TrailEdgeColor.z, (float)m_nCurrentElementId);
     m_pTrailRibbon->SetMaterial(mat);
 }
 
@@ -795,11 +870,14 @@ void ComboAttackBehavior::SpawnSingleCrescent(EnemyComponent* pEnemy, const Comb
     float halfWidth = m_fTrailPieceScale * cfg.halfWidthMul;
     pMesh->UpdateTrail(arc, halfWidth);
 
+    // Crescent — 원소별 단일 호 텍스처 (Kenney slash_02/03/04 + Free Slash noise).
+    //   셰이더가 full-UV 로 슬래시 silhouette 샘플 → arcWindow + 원소 stylization overlay.
     GameObject* pObj = pSpawner->SpawnSlashMesh(pRoom, pMesh,
                                                 XMFLOAT3(0.0f, 0.0f, 0.0f),
                                                 XMFLOAT3(0.0f, 0.0f, 0.0f),
                                                 XMFLOAT3(1.0f, 1.0f, 1.0f),
-                                                m_xmf4CrescentColor);
+                                                m_xmf4CrescentColor,
+                                                PickSlashTextureForElement(m_nCurrentElementId));
     if (pObj)
     {
         MATERIAL mat = pObj->GetMaterial();
@@ -826,6 +904,15 @@ void ComboAttackBehavior::SpawnCrescentFlash(EnemyComponent* pEnemy, const Combo
 
     StopCrescent();   // 직전 hit 잔여 정리
 
+    // 색 세팅 — Crescent 가 SpawnHitVFX 보다 먼저 호출될 수도 있으므로 여기서 보장.
+    //   안 그러면 이전 hit 의 m_xmf4TrailColor 가 leak 됨.
+    {
+        ColorPair cp = PickColorPairForEffect(hit.strVFXOnHit);
+        m_xmf4TrailColor     = cp.core;
+        m_xmf4TrailEdgeColor = cp.edge;
+        m_nCurrentElementId  = cp.elementId;
+    }
+
     XMFLOAT3 bossPos = pBossT->GetPosition();
     float yawDeg = pBossT->GetRotation().y;
 
@@ -847,32 +934,34 @@ void ComboAttackBehavior::SpawnCrescentFlash(EnemyComponent* pEnemy, const Combo
     // shape 별 primary/secondary config.
     ArcShapeCfg cfgA{}, cfgB{};
     bool bUseSecondary = false;
+    // halfWidthMul 전 항목 ~1.8× — 이전엔 검기가 너무 얇아 잘 안 보임. radiusMul 도 살짝 키움.
+    //   Cross 는 +45/-45 로 진짜 X자.
     switch (hit.eShape)
     {
     case SwordEnergyShape::Default:
-        cfgA = { visualConeDeg, 1.15f, 0.92f, 0.0f, 0.0f, false };
+        cfgA = { visualConeDeg, 1.35f, 1.05f, 0.0f, 0.0f, false };
         break;
     case SwordEnergyShape::Wide:
-        cfgA = { visualConeDeg * 0.75f, 1.90f, 0.88f, 0.0f, 0.0f, false };
+        cfgA = { visualConeDeg * 0.80f, 2.10f, 1.00f, 0.0f, 0.0f, false };
         break;
     case SwordEnergyShape::Slim:
-        cfgA = { visualConeDeg * 0.50f, 0.55f, 0.95f, 0.0f, 0.0f, false };
+        cfgA = { visualConeDeg * 0.50f, 0.65f, 1.10f, 0.0f, 0.0f, false };
         break;
     case SwordEnergyShape::Long:
-        cfgA = { visualConeDeg * 0.55f, 0.65f, 1.35f, 0.0f, 0.0f, false };
+        cfgA = { visualConeDeg * 0.55f, 0.80f, 1.55f, 0.0f, 0.0f, false };
         break;
     case SwordEnergyShape::Double:
-        cfgA = { visualConeDeg * 0.90f, 0.85f, 0.92f, +1.4f, 0.0f, false };
-        cfgB = { visualConeDeg * 0.90f, 0.85f, 0.92f, -1.4f, 0.0f, false };
+        cfgA = { visualConeDeg * 0.85f, 1.00f, 1.05f, +1.4f, 0.0f, false };
+        cfgB = { visualConeDeg * 0.85f, 1.00f, 1.05f, -1.4f, 0.0f, false };
         bUseSecondary = true;
         break;
     case SwordEnergyShape::Cross:
-        cfgA = { visualConeDeg * 0.55f, 0.85f, 0.95f, 0.0f, +30.0f, false };
-        cfgB = { visualConeDeg * 0.55f, 0.85f, 0.95f, 0.0f, -30.0f, false };
+        cfgA = { visualConeDeg * 0.55f, 0.90f, 1.10f, 0.0f, +45.0f, false };
+        cfgB = { visualConeDeg * 0.55f, 0.90f, 1.10f, 0.0f, -45.0f, false };
         bUseSecondary = true;
         break;
     case SwordEnergyShape::Overhead:
-        cfgA = { 100.0f, 0.85f, 0.85f, 0.0f, 0.0f, true };   // 수직 plane
+        cfgA = { 100.0f, 1.00f, 1.00f, 0.0f, 0.0f, true };   // 수직 plane
         break;
     }
 
@@ -881,17 +970,21 @@ void ComboAttackBehavior::SpawnCrescentFlash(EnemyComponent* pEnemy, const Combo
         SpawnSingleCrescent(pEnemy, hit, cfgB, chestY, yawDeg, &m_pCrescentObj2, &m_pCrescentMesh2);
 
     m_pCrescentScene = pScene;
-    // Alpha envelope — 호 자체는 처음부터 끝까지 항상 visible. alpha 만 in/out.
-    //   fadeIn   : 0.15s — 부드러운 등장 (한번에 나타나는 pop 회피, smoothstep S-curve).
-    //   hold     : windup 잔여(35%) + hit 전체 + 작은 추가 — 다양한 swing 시점 cover.
-    //   fadeOut  : recovery * 0.4 — 사라짐.
+    // Crescent envelope — Hit 순간 spawn 기준. "쾅 하고 생긴 뒤 찢어지며 사라지는" 짧고 강한 플래시.
+    //   fadeIn   : 0.035s — 거의 즉시. burst 가 이 timing 에 흰빛 폭발 overlay.
+    //   hold     : hit 전체 + 약간 — swing window cover.
+    //   fadeOut  : 0.18s — dissolve.
     m_fCrescentTime       = 0.0f;
-    m_fCrescentFadeInDur  = 0.15f;
-    float hold = hit.fWindupTime * 0.35f + hit.fHitTime + 0.05f;
-    if (hold < 0.20f) hold = 0.20f;
-    m_fCrescentHoldDur    = hold;
-    m_fCrescentFadeOutDur = (hit.fRecoveryTime > 0.0f) ? hit.fRecoveryTime * 0.40f : 0.15f;
-    if (m_fCrescentFadeOutDur < 0.12f) m_fCrescentFadeOutDur = 0.12f;
+    m_fCrescentFadeInDur  = 0.035f;
+    m_fCrescentHoldDur    = hit.fHitTime + 0.04f;
+    if (m_fCrescentHoldDur < 0.10f) m_fCrescentHoldDur = 0.10f;
+    m_fCrescentFadeOutDur = 0.18f;
+}
+
+void ComboAttackBehavior::TriggerCrescentBurst()
+{
+    // Hit phase 진입 순간 호출 — burst 타이머 reset. 호 spawn 안 됐어도 다음 frame 에서 spawn 후 자연 적용.
+    m_fCrescentBurstRemain = m_fCrescentBurstDur;
 }
 
 void ComboAttackBehavior::UpdateCrescent(float dt)
@@ -929,13 +1022,26 @@ void ComboAttackBehavior::UpdateCrescent(float dt)
         if (dissolveProgress > 1.0f) dissolveProgress = 1.0f;
     }
 
+    // Hit burst — Hit phase 진입 시 m_fCrescentBurstRemain = burstDur. 매 frame 감쇠.
+    //   셰이더에 burstAmt ^ 1.7 로 전달 → 빠르게 0 로 떨어져 "번쩍" 한 frame 위주 효과.
+    if (m_fCrescentBurstRemain > 0.0f)
+    {
+        m_fCrescentBurstRemain -= dt;
+        if (m_fCrescentBurstRemain < 0.0f) m_fCrescentBurstRemain = 0.0f;
+    }
+    float burstAmt = (m_fCrescentBurstDur > 0.0f)
+                     ? (m_fCrescentBurstRemain / m_fCrescentBurstDur) : 0.0f;
+    burstAmt = powf(burstAmt, 1.7f);   // 빠른 감쇠
+
     MATERIAL mat;
+    // ambient.w = elementId (정수 0~4) — 셰이더 stylization 분기에 사용 (robust integer encoding).
     mat.m_cAmbient  = XMFLOAT4(m_xmf4TrailEdgeColor.x,
                                 m_xmf4TrailEdgeColor.y,
-                                m_xmf4TrailEdgeColor.z, 1.0f);
-    // diffuse.r = revealProgress, diffuse.g = dissolveProgress (셰이더 noise threshold mask 파라미터).
-    mat.m_cDiffuse  = XMFLOAT4(revealProgress, dissolveProgress, 0.0f, 1.0f);
+                                m_xmf4TrailEdgeColor.z, (float)m_nCurrentElementId);
+    // diffuse.r = revealProgress, diffuse.g = dissolveProgress, diffuse.b = burstAmt.
+    mat.m_cDiffuse  = XMFLOAT4(revealProgress, dissolveProgress, burstAmt, 1.0f);
     mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+    // emissive.w = 3.0 crescent sentinel (별도 elementId 인코딩 X — ambient.w 가 담당).
     mat.m_cEmissive = XMFLOAT4(m_xmf4CrescentColor.x,
                                 m_xmf4CrescentColor.y,
                                 m_xmf4CrescentColor.z, 3.0f);
@@ -983,6 +1089,7 @@ void ComboAttackBehavior::StopCrescent()
 
     m_pCrescentScene = nullptr;
     m_fCrescentTime = 0.0f;
+    m_fCrescentBurstRemain = 0.0f;
 }
 
 // Hit phase 동안 매 frame 호출 — 검 본 위치에 swing 방향으로 stretched dash 를 emit.

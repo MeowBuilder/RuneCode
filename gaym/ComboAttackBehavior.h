@@ -98,6 +98,8 @@ public:
 private:
     void DealConeDamage(EnemyComponent* pEnemy, const ComboHit& hit);
     void SpawnHitVFX(EnemyComponent* pEnemy, const ComboHit& hit);
+    // Hit 순간 원소별 impact particle — strVFXImpact (sub_*) 효과를 검 끝/임팩트 지점에 발사.
+    void SpawnImpactVFX(EnemyComponent* pEnemy, const ComboHit& hit);
     // 검 본 자동 탐색 — DarkLord 등 sword-wielding 보스용. nullptr 면 fallback (boss forward + Y).
     class TransformComponent* FindSwordBone(EnemyComponent* pEnemy);
 
@@ -184,6 +186,12 @@ private:
     float                   m_fCrescentFadeInDur   = 0.06f;
     float                   m_fCrescentHoldDur     = 0.30f;
     float                   m_fCrescentFadeOutDur  = 0.15f;
+    // Hit-burst flash — Hit phase 진입 순간 짧게 1로 솟고 빠르게 0 로 감쇠.
+    //   셰이더에 diffuse.b 로 전달 → noise mask 무력화 + 흰빛 코어 + HDR ×2.5 부스트.
+    //   "검이 닿는 순간 번쩍" 임팩트 모먼트. 호 spawn (windup 65%) 과 분리되어 swing 직전 정확히 터짐.
+    float                   m_fCrescentBurstRemain = 0.0f;
+    float                   m_fCrescentBurstDur    = 0.12f;
+    void TriggerCrescentBurst();
     void SpawnCrescentFlash(EnemyComponent* pEnemy, const ComboHit& hit);
     void SpawnSingleCrescent(EnemyComponent* pEnemy, const ComboHit& hit,
                               const struct ArcShapeCfg& cfg, float chestY, float yawDeg,
@@ -205,6 +213,9 @@ private:
     bool m_bTrailStarted = false;
     // 현재 hit 의 cone 각도 — UpdateTrailMesh 가 회전 공격(>180°) 시 history 짧게 캡 (자기 교차 차단).
     float m_fCurrentConeAngle = 0.0f;
+    // 현재 hit 의 원소 id — 셰이더 stylization 분기에 사용. emissive.w 의 fractional 0.1 단위로 encode.
+    //   0=default, 1=fire, 2=water, 3=earth, 4=wind.
+    int   m_nCurrentElementId = 0;
     // Crescent prearm 트리거 가드 — windup 동안 한 번만 spawn.
     bool m_bCrescentSpawned = false;
 };

@@ -1868,7 +1868,8 @@ GameObject* EnemySpawner::SpawnSlashMesh(CRoom* pRoom, Mesh* pMesh,
                                           const XMFLOAT3& pos,
                                           const XMFLOAT3& rotDeg,
                                           const XMFLOAT3& scale,
-                                          const XMFLOAT4& emissive)
+                                          const XMFLOAT4& emissive,
+                                          const std::string& strSlashTexture)
 {
     if (!m_pDevice || !m_pCommandList || !m_pScene || !pMesh || !m_pShader) return nullptr;
 
@@ -1897,9 +1898,23 @@ GameObject* EnemySpawner::SpawnSlashMesh(CRoom* pRoom, Mesh* pMesh,
     mat.m_cEmissive = emissive;
     pObj->SetMaterial(mat);
 
+    // 슬래시 알파 마스크 텍스처 (옵션) — Kenney scratch_01 등. 셰이더가 sample alpha 로 검기 모양 변형.
+    if (!strSlashTexture.empty())
+    {
+        pObj->SetTextureName(strSlashTexture.c_str());
+        D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle;
+        D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle;
+        m_pScene->AllocateDescriptor(&cpuHandle, &gpuHandle);
+        pObj->LoadTexture(m_pDevice, m_pCommandList, cpuHandle);
+        pObj->SetSrvGpuDescriptorHandle(gpuHandle);
+    }
+
     auto* pRC = pObj->AddComponent<RenderComponent>();
     pRC->SetMesh(pMesh);
     pRC->SetCastsShadow(false);    // ellipse 들의 그림자가 ground 에 spike fan 형성하던 문제 차단
+    // ★ Overlay 플래그 — opaque PSO 는 BlendEnable=FALSE 라 decalA=0 영역에 검은색이 그대로 덮임.
+    //   indicator PSO 는 SrcAlpha/InvSrcAlpha 블렌딩 + DepthWrite=ZERO 라 슬래시 알파가 정상 반영.
+    pRC->SetOverlay(true);
     m_pShader->AddRenderComponent(pRC);
 
     // 첫 프레임 CB 동기화 (Room 이 Inactive 일 때 Update skip 되어 ZeroMemory CB 방지)

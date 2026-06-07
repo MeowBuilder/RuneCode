@@ -800,7 +800,10 @@ float4 PS(PS_INPUT input) : SV_TARGET
                 float v = input.uv.y;
                 float revealProgress   = gMaterial.m_cDiffuse.r;
                 float dissolveProgress = gMaterial.m_cDiffuse.g;
+                float burstAmt         = saturate(gMaterial.m_cDiffuse.b);   // Hit-burst flash (0→1, fast decay)
                 float t = g_Time;
+                // 원소 id 추출 — ambient.w 에 정수 0~4 저장 (0=def,1=fire,2=water,3=earth,4=wind).
+                int   elemId = (int)round(gMaterial.m_cAmbient.w);
 
                 // 1) UV displacement — 호 모양 자체가 sin 으로 약간 흔들림. 완벽한 기하 형태 깨기.
                 float uDisp = (sin(v * 8.0f + t * 2.0f) + sin(v * 19.0f - t * 4.0f) * 0.8f) * 0.04f;
@@ -811,6 +814,8 @@ float4 PS(PS_INPUT input) : SV_TARGET
                 // 2) UV.u 좌우 그라데이션 (displaced UV 사용).
                 float edgeT = abs(uW - 0.5f) * 2.0f;
                 float3 colorMix = lerp(gMaterial.m_cEmissive.rgb, gMaterial.m_cAmbient.rgb, edgeT);
+                // Burst 시 흰빛 코어 — colorMix 가 핵심부터 white 로 lerp (강한 컬러 보존 위해 0.55 까지만).
+                colorMix = lerp(colorMix, float3(1.6f, 1.55f, 1.45f), burstAmt * 0.55f);
 
                 // 3) Multi-octave panning noise — 4 sin 합성으로 sin 단조로움 해소.
                 float oct1 = sin((v * 22.0f + t * 9.0f) * 3.14159f) * 0.50f + 0.50f;
@@ -828,6 +833,12 @@ float4 PS(PS_INPUT input) : SV_TARGET
                 float revealMask = smoothstep(thr - 0.08f, thr + 0.08f, revealProgress);
                 float dissolveMask = 1.0f - smoothstep(thr - 0.08f, thr + 0.08f, dissolveProgress);
                 float organicMask = revealMask * dissolveMask;
+                // V축 directional sweep — 검이 지나간 방향으로 호가 그어짐. 단순 alpha pop X.
+                //   revealProgress 0→1 동안 vW 0→1 픽셀이 차례로 visible. 0.12 폭 soft edge.
+                float sweepMask = 1.0f - smoothstep(revealProgress, revealProgress + 0.12f, vW);
+                organicMask *= sweepMask;
+                // Burst 시 noise mask + sweep mask 무력화 — 임팩트 모먼트엔 호 전체가 fully visible.
+                organicMask = lerp(organicMask, 1.0f, burstAmt);
 
                 // 5) V 분포 — 대칭 bell + wobble (asymmetric brightness).
                 float vProfile = sin(saturate(vW) * 3.14159f);
@@ -843,15 +854,50 @@ float4 PS(PS_INPUT input) : SV_TARGET
                 wisps = pow(saturate(wisps), 5.0f);                       // pow 로 좁은 선만 남김
                 wisps *= sin(v * 9.0f + t * 5.0f) * 0.4f + 0.6f;          // V 따라 wisps 강도 변동
 
-                // 8) Core streak — 중앙 검날 (조금 약화 — wisps 와 합쳐 너무 환하지 않게).
-                float coreStreak = exp(-pow((uW - 0.5f) * 5.0f, 2.0f));
+                // 8) Core streak — 중앙 검날. Burst 시 더 좁고 강하게 — 임팩트 모먼트의 "검날 광선".
+                float coreSharp = lerp(5.0f, 8.5f, burstAmt);
+                float coreStreak = exp(-pow((uW - 0.5f) * coreSharp, 2.0f));
 
-                // 9) HDR — 다층 합성. 본체 + core + wisps.
-                const float kHDR = 5.0f;
+                // 9) HDR 합성 — 본체/core/wisps. Burst boost: +2.5× intensity 가산.
+                const float kHDR = 7.0f;
+                float burstBoost = 1.0f + burstAmt * 2.5f;
                 float intensity = (0.50f + 0.55f * vProfile) * (0.65f + 0.45f * noiseMix);
-                decalRGB += colorMix * intensity * kHDR * organicMask;
-                decalRGB += colorMix * coreStreak * kHDR * 0.45f * organicMask;
+                decalRGB += colorMix * intensity * kHDR * organicMask * burstBoost;
+                decalRGB += colorMix * coreStreak * kHDR * 0.65f * organicMask * burstBoost;
                 decalRGB += colorMix * wisps * kHDR * 0.55f * organicMask;
+                // Burst 의 별도 흰빛 코어 글로우 — coreStreak 위에 흰빛 1.4 ×HDR 가산. 한 frame 폭발감.
+                decalRGB += float3(1.0f, 0.95f, 0.88f) * coreStreak * kHDR * 1.4f * burstAmt;
+
+                // ── 원소별 stylization (Undead Lord 레퍼런스 톤) ──
+                // Fire — hot yellow core overlay. 칼날 중심부에 노란 발광 추가.
+                if (elemId == 1) {
+                    float3 hotYellow = float3(1.4f, 1.05f, 0.30f);
+                    decalRGB += hotYellow * coreStreak * kHDR * 0.85f * organicMask;
+                }
+                // Water — bright cyan-white highlight. 코어에 흰빛 cyan 광택.
+                else if (elemId == 2) {
+                    float3 cyanWhite = float3(0.70f, 1.20f, 1.50f);
+                    decalRGB += cyanWhite * coreStreak * kHDR * 0.55f * organicMask;
+                }
+                // Earth — chunky stepped V profile. 매끄러운 호 → 부서진 돌결.
+                else if (elemId == 3) {
+                    float vChunk = floor(v * 16.0f) / 16.0f + 0.03f;
+                    float chunkProfile = sin(saturate(vChunk) * 3.14159f);
+                    float3 amberGold = float3(1.35f, 0.85f, 0.30f);
+                    decalRGB += amberGold * chunkProfile * coreStreak * kHDR * 0.50f * organicMask;
+                }
+                // Wind — multi-strand 3 parallel + 투명도 ↑. 얇은 공기 칼날 3가닥.
+                else if (elemId == 4) {
+                    float strandSharp = 14.0f;
+                    float strandA = exp(-pow((uW - 0.28f) * strandSharp, 2.0f));
+                    float strandB = exp(-pow((uW - 0.50f) * strandSharp, 2.0f));
+                    float strandC = exp(-pow((uW - 0.72f) * strandSharp, 2.0f));
+                    float strands = strandA + strandB + strandC;
+                    decalRGB += colorMix * strands * kHDR * 0.55f * organicMask;
+                    // 본체는 좀 더 투명 — ethereal 느낌.
+                    decalA *= 0.70f;
+                }
+
                 decalA   *= edgeFade * organicMask;
             }
             else
@@ -880,11 +926,88 @@ float4 PS(PS_INPUT input) : SV_TARGET
         }
         else
         {
-            // 중앙부터 바깥으로 펼쳐지는 reveal 효과
-            // g_HitFlash = reveal radius (0=완전숨김, 1.2=완전표시, 10=clip없음)
-            float normDist = length(input.uv - float2(0.5f, 0.5f)) * 2.0f;
-            float revealMask = saturate((g_HitFlash - normDist) / 0.15f);
-            decalA *= revealMask;
+            // 텍스처드 데칼 경로 — crescent sentinel (>=1.5) 면 검기 텍스처 path, 아니면 center-out reveal.
+            if (gMaterial.m_cEmissive.w >= 1.5f)
+            {
+                // ★ 검기 — 원소별 단일 호 텍스처 (Kenney slash_02/03/04 + Free Slash noise).
+                //   ComboAttackBehavior::PickSlashTextureForElement 에서 선택. full-UV 로 호 silhouette 샘플.
+                float u = input.uv.x;
+                float v = input.uv.y;
+                float revealProgress   = gMaterial.m_cDiffuse.r;
+                float dissolveProgress = gMaterial.m_cDiffuse.g;
+                float burstAmt         = saturate(gMaterial.m_cDiffuse.b);
+                int   elemId = (int)round(gMaterial.m_cAmbient.w);
+                float t = g_Time;
+
+                // 1) 텍스처 샘플 — full UV. 살짝 UV 흔들기로 정형성 깨기 (특히 정적 crescent 의 인공적인 호 윤곽).
+                float texUDisp = sin(v * 11.0f + t * 3.0f) * 0.015f;
+                float texVDisp = sin(u * 8.0f  - t * 4.0f) * 0.012f;
+                float2 sampleUV = saturate(input.uv + float2(texUDisp, texVDisp));
+                float4 slashTex = gAlbedoMap.Sample(gSampler, sampleUV);
+                // 텍스처는 흰 브러시 / 검은 배경 (Kenney) 또는 파란 노이즈 호 (free_slash_noise).
+                // luminance × alpha 곱이 두 인코딩 방식 모두 안전.
+                float slashLum  = max(max(slashTex.r, slashTex.g), slashTex.b);
+                float slashMask = slashLum * slashTex.a;
+
+                // 2) Procedural arc Bell — U 축 좌우 fade 만 담당 (silhouette 은 슬래시 텍스처가 담당).
+                float coreStreak = exp(-pow((u - 0.5f) * 5.0f, 2.0f));
+                float edgeT = abs(u - 0.5f) * 2.0f;
+                float arcWindow = (1.0f - edgeT * edgeT);   // 0~1, 가운데 크고 양 끝 0 — soft window.
+                arcWindow = saturate(arcWindow);
+
+                // 3) Color gradient (core ↔ edge).
+                float3 colorMix = lerp(gMaterial.m_cEmissive.rgb, gMaterial.m_cAmbient.rgb, edgeT);
+                colorMix = lerp(colorMix, float3(1.6f, 1.55f, 1.45f), burstAmt * 0.55f);
+
+                // 4) Reveal/dissolve + sweep masks (procedural — 텍스처와 독립).
+                float thr = sin((v * 18.0f + u * 5.0f) * 3.14159f) * 0.25f
+                          + sin((v * 7.0f  - u * 9.0f) * 3.14159f) * 0.20f
+                          + 0.55f;
+                thr = saturate(thr);
+                float revealMask   = smoothstep(thr - 0.08f, thr + 0.08f, revealProgress);
+                float dissolveMask = 1.0f - smoothstep(thr - 0.08f, thr + 0.08f, dissolveProgress);
+                float organicMask  = revealMask * dissolveMask;
+                float sweepMask    = 1.0f - smoothstep(revealProgress, revealProgress + 0.12f, v);
+                organicMask *= sweepMask;
+                organicMask = lerp(organicMask, 1.0f, burstAmt);
+
+                // 5) Edge fade (V 축 양 끝 부드럽게).
+                float edgeFade = smoothstep(0.0f, 0.05f, v) * smoothstep(1.0f, 0.95f, v);
+
+                // 6) HDR 합성 — slashMask 가 메인 silhouette, arcWindow 가 부드러운 가장자리.
+                const float kHDR = 7.0f;
+                float burstBoost = 1.0f + burstAmt * 2.5f;
+                float intensity = slashMask * arcWindow;
+
+                decalRGB = float3(0.0f, 0.0f, 0.0f);
+                decalRGB += colorMix * intensity * kHDR * organicMask * burstBoost;
+                decalRGB += colorMix * slashMask * coreStreak * kHDR * 0.55f * organicMask * burstBoost;
+                decalRGB += float3(1.0f, 0.95f, 0.88f) * slashMask * kHDR * 1.4f * burstAmt;
+
+                // 7) 원소별 overlay.
+                if (elemId == 1) {        // 불 — 노란 hot core
+                    decalRGB += float3(1.4f, 1.05f, 0.30f) * slashMask * coreStreak * kHDR * 0.85f * organicMask;
+                }
+                else if (elemId == 2) {   // 물 — cyan-white 광택
+                    decalRGB += float3(0.70f, 1.20f, 1.50f) * slashMask * coreStreak * kHDR * 0.55f * organicMask;
+                }
+                else if (elemId == 3) {   // 흙 — gold
+                    decalRGB += float3(1.35f, 0.85f, 0.30f) * slashMask * arcWindow * kHDR * 0.40f * organicMask;
+                }
+                else if (elemId == 4) {   // 바람 — 투명도 ↑
+                    decalA *= 0.70f;
+                }
+
+                // 8) 최종 alpha — slashMask 가 brush silhouette, arcWindow 로 끝단 soft fade.
+                decalA = slashMask * arcWindow * edgeFade * organicMask;
+            }
+            else
+            {
+                // 중앙부터 바깥으로 펼쳐지는 reveal 효과 (기존 데칼)
+                float normDist = length(input.uv - float2(0.5f, 0.5f)) * 2.0f;
+                float revealMask = saturate((g_HitFlash - normDist) / 0.15f);
+                decalA *= revealMask;
+            }
         }
         return float4(decalRGB, decalA);
     }
