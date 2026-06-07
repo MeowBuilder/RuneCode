@@ -11,6 +11,7 @@
 #include "EndingScreen.h"
 #include "GameOverScreen.h"
 #include "LoadingScreen.h"
+#include "AudioManager.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -50,6 +51,7 @@ public:
     void FrameAdvance();
     void ToggleFullscreen();
     void OnResize(UINT nWidth, UINT nHeight);
+    void OnActivateApp(bool active);  // 포커스 손실/복귀 시 오디오 일시정지/재개
 
     InputSystem& GetInputSystem() { return m_inputSystem; } // Added getter for InputSystem
     ID3D12Device* GetDevice() const { return m_pd3dDevice.Get(); }
@@ -125,6 +127,10 @@ private:
 
     std::unique_ptr<Scene> m_pScene;
     InputSystem m_inputSystem; // Added InputSystem member
+
+    // 오디오 (DirectXTK12 / XAudio2) — BGM 재생
+    std::unique_ptr<AudioManager> m_pAudio;
+    void UpdateBGMForState();  // m_eAppState 에 맞는 BGM 선택 (매 프레임, 중복 호출 안전)
 
     // DirectXTK12 텍스트 렌더링
     std::unique_ptr<DirectX::GraphicsMemory> m_graphicsMemory;

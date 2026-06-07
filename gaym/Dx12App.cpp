@@ -217,6 +217,11 @@ void Dx12App::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
 
     m_eAppState = AppState::Title;
 
+    // 오디오 초기화 (장치가 없으면 silent mode 로 동작, 실패해도 게임은 무음 진행)
+    m_pAudio = std::make_unique<AudioManager>();
+    if (!m_pAudio->Initialize())
+        m_pAudio.reset();
+
     // 네트워크 초기화
     InitializeNetwork();
 
@@ -231,6 +236,13 @@ void Dx12App::OnDestroy()
     static bool s_bDestroyed = false;
     if (s_bDestroyed) return;
     s_bDestroyed = true;
+
+    // 오디오 정리 (보이스/엔진 파괴)
+    if (m_pAudio)
+    {
+        m_pAudio->Shutdown();
+        m_pAudio.reset();
+    }
 
     // 네트워크 정리
     if (m_pNetworkManager)
@@ -261,6 +273,13 @@ void Dx12App::OnDestroy()
         m_pdxgiSwapChain->SetFullscreenState(FALSE, NULL);
     }
     CloseHandle(m_hFenceEvent);
+}
+
+void Dx12App::OnActivateApp(bool active)
+{
+    if (!m_pAudio) return;
+    if (active) m_pAudio->Resume();
+    else        m_pAudio->Suspend();
 }
 
 void Dx12App::CreateDirect3DDevice()
@@ -515,10 +534,39 @@ void Dx12App::UpdateFrameRate()
     ::SetWindowText(m_hWnd, text);
 }
 
+void Dx12App::UpdateBGMForState()
+{
+    if (!m_pAudio) return;
+    switch (m_eAppState)
+    {
+    case AppState::Title:
+    case AppState::CharacterSelect:
+    case AppState::Ending:
+        m_pAudio->PlayBGM(L"menu_theme");
+        break;
+    case AppState::Loading:
+        // 로딩 중에는 BGM 전환하지 않음 (메뉴→인게임 전환을 매끄럽게)
+        break;
+    case AppState::Playing:
+        m_pAudio->PlayBGM(L"ingame_theme");
+        break;
+    case AppState::GameOver:
+        m_pAudio->PlayBGM(L"gameover_theme");
+        break;
+    }
+}
+
 void Dx12App::FrameAdvance()
 {
     m_GameTimer.Tick();
     float deltaTime = m_GameTimer.GetTimeElapsed();
+
+    // 오디오: 매 프레임 엔진 처리 + 현재 앱 상태에 맞는 BGM 선택
+    if (m_pAudio)
+    {
+        m_pAudio->Update();
+        UpdateBGMForState();
+    }
 
     // ── 타이틀 화면 ─────────────────────────────────────────────────────────
     if (m_eAppState == AppState::Title)
@@ -593,6 +641,7 @@ void Dx12App::FrameAdvance()
 
         if (m_graphicsMemory) m_graphicsMemory->Commit(m_pd3dCommandQueue.Get());
         UpdateFrameRate();
+        m_inputSystem.Reset(); // UI 상태에서도 매 프레임 입력 prev 상태 갱신 (클릭 엣지 검출 유지)
         return;
     }
 
@@ -664,6 +713,7 @@ void Dx12App::FrameAdvance()
 
         if (m_graphicsMemory) m_graphicsMemory->Commit(m_pd3dCommandQueue.Get());
         UpdateFrameRate();
+        m_inputSystem.Reset(); // UI 상태에서도 매 프레임 입력 prev 상태 갱신 (클릭 엣지 검출 유지)
         return;
     }
 
@@ -729,6 +779,7 @@ void Dx12App::FrameAdvance()
 
         if (m_graphicsMemory) m_graphicsMemory->Commit(m_pd3dCommandQueue.Get());
         UpdateFrameRate();
+        m_inputSystem.Reset(); // UI 상태에서도 매 프레임 입력 prev 상태 갱신 (클릭 엣지 검출 유지)
         return;
     }
 
@@ -840,6 +891,7 @@ void Dx12App::FrameAdvance()
 
         if (m_graphicsMemory) m_graphicsMemory->Commit(m_pd3dCommandQueue.Get());
         UpdateFrameRate();
+        m_inputSystem.Reset(); // UI 상태에서도 매 프레임 입력 prev 상태 갱신 (클릭 엣지 검출 유지)
         return;
     }
 

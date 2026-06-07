@@ -159,6 +159,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_SIZE:
         g_pDx12App->OnResize(LOWORD(lParam), HIWORD(lParam));
         break;
+    case WM_ACTIVATEAPP:
+        g_pDx12App->OnActivateApp(wParam != FALSE);
+        break;
     case WM_DESTROY:
         g_pDx12App->OnDestroy();
         PostQuitMessage(0);
