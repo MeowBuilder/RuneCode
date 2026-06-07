@@ -21,12 +21,12 @@ void StoneSpikesBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFL
     m_bChannelMode = true;
     m_pCaster = caster;  // 채널 모드에서도 caster 캐시 (처형자 룬 등 SkillStats 조회에 필요)
     // Execute에서 원소를 캐시하지 않으므로 여기서 미리 캐시
-    m_cachedElem = ElementType::None;
+    m_cachedElemSet.clear();
     if (caster) {
         auto* pSC = caster->GetComponent<SkillComponent>();
         if (pSC && m_slot != SkillSlot::Count) {
             SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-            if (!sts.elementSet.empty()) m_cachedElem = sts.elementSet[0];
+            m_cachedElemSet = sts.elementSet;
         }
     }
 }
@@ -51,8 +51,8 @@ void StoneSpikesBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLO
         XMFLOAT3 spawnPos = { target.x, 0.f, target.z };
         XMFLOAT3 up = { 0.f, 1.f, 0.f };
         EffectDef def = EffectRegistry::Get().GetEffect("Q_StoneSpike");
-        if (m_cachedElem != ElementType::None)
-            ApplyElementToEffectDef(def, m_cachedElem);
+        if (!m_cachedElemSet.empty())
+            ApplyElementSetToEffectDef(def, m_cachedElemSet);
         m_pVFXManager->SpawnEffectDef(spawnPos, up, def, true);
     }
 
@@ -122,14 +122,13 @@ void StoneSpikesBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& t
         m_spikes.push_back(e);
     }
 
-    // 변환 룬 원소 캡처
-    m_cachedElem = ElementType::None;
+    // 변환 룬 원소 세트 캡처 (멀티 원소 레이어용)
+    m_cachedElemSet.clear();
     if (caster) {
         auto* pSC = caster->GetComponent<SkillComponent>();
         if (pSC && m_slot != SkillSlot::Count) {
             SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-            if (!sts.elementSet.empty())
-                m_cachedElem = sts.elementSet[0];
+            m_cachedElemSet = sts.elementSet;
         }
     }
 
@@ -164,8 +163,8 @@ void StoneSpikesBehavior::TriggerSpike(int idx)
     {
         XMFLOAT3 up = { 0.f, 1.f, 0.f };
         EffectDef def = EffectRegistry::Get().GetEffect("Q_StoneSpike");
-        if (m_cachedElem != ElementType::None)
-            ApplyElementToEffectDef(def, m_cachedElem);
+        if (!m_cachedElemSet.empty())
+            ApplyElementSetToEffectDef(def, m_cachedElemSet);
         s.vfxId = m_pVFXManager->SpawnEffectDef(s.pos, up, def, true);
     }
 

@@ -31,12 +31,12 @@ uint32_t WindCutterBehavior::GetRuneFlags(GameObject* caster) const
 void WindCutterBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3& targetPosition)
 {
     m_bChannelMode = true;
-    m_cachedElem   = ElementType::None;
+    m_cachedElemSet.clear();
     if (caster) {
         auto* pSC = caster->GetComponent<SkillComponent>();
         if (pSC && m_slot != SkillSlot::Count) {
             SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-            if (!sts.elementSet.empty()) m_cachedElem = sts.elementSet[0];
+            m_cachedElemSet = sts.elementSet;
         }
     }
 }
@@ -72,8 +72,8 @@ void WindCutterBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOA
             l.crescent.normalSpeedMin *= 0.37f;
             l.crescent.normalSpeedMax *= 0.37f;
         }
-        if (m_cachedElem != ElementType::None)
-            ApplyElementToEffectDef(miniDef, m_cachedElem);
+        if (!m_cachedElemSet.empty())
+            ApplyElementSetToEffectDef(miniDef, m_cachedElemSet);
         m_pVFXManager->SpawnEffectDef(spawnPos, dir, miniDef, true);
     }
 

@@ -54,7 +54,7 @@ private:
     bool  m_bChannelMode     = false;
     float m_damageMult = 1.f;
     float m_elapsed    = 0.f;
-    ElementType m_cachedElem = ElementType::None;
+    std::vector<ElementType> m_cachedElemSet;   // Execute 시 결정된 원소 세트 (멀티 원소 레이어)
     GameObject* m_pCaster    = nullptr;
 
     std::vector<SpikeEntry> m_spikes;

@@ -75,7 +75,7 @@ void WaterPuddleBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLO
     {
         XMFLOAT3 fallPos = { targetPosition.x, targetPosition.y + 5.5f, targetPosition.z };
         EffectDef fallDef = EffectRegistry::Get().GetEffect("Q_WaterFall");
-        if (!stats.elementSet.empty()) ApplyElementToEffectDef(fallDef, stats.elementSet[0]);
+        if (!stats.elementSet.empty()) ApplyElementSetToEffectDef(fallDef, stats.elementSet);
         VFXModifier mod;
         mod.sizeScaleMult     = 0.5f;
         mod.particleCountMult = 0.45f;
@@ -88,7 +88,7 @@ void WaterPuddleBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLO
     {
         XMFLOAT3 puddlePos = { targetPosition.x, 2.5f, targetPosition.z };
         EffectDef puddleDef = EffectRegistry::Get().GetEffect("Q_WaterPuddle");
-        if (!stats.elementSet.empty()) ApplyElementToEffectDef(puddleDef, stats.elementSet[0]);
+        if (!stats.elementSet.empty()) ApplyElementSetToEffectDef(puddleDef, stats.elementSet);
         VFXModifier mod;
         mod.sizeScaleMult     = 0.5f;
         mod.particleCountMult = 0.45f;
@@ -151,7 +151,7 @@ void WaterPuddleBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& t
         XMFLOAT3 fallDir    = { 0.f, -1.f, 0.f };
         EffectDef fallDef   = EffectRegistry::Get().GetEffect("Q_WaterFall");
         if (!stats.elementSet.empty())
-            ApplyElementToEffectDef(fallDef, stats.elementSet[0]);
+            ApplyElementSetToEffectDef(fallDef, stats.elementSet);
         m_fallVfxId = m_pVFXManager->SpawnEffectDef(fallOrigin, fallDir, fallDef, true);
     }
 
@@ -161,7 +161,7 @@ void WaterPuddleBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& t
         XMFLOAT3 puddleDir    = { 0.f, -1.f, 0.f };
         EffectDef puddleDef   = EffectRegistry::Get().GetEffect("Q_WaterPuddle");
         if (!stats.elementSet.empty())
-            ApplyElementToEffectDef(puddleDef, stats.elementSet[0]);
+            ApplyElementSetToEffectDef(puddleDef, stats.elementSet);
         m_vfxId = m_pVFXManager->SpawnEffectDef(puddleOrigin, puddleDir, puddleDef, true);
     }
 

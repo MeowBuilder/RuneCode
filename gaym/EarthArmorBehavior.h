@@ -1,6 +1,8 @@
 #pragma once
 #include "ISkillBehavior.h"
 #include "SkillData.h"
+#include "SkillTypes.h"
+#include <vector>
 
 class FluidSkillVFXManager;
 class Scene;
@@ -41,7 +43,7 @@ private:
     bool        m_bChannelMode     = false;
     bool        m_bPostChannel     = false;  // OnChannelEnd → Execute 버스트 전달용
     float       m_elapsed          = 0.f;
-    ElementType m_cachedElem       = ElementType::None;
+    std::vector<ElementType> m_cachedElemSet;   // Execute 시 결정된 원소 세트 (멀티 원소 레이어)
     int         m_auraVfxId        = -1;
     int         m_shieldVfxId      = -1;
     int         m_enhanceAuraId    = -1;

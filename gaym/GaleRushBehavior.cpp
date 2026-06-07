@@ -22,12 +22,12 @@ void GaleRushBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT
     m_hitEnemies.clear();
     m_trailTimer = 0.f;
     // Execute가 채널 모드에서 early-return하므로 여기서 변환 룬 원소를 캐시
-    m_cachedElem = ElementType::None;
+    m_cachedElemSet.clear();
     if (caster) {
         auto* pSC = caster->GetComponent<SkillComponent>();
         if (pSC && m_slot != SkillSlot::Count) {
             SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-            if (!sts.elementSet.empty()) m_cachedElem = sts.elementSet[0];
+            m_cachedElemSet = sts.elementSet;
         }
     }
 }
@@ -68,8 +68,8 @@ void GaleRushBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3
             XMFLOAT3 burstPos = casterPos;
             burstPos.y += 2.0f;
             EffectDef burstDef = EffectRegistry::Get().GetEffect("E_GaleRush_Burst");
-            if (m_cachedElem != ElementType::None)
-                ApplyElementToEffectDef(burstDef, m_cachedElem);
+            if (!m_cachedElemSet.empty())
+                ApplyElementSetToEffectDef(burstDef, m_cachedElemSet);
             m_pVFXManager->SpawnEffectDef(burstPos, m_direction, burstDef, false);
         }
 
@@ -80,8 +80,8 @@ void GaleRushBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3
             trailPos.y += 2.0f;
             XMFLOAT3 backDir = { -m_direction.x, 0.f, -m_direction.z };
             EffectDef trailDef = EffectRegistry::Get().GetEffect("E_GaleRush_Trail");
-            if (m_cachedElem != ElementType::None)
-                ApplyElementToEffectDef(trailDef, m_cachedElem);
+            if (!m_cachedElemSet.empty())
+                ApplyElementSetToEffectDef(trailDef, m_cachedElemSet);
             int id = m_pVFXManager->SpawnEffectDef(trailPos, backDir, trailDef, false);
             if (id >= 0) m_trailVfxIds.push_back(id);
         }
@@ -178,13 +178,12 @@ void GaleRushBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
     }
 
     // 변환 룬 원소 캡처
-    m_cachedElem = ElementType::None;
+    m_cachedElemSet.clear();
     {
         auto* pSC = caster->GetComponent<SkillComponent>();
         if (pSC && m_slot != SkillSlot::Count) {
             SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-            if (!sts.elementSet.empty())
-                m_cachedElem = sts.elementSet[0];
+            m_cachedElemSet = sts.elementSet;
         }
     }
 
@@ -193,8 +192,8 @@ void GaleRushBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
         XMFLOAT3 burstPos = casterPos;
         burstPos.y += 2.0f;
         EffectDef burstDef = EffectRegistry::Get().GetEffect("E_GaleRush_Burst");
-        if (m_cachedElem != ElementType::None)
-            ApplyElementToEffectDef(burstDef, m_cachedElem);
+        if (!m_cachedElemSet.empty())
+            ApplyElementSetToEffectDef(burstDef, m_cachedElemSet);
         m_vfxId = m_pVFXManager->SpawnEffectDef(burstPos, m_direction, burstDef, true);
     }
 
@@ -203,8 +202,8 @@ void GaleRushBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
         XMFLOAT3 ringPos = casterPos;
         ringPos.y = 0.f;
         EffectDef ringDef = EffectRegistry::Get().GetEffect("E_GaleRush_Ring");
-        if (m_cachedElem != ElementType::None)
-            ApplyElementToEffectDef(ringDef, m_cachedElem);
+        if (!m_cachedElemSet.empty())
+            ApplyElementSetToEffectDef(ringDef, m_cachedElemSet);
         m_ringVfxId = m_pVFXManager->SpawnEffectDef(ringPos, m_direction, ringDef, true);
     }
 
@@ -245,8 +244,8 @@ void GaleRushBehavior::Update(float deltaTime)
             XMFLOAT3 backDir = { -m_direction.x, 0.f, -m_direction.z };
 
             EffectDef trailDef = EffectRegistry::Get().GetEffect("E_GaleRush_Trail");
-            if (m_cachedElem != ElementType::None)
-                ApplyElementToEffectDef(trailDef, m_cachedElem);
+            if (!m_cachedElemSet.empty())
+                ApplyElementSetToEffectDef(trailDef, m_cachedElemSet);
             int id = m_pVFXManager->SpawnEffectDef(pos, backDir, trailDef, true);
             if (id >= 0) m_trailVfxIds.push_back(id);
         }

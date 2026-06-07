@@ -22,12 +22,12 @@ void EarthArmorBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLO
     m_pCaster      = caster;
     m_bChannelMode = true;
     m_bPostChannel = false;
-    m_cachedElem   = ElementType::None;
+    m_cachedElemSet.clear();
     if (caster) {
         auto* pSC = caster->GetComponent<SkillComponent>();
         if (pSC && m_slot != SkillSlot::Count) {
             SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-            if (!sts.elementSet.empty()) m_cachedElem = sts.elementSet[0];
+            m_cachedElemSet = sts.elementSet;
         }
     }
 
@@ -43,13 +43,13 @@ void EarthArmorBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLO
         if (EffectRegistry::Get().HasEffect("E_EarthArmor_Aura"))
         {
             EffectDef def = EffectRegistry::Get().GetEffect("E_EarthArmor_Aura");
-            if (m_cachedElem != ElementType::None) ApplyElementToEffectDef(def, m_cachedElem);
+            if (!m_cachedElemSet.empty()) ApplyElementSetToEffectDef(def, m_cachedElemSet);
             m_auraVfxId = m_pVFXManager->SpawnEffectDef(pos, up, def, true);
         }
         if (EffectRegistry::Get().HasEffect("E_EarthArmor_Shield"))
         {
             EffectDef def = EffectRegistry::Get().GetEffect("E_EarthArmor_Shield");
-            if (m_cachedElem != ElementType::None) ApplyElementToEffectDef(def, m_cachedElem);
+            if (!m_cachedElemSet.empty()) ApplyElementSetToEffectDef(def, m_cachedElemSet);
             m_shieldVfxId = m_pVFXManager->SpawnEffectDef(pos, up, def, true);
         }
     }
@@ -75,7 +75,7 @@ void EarthArmorBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLOA
     if (m_pVFXManager && EffectRegistry::Get().HasEffect("E_EarthArmor_Burst"))
     {
         EffectDef def = EffectRegistry::Get().GetEffect("E_EarthArmor_Burst");
-        if (m_cachedElem != ElementType::None) ApplyElementToEffectDef(def, m_cachedElem);
+        if (!m_cachedElemSet.empty()) ApplyElementSetToEffectDef(def, m_cachedElemSet);
         for (auto& l : def.layers) l.particleCount = (std::max)(l.particleCount / 2, 4);
         m_pVFXManager->SpawnEffectDef(pos, up, def, true);
     }
@@ -143,7 +143,7 @@ void EarthArmorBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& ta
             XMFLOAT3 pos = caster->GetTransform()->GetPosition();
             XMFLOAT3 up  = { 0.f, 1.f, 0.f };
             EffectDef def = EffectRegistry::Get().GetEffect("E_EarthArmor_Burst");
-            if (m_cachedElem != ElementType::None) ApplyElementToEffectDef(def, m_cachedElem);
+            if (!m_cachedElemSet.empty()) ApplyElementSetToEffectDef(def, m_cachedElemSet);
             m_pVFXManager->SpawnEffectDef(pos, up, def, true);
         }
         m_bIsFinished = true;
@@ -160,14 +160,14 @@ void EarthArmorBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& ta
 
     pPC->SetInvincible(INVINCIBLE_DURATION);
 
-    if (m_cachedElem == ElementType::None) {
+    if (m_cachedElemSet.empty()) {
         auto* pSC = caster ? caster->GetComponent<SkillComponent>() : nullptr;
         if (pSC && m_slot != SkillSlot::Count) {
             SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-            if (!sts.elementSet.empty()) m_cachedElem = sts.elementSet[0];
+            m_cachedElemSet = sts.elementSet;
         }
     }
-    ElementType cachedElem = m_cachedElem;
+    const std::vector<ElementType>& cachedElemSet = m_cachedElemSet;
 
     if (m_pVFXManager && caster && caster->GetTransform())
     {
@@ -177,19 +177,19 @@ void EarthArmorBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& ta
         if (EffectRegistry::Get().HasEffect("E_EarthArmor_Burst"))
         {
             EffectDef def = EffectRegistry::Get().GetEffect("E_EarthArmor_Burst");
-            if (cachedElem != ElementType::None) ApplyElementToEffectDef(def, cachedElem);
+            if (!cachedElemSet.empty()) ApplyElementSetToEffectDef(def, cachedElemSet);
             m_pVFXManager->SpawnEffectDef(pos, up, def, true);
         }
         if (EffectRegistry::Get().HasEffect("E_EarthArmor_Aura"))
         {
             EffectDef def = EffectRegistry::Get().GetEffect("E_EarthArmor_Aura");
-            if (cachedElem != ElementType::None) ApplyElementToEffectDef(def, cachedElem);
+            if (!cachedElemSet.empty()) ApplyElementSetToEffectDef(def, cachedElemSet);
             m_auraVfxId = m_pVFXManager->SpawnEffectDef(pos, up, def, true);
         }
         if (EffectRegistry::Get().HasEffect("E_EarthArmor_Shield"))
         {
             EffectDef def = EffectRegistry::Get().GetEffect("E_EarthArmor_Shield");
-            if (cachedElem != ElementType::None) ApplyElementToEffectDef(def, cachedElem);
+            if (!cachedElemSet.empty()) ApplyElementSetToEffectDef(def, cachedElemSet);
             m_shieldVfxId = m_pVFXManager->SpawnEffectDef(pos, up, def, true);
         }
     }
@@ -295,7 +295,7 @@ void EarthArmorBehavior::Reset()
     m_bChannelMode = false;
     m_bPostChannel = false;
     m_elapsed      = 0.f;
-    m_cachedElem   = ElementType::None;
+    m_cachedElemSet.clear();
     m_shieldVfxId  = -1;
     m_pCaster      = nullptr;
 }

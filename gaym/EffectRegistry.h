@@ -67,3 +67,55 @@ inline void ApplyElementToEffectDef(EffectDef& def, ElementType e)
         l.overrideColors = true;
     }
 }
+
+// 여러 원소를 한 EffectDef 안에 레이어로 합성한다 (멀티 원소 룬 장착 시).
+//   set[0]   = 주 원소: 기존 레이어를 재색.
+//   set[1..] = 보조 원소: 원본 레이어를 복제해 각 원소 색으로 추가.
+// 다원소일 때는 레이어 수가 늘어나므로 파티클 수를 줄여 총량 폭주를 막는다.
+// 단일/빈 세트는 ApplyElementToEffectDef 와 동일하게 동작.
+inline void ApplyElementSetToEffectDef(EffectDef& def, const std::vector<ElementType>& set)
+{
+    if (set.empty()) return;
+    if (set.size() == 1) { ApplyElementToEffectDef(def, set[0]); return; }
+
+    auto reduceCount = [](EffectLayer& l) {
+        const bool isSPH = (l.type >= EmitterType::SPH_Attract &&
+                            l.type <= EmitterType::SPH_Beam);
+        if (isSPH) {
+            int c = (int)(l.sph.particleCount * 0.6f);
+            l.sph.particleCount = c < 100 ? 100 : c;
+        } else {
+            int c = (int)(l.particleCount * 0.6f);
+            l.particleCount = c < 40 ? 40 : c;
+        }
+    };
+
+    // 복제 전 원본 레이어 스냅샷 (주 원소 재색 후 이 스냅샷을 보조 원소용으로 복제)
+    const std::vector<EffectLayer> base = def.layers;
+
+    // 주 원소: 기존 레이어 재색 + 카운트 축소
+    {
+        FluidElementColor ec = FluidElementColors::Get(set[0]);
+        def.element = set[0];
+        for (auto& l : def.layers) {
+            l.element        = set[0];
+            l.coreColor      = ec.coreColor;
+            l.edgeColor      = ec.edgeColor;
+            l.overrideColors = true;
+            reduceCount(l);
+        }
+    }
+
+    // 보조 원소: 원본 레이어 복제 후 각 색으로 추가
+    for (size_t i = 1; i < set.size(); ++i) {
+        FluidElementColor ec = FluidElementColors::Get(set[i]);
+        for (EffectLayer l : base) {   // 값 복사
+            l.element        = set[i];
+            l.coreColor      = ec.coreColor;
+            l.edgeColor      = ec.edgeColor;
+            l.overrideColors = true;
+            reduceCount(l);
+            def.layers.push_back(l);
+        }
+    }
+}

@@ -12,17 +12,6 @@
 #include "EnemyComponent.h"
 #include "Dx12App.h"
 
-static void ApplyElementColors(EffectDef& def, ElementType e)
-{
-    FluidElementColor ec = FluidElementColors::Get(e);
-    def.element = e;
-    for (auto& l : def.layers) {
-        l.element   = e;
-        l.coreColor = ec.coreColor;
-        l.edgeColor = ec.edgeColor;
-    }
-}
-
 // 코어 빔: swirlSpeed=0, 좁은 spreadRadius → 빔 축을 따라 빽빽하게 흐르는 직선
 EffectDef FireBeamBehavior::BuildCoreBeamDef()
 {
@@ -204,15 +193,15 @@ void FireBeamBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targ
             if (pSkillComp && m_slot != SkillSlot::Count)
                 stats = pSkillComp->BuildSkillStats(m_slot, m_SkillData.activationType);
         }
-        if (!stats.elementSet.empty())
-            elemType = stats.elementSet[0];
+        std::vector<ElementType> elemSet = stats.elementSet;
+        if (elemSet.empty()) elemSet = { elemType };
 
         EffectDef coreDef  = BuildCoreBeamDef();
         EffectDef swirlDef = BuildSwirlDef();
         EffectDef burstDef = BuildBurstDef();
-        ApplyElementColors(coreDef,  elemType);
-        ApplyElementColors(swirlDef, elemType);
-        ApplyElementColors(burstDef, elemType);
+        ApplyElementSetToEffectDef(coreDef,  elemSet);
+        ApplyElementSetToEffectDef(swirlDef, elemSet);
+        ApplyElementSetToEffectDef(burstDef, elemSet);
 
         // 룬 vfxMod + 활성화 vfxMod 병합하여 빔 두께/밀도 스케일 적용
         {

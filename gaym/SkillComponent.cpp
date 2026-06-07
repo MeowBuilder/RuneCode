@@ -166,6 +166,47 @@ void SkillComponent::Update(float deltaTime)
         }
     }
 
+    // 원소 공명(ABY_RES) 오라 추적 — 링을 바깥으로 펼치고 위로 띄우며 플레이어 추종
+    if (m_resonanceTimer > 0.f)
+    {
+        m_resonanceTimer -= deltaTime;
+        if (m_resonanceTimer <= 0.f)
+        {
+            for (auto& r : m_resonanceRing) r.slot = -1;
+            m_resonanceRingCount = 0;
+            m_resonanceCoreSlot  = -1;
+        }
+        else if (m_pOwner && m_pOwner->GetTransform())
+        {
+            DirectX::XMFLOAT3 center = m_pOwner->GetTransform()->GetPosition();
+
+            // 진행도 0→1 (ease-out 으로 초반 빠르게 펼쳐짐)
+            float t  = 1.f - (m_resonanceTimer / m_resonanceLife);
+            float eo = 1.f - (1.f - t) * (1.f - t);
+            float radius = 0.4f + eo * 2.6f;      // 0.4 → 3.0
+            float rise   = 0.6f + eo * 1.4f;      // 0.6 → 2.0
+
+            // 중앙 펄스
+            if (m_resonanceCoreSlot >= 0)
+            {
+                DirectX::XMFLOAT3 cpos = center; cpos.y += 1.2f;
+                VFXSpriteManager::Get().SetPosition(m_resonanceCoreSlot, cpos);
+            }
+            // 링: 회전하며 확장 + 상승
+            float spin = t * DirectX::XM_2PI * 0.6f;   // 전체적으로 천천히 회전
+            for (int i = 0; i < m_resonanceRingCount; ++i)
+            {
+                if (m_resonanceRing[i].slot < 0) continue;
+                float a = m_resonanceRing[i].angle + spin;
+                DirectX::XMFLOAT3 p = center;
+                p.x += cosf(a) * radius;
+                p.z += sinf(a) * radius;
+                p.y += rise;
+                VFXSpriteManager::Get().SetPosition(m_resonanceRing[i].slot, p);
+            }
+        }
+    }
+
     // 과열 룬 스택 불꽃 오라 추적 — 플레이어 머리 위 가로 배치
     if (!m_overheatStackVFX.empty())
     {
@@ -1100,11 +1141,12 @@ SkillStats SkillComponent::BuildSkillStats(SkillSlot skill, ActivationType defau
     if (hasL03 && uniqueElements.size() >= 2)
         stats.damageMult *= 1.30f;
 
-    // 원소 공명(ABY_RES): 2개 이상 다른 원소 장착 시 +25% 데미지
+    // 원소 공명(ABY_RES): 서로 다른 원소 변환 룬 2종 이상 장착 시 +50% 데미지
+    //   (전설 슬롯 1 + 변환 룬 2개로 슬롯 3개를 모두 소모하므로 L03(+30%)보다 높게 책정)
     if (hasABY_RES && uniqueElements.size() >= 2)
     {
-        stats.damageMult     *= 1.25f;
-        stats.resonanceActive = true;  // ExecuteOrSplit 에서 공명 펄스 트리거용
+        stats.damageMult     *= 1.50f;
+        stats.resonanceActive = true;  // ExecuteOrSplit / SpawnPlaceTrap 에서 공명 펄스 트리거용
     }
 
     // elementSet: VFX 색상 오버라이드용 (순서 보존)
@@ -1277,6 +1319,57 @@ void SkillComponent::SpawnOverheatBurstVFX()
     m_overheatBurstVFXTimer = kBurstLife;
 }
 
+void SkillComponent::SpawnResonanceAura(const std::vector<ElementType>& elements)
+{
+    if (!m_pOwner || !m_pOwner->GetTransform()) return;
+
+    // 이전 오라가 남아 있으면 정리 (중복 방지)
+    for (auto& r : m_resonanceRing)
+        if (r.slot >= 0) { VFXSpriteManager::Get().Stop(r.slot); r.slot = -1; }
+    if (m_resonanceCoreSlot  >= 0) { VFXSpriteManager::Get().Stop(m_resonanceCoreSlot);  m_resonanceCoreSlot  = -1; }
+    m_resonanceRingCount = 0;
+
+    constexpr float kLife = 0.85f;
+    m_resonanceLife  = kLife;
+    m_resonanceTimer = kLife;
+
+    DirectX::XMFLOAT3 center = m_pOwner->GetTransform()->GetPosition();
+
+    // 장착된 원소가 2종 미만이면(이론상 없음) 기본 라벤더로 채움
+    std::vector<ElementType> elems = elements;
+    if (elems.empty())
+        elems.push_back(ElementType::None);
+
+    // 중앙 펄스 — 흰빛 flare, Update 에서 위치 추적
+    {
+        DirectX::XMFLOAT3 cpos = center; cpos.y += 1.2f;
+        m_resonanceCoreSlot = VFXSpriteManager::Get().Spawn("flare1", cpos, 300.f, kLife,
+            { 1.0f, 0.95f, 1.0f, 1.0f }, 2.5f, VFXSpriteAnim::FadeOut);
+    }
+
+    // 다원소 링 — 원 둘레에 원소 색을 번갈아 배치한 star_08 (Update 에서 펼침/상승)
+    const int ringCount = kResonanceRingMax;  // 12개
+    m_resonanceRingCount = ringCount;
+    for (int i = 0; i < ringCount; ++i)
+    {
+        float angle = (DirectX::XM_2PI * static_cast<float>(i)) / static_cast<float>(ringCount);
+        ElementType e = elems[static_cast<size_t>(i) % elems.size()];
+        FluidElementColor ec = FluidElementColors::Get(e);
+        DirectX::XMFLOAT4 col = ec.coreColor; col.w = 1.0f;
+
+        // 초기 위치 (반지름 작게 시작, Update 에서 확장)
+        DirectX::XMFLOAT3 p = center;
+        p.x += cosf(angle) * 0.4f;
+        p.z += sinf(angle) * 0.4f;
+        p.y += 0.6f;
+
+        int slot = VFXSpriteManager::Get().Spawn("star_08", p, 130.f, kLife,
+            col, 7.0f, VFXSpriteAnim::FadeOut,
+            angle);  // initialRotation 으로 별 방향 분산
+        m_resonanceRing[i] = { slot, angle };
+    }
+}
+
 int SkillComponent::SpawnEchoTriggerVFX(ElementType element, const XMFLOAT3& targetPos, EnemyComponent** pOutTarget)
 {
     if (!m_pOwner || !m_pOwner->GetTransform()) return -1;
@@ -1300,6 +1393,12 @@ int SkillComponent::SpawnEchoTriggerVFX(ElementType element, const XMFLOAT3& tar
 void SkillComponent::SpawnPlaceTrap(size_t skillIndex, const XMFLOAT3& pos, float mult, const RuneCombo& /*combo*/)
 {
     if (skillIndex >= m_Skills.size() || !m_Skills[skillIndex]) return;
+
+    // 룬 데미지 배율 적용 — 설치 경로는 ExecuteOrSplit 를 거치지 않으므로
+    //   원소공명(+50%)·원소증폭(L03)·기타 배율 룬이 누락된다. 여기서 직접 반영한다.
+    ActivationType placeDefType = m_Skills[skillIndex]->GetSkillData().activationType;
+    SkillStats placeStats = BuildSkillStats(static_cast<SkillSlot>(skillIndex), placeDefType);
+    mult *= placeStats.damageMult;
 
     XMFLOAT3 groundPos = pos;
     groundPos.y = 0.f;
@@ -1336,6 +1435,11 @@ void SkillComponent::SpawnPlaceTrap(size_t skillIndex, const XMFLOAT3& pos, floa
 
     m_placeQueue.push_back({ skillIndex, mult, groundPos, spriteSlot, 3.0f, playerTrig, windGate });
     OutputDebugString(L"[Skill] PlacedTrap spawned\n");
+
+    // 원소 공명(ABY_RES) 오라 — 설치 시점에 다원소 링 연출.
+    if (placeStats.resonanceActive)
+        SpawnResonanceAura(placeStats.elementSet);
+
     NotifyActionNetAt(PLAYER_ACTION_PLACE_SPAWN, static_cast<SkillSlot>(skillIndex), groundPos);
 }
 
@@ -1478,16 +1582,10 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
             mult *= (1.f + stats.revengeBonus);
     }
 
-    // 원소 공명(ABY_RES) 시각 펄스 — 시전 시점에 캐스터 머리 위 무지개 펄스 한 번.
+    // 원소 공명(ABY_RES) 오라 — 시전 시점에 다원소 링 + 중앙 펄스 + 소용돌이.
     //   채널 틱마다 중복 안 뜨도록 wasChannelTick 가드.
-    if (stats.resonanceActive && !wasChannelTick && m_pOwner && m_pOwner->GetTransform())
-    {
-        DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
-        pos.y += 2.0f;
-        // star_08 — 다색 펄스, 빠른 회전, 짧은 lifetime
-        VFXSpriteManager::Get().Spawn("star_08", pos, 180.f, 0.40f,
-            DirectX::XMFLOAT4(0.85f, 0.75f, 1.0f, 1.0f), 5.0f, VFXSpriteAnim::FadeOut);
-    }
+    if (stats.resonanceActive && !wasChannelTick)
+        SpawnResonanceAura(stats.elementSet);
 
     auto invokeOnCast = [&]() {
         if (!stats.onCastHooks.empty() && m_pOwner)

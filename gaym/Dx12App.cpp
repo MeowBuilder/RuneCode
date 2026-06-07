@@ -1463,12 +1463,13 @@ void Dx12App::InitializeText()
     // 폰트용 디스크립터 힙 생성
     //   [0] 폰트, [1] HP바 base, [2] HP바 fill, [3] 캐릭터선택 흰픽셀
     //   [4] VFX magic_03, [5] VFX skull, [6] VFX star_08, [7] VFX twirl_01, [8] VFX fire_01, [9] VFX flare_01
-    //   [10~26] UI 텍스처 (UISlot 매핑, kUIHeapBase=10)
+    //   [10~28] UI 텍스처 (UISlot 매핑, kUIHeapBase=10, Count=19 → 10..28)
+    //   [29] 보호막 바 fill (small_bar)
     m_fontDescriptorHeap = std::make_unique<DirectX::DescriptorHeap>(
         m_pd3dDevice.Get(),
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-        30
+        32
     );
 
     // 리소스 업로드 배치
@@ -1520,8 +1521,10 @@ void Dx12App::InitializeText()
     CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
 
     m_pHealthBarUI = std::make_unique<HealthBarUI>();
+    //   base/fill = 슬롯 1,2 / 보호막 fill = UI 슬롯 바로 뒤(=10+Count) → 충돌 없음
+    const UINT kShieldHeapSlot = kUIHeapBase + (UINT)UISlot::Count;  // = 29
     m_pHealthBarUI->Initialize(m_pd3dDevice.Get(), m_pd3dCommandList.Get(),
-                                m_fontDescriptorHeap.get(), 1);
+                                m_fontDescriptorHeap.get(), 1, kShieldHeapSlot);
 
     // CommandList를 닫고 실행
     CHECK_HR(m_pd3dCommandList->Close());
@@ -1993,8 +1996,48 @@ void Dx12App::RenderText()
                         DirectX::XMUINT2((UINT)avDesc.Width, (UINT)avDesc.Height));
                 }
 
+                // 보호막 바 — HP 위에 청록색으로 덮어 표시 (shield/maxHP 비율, Render 내 clamp)
+                float shield = pPlayerComp->GetShield();
+                float shieldRatio = (pPlayerComp->GetMaxHP() > 0.f)
+                    ? shield / pPlayerComp->GetMaxHP() : 0.f;
                 m_pHealthBarUI->Render(m_spriteBatch.get(), pPlayerComp->GetHPRatio(),
+                                        shieldRatio,
                                         (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+
+                // HP / 보호막 수치 텍스트 (HP 바 기준 정렬)
+                float bx, by, bw, bh;
+                m_pHealthBarUI->GetFillRect(bx, by, bw, bh);
+
+                auto drawHudText = [&](const wchar_t* txt, XMFLOAT2 pos, float scale, FXMVECTOR color)
+                {
+                    m_spriteFont->DrawString(m_spriteBatch.get(), txt,
+                        XMFLOAT2(pos.x + 1.5f, pos.y + 1.5f), DirectX::Colors::Black,
+                        0.f, XMFLOAT2(0.f, 0.f), scale);   // 그림자
+                    m_spriteFont->DrawString(m_spriteBatch.get(), txt, pos, color,
+                        0.f, XMFLOAT2(0.f, 0.f), scale);
+                };
+
+                // HP 숫자 — 바 중앙
+                const float sc = 0.42f;
+                wchar_t hpBuf[48];
+                swprintf_s(hpBuf, _countof(hpBuf), L"%d / %d",
+                    (int)(pPlayerComp->GetCurrentHP() + 0.5f),
+                    (int)(pPlayerComp->GetMaxHP() + 0.5f));
+                XMVECTOR hpSz = m_spriteFont->MeasureString(hpBuf);
+                float hpW = XMVectorGetX(hpSz) * sc;
+                float hpH = XMVectorGetY(hpSz) * sc;
+                float hpX = bx + (bw - hpW) * 0.5f;
+                float hpY = by + (bh - hpH) * 0.5f;
+                drawHudText(hpBuf, XMFLOAT2(hpX, hpY), sc, DirectX::Colors::White);
+
+                // 보호막 수치 — HP 텍스트 오른쪽에 "+N" 청록색 (보호막 있을 때만)
+                if (shield > 0.f)
+                {
+                    wchar_t shBuf[32];
+                    swprintf_s(shBuf, _countof(shBuf), L"+%d", (int)(shield + 0.5f));
+                    drawHudText(shBuf, XMFLOAT2(hpX + hpW + 10.f, hpY),
+                        sc, DirectX::Colors::DeepSkyBlue);
+                }
             }
         }
     }

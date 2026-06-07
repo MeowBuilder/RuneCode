@@ -19,7 +19,8 @@ HealthBarUI::~HealthBarUI()
 }
 
 void HealthBarUI::Initialize(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList,
-                              DirectX::DescriptorHeap* pDescriptorHeap, UINT nBaseDescriptorIndex)
+                              DirectX::DescriptorHeap* pDescriptorHeap, UINT nBaseDescriptorIndex,
+                              UINT nShieldDescriptorIndex)
 {
     // Load base texture
     std::unique_ptr<uint8_t[]> baseData;
@@ -41,6 +42,17 @@ void HealthBarUI::Initialize(ID3D12Device* pDevice, ID3D12GraphicsCommandList* p
         m_pFillTexture.ReleaseAndGetAddressOf(),
         fillData,
         fillSubresource
+    ));
+
+    // Load shield fill texture — HP 바와 동일한 광택 스타일의 파란 바 재사용
+    std::unique_ptr<uint8_t[]> shieldData;
+    D3D12_SUBRESOURCE_DATA shieldSubresource = {};
+    CHECK_HR(LoadWICTextureFromFile(
+        pDevice,
+        L"Assets/Textures/UI/small_bar.png",
+        m_pShieldTexture.ReleaseAndGetAddressOf(),
+        shieldData,
+        shieldSubresource
     ));
 
     // Create upload buffers and copy data (kept as member variables until GPU completes)
@@ -95,6 +107,31 @@ void HealthBarUI::Initialize(ID3D12Device* pDevice, ID3D12GraphicsCommandList* p
         pCommandList->ResourceBarrier(1, &barrier);
     }
 
+    // Upload shield fill texture
+    {
+        const UINT64 uploadBufferSize = GetRequiredIntermediateSize(m_pShieldTexture.Get(), 0, 1);
+        CD3DX12_HEAP_PROPERTIES uploadHeap(D3D12_HEAP_TYPE_UPLOAD);
+        CD3DX12_RESOURCE_DESC bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize);
+
+        CHECK_HR(pDevice->CreateCommittedResource(
+            &uploadHeap,
+            D3D12_HEAP_FLAG_NONE,
+            &bufferDesc,
+            D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr,
+            IID_PPV_ARGS(&m_pShieldUploadBuffer)
+        ));
+
+        UpdateSubresources(pCommandList, m_pShieldTexture.Get(), m_pShieldUploadBuffer.Get(), 0, 0, 1, &shieldSubresource);
+
+        CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(
+            m_pShieldTexture.Get(),
+            D3D12_RESOURCE_STATE_COPY_DEST,
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE
+        );
+        pCommandList->ResourceBarrier(1, &barrier);
+    }
+
     // Get texture dimensions
     D3D12_RESOURCE_DESC baseDesc = m_pBaseTexture->GetDesc();
     m_nBaseWidth = static_cast<UINT>(baseDesc.Width);
@@ -103,6 +140,10 @@ void HealthBarUI::Initialize(ID3D12Device* pDevice, ID3D12GraphicsCommandList* p
     D3D12_RESOURCE_DESC fillDesc = m_pFillTexture->GetDesc();
     m_nFillWidth = static_cast<UINT>(fillDesc.Width);
     m_nFillHeight = static_cast<UINT>(fillDesc.Height);
+
+    D3D12_RESOURCE_DESC shieldDesc = m_pShieldTexture->GetDesc();
+    m_nShieldWidth  = static_cast<UINT>(shieldDesc.Width);
+    m_nShieldHeight = static_cast<UINT>(shieldDesc.Height);
 
     // Create SRVs
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -128,14 +169,25 @@ void HealthBarUI::Initialize(ID3D12Device* pDevice, ID3D12GraphicsCommandList* p
         pDescriptorHeap->GetCpuHandle(nBaseDescriptorIndex + 1)
     );
     m_hFillGPU = pDescriptorHeap->GetGpuHandle(nBaseDescriptorIndex + 1);
+
+    // Shield fill texture SRV (별도 슬롯)
+    srvDesc.Format = shieldDesc.Format;
+    pDevice->CreateShaderResourceView(
+        m_pShieldTexture.Get(),
+        &srvDesc,
+        pDescriptorHeap->GetCpuHandle(nShieldDescriptorIndex)
+    );
+    m_hShieldGPU = pDescriptorHeap->GetGpuHandle(nShieldDescriptorIndex);
 }
 
-void HealthBarUI::Render(DirectX::SpriteBatch* pSpriteBatch, float fHPRatio,
+void HealthBarUI::Render(DirectX::SpriteBatch* pSpriteBatch, float fHPRatio, float fShieldRatio,
                           float fScreenWidth, float fScreenHeight)
 {
     // Clamp HP ratio
     if (fHPRatio < 0.0f) fHPRatio = 0.0f;
     if (fHPRatio > 1.0f) fHPRatio = 1.0f;
+    if (fShieldRatio < 0.0f) fShieldRatio = 0.0f;
+    if (fShieldRatio > 1.0f) fShieldRatio = 1.0f;
 
     // Calculate position (top-left of screen)
     XMFLOAT2 basePos;
@@ -202,6 +254,35 @@ void HealthBarUI::Render(DirectX::SpriteBatch* pSpriteBatch, float fHPRatio,
             0.0f,
             XMFLOAT2(0.0f, 0.0f),
             fillScale
+        );
+    }
+
+    // 4. 보호막 바 — HP fill 과 동일한 영역/스케일로 파란 바(small_bar)를 위에 덮어 그림.
+    //    좌측부터 shield 비율만큼 클리핑 → 보호막이 HP 를 덮는 형태.
+    if (fShieldRatio > 0.0f && m_hShieldGPU.ptr && m_nShieldWidth > 0)
+    {
+        LONG shieldWidthClipped = static_cast<LONG>(m_nShieldWidth * fShieldRatio);
+        RECT srcRect = { 0, 0, shieldWidthClipped, static_cast<LONG>(m_nShieldHeight) };
+
+        XMFLOAT2 shieldPos;
+        shieldPos.x = basePos.x + FILL_OFFSET_X * SCALE;
+        shieldPos.y = basePos.y + FILL_OFFSET_Y * SCALE;
+
+        // HP fill 의 화면 크기와 동일하게 보이도록 small_bar 자체 해상도 기준으로 스케일 환산
+        XMFLOAT2 shieldScale = {
+            (static_cast<float>(m_nFillWidth)  * SCALE * FILL_SCALE_X) / static_cast<float>(m_nShieldWidth),
+            (static_cast<float>(m_nFillHeight) * SCALE * FILL_SCALE_Y) / static_cast<float>(m_nShieldHeight)
+        };
+
+        pSpriteBatch->Draw(
+            m_hShieldGPU,
+            XMUINT2(m_nShieldWidth, m_nShieldHeight),
+            shieldPos,
+            &srcRect,
+            Colors::White,
+            0.0f,
+            XMFLOAT2(0.0f, 0.0f),
+            shieldScale
         );
     }
 }

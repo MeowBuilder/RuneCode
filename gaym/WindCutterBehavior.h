@@ -1,6 +1,8 @@
 #pragma once
 #include "ISkillBehavior.h"
 #include "SkillData.h"
+#include "SkillTypes.h"
+#include <vector>
 #include <unordered_set>
 
 class FluidSkillVFXManager;
@@ -46,7 +48,7 @@ private:
 
     bool        m_bActive      = false;
     bool        m_bChannelMode = false;
-    ElementType m_cachedElem   = ElementType::None;
+    std::vector<ElementType> m_cachedElemSet;   // Execute 시 결정된 원소 세트 (멀티 원소 레이어)
     float m_damageMult = 1.f;
     float m_elapsed    = 0.f;
     DirectX::XMFLOAT3 m_origin    = {};

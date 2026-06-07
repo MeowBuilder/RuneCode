@@ -58,6 +58,7 @@ private:
     Scene*                m_pScene         = nullptr;
     GameObject*           m_pCaster        = nullptr;
     ElementType           m_elementType = ElementType::Fire;
+    std::vector<ElementType> m_elementSet;   // 멀티 원소 레이어용 (비면 m_elementType 단일)
 
     bool m_bChannelMode  = false;  // 채널 룬 발동 중 (샤워 스킵, 틱마다 낙하 메테오)
     bool m_bPostChannel  = false;  // 채널 종료 후 낙하 중 메테오 마무리 처리 중

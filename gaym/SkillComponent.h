@@ -231,6 +231,18 @@ private:
     void SpawnOverheatStackVFX(int stackCount);
     void SpawnOverheatBurstVFX();
 
+    // 원소 공명(ABY_RES) 오라 VFX — 확장하는 다원소 링 + 중앙 펄스 + 머리 위 소용돌이.
+    //   슬롯/각도를 추적해 Update() 에서 링을 바깥으로 펼치고 위로 띄운다.
+    static constexpr int kResonanceRingMax = 12;
+    struct ResonanceRing { int slot = -1; float angle = 0.f; };
+    std::array<ResonanceRing, kResonanceRingMax> m_resonanceRing{};
+    int   m_resonanceRingCount = 0;
+    int   m_resonanceCoreSlot  = -1;   // 중앙 flare 펄스
+    float m_resonanceTimer     = 0.f;  // 남은 수명
+    float m_resonanceLife      = 0.f;  // 총 수명
+    // 서로 다른 원소 색으로 링을 구성하는 공명 오라 스폰
+    void SpawnResonanceAura(const std::vector<ElementType>& elements);
+
     // 활성화 룬(차지/증강/설치) 상태 전이를 다른 클라에 알리는 헬퍼. NetworkManager::IsConnected() 일 때만 전송.
     //   actionType: PLAYER_ACTION_CHARGE_BEGIN/END, ENHANCE_BEGIN/END, PLACE_SPAWN/FIRE
     //   slot: skillSlot (4 = SkillSlot::Count 는 슬롯 불명 sentinel)

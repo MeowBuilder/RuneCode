@@ -2,6 +2,7 @@
 #include "ISkillBehavior.h"
 #include "SkillData.h"
 #include "SkillTypes.h"
+#include <vector>
 #include <unordered_set>
 
 class FluidSkillVFXManager;
@@ -53,7 +54,7 @@ private:
     std::unordered_set<EnemyComponent*> m_hitEnemies;  // 이번 대쉬에서 이미 맞은 적
     std::vector<int> m_trailVfxIds;                    // 트레일 VFX ID 목록 (Reset 시 정리)
     float m_trailTimer = 0.f;                          // 다음 트레일 스폰까지 남은 시간
-    ElementType m_cachedElem = ElementType::None;      // Execute 시 결정된 원소 (Update trail에도 적용)
+    std::vector<ElementType> m_cachedElemSet;   // Execute 시 결정된 원소 세트 (Update trail/멀티 원소 레이어)
     int  m_channelGatherVfxId = -1;                    // 채널 중 시전자 gathering 이펙트
     bool m_bChannelMode       = false;
 

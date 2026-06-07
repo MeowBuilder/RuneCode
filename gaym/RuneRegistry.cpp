@@ -549,9 +549,9 @@ RuneRegistry::RuneRegistry()
                .grade=RuneGrade::Legendary,
                .overheatBonus=0.60f });
 
-    // ABY_RES 원소 공명: 다른 원소 룬 2종 이상 장착 시 피해 +25% (BuildSkillStats에서 처리)
+    // ABY_RES 원소 공명: 다른 원소 룬 2종 이상 장착 시 피해 +50% (BuildSkillStats에서 처리)
     Register({ .id="ABY_RES", .name="원소 공명", .category="심연",
-               .description="서로 다른 원소 룬 2종 이상 장착 시 피해 +25%",
+               .description="서로 다른 원소 룬 2종 이상 장착 시 피해 +50%",
                .grade=RuneGrade::Legendary });
 
     // ABY_ECO 메아리: 50% 확률로 2초 뒤 가장 가까운 적을 향해 50% 위력 재발동

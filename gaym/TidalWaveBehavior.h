@@ -50,7 +50,7 @@ private:
     std::vector<int>      m_channelWaveVfxIds;
 
     bool        m_bActive    = false;
-    ElementType m_cachedElem = ElementType::None;
+    std::vector<ElementType> m_cachedElemSet;   // 채널 틱 멀티 원소 레이어용
     float m_damageMult  = 1.f;
     float m_elapsed     = 0.f;
     float m_foamTimer   = 0.f;

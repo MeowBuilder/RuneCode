@@ -46,7 +46,7 @@ void WaterVortexBehavior::OnChannelTick(GameObject* caster, const DirectX::XMFLO
     }
 
     EffectDef def = EffectRegistry::Get().GetEffect("E_WaterVortex");
-    if (!stats.elementSet.empty()) ApplyElementToEffectDef(def, stats.elementSet[0]);
+    if (!stats.elementSet.empty()) ApplyElementSetToEffectDef(def, stats.elementSet);
 
     VFXModifier mod;
     mod.sizeScaleMult     = 0.5f;
@@ -117,7 +117,7 @@ void WaterVortexBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& t
 
     EffectDef def = EffectRegistry::Get().GetEffect("E_WaterVortex");
     if (!stats.elementSet.empty())
-        ApplyElementToEffectDef(def, stats.elementSet[0]);
+        ApplyElementSetToEffectDef(def, stats.elementSet);
     m_vfxId = m_pVFXManager->SpawnEffectDef(origin, direction, def, true);
 
     if (m_vfxId >= 0)

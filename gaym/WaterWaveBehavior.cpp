@@ -152,7 +152,7 @@ void WaterWaveBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& tar
 
     EffectDef def = EffectRegistry::Get().GetEffect("Q_WaterWave", runeFlags);
     if (!stats.elementSet.empty())
-        ApplyElementToEffectDef(def, stats.elementSet[0]);
+        ApplyElementSetToEffectDef(def, stats.elementSet);
     m_vfxId = m_pVFXManager->SpawnEffectDef(origin, direction, def, true);
 
     m_extraVFXIds.clear();

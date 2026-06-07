@@ -723,11 +723,25 @@ void PlayerComponent::TakeDamage(float fDamage)
     // 오프라인에선 이 세 가지가 누락되어 있어 체감상 "맞는지 모르겠음".
     TriggerHitFlash();
 
-    // 보복 룬 (ABY_RVG): 피격 시 보복 상태 활성화 — 멀티는 서버 권위
+    // 보복 룬 (ABY_RVG): 피격 시 보복 상태 활성화 — 멀티는 서버 권위.
+    //   ABY_RVG 를 실제로 장착한 경우에만 발동 (미장착 시 보복 오라 VFX 가 뜨던 버그 수정).
     {
         NetworkManager* pNetMgr = NetworkManager::GetInstance();
         if (!(pNetMgr && pNetMgr->IsConnected()))
-            TriggerVengeance(10.f);
+        {
+            bool hasRevengeRune = false;
+            if (auto* pSC = m_pOwner ? m_pOwner->GetComponent<SkillComponent>() : nullptr)
+            {
+                for (int s = 0; s < static_cast<int>(SkillSlot::Count); ++s)
+                    if (pSC->HasRuneEquipped(static_cast<SkillSlot>(s), "ABY_RVG"))
+                    {
+                        hasRevengeRune = true;
+                        break;
+                    }
+            }
+            if (hasRevengeRune)
+                TriggerVengeance(10.f);
+        }
     }
 
     if (m_pOwner && m_pOwner->GetTransform())

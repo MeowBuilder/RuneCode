@@ -15,17 +15,6 @@
 #include <algorithm>
 #include <random>
 
-static void ApplyElementColors(EffectDef& def, ElementType e)
-{
-    FluidElementColor ec = FluidElementColors::Get(e);
-    def.element = e;
-    for (auto& l : def.layers) {
-        l.element   = e;
-        l.coreColor = ec.coreColor;
-        l.edgeColor = ec.edgeColor;
-    }
-}
-
 static constexpr float TWO_PI = 6.28318530718f;
 
 MeteorBehavior::MeteorBehavior()
@@ -57,6 +46,7 @@ void MeteorBehavior::OnChannelBegin(GameObject* caster, const DirectX::XMFLOAT3&
         if (auto* pPC = caster->GetComponent<PlayerComponent>())
             m_elementType = pPC->GetElementType();
     }
+    m_elementSet = { m_elementType };
 }
 
 void MeteorBehavior::SpawnSmallMeteorAt(const XMFLOAT3& targetPos)
@@ -74,7 +64,7 @@ void MeteorBehavior::SpawnSmallMeteorAt(const XMFLOAT3& targetPos)
     if (EffectRegistry::Get().HasEffect("R_MeteorSmallTrail"))
     {
         EffectDef trailDef = EffectRegistry::Get().GetEffect("R_MeteorSmallTrail");
-        ApplyElementColors(trailDef, m_elementType);
+        ApplyElementSetToEffectDef(trailDef, m_elementSet);
         if (!trailDef.layers.empty())
             sm.trailVfxId = m_pVFXManager->SpawnEffectLayer(
                 sm.spawnPos, upDir, trailDef.name, trailDef.layers[0], true);
@@ -145,16 +135,20 @@ void MeteorBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& target
 
     // 캐스터 원소 캡처 (변환 룬 우선)
     m_elementType = ElementType::Fire;
+    m_elementSet.clear();
     if (caster) {
         if (auto* pPC = caster->GetComponent<PlayerComponent>())
             m_elementType = pPC->GetElementType();
         auto* pSC = caster->GetComponent<SkillComponent>();
         if (pSC && m_slot != SkillSlot::Count) {
             SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-            if (!sts.elementSet.empty())
+            if (!sts.elementSet.empty()) {
                 m_elementType = sts.elementSet[0];
+                m_elementSet  = sts.elementSet;
+            }
         }
     }
+    if (m_elementSet.empty()) m_elementSet = { m_elementType };
 
     // 상태 초기화
     m_targetPos      = targetPos;
@@ -199,7 +193,7 @@ void MeteorBehavior::SpawnSmallMeteor()
 
     XMFLOAT3 upDir = { 0.f, 1.f, 0.f };
     EffectDef trailDef = EffectRegistry::Get().GetEffect("R_MeteorSmallTrail");
-    ApplyElementColors(trailDef, m_elementType);
+    ApplyElementSetToEffectDef(trailDef, m_elementSet);
     if (!trailDef.layers.empty())
         sm.trailVfxId = m_pVFXManager->SpawnEffectLayer(
             sm.spawnPos, upDir, trailDef.name, trailDef.layers[0], true);
@@ -297,7 +291,7 @@ void MeteorBehavior::OnSmallImpact(SmallMeteorData& sm)
         }
         XMFLOAT3 up = { 0.f, 1.f, 0.f };
         EffectDef impDef = EffectRegistry::Get().GetEffect("R_MeteorSmallImpact");
-        ApplyElementColors(impDef, m_elementType);
+        ApplyElementSetToEffectDef(impDef, m_elementSet);
         m_pVFXManager->SpawnEffectDef(sm.targetPos, up, impDef, true);
     }
 
@@ -318,13 +312,13 @@ void MeteorBehavior::SpawnFinalMeteor()
     XMFLOAT3 upDir  = { 0.f, 1.f, 0.f };
 
     EffectDef trailDef = EffectRegistry::Get().GetEffect("R_MeteorTrail");
-    ApplyElementColors(trailDef, m_elementType);
+    ApplyElementSetToEffectDef(trailDef, m_elementSet);
     if (!trailDef.layers.empty())
         m_finalTrailId = m_pVFXManager->SpawnEffectLayer(
             m_finalSpawnPos, upDir, trailDef.name, trailDef.layers[0], true);
 
     EffectDef outerDef = EffectRegistry::Get().GetEffect("R_MeteorTrailOuter");
-    ApplyElementColors(outerDef, m_elementType);
+    ApplyElementSetToEffectDef(outerDef, m_elementSet);
     if (!outerDef.layers.empty())
         m_finalOuterId = m_pVFXManager->SpawnEffectLayer(
             m_finalSpawnPos, upDir, outerDef.name, outerDef.layers[0], true);
@@ -346,10 +340,10 @@ void MeteorBehavior::OnFinalImpact()
 
         XMFLOAT3 up = { 0.f, 1.f, 0.f };
         EffectDef impDef  = EffectRegistry::Get().GetEffect("R_MeteorImpact");
-        ApplyElementColors(impDef, m_elementType);
+        ApplyElementSetToEffectDef(impDef, m_elementSet);
         m_finalImpactId = m_pVFXManager->SpawnEffectDef(m_targetPos, up, impDef, true);
         EffectDef fireDef = EffectRegistry::Get().GetEffect("R_MeteorGroundFire");
-        ApplyElementColors(fireDef, m_elementType);
+        ApplyElementSetToEffectDef(fireDef, m_elementSet);
         m_finalGroundId = m_pVFXManager->SpawnEffectDef(m_targetPos, up, fireDef, true);
     }
 

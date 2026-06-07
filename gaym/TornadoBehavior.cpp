@@ -79,7 +79,7 @@ void TornadoBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targe
 
     EffectDef def = EffectRegistry::Get().GetEffect("R_TornadoPlayer");
     if (!stats.elementSet.empty())
-        ApplyElementToEffectDef(def, stats.elementSet[0]);
+        ApplyElementSetToEffectDef(def, stats.elementSet);
     m_vfxId = m_pVFXManager->SpawnEffectDef(origin, direction, def, true);
 
     if (m_vfxId >= 0)
