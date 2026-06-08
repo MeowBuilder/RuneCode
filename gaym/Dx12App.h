@@ -60,6 +60,7 @@ public:
     class AudioManager* GetAudio() const { return m_pAudio.get(); }
     class WhiteFlashOverlay* GetWhiteFlash() const { return m_pWhiteFlash.get(); }
     class ScreenSplitOverlay* GetScreenSplit() const { return m_pScreenSplit.get(); }
+    class LeafSystem* GetLeafSystem() const { return m_pLeafSystem.get(); }
 
     // 런타임 윈도우 크기 (NDC 변환용)
     UINT GetWindowWidth() const { return m_nWndClientWidth; }
@@ -182,6 +183,9 @@ private:
 
     // 화면 베기 후 두 조각 분리 슬라이드 (DarkLord Sever 페이즈)
     std::unique_ptr<class ScreenSplitOverlay> m_pScreenSplit;
+
+    // Wind 테마 잎새 (벚꽃/단풍/연두) — Scene 이 SetEnabled 로 토글
+    std::unique_ptr<class LeafSystem> m_pLeafSystem;
 
     // Network Manager
     NetworkManager* m_pNetworkManager = nullptr;

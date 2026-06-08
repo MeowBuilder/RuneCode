@@ -10,6 +10,7 @@
 #include "SlashCue.h"   // ImpactEffectName / ChargeAuraEffectName (Sanctum 원소별 spawn)
 #include "WhiteFlashOverlay.h"  // Dominion 시그니처 발동 시 화이트플래시
 #include "ScreenSplitOverlay.h" // Sever 화면 베기 후 분리 슬라이드
+#include "LeafSystem.h"         // Wind 테마 잎새 시스템
 #include "EnemyComponent.h"
 #include "MegaBreathAttackBehavior.h"
 #include "Room.h"
@@ -414,14 +415,21 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
         RingMesh* pPortalDisc = new RingMesh(pDevice, pCommandList, 1.0f, 0.0f, 64);
         m_pInteractionCube->SetMesh(pPortalDisc);
 
-        // 포탈 머티리얼 — bIsPortal 셰이더 분기가 fbm 와류로 두 톤을 부드럽게 섞는다.
-        // 통일된 보라 계열 (라벤더 코어 + 딥 바이올렛 림) — 디지털한 보색 듀얼톤 회피.
+        // 포탈 머티리얼 — 보라 포탈 추천값 (rim 밝게, core 어둡게 = 포탈 깊이감)
         MATERIAL portalMat;
         portalMat.m_cAmbient  = XMFLOAT4(0.00f, 0.00f, 0.00f, 1.0f);
-        portalMat.m_cDiffuse  = XMFLOAT4(0.40f, 0.20f, 0.85f, 1.0f);   // 딥 바이올렛 (외곽 림)
+        portalMat.m_cDiffuse  = XMFLOAT4(0.75f, 0.42f, 1.00f, 1.0f);   // 밝은 보라 림
         portalMat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-        portalMat.m_cEmissive = XMFLOAT4(1.00f, 0.75f, 0.95f, 1.0f);   // 라벤더-핑크 (코어)
+        portalMat.m_cEmissive = XMFLOAT4(0.08f, 0.01f, 0.18f, 1.0f);   // 깊은 심연 — 거의 검정 바이올렛
         m_pInteractionCube->SetMaterial(portalMat);
+
+        // 포탈 vortex body 텍스처 — bIsPortal 분기에서 폴라 UV로 샘플 (소용돌이/구름 형태 강조)
+        m_pInteractionCube->SetTextureName("Assets/Textures/VFX/Portal/portal_vortex_body.png");
+        D3D12_CPU_DESCRIPTOR_HANDLE portalCpuHandle;
+        D3D12_GPU_DESCRIPTOR_HANDLE portalGpuHandle;
+        AllocateDescriptor(&portalCpuHandle, &portalGpuHandle);
+        m_pInteractionCube->LoadTexture(pDevice, pCommandList, portalCpuHandle);
+        m_pInteractionCube->SetSrvGpuDescriptorHandle(portalGpuHandle);
 
         m_pInteractionCube->AddComponent<RenderComponent>()->SetMesh(pPortalDisc);
         m_pInteractionCube->SetPortal(true);  // bIsPortal — 셰이더 와류/블랙홀 분기 활성
@@ -1881,6 +1889,24 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         m_eLastAppliedTheme = m_eCurrentTheme;
         ApplyThemeSkyColor();
         if (m_eCurrentTheme != StageTheme::Grass) CleanupWindAmbient();
+
+        // Wind 테마 잎새 시스템 토글
+        if (auto* pApp = Dx12App::GetInstance())
+        {
+            if (auto* pLeaves = pApp->GetLeafSystem())
+            {
+                bool bWind = (m_eCurrentTheme == StageTheme::Grass);
+                if (bWind && m_pCurrentRoom)
+                {
+                    const BoundingBox& bb = m_pCurrentRoom->GetBoundingBox();
+                    XMFLOAT3 center = bb.Center; center.y = 5.0f;
+                    XMFLOAT3 half(bb.Extents.x * 0.95f, 18.0f, bb.Extents.z * 0.95f);
+                    pLeaves->SetSpawnArea(center, half);
+                    pLeaves->SetWind(XMFLOAT3(0.5f, 0.0f, 0.3f), 2.5f);
+                }
+                pLeaves->SetEnabled(bWind);
+            }
+        }
     }
 
     // 4스테이지 바람 ambient — Grass 테마: 주기적 큰 토네이도 + 경고 인디케이터 + 데미지 트랩
@@ -5779,11 +5805,11 @@ void Scene::SetupWindAmbient(const BoundingBox& roomBB)
             const int kClumpCount = kTileClumpCount + kRingClumpCount;
             struct ClumpCfg { int nBlades; float fRadius; };
             ClumpCfg cfgs[kClumpCount] = {
-                // === Tile 그룹 — walkable 영역 ===
-                { 55, 6.0f }, { 60, 6.2f }, { 50, 5.8f }, { 55, 6.0f },
-                { 48, 5.5f }, { 52, 5.8f }, { 45, 5.2f }, { 50, 5.5f },
-                { 30, 4.0f }, { 32, 4.0f }, { 28, 3.8f }, { 30, 3.8f },
-                { 26, 3.5f }, { 28, 3.5f },
+                // === Tile 그룹 — walkable 영역. 반경 ↓ (타일 안에 풀잎 유지)
+                { 55, 4.0f }, { 60, 4.2f }, { 50, 3.8f }, { 55, 4.0f },
+                { 48, 3.5f }, { 52, 3.8f }, { 45, 3.2f }, { 50, 3.5f },
+                { 30, 2.5f }, { 32, 2.5f }, { 28, 2.2f }, { 30, 2.2f },
+                { 26, 2.0f }, { 28, 2.0f },
             };
 
             // ── (1) Tile 그룹 좌표 수집: 맵 JSON 의 floor tile 만, 스폰 근처 제외 ──
@@ -5801,6 +5827,26 @@ void Scene::SetupWindAmbient(const BoundingBox& roomBB)
                 if (dx*dx + dz*dz >= kSpawnExc * kSpawnExc) tileAvail.push_back(t);
             }
             if (tileAvail.empty()) tileAvail = tiles;
+
+            // 외곽 타일 제거 — 풀 군집이 맵 경계 밖으로 뻗어나가지 않게.
+            {
+                float minX = +1e9f, maxX = -1e9f, minZ = +1e9f, maxZ = -1e9f;
+                for (const auto& t : tiles) {
+                    if (t.x < minX) minX = t.x;
+                    if (t.x > maxX) maxX = t.x;
+                    if (t.z < minZ) minZ = t.z;
+                    if (t.z > maxZ) maxZ = t.z;
+                }
+                constexpr float kEdgeMargin = 5.0f;
+                std::vector<XMFLOAT3> inner;
+                inner.reserve(tileAvail.size());
+                for (const auto& t : tileAvail) {
+                    if (t.x > minX + kEdgeMargin && t.x < maxX - kEdgeMargin &&
+                        t.z > minZ + kEdgeMargin && t.z < maxZ - kEdgeMargin)
+                        inner.push_back(t);
+                }
+                if (!inner.empty()) tileAvail = std::move(inner);
+            }
 
             unsigned int placeSeed = 2166136261u;
             for (char c : m_strCurrentMap) {

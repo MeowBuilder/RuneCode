@@ -5,6 +5,7 @@
 #include "d3dx12.h"
 #include "WhiteFlashOverlay.h"
 #include "ScreenSplitOverlay.h"
+#include "LeafSystem.h"
 #include "SkillComponent.h"
 #include "ISkillBehavior.h"
 #include "SkillData.h"
@@ -170,6 +171,9 @@ void Dx12App::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
     // 화면 분리 후처리 (Sever 페이즈 화면 베기 후 두 조각 슬라이드)
     m_pScreenSplit = std::make_unique<ScreenSplitOverlay>();
     m_pScreenSplit->Init(m_pd3dDevice.Get(), m_nWndClientWidth, m_nWndClientHeight);
+
+    // Wind 테마 잎새 시스템 — Init 은 다른 텍스처 로드와 함께 InitializeText 후에 처리.
+    m_pLeafSystem = std::make_unique<LeafSystem>();
 
     // 텍스트 렌더링 먼저 초기화 (캐릭터 선택 화면에서 사용)
     InitializeText();
@@ -1328,6 +1332,38 @@ void Dx12App::FrameAdvance()
     shadowBarrierBack.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     m_pd3dCommandList->ResourceBarrier(1, &shadowBarrierBack);
 
+    // Wind 테마 잎새 — Scene 렌더 직후 Bloom 전. RTV 가 이미 RENDER_TARGET 상태.
+    //   Scene 이 SetEnabled / SetSpawnArea 로 토글, 활성 시 매 프레임 update + render.
+    if (m_pLeafSystem && m_pLeafSystem->IsEnabled())
+    {
+        m_pLeafSystem->Update(deltaTime);
+
+        m_pd3dCommandList->OMSetRenderTargets(1, &d3dRtvCPUDescriptorHandle,
+                                              FALSE, &d3dDsvCPUDescriptorHandle);
+        D3D12_VIEWPORT vpL = { 0, 0, (float)m_nWndClientWidth, (float)m_nWndClientHeight, 0, 1 };
+        m_pd3dCommandList->RSSetViewports(1, &vpL);
+        D3D12_RECT scL = { 0, 0, (LONG)m_nWndClientWidth, (LONG)m_nWndClientHeight };
+        m_pd3dCommandList->RSSetScissorRects(1, &scL);
+
+        if (m_pScene && m_pScene->GetCamera())
+        {
+            CCamera* pCam = m_pScene->GetCamera();
+            XMFLOAT4X4 vp;
+            DirectX::XMStoreFloat4x4(&vp,
+                DirectX::XMMatrixTranspose(
+                  DirectX::XMLoadFloat4x4(&pCam->GetViewMatrix())
+                  * DirectX::XMLoadFloat4x4(&pCam->GetProjectionMatrix())));
+            DirectX::XMVECTOR camRightV = pCam->GetRightDirection();
+            DirectX::XMVECTOR camUpV    = DirectX::XMVectorSet(0, 1, 0, 0);
+            XMFLOAT3 camRight, camUp;
+            DirectX::XMStoreFloat3(&camRight, camRightV);
+            DirectX::XMStoreFloat3(&camUp,    camUpV);
+            static float s_fLeafTimeAccum = 0.0f;
+            s_fLeafTimeAccum += deltaTime;
+            m_pLeafSystem->Render(m_pd3dCommandList.Get(), vp, camRight, camUp, s_fLeafTimeAccum);
+        }
+    }
+
     // Bloom: capture LDR scene from the back buffer, extract bright pixels (threshold),
     // Gaussian blur, then additive-composite back onto the swap-chain back buffer.
     m_pBloom->Apply(m_pd3dCommandList.Get(),
@@ -1795,6 +1831,22 @@ void Dx12App::InitializeText()
     CHECK_HR(m_pd3dCommandList->Close());
     ID3D12CommandList* iconCmdLists[] = { m_pd3dCommandList.Get() };
     m_pd3dCommandQueue->ExecuteCommandLists(_countof(iconCmdLists), iconCmdLists);
+    WaitForGpuComplete();
+
+    // Wind 테마 잎새 텍스처 로드 (sakura / green_leaf / red_leaf)
+    CHECK_HR(m_pd3dCommandAllocator->Reset());
+    CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
+    {
+        std::vector<std::wstring> leafPaths = {
+            L"Assets/Textures/leafs/sakura.png",
+            L"Assets/Textures/leafs/green_leaf.png",
+            L"Assets/Textures/leafs/red_leaf.png",
+        };
+        m_pLeafSystem->Init(m_pd3dDevice.Get(), m_pd3dCommandList.Get(), leafPaths);
+    }
+    CHECK_HR(m_pd3dCommandList->Close());
+    ID3D12CommandList* leafCmdLists[] = { m_pd3dCommandList.Get() };
+    m_pd3dCommandQueue->ExecuteCommandLists(_countof(leafCmdLists), leafCmdLists);
     WaitForGpuComplete();
 
     // UI 텍스처 로드 (Title / Loading / Pause / GameOver / Ending / HUD / Avatars)

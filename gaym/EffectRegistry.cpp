@@ -1822,38 +1822,66 @@ void EffectRegistry::Initialize()
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // Portal_Ring — 인터랙션 큐브 포탈 회전 링 (보라 자기장, 무한 루프)
+    // Portal_Ring — 인터랙션 큐브 포탈 회전 링 (듀얼 톤: 시안 외곽 + 마젠타 내부 림)
+    //   2 레이어로 깊이감: outer 차가운 시안 (외곽 큰 띠) + inner 따뜻한 마젠타 (좁고 빠른 가까운 띠)
+    //   대비되는 색 + 다른 속도 → 절차적 보라 단일 톤 인상 제거
     // ──────────────────────────────────────────────────────────────────────────
     {
         EffectDef def;
         def.name    = "Portal_Ring";
-        def.element = ElementType::Wind; // 가장 가벼운 element 재사용
+        def.element = ElementType::Wind;
 
-        EffectLayer ring;
-        ring.type           = EmitterType::Ring;
-        ring.element        = ElementType::Wind;
-        ring.particleCount  = 220;
-        ring.overrideColors = true;
-        // 라벤더 코어 + 딥 바이올렛 엣지 — 디스크와 같은 보라 톤으로 통일
-        ring.coreColor      = { 1.00f, 0.80f, 0.95f, 0.95f };
-        ring.edgeColor      = { 0.50f, 0.25f, 0.85f, 0.50f };
-        ring.sizeScale      = 1.4f;
-        ring.speedMin       = 0.3f;
-        ring.speedMax       = 0.9f;
-        ring.lifetimeMin    = 1.2f;
-        ring.lifetimeMax    = 2.0f;
-        ring.duration       = 9999.f;       // 무한 루프 (포탈 활성 동안 계속)
-        ring.emitRate       = 120.f;
+        // ── 외곽 밝은 보라 림 — 넓고 천천히 회전 (림 두께/외곽 분위기) ──────────
+        EffectLayer outerRing;
+        outerRing.type           = EmitterType::Ring;
+        outerRing.element        = ElementType::Wind;
+        outerRing.particleCount  = 200;
+        outerRing.overrideColors = true;
+        outerRing.coreColor      = { 0.80f, 0.55f, 1.00f, 0.85f };  // 밝은 보라
+        outerRing.edgeColor      = { 0.25f, 0.08f, 0.55f, 0.30f };  // 딥 바이올렛 페이드
+        outerRing.sizeScale      = 1.6f;
+        outerRing.speedMin       = 0.2f;
+        outerRing.speedMax       = 0.7f;
+        outerRing.lifetimeMin    = 1.5f;
+        outerRing.lifetimeMax    = 2.4f;
+        outerRing.duration       = 9999.f;
+        outerRing.emitRate       = 110.f;
 
-        ring.ring.radius         = 8.5f;     // 디스크 반경 9 와 매칭 (외곽 림 위에 입자)
-        ring.ring.width          = 1.0f;
-        ring.ring.expandSpeed    = 0.0f;     // 제자리 회전
-        ring.ring.tiltX          = 0.f;
-        ring.ring.rotateSpeed    = 3.0f;     // 회전 속도 약간 낮춤 (반경 커져서 외형상 속도는 유지)
-        ring.ring.normalSpeedMin = 0.2f;
-        ring.ring.normalSpeedMax = 0.8f;     // 살짝 위로 떠오르는 입자
+        outerRing.ring.radius         = 8.7f;
+        outerRing.ring.width          = 0.9f;
+        outerRing.ring.expandSpeed    = 0.0f;
+        outerRing.ring.tiltX          = 0.f;
+        outerRing.ring.rotateSpeed    = -2.2f;   // 역방향 회전 — inner 와 대비
+        outerRing.ring.normalSpeedMin = 0.15f;
+        outerRing.ring.normalSpeedMax = 0.6f;
 
-        def.layers.push_back(ring);
+        def.layers.push_back(outerRing);
+
+        // ── 내부 핫 라벤더 펄스 — 좁고 빠르게 회전 (강렬한 코어 림) ────────────
+        EffectLayer innerRing;
+        innerRing.type           = EmitterType::Ring;
+        innerRing.element        = ElementType::Wind;
+        innerRing.particleCount  = 160;
+        innerRing.overrideColors = true;
+        innerRing.coreColor      = { 1.00f, 0.75f, 1.00f, 0.95f };  // 라벤더-핑크
+        innerRing.edgeColor      = { 0.55f, 0.15f, 0.85f, 0.40f };
+        innerRing.sizeScale      = 1.0f;
+        innerRing.speedMin       = 0.4f;
+        innerRing.speedMax       = 1.0f;
+        innerRing.lifetimeMin    = 0.8f;
+        innerRing.lifetimeMax    = 1.4f;
+        innerRing.duration       = 9999.f;
+        innerRing.emitRate       = 130.f;
+
+        innerRing.ring.radius         = 7.5f;
+        innerRing.ring.width          = 0.4f;
+        innerRing.ring.expandSpeed    = 0.0f;
+        innerRing.ring.tiltX          = 0.f;
+        innerRing.ring.rotateSpeed    = 5.5f;    // 빠른 정방향 — outer 와 반대로 회전 → 마찰감
+        innerRing.ring.normalSpeedMin = 0.3f;
+        innerRing.ring.normalSpeedMax = 1.0f;
+
+        def.layers.push_back(innerRing);
         Register(std::move(def));
     }
 
@@ -2773,7 +2801,8 @@ void EffectRegistry::Initialize()
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // Portal_Suction — 외곽에서 중심으로 빨려들어가는 흡입 입자 (차원문 인력 연출)
+    // Portal_Suction — 외곽에서 중심으로 빨려들어가는 흡입 입자 (강한 인력 + 시안 streak)
+    //   ↑ 입자 수, ↑ 속도, ↓ 사이즈 → "실제로 빨아들이는" 격렬한 vortex 느낌
     // ──────────────────────────────────────────────────────────────────────────
     {
         EffectDef def;
@@ -2783,56 +2812,55 @@ void EffectRegistry::Initialize()
         EffectLayer suck;
         suck.type           = EmitterType::Sphere;
         suck.element        = ElementType::Wind;
-        suck.particleCount  = 70;            // 약간 늘림 — 흐름이 너무 빈약하지 않게
+        suck.particleCount  = 100;           // 140→100 — 점 장식 인상 제거, 적지만 빠르게
         suck.overrideColors = true;
-        suck.coreColor      = { 1.00f, 0.75f, 0.95f, 0.80f };  // 라벤더
-        suck.edgeColor      = { 0.30f, 0.10f, 0.60f, 0.0f };   // 딥 바이올렛 페이드
-        suck.sizeScale      = 0.45f;
-        suck.speedMin       = 1.5f;          // ↓ 느리게 — 빨려들어가는 속도가 자연스러워짐
-        suck.speedMax       = 2.8f;
-        suck.lifetimeMin    = 1.2f;          // ↑ 길게 — trail 이 더 부드럽게 보임
-        suck.lifetimeMax    = 1.8f;
+        suck.coreColor      = { 0.85f, 0.65f, 1.00f, 0.85f }; // 밝은 라벤더
+        suck.edgeColor      = { 0.40f, 0.10f, 0.80f, 0.0f };  // 딥 바이올렛 페이드
+        suck.sizeScale      = 0.38f;         // 0.30→0.38 — 조금 더 읽히는 streak
+        suck.speedMin       = 4.5f;          // ↑ 격렬한 흡입
+        suck.speedMax       = 7.5f;
+        suck.lifetimeMin    = 0.45f;         // 짧게 → 속도감 살아남
+        suck.lifetimeMax    = 0.85f;
         suck.duration       = 9999.f;
-        suck.emitRate       = 40.f;
+        suck.emitRate       = 70.f;          // 90→70 — 적은 입자 흐름
 
-        suck.sphere.radius        = 8.5f;    // 디스크 외곽 직전 (반경 9)
+        suck.sphere.radius        = 9.0f;
         suck.sphere.shellFraction = 1.0f;
         suck.sphere.inward        = true;
-        suck.sphere.rotationSpeed = 0.5f;    // 부드러운 나선 (큰 반경에 맞춰 약간 느리게)
+        suck.sphere.rotationSpeed = 4.0f;    // 2.5→4.0 — 강한 vortex 회전
 
         def.layers.push_back(suck);
         Register(std::move(def));
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // Portal_Beam — 디스크에서 위로 솟는 수직 광주 (멀리서도 인지)
+    // Portal_Beam — 디스크에서 위로 솟는 수직 광주 (얇고 높게 — cinematic 광선)
+    //   tornado 둘레 좁히고 더 높이 → 멀리서도 보이는 신호탑 같은 인상
     // ──────────────────────────────────────────────────────────────────────────
     {
         EffectDef def;
         def.name    = "Portal_Beam";
         def.element = ElementType::Wind;
 
-        // Linear emitter — 위로 솟는 빛줄기 + swirl(공전) 으로 토네이도/소용돌이 형태
-        // recycle 켜져 있어 위쪽 끝 도달 시 바닥에서 재스폰 → 끊김 없는 흐름
         EffectLayer beam;
         beam.type           = EmitterType::Linear;
         beam.element        = ElementType::Wind;
-        beam.particleCount  = 90;            // 토네이도 흐름은 입자 수 필요
+        beam.particleCount  = 110;
         beam.overrideColors = true;
-        beam.coreColor      = { 1.00f, 0.80f, 0.95f, 0.85f }; // 라벤더
-        beam.edgeColor      = { 0.40f, 0.15f, 0.75f, 0.0f };  // 딥 바이올렛 페이드
-        beam.sizeScale      = 0.5f;
-        beam.speedMin       = 1.8f;
-        beam.speedMax       = 3.0f;
-        beam.lifetimeMin    = 1.8f;
-        beam.lifetimeMax    = 2.6f;
+        beam.coreColor      = { 0.95f, 0.80f, 1.00f, 0.90f }; // 라벤더-화이트
+        beam.edgeColor      = { 0.45f, 0.10f, 0.85f, 0.0f };  // 딥 바이올렛 페이드
+        beam.sizeScale      = 0.4f;          // ↓ 0.5 → 0.4 — 얇은 광선
+        beam.speedMin       = 2.5f;          // ↑ 더 빠르게 솟음
+        beam.speedMax       = 4.0f;
+        beam.lifetimeMin    = 1.5f;
+        beam.lifetimeMax    = 2.3f;
         beam.duration       = 9999.f;
-        beam.emitRate       = 50.f;
+        beam.emitRate       = 65.f;
 
-        beam.linear.length      = 7.5f;     // 디스크 위로 7.5u 솟음 (디스크 커져서 비례)
-        beam.linear.width       = 2.2f;     // 토네이도 둘레 반경
-        beam.linear.recycleRate = 1.0f;     // 끝 도달 후 재스폰 (지속 흐름)
-        beam.linear.swirlSpeed  = 3.0f;     // 회전 — 진짜 소용돌이 느낌
+        beam.linear.length      = 11.0f;    // ↑ 7.5 → 11 — 더 높이 솟음
+        beam.linear.width       = 1.2f;     // ↓ 2.2 → 1.2 — 좁은 토네이도 둘레
+        beam.linear.recycleRate = 1.0f;
+        beam.linear.swirlSpeed  = 5.5f;     // ↑ 3 → 5.5 — 격렬한 회전
 
         def.layers.push_back(beam);
         Register(std::move(def));

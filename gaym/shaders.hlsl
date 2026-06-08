@@ -514,9 +514,12 @@ VS_OUTLINE_OUTPUT VS_Outline(VS_INPUT input)
 
     // Canonical inverted hull: push outward in world space along the normal.
     // Scale by clip-w to keep the on-screen thickness roughly constant.
-    // 0.0040 → 0.0025 → 0.0015: DarkLord 대형 보스에서 outline 너무 두꺼워 보이는 문제.
+    //   기본 0.0025 — 일반 적/플레이어 두께 유지.
+    //   대형 보스(World scale > 5) 만 0.55× 적용 — DarkLord 외곽선 얇게.
+    float worldScaleX = length(float3(World._11, World._12, World._13));
+    float thicknessMul = (worldScaleX > 5.0f) ? 0.55f : 1.0f;
     float4 clipFirst = mul(worldPos, ViewProj);
-    float thickness  = 0.0015f * clipFirst.w;
+    float thickness  = 0.0025f * clipFirst.w * thicknessMul;
     worldPos.xyz += worldNormal * thickness;
 
     output.position = mul(worldPos, ViewProj);
@@ -634,57 +637,94 @@ float4 PS(PS_INPUT input) : SV_TARGET
     //   - gMaterial.m_cEmissive = 코어색(마젠타), m_cDiffuse = 림색(시안)
     if (bIsPortal)
     {
-        // RingMesh UV: u = 각도(0~1), v = 반경(0=외곽, 1=중심)
-        // fbm 노이즈 + r 기반 회전 속도 차등(안쪽이 빠르게 빨려들어가는 깊이감)
+        // ═══════════════════════════════════════════════════════════════════════
+        // 포탈 셰이더 — alpha 직접 계산 + 핫스팟/임팩트 절제 + 중앙 hole + 외곽 fade
+        //   메인 PSO 가 BlendEnable=FALSE 라 알파 곱셈으로 검정 처리해 "비어보임" 시뮬레이션
+        // ═══════════════════════════════════════════════════════════════════════
         float r = saturate(1.0f - input.uv.y);
         float theta = input.uv.x * 6.2831853f;
 
-        // 깊이감의 핵심: 안쪽으로 갈수록 빠르게 회전 (whirlpool / accretion disk)
-        float radialBoost = 1.0f / max(r + 0.18f, 0.18f);
-        float twistedTheta = theta + g_Time * 0.30f * radialBoost;
+        // 비대칭 왜곡 — disc 가 살짝 타원으로 흔들리게
+        float warp = sin(theta * 3.0f + g_Time * 0.6f) * 0.05f
+                   + sin(theta * 5.0f - g_Time * 0.4f) * 0.03f;
+        float warpedR = saturate(r + warp);
 
-        float t = g_Time * 0.12f;
-        float2 polar = float2(cos(twistedTheta), sin(twistedTheta)) * (0.6f + r * 1.4f);
+        // ── body (vortex) 텍스처 — 폴라 매핑 (포탈 본체 결) + invert ──────────
+        float radialBoost = 1.0f / max(warpedR + 0.18f, 0.18f);
+        float twistedTheta = theta + g_Time * 0.22f * radialBoost;
 
-        // 3 옥타브 fbm — 부드러운 유기적 패턴
-        float n1 = _vnoise(polar * 2.5f + float2( t,        -t * 0.6f));
-        float n2 = _vnoise(polar * 5.0f + float2(-t * 0.7f,  t * 0.9f));
-        float n3 = _vnoise(polar * 9.5f + float2( t * 1.3f,  t * 0.4f));
-        float swirl = saturate(n1 * 0.55f + n2 * 0.30f + n3 * 0.15f);
+        float t = g_Time * 0.10f;
+        float2 polar = float2(cos(twistedTheta), sin(twistedTheta)) * (0.55f + warpedR * 1.25f);
 
+        // disc 평면 직접 매핑 + 회전 (텍스처 결 그대로 회전)
+        float angA = g_Time * 0.25f;
+        float cA = cos(angA), sA = sin(angA);
+        float2 discXY = float2(cos(theta), sin(theta)) * warpedR;
+        float2 rotA = float2(cA * discXY.x - sA * discXY.y, sA * discXY.x + cA * discXY.y);
+        float body = 1.0f - gAlbedoMap.Sample(gSampler, rotA * 0.5f + 0.5f).r;
+
+        // 추가 디테일 — 큰 스케일로 tile 해서 외곽에도 결
+        float angB = -g_Time * 0.18f;
+        float cB = cos(angB), sB = sin(angB);
+        float2 rotB = float2(cB * discXY.x - sB * discXY.y, sB * discXY.x + cB * discXY.y) * 1.8f;
+        float detail = 1.0f - gAlbedoMap.Sample(gSampler, rotB * 0.5f + 0.5f + float2(0.13f, -0.21f)).r;
+
+        // procedural noise 보조 (텍스처 결 흔들기)
+        float n1 = _vnoise(polar * 2.2f + float2( t,        -t * 0.5f));
+        float n2 = _vnoise(polar * 4.6f + float2(-t * 0.6f,  t * 0.8f));
+        float procSwirl = n1 * 0.6f + n2 * 0.4f;
+
+        // 패턴 합성 — body 더 dominant, procedural 비중 ↓ + 콘트라스트 강화로 뭉개짐 제거
+        float swirl = saturate(body * 0.85f + detail * 0.20f + procSwirl * 0.12f);
+        swirl = pow(swirl, 1.25f);  // 콘트라스트 ↑ — 진흙처럼 뭉개지지 않게
+
+        // ── 색상 합성 (절제된 강도) ────────────────────────────────────────────
         float3 coreCol = gMaterial.m_cEmissive.rgb;
         float3 rimCol  = gMaterial.m_cDiffuse.rgb;
-        float3 portalCol = lerp(rimCol * 0.25f, coreCol, swirl);
 
-        // 블랙홀 + 깊이감 음영 — 안쪽으로 갈수록 어두워지며 빨려드는 깊이 표현
-        // smoothstep 두 단계: 0~0.18 진한 어둠, 0.18~0.45 점차 밝아짐 → 우물 같은 깊이
-        float blackhole = smoothstep(0.0f, 0.18f, r) * smoothstep(0.0f, 0.45f, r);
-        portalCol *= blackhole;
+        // 중앙 hole + 외곽 페이드 — hole 더 좁게 → 내부가 먹물처럼 안 퍼짐
+        float innerHole   = 1.0f - smoothstep(0.015f, 0.095f, warpedR);
+        float singularity = 1.0f - smoothstep(0.0f,   0.045f, warpedR);  // 더 깊은 흡입점
+        float outerFade   = 1.0f - smoothstep(0.93f,  1.00f,  warpedR);
 
-        // 외곽 림 — 부드러운 그라데이션 + 부드러운 inner highlight (마법진 위에 떠있는 듯한 광막)
-        float rimGlow = smoothstep(0.62f, 1.0f, r);
+        // 외곽 림 글로우 — 얇게 + procedural rimBreak 로 불규칙 (완벽한 원 깨기)
+        float rimNoise = _vnoise(float2(theta * 2.0f, g_Time * 0.25f) + warpedR * 8.0f);
+        float rimBreak = lerp(0.65f, 1.25f, rimNoise);
+        float rimGlow = smoothstep(0.78f, 0.98f, warpedR);  // 0.72 → 0.78 (얇아짐)
         rimGlow *= rimGlow;
-        portalCol += rimCol * rimGlow * 1.8f;
+        rimGlow *= rimBreak;  // 불규칙 찢어짐
 
-        // 부드러운 빛점 — fbm swirl 의 핫스팟
-        float hotspot = smoothstep(0.65f, 0.95f, swirl) * (1.0f - r * 0.5f);
-        portalCol += coreCol * hotspot * 1.2f;
+        // body 색 — 핫코어 → rim 색 lerp (어두운 코어 + 밝은 림)
+        float3 col = lerp(coreCol * 0.25f, rimCol, swirl);
+        col *= (1.0f - innerHole * 0.95f);  // 중앙 hole 검정 처리
+        col = lerp(col, float3(0.0f, 0.0f, 0.0f), singularity);  // 정중앙 심연
 
-        // ── 주기적 임팩트 펄스 — 4초 주기, ring 이 중심→외곽으로 sweep ────────────
-        //   살짝의 임팩트: 너무 강하지 않게 페이드 아웃. impactR 가 r 위치에 도달했을 때 작은 발광 띠.
+        // 림 글로우 + 핫스팟 + 임팩트 — 모두 절제된 강도
+        col += rimCol  * rimGlow * 0.70f;                         // ↓ 2.4 → 0.7
+        float hotspot = smoothstep(0.62f, 0.95f, swirl) * (1.0f - warpedR * 0.4f);
+        col += coreCol * hotspot * 0.45f;                         // ↓ 1.6 → 0.45
+
         const float IMPACT_PERIOD = 4.0f;
-        float impactT = frac(g_Time / IMPACT_PERIOD);     // [0, 1)
-        float impactR = impactT * 0.95f;                  // ring 가 0→0.95 로 sweep
-        float impactWidth = 0.07f;
-        float impactBand = exp(-pow((r - impactR) / impactWidth, 2.0f));
-        float impactFade = 1.0f - impactT;                // 시간 지날수록 약해짐
-        portalCol += coreCol * impactBand * impactFade * 1.4f;
+        float impactT = frac(g_Time / IMPACT_PERIOD);
+        float impactR = impactT * 0.95f;
+        float impactBand = exp(-pow((warpedR - impactR) / 0.07f, 2.0f));
+        float impactFade = 1.0f - impactT;
+        col += coreCol * impactBand * impactFade * 0.55f;         // ↓ 1.4 → 0.55
 
         // 호흡 펄스
-        float pulse = 0.90f + 0.10f * sin(g_Time * 1.7f);
-        portalCol *= pulse;
+        float pulse = 0.92f + 0.08f * sin(g_Time * 1.7f);
+        col *= pulse;
 
-        return float4(portalCol, gMaterial.m_cDiffuse.a);
+        // ── 알파 계산 (메인 PSO 가 BlendEnable=FALSE 이므로 색에 곱해서 검정 시뮬레이션) ─
+        float bodyAlpha = saturate(swirl * 0.65f + rimGlow * 0.45f);
+        float alpha = bodyAlpha * outerFade;
+        alpha *= (1.0f - innerHole * 0.85f);  // 중앙은 알파↓ → 색 검정 → 구멍 인상
+        alpha = saturate(alpha + rimGlow * 0.4f);  // 림은 알파 약간 부스트해서 살짝 보임 보장
+
+        // 메인 PSO 알파 블렌딩 없음 → 색에 알파 곱해 비어보이는 부분을 검정으로
+        col *= alpha;
+
+        return float4(col, 1.0f);
     }
 
     // Normalize the world normal

@@ -1212,6 +1212,27 @@ void MapLoader::ScatterPropsOnFloorTiles(
     }
     if (avail.empty()) return;
 
+    // ── 외곽 타일 제거 — prop 이 맵 boundary 밖으로 삐져나가지 않게 ────────
+    //   tile bbox 의 가장자리에서 일정 margin 안쪽 tile 만 사용. fallback: 전부 사용.
+    {
+        float minX = +1e9f, maxX = -1e9f, minZ = +1e9f, maxZ = -1e9f;
+        for (const auto& t : tiles) {
+            if (t.x < minX) minX = t.x;
+            if (t.x > maxX) maxX = t.x;
+            if (t.z < minZ) minZ = t.z;
+            if (t.z > maxZ) maxZ = t.z;
+        }
+        constexpr float kEdgeMargin = 5.0f;   // tile 평균 size 가 ~10m 기준 — 외곽 1줄 제거
+        std::vector<XMFLOAT3> inner;
+        inner.reserve(avail.size());
+        for (const auto& t : avail) {
+            if (t.x > minX + kEdgeMargin && t.x < maxX - kEdgeMargin &&
+                t.z > minZ + kEdgeMargin && t.z < maxZ - kEdgeMargin)
+                inner.push_back(t);
+        }
+        if (!inner.empty()) avail = std::move(inner);   // 충분하면 inner 사용
+    }
+
     // 3. 스캐터 config 로드
     JsonVal cfg = JsonVal::parseFile(scatterConfigPath);
     if (cfg.isNull() || !cfg.has("scatter")) return;

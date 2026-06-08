@@ -256,6 +256,7 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClInclude Include="BloomPostProcess.h" />
     <ClInclude Include="WhiteFlashOverlay.h" />
     <ClInclude Include="ScreenSplitOverlay.h" />
+    <ClInclude Include="LeafSystem.h" />
     <ClInclude Include="HitStopSystem.h" />
     <ClInclude Include="SlashVFXDesc.h" />
     <ClInclude Include="SlashCue.h" />
@@ -419,6 +420,7 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClCompile Include="BloomPostProcess.cpp" />
     <ClCompile Include="WhiteFlashOverlay.cpp" />
     <ClCompile Include="ScreenSplitOverlay.cpp" />
+    <ClCompile Include="LeafSystem.cpp" />
     <ClCompile Include="HitStopSystem.cpp" />
     <ClCompile Include="SlashVFXDesc.cpp" />
     <ClCompile Include="SlashCue.cpp" />
@@ -557,6 +559,12 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </FxCompile>
     <FxCompile Include="screen_split.hlsl">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </FxCompile>
+    <FxCompile Include="leaf_particle.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>

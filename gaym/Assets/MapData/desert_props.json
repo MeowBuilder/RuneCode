@@ -5,22 +5,22 @@
       "meshFile": "meshes/CrossPlains_Plant_10.bin",
       "count": 7,
       "yOffset": 0.5,
-      "scaleMin": 0.6,
-      "scaleMax": 1.4
+      "scaleMin": 0.55,
+      "scaleMax": 1.0
     },
     {
       "meshFile": "meshes/CrossPlains_Skull_01.bin",
       "count": 3,
       "yOffset": 0.5,
-      "scaleMin": 0.75,
-      "scaleMax": 1.2
+      "scaleMin": 0.65,
+      "scaleMax": 0.95
     },
     {
       "meshFile": "meshes/CrossPlains_Ribs_01.bin",
       "count": 2,
       "yOffset": 0.0,
-      "scaleMin": 0.85,
-      "scaleMax": 1.3
+      "scaleMin": 0.75,
+      "scaleMax": 1.05
     }
   ]
 }
