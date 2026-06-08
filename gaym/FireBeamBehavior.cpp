@@ -405,17 +405,10 @@ void FireBeamBehavior::HitEnemiesInBeam(float damage, const XMFLOAT3* pDirOverri
             pEnemy->TakeDamage(ApplyExecBonus(damage, pEnemy, m_pCaster), false, bExec);
             NotifyHit(m_pCaster, ePos);
 
-            if (hasStats && !sts.onHitHooks.empty())
-            {
-                SkillContext ctx;
-                ctx.caster             = m_pCaster;
-                ctx.baseDamage         = damage;
-                ctx.damageDealt        = damage;
-                ctx.hitEnemy           = pEnemy;
-                ctx.hitEnemyPos        = pTransform->GetPosition();
-                ctx.statusChanceMult   = sts.statusChanceMult;
-                ctx.statusDurationMult = sts.statusDurationMult;
-                for (auto& hook : sts.onHitHooks) hook(ctx);
+            if (hasStats) {
+                if (auto* pSC = m_pCaster->GetComponent<SkillComponent>())
+                    pSC->ApplyOnHitRunes(m_slot, sts, damage, damage, pEnemy,
+                                         pTransform->GetPosition(), m_pScene);
             }
         }
     }

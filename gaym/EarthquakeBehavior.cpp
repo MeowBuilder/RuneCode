@@ -224,18 +224,7 @@ void EarthquakeBehavior::UpdateWaves(float dt)
                 auto* pSC = m_pCaster->GetComponent<SkillComponent>();
                 if (pSC && m_slot != SkillSlot::Count) {
                     SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-                    if (!sts.onHitHooks.empty()) {
-                        SkillContext ctx;
-                        ctx.caster             = m_pCaster;
-                        ctx.baseDamage         = dmg;
-                        ctx.damageDealt        = dmg;
-                        ctx.hitEnemy           = pEnemy;
-                        ctx.hitEnemyPos        = ep;
-                        ctx.scene              = m_pScene;
-                        ctx.statusChanceMult   = sts.statusChanceMult;
-                        ctx.statusDurationMult = sts.statusDurationMult;
-                        for (auto& hook : sts.onHitHooks) hook(ctx);
-                    }
+                    pSC->ApplyOnHitRunes(m_slot, sts, dmg, dmg, pEnemy, ep, m_pScene);
                 }
             }
         }

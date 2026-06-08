@@ -840,9 +840,13 @@ void PlayerComponent::TriggerLifestealVFX(float healAmount)
     if (!m_pOwner || !m_pOwner->GetTransform() || healAmount <= 0.f) return;
     DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
     pos.y += 2.4f;
-    // twirl1 — 초록 톤, 빠른 회전, 짧은 lifetime
-    VFXSpriteManager::Get().Spawn("twirl1", pos, 110.f, 0.45f,
-        DirectX::XMFLOAT4(0.30f, 1.0f, 0.45f, 1.0f), 6.0f, VFXSpriteAnim::FadeOut);
+    // fang — 진홍 송곳니(흡혈귀 바이트). 회전 없이 팝업 후 페이드.
+    // 이전 송곳니가 남아 있으면 교체 → 항상 하나만 플레이어를 따라다님.
+    constexpr float kFangLife = 0.55f;
+    if (m_lifestealVFXSlot >= 0) VFXSpriteManager::Get().Stop(m_lifestealVFXSlot);
+    m_lifestealVFXSlot  = VFXSpriteManager::Get().Spawn("fang", pos, 95.f, kFangLife,
+        DirectX::XMFLOAT4(0.85f, 0.10f, 0.18f, 1.0f), 0.f, VFXSpriteAnim::SkullPop);
+    m_lifestealVFXTimer = kFangLife;
 }
 
 void PlayerComponent::TriggerShieldBreakVFX()
@@ -923,6 +927,19 @@ void PlayerComponent::UpdateAbyssAuraVFX(float deltaTime)
         VFXSpriteManager::Get().Stop(m_vengeanceVFXSlot);
         m_vengeanceVFXSlot      = -1;
         m_vengeanceRefreshTimer = 0.f;
+    }
+
+    // ─ 흡혈 송곳니 (일회성, lifetime 동안만 플레이어 추적) ───────────────────────
+    if (m_lifestealVFXSlot >= 0)
+    {
+        m_lifestealVFXTimer -= deltaTime;
+        if (m_lifestealVFXTimer <= 0.f)
+            m_lifestealVFXSlot = -1;       // 만료 — 슬롯 재사용 대비 추적 중단
+        else
+        {
+            DirectX::XMFLOAT3 pos = base; pos.y += 2.4f;
+            VFXSpriteManager::Get().SetPosition(m_lifestealVFXSlot, pos);
+        }
     }
 }
 

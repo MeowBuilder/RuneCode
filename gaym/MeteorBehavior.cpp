@@ -59,6 +59,10 @@ void MeteorBehavior::SpawnSmallMeteorAt(const XMFLOAT3& targetPos)
     sm.fallDuration = SMALL_SPAWN_HEIGHT / SMALL_FALL_SPEED;
     sm.elapsed     = 0.f;
     sm.impacted    = false;
+    sm.damage      = m_SkillData.damage * m_damageMult * SMALL_DAMAGE_RATIO;
+    sm.radius      = SMALL_EXPLODE_RADIUS;
+    sm.stagger     = true;
+    sm.isEcho      = false;
 
     XMFLOAT3 upDir = { 0.f, 1.f, 0.f };
     if (EffectRegistry::Get().HasEffect("R_MeteorSmallTrail"))
@@ -190,6 +194,10 @@ void MeteorBehavior::SpawnSmallMeteor()
     sm.fallDuration = SMALL_SPAWN_HEIGHT / SMALL_FALL_SPEED;
     sm.elapsed     = 0.f;
     sm.impacted    = false;
+    sm.damage      = m_SkillData.damage * m_damageMult * SMALL_DAMAGE_RATIO;
+    sm.radius      = SMALL_EXPLODE_RADIUS;
+    sm.stagger     = true;
+    sm.isEcho      = false;
 
     XMFLOAT3 upDir = { 0.f, 1.f, 0.f };
     EffectDef trailDef = EffectRegistry::Get().GetEffect("R_MeteorSmallTrail");
@@ -275,6 +283,17 @@ void MeteorBehavior::Update(float deltaTime)
         if (m_finalElapsed >= finalFallDuration)
             OnFinalImpact();
     }
+
+    // 일반 샤워 완료 판정 — 최종 메테오 착지 후에도 메아리 메테오가 남아 있으면 대기
+    // (OnFinalImpact 에서 바로 끝내면 메아리 메테오가 추적 안 돼 공중에서 사라짐)
+    if (!m_bChannelMode && !m_bPostChannel && m_bFinalSpawned && m_bFinalImpacted)
+    {
+        bool allSmallDone = true;
+        for (const auto& sm : m_smallMeteors)
+            if (!sm.impacted) { allSmallDone = false; break; }
+        if (allSmallDone)
+            m_bIsFinished = true;
+    }
 }
 
 // ─── 소형 메테오 착지 ────────────────────────────────────────────────────────
@@ -290,14 +309,26 @@ void MeteorBehavior::OnSmallImpact(SmallMeteorData& sm)
             sm.trailVfxId = -1;
         }
         XMFLOAT3 up = { 0.f, 1.f, 0.f };
-        EffectDef impDef = EffectRegistry::Get().GetEffect("R_MeteorSmallImpact");
-        ApplyElementSetToEffectDef(impDef, m_elementSet);
-        m_pVFXManager->SpawnEffectDef(sm.targetPos, up, impDef, true);
+        if (sm.isEcho)
+        {
+            // 메아리 재발동: 최종 메테오급 대형 폭발 VFX
+            EffectDef impDef = EffectRegistry::Get().GetEffect("R_MeteorImpact");
+            ApplyElementSetToEffectDef(impDef, m_elementSet);
+            m_pVFXManager->SpawnEffectDef(sm.targetPos, up, impDef, true);
+            EffectDef fireDef = EffectRegistry::Get().GetEffect("R_MeteorGroundFire");
+            ApplyElementSetToEffectDef(fireDef, m_elementSet);
+            m_pVFXManager->SpawnEffectDef(sm.targetPos, up, fireDef, true);
+        }
+        else
+        {
+            EffectDef impDef = EffectRegistry::Get().GetEffect("R_MeteorSmallImpact");
+            ApplyElementSetToEffectDef(impDef, m_elementSet);
+            m_pVFXManager->SpawnEffectDef(sm.targetPos, up, impDef, true);
+        }
     }
 
-
-    float smallDmg = m_SkillData.damage * m_damageMult * SMALL_DAMAGE_RATIO;
-    ApplyExplosionDamage(smallDmg, SMALL_EXPLODE_RADIUS, sm.targetPos, true);
+    // 스폰 시점에 캡처한 피해/반경 사용 (공유 m_damageMult 비의존)
+    ApplyExplosionDamage(sm.damage, sm.radius, sm.targetPos, sm.stagger);
 }
 
 // ─── 최종 대형 메테오 스폰 ────────────────────────────────────────────────────
@@ -330,8 +361,7 @@ void MeteorBehavior::SpawnFinalMeteor()
 void MeteorBehavior::OnFinalImpact()
 {
     m_bFinalImpacted = true;
-    if (!m_bPostChannel)
-        m_bIsFinished = true;  // 후처리 모드면 Update() 의 allDone 체크에서 처리
+    // 완료 판정은 Update() 말미의 통합 체크에서 처리 (메아리 메테오가 남아 있을 수 있음)
 
     if (m_pVFXManager)
     {
@@ -389,6 +419,46 @@ void MeteorBehavior::OnChannelEnd(GameObject* caster)
     {
         m_bIsFinished = true;
     }
+}
+
+// ─── 메아리 룬(ABY_ECO) 재발동 ────────────────────────────────────────────────
+// 첫 시전의 진행 중 상태(m_smallMeteors / 최종 메테오)를 절대 건드리지 않고,
+// 타겟 위에 독립적인 대형 메테오 1개를 떨군다. 피해/반경은 메테오에 직접 캡처되어
+// 공유 멤버(m_damageMult 등)와 충돌하지 않는다.
+void MeteorBehavior::SpawnEchoMeteorAt(const XMFLOAT3& targetPos, float mult)
+{
+    if (!m_pVFXManager) return;
+
+    SmallMeteorData sm;
+    sm.targetPos    = { targetPos.x, 0.f, targetPos.z };
+    sm.spawnPos     = { targetPos.x, SMALL_SPAWN_HEIGHT, targetPos.z };
+    sm.fallDuration = SMALL_SPAWN_HEIGHT / SMALL_FALL_SPEED;
+    sm.elapsed      = 0.f;
+    sm.impacted     = false;
+    // 메아리는 이미 0.5배 mult가 적용돼 들어온다 → 최종 메테오급 전체 범위 단발
+    sm.damage       = m_SkillData.damage * mult;
+    sm.radius       = m_SkillData.range;
+    sm.stagger      = false;
+    sm.isEcho       = true;
+
+    XMFLOAT3 upDir = { 0.f, 1.f, 0.f };
+    EffectDef trailDef = EffectRegistry::Get().GetEffect("R_MeteorTrail");
+    ApplyElementSetToEffectDef(trailDef, m_elementSet);
+    if (!trailDef.layers.empty())
+        sm.trailVfxId = m_pVFXManager->SpawnEffectLayer(
+            sm.spawnPos, upDir, trailDef.name, trailDef.layers[0], true);
+
+    m_smallMeteors.push_back(sm);
+}
+
+void MeteorBehavior::OnEchoFire(GameObject* caster, const DirectX::XMFLOAT3& targetPos, float mult)
+{
+    if (!m_pVFXManager) return;
+    if (caster) m_pCaster = caster;
+
+    SpawnEchoMeteorAt(targetPos, mult);
+    m_bIsFinished = false;  // Update()가 메아리 메테오를 끝까지 추적하도록
+    OutputDebugStringA("[Meteor] Echo rune: independent meteor dropped!\n");
 }
 
 void MeteorBehavior::Reset()
@@ -470,17 +540,9 @@ void MeteorBehavior::ApplyExplosionDamage(float damage, float radius, const XMFL
             pEnemy->TakeDamage(actualDmg, bTriggerStagger, bExec);
             NotifyHit(m_pCaster, ePos);
 
-            if (hasStats && !sts.onHitHooks.empty()) {
-                SkillContext ctx;
-                ctx.caster             = m_pCaster;
-                ctx.baseDamage         = damage;
-                ctx.damageDealt        = actualDmg;
-                ctx.hitEnemy           = pEnemy;
-                ctx.hitEnemyPos        = ePos;
-                ctx.scene              = m_pScene;
-                ctx.statusChanceMult   = sts.statusChanceMult;
-                ctx.statusDurationMult = sts.statusDurationMult;
-                for (auto& hook : sts.onHitHooks) hook(ctx);
+            if (hasStats) {
+                if (auto* pSC = m_pCaster->GetComponent<SkillComponent>())
+                    pSC->ApplyOnHitRunes(m_slot, sts, damage, actualDmg, pEnemy, ePos, m_pScene);
             }
         }
     }

@@ -1455,6 +1455,129 @@ ComPtr<ID3D12Resource> Dx12App::CreateBufferResource(const void* pData, UINT nBy
     return pd3dBuffer;
 }
 
+// ─── 프로시저럴 룬 VFX 텍스처 생성 (외부 아트 없이 픽셀 버퍼로 직접 그림) ────────
+//   RGB 는 흰색으로 두고 알파로만 형태를 정의 → 스폰 시 color 인자로 틴트.
+//   포맷 R8G8B8A8_UNORM, 리틀엔디언: byte0=R 이므로 0xAABBGGRR (흰색=0x00FFFFFF | A<<24).
+namespace {
+inline float ProcClampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+inline float ProcMin(float a, float b) { return a < b ? a : b; }
+inline float ProcMax(float a, float b) { return a > b ? a : b; }
+
+inline void ProcPlotWhite(std::vector<uint32_t>& px, int dim, int x, int y, float a)
+{
+    if (x < 0 || y < 0 || x >= dim || y >= dim) return;
+    a = ProcClampf(a, 0.f, 1.f);
+    uint32_t A = (uint32_t)(a * 255.f + 0.5f);
+    uint32_t& p = px[(size_t)y * dim + x];
+    uint32_t curA = (p >> 24) & 0xFFu;
+    if (A > curA) p = 0x00FFFFFFu | (A << 24);   // 흰색 RGB + 최대 알파 블렌드
+}
+
+// 시계: 바깥 링 + 12눈금(정각 4개 강조) + 시침/분침 + 중심 허브
+void BuildClockTexture(std::vector<uint32_t>& px, int dim)
+{
+    const float c  = (dim - 1) * 0.5f;
+    const float R  = dim * 0.46f;
+    const float ringHalf = dim * 0.028f;
+    const float aa = 1.1f;
+    const float PI = 3.14159265f;
+
+    for (int y = 0; y < dim; ++y)
+    for (int x = 0; x < dim; ++x)
+    {
+        float dx = x - c, dy = y - c;
+        float r  = sqrtf(dx * dx + dy * dy);
+
+        // 바깥 링
+        float ringCov = ProcClampf((ringHalf - fabsf(r - R)) / aa + 0.5f, 0.f, 1.f);
+        if (ringCov > 0.f) ProcPlotWhite(px, dim, x, y, ringCov);
+
+        // 12눈금
+        if (r > R * 0.62f && r < R * 0.92f)
+        {
+            float ang     = atan2f(dy, dx);
+            float step    = PI / 6.f;
+            float nearest = floorf(ang / step + 0.5f);
+            float da      = fabsf(ang / step - nearest) * step;     // 각거리
+            bool  cardinal = (((int)llroundf(nearest)) % 3) == 0;   // 12/3/6/9
+            float halfW   = (cardinal ? dim * 0.016f : dim * 0.009f) / r;
+            float inner   = cardinal ? R * 0.62f : R * 0.74f;
+            if (r > inner)
+            {
+                float cov = ProcClampf((halfW - da) / (aa / r) + 0.5f, 0.f, 1.f);
+                if (cov > 0.f) ProcPlotWhite(px, dim, x, y, cov);
+            }
+        }
+    }
+
+    // 바늘: 12시가 위(-90°). 시침=10시 방향, 분침=2시 방향 (정지 시계 느낌)
+    auto drawHand = [&](float angDeg, float len, float halfW) {
+        float a  = angDeg * PI / 180.f;
+        float ex = cosf(a), ey = sinf(a);
+        for (int y = 0; y < dim; ++y)
+        for (int x = 0; x < dim; ++x)
+        {
+            float pxx = x - c, pyy = y - c;
+            float t = ProcClampf(pxx * ex + pyy * ey, 0.f, len);
+            float qx = pxx - ex * t, qy = pyy - ey * t;
+            float d  = sqrtf(qx * qx + qy * qy);
+            float cov = ProcClampf((halfW - d) + 0.5f, 0.f, 1.f);
+            if (cov > 0.f) ProcPlotWhite(px, dim, x, y, cov);
+        }
+    };
+    drawHand(-90.f - 60.f, R * 0.46f, dim * 0.018f);
+    drawHand(-90.f + 60.f, R * 0.66f, dim * 0.012f);
+
+    // 중심 허브
+    for (int y = 0; y < dim; ++y)
+    for (int x = 0; x < dim; ++x)
+    {
+        float dx = x - c, dy = y - c;
+        float d  = sqrtf(dx * dx + dy * dy);
+        float cov = ProcClampf((dim * 0.03f - d) + 0.5f, 0.f, 1.f);
+        if (cov > 0.f) ProcPlotWhite(px, dim, x, y, cov);
+    }
+}
+
+// 이빨: 아래로 뾰족한 송곳니 두 개 (흡혈귀 바이트)
+void BuildFangTexture(std::vector<uint32_t>& px, int dim)
+{
+    auto fillTri = [&](float ax, float ay, float bx, float by, float cx, float cy) {
+        auto edge = [](float Px, float Py, float x0, float y0, float x1, float y1,
+                       float ox, float oy) -> float {
+            float ex = x1 - x0, ey = y1 - y0;
+            float nx = -ey, ny = ex;
+            float len = sqrtf(nx * nx + ny * ny);
+            if (len < 1e-5f) return 0.f;
+            nx /= len; ny /= len;
+            float d  = (Px - x0) * nx + (Py - y0) * ny;
+            float od = (ox - x0) * nx + (oy - y0) * ny;   // 내부(반대 꼭짓점) 쪽이 +
+            return od < 0.f ? -d : d;
+        };
+        int minx = (int)floorf(ProcMin(ax, ProcMin(bx, cx))) - 1;
+        int maxx = (int)ceilf (ProcMax(ax, ProcMax(bx, cx))) + 1;
+        int miny = (int)floorf(ProcMin(ay, ProcMin(by, cy))) - 1;
+        int maxy = (int)ceilf (ProcMax(ay, ProcMax(by, cy))) + 1;
+        for (int y = miny; y <= maxy; ++y)
+        for (int x = minx; x <= maxx; ++x)
+        {
+            float fx = x + 0.5f, fy = y + 0.5f;
+            float d0 = edge(fx, fy, ax, ay, bx, by, cx, cy);
+            float d1 = edge(fx, fy, bx, by, cx, cy, ax, ay);
+            float d2 = edge(fx, fy, cx, cy, ax, ay, bx, by);
+            float m  = ProcMin(d0, ProcMin(d1, d2));
+            float cov = ProcClampf(m + 0.5f, 0.f, 1.f);
+            if (cov > 0.f) ProcPlotWhite(px, dim, x, y, cov);
+        }
+    };
+    float yTop = dim * 0.26f, yTip = dim * 0.72f;
+    float w    = dim * 0.15f;
+    float lx   = dim * 0.37f, rx = dim * 0.63f;
+    fillTri(lx - w * 0.5f, yTop, lx + w * 0.5f, yTop, lx, yTip);   // 왼쪽 송곳니
+    fillTri(rx - w * 0.5f, yTop, rx + w * 0.5f, yTop, rx, yTip);   // 오른쪽 송곳니
+}
+} // namespace
+
 void Dx12App::InitializeText()
 {
     // GraphicsMemory 초기화
@@ -1465,11 +1588,12 @@ void Dx12App::InitializeText()
     //   [4] VFX magic_03, [5] VFX skull, [6] VFX star_08, [7] VFX twirl_01, [8] VFX fire_01, [9] VFX flare_01
     //   [10~28] UI 텍스처 (UISlot 매핑, kUIHeapBase=10, Count=19 → 10..28)
     //   [29] 보호막 바 fill (small_bar)
+    //   [30] 프로시저럴 clock(시간역행), [31] 프로시저럴 fang(흡혈)
     m_fontDescriptorHeap = std::make_unique<DirectX::DescriptorHeap>(
         m_pd3dDevice.Get(),
         D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
-        32
+        34
     );
 
     // 리소스 업로드 배치
@@ -1580,6 +1704,50 @@ void Dx12App::InitializeText()
         loadVFXTex(L"Assets/Textures/VFX/twirl_01.png",    m_pTwirlTex,      m_pTwirlUpload,      7, "twirl1");
         loadVFXTex(L"Assets/Textures/VFX/fire_01.png",     m_pFlameTex,      m_pFlameUpload,      8, "fire1");
         loadVFXTex(L"Assets/Textures/VFX/flare_01.png",    m_pFlareTex,      m_pFlareUpload,      9, "flare1");
+
+        // ── 프로시저럴 생성 텍스처 (시계=시간역행, 이빨=흡혈) ──────────────────────
+        auto createProcTex = [&](const std::vector<uint32_t>& pixels, UINT dim,
+                                  ComPtr<ID3D12Resource>& tex, ComPtr<ID3D12Resource>& upload,
+                                  UINT heapSlot, const std::string& regId)
+        {
+            CD3DX12_HEAP_PROPERTIES dhp(D3D12_HEAP_TYPE_DEFAULT);
+            auto td = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, dim, dim, 1, 1);
+            m_pd3dDevice->CreateCommittedResource(&dhp, D3D12_HEAP_FLAG_NONE, &td,
+                D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&tex));
+
+            D3D12_SUBRESOURCE_DATA sub{};
+            sub.pData      = pixels.data();
+            sub.RowPitch   = (LONG_PTR)dim * 4;
+            sub.SlicePitch = sub.RowPitch * dim;
+
+            UINT64 sz = GetRequiredIntermediateSize(tex.Get(), 0, 1);
+            CD3DX12_HEAP_PROPERTIES uhp(D3D12_HEAP_TYPE_UPLOAD);
+            auto bd = CD3DX12_RESOURCE_DESC::Buffer(sz);
+            m_pd3dDevice->CreateCommittedResource(&uhp, D3D12_HEAP_FLAG_NONE, &bd,
+                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&upload));
+            UpdateSubresources(m_pd3dCommandList.Get(), tex.Get(), upload.Get(), 0, 0, 1, &sub);
+            auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(tex.Get(),
+                D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            m_pd3dCommandList->ResourceBarrier(1, &barrier);
+
+            D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+            srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            srvDesc.Format                  = DXGI_FORMAT_R8G8B8A8_UNORM;
+            srvDesc.ViewDimension           = D3D12_SRV_DIMENSION_TEXTURE2D;
+            srvDesc.Texture2D.MipLevels     = 1;
+            m_pd3dDevice->CreateShaderResourceView(tex.Get(), &srvDesc,
+                m_fontDescriptorHeap->GetCpuHandle(heapSlot));
+            VFXSpriteManager::Get().RegisterTex(regId,
+                m_fontDescriptorHeap->GetGpuHandle(heapSlot), dim, dim);
+        };
+
+        constexpr UINT kProcDim = 128;
+        std::vector<uint32_t> clockPx((size_t)kProcDim * kProcDim, 0u);
+        std::vector<uint32_t> fangPx ((size_t)kProcDim * kProcDim, 0u);
+        BuildClockTexture(clockPx, kProcDim);
+        BuildFangTexture (fangPx,  kProcDim);
+        createProcTex(clockPx, kProcDim, m_pClockTex, m_pClockUpload, 30, "clock");
+        createProcTex(fangPx,  kProcDim, m_pFangTex,  m_pFangUpload,  31, "fang");
     }
     CHECK_HR(m_pd3dCommandList->Close());
     ID3D12CommandList* vfxCmdLists[] = { m_pd3dCommandList.Get() };

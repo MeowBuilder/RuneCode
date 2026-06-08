@@ -152,6 +152,20 @@ void SkillComponent::Update(float deltaTime)
         }
     }
 
+    // 시간역행 룬 시계 VFX 위치 추적
+    if (m_timeRewindVFXSlot >= 0)
+    {
+        m_timeRewindVFXTimer -= deltaTime;
+        if (m_timeRewindVFXTimer <= 0.f)
+            m_timeRewindVFXSlot = -1;
+        else if (m_pOwner && m_pOwner->GetTransform())
+        {
+            DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+            pos.y += 2.2f;
+            VFXSpriteManager::Get().SetPosition(m_timeRewindVFXSlot, pos);
+        }
+    }
+
     // 과열 발동 폭발 VFX 추적 — 플레이어 몸통
     if (m_overheatBurstVFXSlot >= 0)
     {
@@ -246,13 +260,26 @@ void SkillComponent::Update(float deltaTime)
             }
         }
 
-        // 무한 룬 Pending reset 소비 — Casting 끝나서 Cooldown 으로 전환된 직후 즉시 Ready 로
-        if (m_pendingCooldownReset[i] && m_SkillStates[i] != SkillState::Casting)
+        // Casting 종료(→Cooldown 전환) 직후, 시전 중 누적된 룬 쿨다운 효과를 실제 타이머에 소비.
+        // (시전 중에는 쿨다운이 0이라 즉시 적용하면 버려지므로 여기서 일괄 반영)
+        if (m_SkillStates[i] != SkillState::Casting)
         {
-            m_CooldownTimers[i] = 0.0f;
-            if (m_SkillStates[i] == SkillState::Cooldown)
-                m_SkillStates[i] = SkillState::Ready;
-            m_pendingCooldownReset[i] = false;
+            // 시간역행(ABY_TIM): 누적 감소량 적용
+            if (m_pendingCooldownReduce[i] > 0.0f)
+            {
+                m_CooldownTimers[i] = max(0.0f, m_CooldownTimers[i] - m_pendingCooldownReduce[i]);
+                m_pendingCooldownReduce[i] = 0.0f;
+                if (m_CooldownTimers[i] <= 0.0f && m_SkillStates[i] == SkillState::Cooldown)
+                    m_SkillStates[i] = SkillState::Ready;
+            }
+            // 무한(ABY_INF): 즉시 초기화 (reset 이 reduce 보다 우선 — 어차피 0)
+            if (m_pendingCooldownReset[i])
+            {
+                m_CooldownTimers[i] = 0.0f;
+                if (m_SkillStates[i] == SkillState::Cooldown)
+                    m_SkillStates[i] = SkillState::Ready;
+                m_pendingCooldownReset[i] = false;
+            }
         }
     }
 
@@ -921,22 +948,82 @@ void SkillComponent::TryTriggerInfiniteRune(SkillSlot slot, const DirectX::XMFLO
 void SkillComponent::ReduceCooldown(SkillSlot slot, float seconds)
 {
     size_t index = static_cast<size_t>(slot);
-    if (index >= m_CooldownTimers.size()) return;
-    float prev = m_CooldownTimers[index];
-    m_CooldownTimers[index] = max(0.f, m_CooldownTimers[index] - seconds);
-    if (m_CooldownTimers[index] == 0.f && index < m_SkillStates.size()
-        && m_SkillStates[index] == SkillState::Cooldown)
-        m_SkillStates[index] = SkillState::Ready;
+    if (index >= m_CooldownTimers.size() || seconds <= 0.f) return;
 
-    // 시간 역행 룬 VFX — 실제로 쿨다운이 줄어든 경우에만 표시 (이미 0 이거나 변화 없으면 skip)
-    if (prev > m_CooldownTimers[index] && m_pOwner && m_pOwner->GetTransform())
+    bool applied = false;
+    if (index < m_SkillStates.size() && m_SkillStates[index] == SkillState::Casting)
     {
-        DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
-        pos.y += 1.0f;
-        // magic3 — 청록 시계 후광, 빠른 역회전(음수 회전 = 시간 역행 느낌)
-        VFXSpriteManager::Get().Spawn("magic3", pos, 200.f, 0.55f,
-            DirectX::XMFLOAT4(0.45f, 0.95f, 1.0f, 1.0f), -3.5f, VFXSpriteAnim::FadeOut);
+        // 시전 중 → 쿨다운이 아직 시작되지 않음(0). 감소량을 누적했다가
+        // Casting 종료 후 Update 의 소비 블록에서 실제 타이머에 반영.
+        m_pendingCooldownReduce[index] += seconds;
+        applied = true;
     }
+    else
+    {
+        float prev = m_CooldownTimers[index];
+        m_CooldownTimers[index] = max(0.f, m_CooldownTimers[index] - seconds);
+        if (m_CooldownTimers[index] == 0.f && index < m_SkillStates.size()
+            && m_SkillStates[index] == SkillState::Cooldown)
+            m_SkillStates[index] = SkillState::Ready;
+        applied = prev > m_CooldownTimers[index];
+    }
+
+    // 시간 역행 룬 VFX — 감소가 등록된 경우(live 적용 또는 시전 중 누적) 표시.
+    // 이전 시계가 남아 있으면 Stop 후 교체 → 항상 하나만 플레이어를 따라다님.
+    if (applied && m_pOwner && m_pOwner->GetTransform())
+    {
+        constexpr float kClockLife = 0.85f;
+        if (m_timeRewindVFXSlot >= 0) VFXSpriteManager::Get().Stop(m_timeRewindVFXSlot);
+        DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+        pos.y += 2.2f;
+        // clock — 청록 시계가 거꾸로 도는 연출 (음수 회전 = 시간 역행)
+        m_timeRewindVFXSlot  = VFXSpriteManager::Get().Spawn("clock", pos, 150.f, kClockLife,
+            DirectX::XMFLOAT4(0.45f, 0.95f, 1.0f, 1.0f), -4.5f, VFXSpriteAnim::FadeOut);
+        m_timeRewindVFXTimer = kClockLife;
+    }
+}
+
+void SkillComponent::ApplyOnHitRunes(SkillSlot slot, const SkillStats& stats,
+                                     float baseDamage, float dealtDamage,
+                                     void* hitEnemy, const DirectX::XMFLOAT3& hitEnemyPos,
+                                     void* scene)
+{
+    // onHit 훅 (시간역행 ABY_TIM, 연쇄 등) — skillSlot 이 채워져야 슬롯 의존 훅이 동작
+    if (!stats.onHitHooks.empty())
+    {
+        SkillContext ctx;
+        ctx.caster             = m_pOwner;
+        ctx.baseDamage         = baseDamage;
+        ctx.damageDealt        = dealtDamage;
+        ctx.skillSlot          = slot;
+        ctx.scene              = scene;
+        ctx.hitEnemy           = hitEnemy;
+        ctx.hitEnemyPos        = hitEnemyPos;
+        ctx.statusChanceMult   = stats.statusChanceMult;
+        ctx.statusDurationMult = stats.statusDurationMult;
+        for (auto& hook : stats.onHitHooks) hook(ctx);
+    }
+
+    // 흡혈 (ABY_VMP) — 피해의 lifestealRatio 만큼 시전자 HP 회복
+    if (stats.lifestealRatio > 0.f && m_pOwner)
+    {
+        if (auto* pPlayer = m_pOwner->GetComponent<PlayerComponent>())
+        {
+            float healAmount = dealtDamage * stats.lifestealRatio;
+            if (healAmount > 0.f)
+            {
+                pPlayer->Heal(healAmount);
+                // 멀티에서는 서버 권위 RUNE_TRIGGER 가 시각화 → 오프라인 한정 펄스
+                NetworkManager* pNet = NetworkManager::GetInstance();
+                if (!(pNet && pNet->IsConnected()))
+                    pPlayer->TriggerLifestealVFX(healAmount);
+            }
+        }
+    }
+
+    // 무한 (ABY_INF) — RNG/멀티 게이트/쿨다운 초기화/VFX 는 함수 내부에서 일괄 처리
+    if (slot != SkillSlot::Count)
+        TryTriggerInfiniteRune(slot, hitEnemyPos);
 }
 
 float SkillComponent::GetCooldownProgress(SkillSlot slot) const

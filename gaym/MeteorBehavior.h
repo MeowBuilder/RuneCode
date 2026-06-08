@@ -15,6 +15,12 @@ struct SmallMeteorData
     float    elapsed      = 0.f;
     int      trailVfxId   = -1;
     bool     impacted     = false;
+    // 착지 시 적용할 피해 — 스폰 시점에 캡처해 공유 m_damageMult 의존을 제거한다.
+    // (메아리 룬 재발동으로 동시 시전돼도 서로의 피해값이 섞이지 않도록)
+    float    damage       = 0.f;
+    float    radius       = 0.f;
+    bool     stagger      = true;
+    bool     isEcho       = false;  // 메아리 재발동 메테오(대형 VFX/전체 범위)
 };
 
 // R 슬롯 — 메테오 샤워 (소형 메테오 다수 랜덤 낙하 → 최종 대형 메테오 전체 범위 피해)
@@ -37,6 +43,8 @@ public:
     virtual void OnChannelTick(GameObject* caster, const DirectX::XMFLOAT3& targetPosition, float tickMult) override;
     virtual void OnChannelComplete(GameObject* caster, const DirectX::XMFLOAT3& targetPosition) override;
     virtual void OnChannelEnd(GameObject* caster) override;
+    // 메아리 룬(ABY_ECO) 재발동: 첫 시전 상태를 건드리지 않고 독립 대형 메테오 1개를 떨군다.
+    virtual void OnEchoFire(GameObject* caster, const DirectX::XMFLOAT3& targetPos, float mult) override;
     virtual void Update(float deltaTime) override;
     virtual bool IsFinished() const override;
     virtual void Reset() override;
@@ -47,6 +55,7 @@ public:
 private:
     void SpawnSmallMeteor();
     void SpawnSmallMeteorAt(const DirectX::XMFLOAT3& targetPos);
+    void SpawnEchoMeteorAt(const DirectX::XMFLOAT3& targetPos, float mult);
     void OnSmallImpact(SmallMeteorData& meteor);
     void SpawnFinalMeteor();
     void OnFinalImpact();

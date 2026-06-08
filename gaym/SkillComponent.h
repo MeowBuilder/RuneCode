@@ -60,6 +60,14 @@ public:
     // 시간 역행 룬: 쿨다운 seconds 초 감소
     void ReduceCooldown(SkillSlot slot, float seconds);
 
+    // 비투사체(AoE/빔/채널) 스킬의 적중 룬 일괄 처리: onHit 훅(시간역행 등) + 흡혈(ABY_VMP).
+    // skillSlot 을 ctx 에 채워 슬롯 의존 훅이 동작하도록 한다. 투사체는 ProjectileManager 가
+    // 동일 역할을 수행. 멀티에서는 BuildSkillStats 가 훅/흡혈을 미리 비워 서버 권위와 충돌 없음.
+    void ApplyOnHitRunes(SkillSlot slot, const SkillStats& stats,
+                         float baseDamage, float dealtDamage,
+                         void* hitEnemy, const DirectX::XMFLOAT3& hitEnemyPos,
+                         void* scene);
+
     // 룬 cooldownMult 적용한 실제 쿨다운 반환
     float GetEffectiveCooldown(size_t slotIndex) const;
 
@@ -214,12 +222,20 @@ private:
     // 무한 룬(ABY_INF) Casting 중 reset 요청 보류 — Casting 종료 후 GetEffectiveCooldown 으로 덮어써지지 않도록 Update 끝에서 소비
     std::array<bool, static_cast<size_t>(SkillSlot::Count)> m_pendingCooldownReset{};
 
+    // 시간역행 룬(ABY_TIM) Casting 중 쿨다운 감소 누적 — 시전 중엔 쿨다운이 0이라 감소가 버려지므로
+    // 누적했다가 Casting 종료(쿨다운 세팅) 직후 Update 에서 실제 타이머에 적용
+    std::array<float, static_cast<size_t>(SkillSlot::Count)> m_pendingCooldownReduce{};
+
     // 채널 중단 마킹 — IsFinished() 후 쿨타임 세팅 시 50% 페널티 적용 여부 추적
     std::array<bool, static_cast<size_t>(SkillSlot::Count)> m_bChannelInterrupted{};
 
     // 무한 룬 VFX 추적 (플레이어 따라 이동)
     int   m_infRuneVFXSlot  = -1;
     float m_infRuneVFXTimer = 0.f;
+
+    // 시간역행 룬(ABY_TIM) 시계 VFX 추적 (플레이어 따라 이동, 새 발동 시 교체)
+    int   m_timeRewindVFXSlot  = -1;
+    float m_timeRewindVFXTimer = 0.f;
 
     // 과열 룬(ABY_OVL) 스택 불꽃 오라 — 플레이어 머리 위 추적, 스택 수만큼 표시
     std::vector<int> m_overheatStackVFX;

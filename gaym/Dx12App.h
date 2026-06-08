@@ -159,6 +159,11 @@ private:
     ComPtr<ID3D12Resource> m_pFlameUpload;
     ComPtr<ID3D12Resource> m_pFlareTex;
     ComPtr<ID3D12Resource> m_pFlareUpload;
+    // 프로시저럴 생성 룬 VFX (힙 슬롯 30: clock 시간역행, 31: fang 흡혈)
+    ComPtr<ID3D12Resource> m_pClockTex;
+    ComPtr<ID3D12Resource> m_pClockUpload;
+    ComPtr<ID3D12Resource> m_pFangTex;
+    ComPtr<ID3D12Resource> m_pFangUpload;
 
     // UI 텍스처 (Title / Loading / Pause / GameOver / Ending / HUD / Avatars)
     static constexpr UINT kUIHeapBase = 10;

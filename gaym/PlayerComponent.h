@@ -139,6 +139,10 @@ private:
     int   m_vengeanceVFXSlot      = -1;
     float m_vengeanceRefreshTimer = 0.f;
 
+    // 흡혈 룬(ABY_VMP) 송곳니 VFX 추적 (플레이어 따라 이동, 새 발동 시 교체)
+    int   m_lifestealVFXSlot      = -1;
+    float m_lifestealVFXTimer     = 0.f;
+
     // 보호막/보복 오라 추적 — PlayerUpdate 에서 매 프레임 호출
     void UpdateAbyssAuraVFX(float deltaTime);
 

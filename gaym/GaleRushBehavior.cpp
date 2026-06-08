@@ -289,18 +289,7 @@ void GaleRushBehavior::HitEnemiesNearCaster(float damage)
             auto* pSC = m_pCaster->GetComponent<SkillComponent>();
             if (pSC && m_slot != SkillSlot::Count) {
                 SkillStats sts = pSC->BuildSkillStats(m_slot, m_SkillData.activationType);
-                if (!sts.onHitHooks.empty()) {
-                    SkillContext ctx;
-                    ctx.caster             = m_pCaster;
-                    ctx.baseDamage         = damage;
-                    ctx.damageDealt        = damage;
-                    ctx.hitEnemy           = pEnemy;
-                    ctx.hitEnemyPos        = ePos;
-                    ctx.scene              = m_pScene;
-                    ctx.statusChanceMult   = sts.statusChanceMult;
-                    ctx.statusDurationMult = sts.statusDurationMult;
-                    for (auto& hook : sts.onHitHooks) hook(ctx);
-                }
+                pSC->ApplyOnHitRunes(m_slot, sts, damage, damage, pEnemy, ePos, m_pScene);
             }
         }
     }
