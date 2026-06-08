@@ -246,6 +246,24 @@
     <ClInclude Include="BloomPostProcess.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="WhiteFlashOverlay.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="ScreenSplitOverlay.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="HitStopSystem.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="SlashVFXDesc.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="SlashCue.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="DarkLordSigilSlash.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
     <ClInclude Include="DropItemComponent.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -690,6 +708,24 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="BloomPostProcess.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="WhiteFlashOverlay.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="ScreenSplitOverlay.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="HitStopSystem.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="SlashVFXDesc.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="SlashCue.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="DarkLordSigilSlash.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="DropItemComponent.cpp">

@@ -30,10 +30,15 @@ public:
 
     void SetOwnerShader(Shader* pShader) { m_pOwnerShader = pShader; }
 
+    // 컷씬 등에서 일시적으로 mesh 렌더 skip — Shader::Render 가 이 플래그 보고 건너뜀.
+    void SetVisible(bool b) { m_bVisible = b; }
+    bool IsVisible() const  { return m_bVisible; }
+
 private:
     Mesh* m_pMesh = nullptr;
     bool m_bCastsShadow = false;
     bool m_bTransparent = false;
     bool m_bOverlay = false;
+    bool m_bVisible = true;
     Shader* m_pOwnerShader = nullptr;
 };

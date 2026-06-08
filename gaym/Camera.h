@@ -54,6 +54,14 @@ public:
     void  SetExtraOrbitDistanceTarget(float fTarget) { m_fExtraOrbitDistTarget = fTarget; }
     float GetExtraOrbitDistance() const              { return m_fExtraOrbitDist; }
 
+    // ─── 검기 카메라 펄스 (Day 1) ─────────────────────────────────────────────
+    // 검기 임팩트 1회 호출. 내부 타이머가 zoomHoldSec 후 자동으로 orbit target 을 0 복귀.
+    //   shakeIntensity / shakeDuration: 기존 StartShake 와 동일
+    //   zoomBoost: 음수 = pull in, 양수 = push back (보통 +2 ~ +5)
+    //   zoomHoldSec: zoom 유지 시간 (이후 자동 lerp 복귀)
+    void RequestSlashPulse(float shakeIntensity, float shakeDuration,
+                           float zoomBoost = 0.0f, float zoomHoldSec = 0.25f);
+
     // Cinematic mode: orbit around a world-space point instead of the follow target
     void StartCinematic(const DirectX::XMFLOAT3& lookAt, float distance, float pitch, float yaw);
     void StopCinematic();
@@ -133,4 +141,7 @@ private:
     // 임시 orbit 거리 부스트 (드라마틱 pull-back 용)
     float m_fExtraOrbitDist       = 0.0f;
     float m_fExtraOrbitDistTarget = 0.0f;
+
+    // 검기 펄스 자동 복귀 타이머 (RequestSlashPulse 가 사용)
+    float m_fSlashZoomHoldTimer   = 0.0f;
 };

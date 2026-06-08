@@ -433,3 +433,7 @@ FodyWeavers.xsd
 desktop.ini
 # Runtime network log (was tracked; now ignored)
 gaym/network_log.txt
+
+# 작업용 에셋 소스 폴더 (로컬 유지, repo 제외 — 큰 용량)
+gaym/Assets/Textures/VFX_Source/
+gaym/Assets/SFX_Source/

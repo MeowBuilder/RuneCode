@@ -330,6 +330,10 @@ private:
 
     float m_fTotalTime = 0.0f;
     float m_fLastDeltaTime = 0.016f;
+    float m_fRawDeltaTime  = 0.016f;  // Hit-Stop 영향 X — 카메라/플래시 등 raw dt 소비자용
+public:
+    float GetRawDeltaTime() const { return m_fRawDeltaTime; }
+private:
     bool m_bInBossRoom = false;  // 보스 룸 여부 (클리어 시 다음 스테이지 전환)
 
     // 디버그용 영구 wind VFX (데몬 보스방 진입 시 활성, 튜닝 가시성 확보)
@@ -537,6 +541,10 @@ private:
     };
     DarkLordIntroStage m_eDarkLordIntroStage = DarkLordIntroStage::None;
     float    m_fDarkLordIntroTimer = 0.0f;
+    // 입장 컷씬 동안 플레이어 위치 stash — 컷씬 끝나면 복귀.
+    DirectX::XMFLOAT3 m_xmf3PlayerIntroStashPos = { 0.0f, 0.0f, 0.0f };
+    bool              m_bPlayerIntroStashed     = false;
+    bool              m_bScreenSplitTriggered    = false;  // Sever 화면 분리 1회 가드
     // 0.0 = 화려한 Sanctum 톤, 1.0 = 어두운 Dark 톤. Sever 페이즈에서 빠르게 1.0 로 lerp.
     //   PassConstants 의 light/ambient 가 이 값으로 sanctum 팔레트 ↔ 기존 Dark 팔레트 사이를 보간.
     float    m_fSanctumBlend       = 1.0f;   // Dark 비활성 디폴트 (이전 동작 유지)

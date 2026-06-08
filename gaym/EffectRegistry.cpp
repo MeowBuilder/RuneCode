@@ -34,6 +34,72 @@ namespace {
     {
         layer.type = PickSPHEmitter(layer.sph.phases);
     }
+
+    // ─── 원소별 검기 색상 / 이름 helper (Boss_* 검기 일괄 등록용) ────────────
+    struct ElementTone
+    {
+        XMFLOAT4 coreBright;   // L1 charge, L3 sigil core, L5 spark — 밝은 코어
+        XMFLOAT4 edgeDark;     // 진한 외곽 (alpha 0 → 투명 소멸)
+        XMFLOAT4 heatMid;      // L3 heat 레이어 — 중간 톤
+        XMFLOAT4 heatDark;     // L3 heat edge
+        XMFLOAT4 mistDark;     // Heavy mist — 어두운 안개
+        XMFLOAT4 ringMid;      // L5 ring — 중간 톤
+        const char* suffix;
+    };
+
+    ElementTone GetElementTone(ElementType e)
+    {
+        switch (e)
+        {
+        case ElementType::Fire:
+            return {
+                { 1.00f, 0.88f, 0.45f, 1.0f },   // 황백
+                { 1.00f, 0.32f, 0.04f, 1.0f },
+                { 1.05f, 0.45f, 0.10f, 0.90f },
+                { 0.55f, 0.10f, 0.0f,  0.0f  },
+                { 0.55f, 0.15f, 0.03f, 0.65f },
+                { 1.00f, 0.45f, 0.10f, 0.0f  },
+                "Fire"
+            };
+        case ElementType::Water:
+            return {
+                { 0.55f, 0.92f, 1.20f, 1.0f },   // 청백
+                { 0.10f, 0.30f, 0.95f, 1.0f },
+                { 0.20f, 0.55f, 1.10f, 0.90f },
+                { 0.05f, 0.15f, 0.55f, 0.0f  },
+                { 0.05f, 0.15f, 0.45f, 0.65f },
+                { 0.30f, 0.70f, 1.10f, 0.0f  },
+                "Water"
+            };
+        case ElementType::Wind:
+            return {
+                { 0.55f, 1.20f, 0.85f, 1.0f },   // 청록 민트
+                { 0.10f, 0.55f, 0.30f, 1.0f },
+                { 0.30f, 0.95f, 0.55f, 0.90f },
+                { 0.05f, 0.40f, 0.18f, 0.0f  },
+                { 0.10f, 0.30f, 0.18f, 0.55f },
+                { 0.35f, 0.95f, 0.55f, 0.0f  },
+                "Wind"
+            };
+        case ElementType::Earth:
+            return {
+                { 1.20f, 0.85f, 0.40f, 1.0f },   // 황갈
+                { 0.55f, 0.30f, 0.05f, 1.0f },
+                { 0.95f, 0.55f, 0.15f, 0.90f },
+                { 0.40f, 0.20f, 0.05f, 0.0f  },
+                { 0.30f, 0.18f, 0.05f, 0.65f },
+                { 0.95f, 0.60f, 0.20f, 0.0f  },
+                "Earth"
+            };
+        default:
+            return GetElementTone(ElementType::Fire);
+        }
+    }
+
+    std::string MakeBossEffectName(const char* base, ElementType e)
+    {
+        return std::string(base) + "_" + GetElementTone(e).suffix;
+    }
 }
 
 // ─── EffectRegistry ──────────────────────────────────────────────────────────
@@ -668,6 +734,673 @@ void EffectRegistry::Initialize()
         def.layers.push_back(std::move(layer));
         Register(std::move(def));
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Boss_SwordCharge_Fire — Dark Lord 검 끝에 부착되는 차징 오라 (L1 Charge 레이어)
+    //   inward=true → 검 끝으로 불씨가 빨려들어오는 차징 연출.
+    //   원소별 4종 등록 예정 (Day 3 — 색상만 교체). Fire 부터 완성.
+    //
+    //   [튜닝 v2] v1 옅음 → v2 보스 전체 덮음. v3 는 응축감에 집중:
+    //              검 끝 1.2m 반경 좁은 spawn + 빠른 수렴 + 작고 많은 불씨.
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectLayer layer;
+        layer.type           = EmitterType::Sphere;
+        layer.element        = ElementType::Fire;
+        layer.overrideColors = true;
+        layer.coreColor      = { 1.0f, 0.88f, 0.45f, 1.0f };  // 황백 코어 (HDR 살짝 boost)
+        layer.edgeColor      = { 1.0f, 0.32f, 0.04f, 1.0f };  // 진홍 엣지
+        layer.particleCount  = 110;        // 180 → 110 (밀도 적절)
+        layer.sizeScale      = 1.4f;       // 5.5 → 1.4 (한 입자 작게 — 응축 가독성)
+        layer.speedMin       = 6.0f;       // 2 → 6 (빠른 수렴 — "빨려들어감" 명확)
+        layer.speedMax       = 11.0f;
+        layer.lifetimeMin    = 0.06f;      // v4:0.08 → v5:0.06 (Stop 후 ~0.14s 클린업)
+        layer.lifetimeMax    = 0.14f;      // v4:0.18 → v5:0.14
+        layer.duration       = -1.f;       // SlashCue 가 명시적으로 정지/지속 제어
+        layer.emitRate       = 130.f;      // v4:220 → v5:130 (잔재 줄이기, 응축 충분)
+
+        layer.sphere.radius        = 1.2f; // 3.0 → 1.2 (보스 본체 안 덮음. 검 끝 주변만)
+        layer.sphere.shellFraction = 0.90f; // 외곽 셸에서 거의 다 spawn → 가시적 수렴
+        layer.sphere.inward        = true;  // ★ 검 끝으로 빨려들어가는 핵심 플래그
+        layer.sphere.rotationSpeed = 2.5f;  // 회전감 ↑
+
+        EffectDef def;
+        def.name    = "Boss_SwordCharge_Fire";
+        def.element = ElementType::Fire;
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Boss_CrescentSigil_Fire — Dark Lord 검기 본체 (L3 Blade Body)
+    //   기존: ComboHit 의 strVFXOnHit="status_burn" (보스 sphere DoT) 으로 메인 본체를
+    //         대신했음 → 판정 면처럼 읽히는 문제.
+    //   교체: Crescent 호 한 줄. 검 끝 위치에 spawn 되어 sweep — 검에 깃든 불꽃 한 줄.
+    //   참고: Q_WindCutter (플레이어 윈드커터) 와 비슷한 골격, 색만 Fire.
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Boss_CrescentSigil_Fire";
+        def.element = ElementType::Fire;
+
+        // 코어 — 굵고 밝은 황금 칼날 (v2 강화: 두께·반경·duration ↑)
+        EffectLayer core;
+        core.type           = EmitterType::Crescent;
+        core.element        = ElementType::Fire;
+        core.overrideColors = true;
+        core.coreColor      = { 1.20f, 0.95f, 0.50f, 1.0f };  // HDR boost — 1.10 → 1.20
+        core.edgeColor      = { 1.10f, 0.32f, 0.05f, 0.0f };
+        core.particleCount  = 480;     // 320 → 480 (밀도 ↑)
+        core.sizeScale      = 4.5f;    // 2.6 → 4.5 (한 입자 굵게)
+        core.lifetimeMin    = 0.30f;
+        core.lifetimeMax    = 0.50f;
+        core.duration       = 0.55f;   // 0.30 → 0.55 (Hit + Recovery 전반에 잔존)
+
+        core.crescent.radius         = 5.2f;   // 3.2 → 5.2 (호 반경 ↑ — 검 sweep 폭)
+        core.crescent.thickness      = 1.8f;   // 0.9 → 1.8 (두께 2배)
+        core.crescent.arcAngle       = 160.0f;
+        core.crescent.arcOffset      = -80.0f;
+        core.crescent.tiltX          = 0.0f;
+        core.crescent.normalSpeedMin = 32.f;
+        core.crescent.normalSpeedMax = 48.f;
+        core.crescent.rotateSpeed    = 0.0f;
+        def.layers.push_back(core);
+
+        // 외층 — 두껍고 어두운 적색 열기 — 코어 뒤 무게감 담당
+        EffectLayer heat;
+        heat.type           = EmitterType::Crescent;
+        heat.element        = ElementType::Fire;
+        heat.overrideColors = true;
+        heat.coreColor      = { 1.00f, 0.42f, 0.10f, 0.95f };
+        heat.edgeColor      = { 0.55f, 0.10f, 0.0f,  0.0f };
+        heat.particleCount  = 280;     // 180 → 280
+        heat.sizeScale      = 6.0f;    // 3.6 → 6.0 (외층 더 굵게)
+        heat.lifetimeMin    = 0.40f;
+        heat.lifetimeMax    = 0.65f;
+        heat.duration       = 0.55f;
+
+        heat.crescent.radius         = 5.8f;   // 3.5 → 5.8
+        heat.crescent.thickness      = 2.6f;   // 1.4 → 2.6 (외층 두께 ↑)
+        heat.crescent.arcAngle       = 180.0f;
+        heat.crescent.arcOffset      = -90.0f;
+        heat.crescent.normalSpeedMin = 18.f;
+        heat.crescent.normalSpeedMax = 28.f;
+        heat.crescent.rotateSpeed    = 0.0f;
+        def.layers.push_back(heat);
+
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Boss_CrescentSigil_Fire_Heavy — 두껍고 무거운 검기 변형 (Slam/Overhead 톤)
+    //   기존 Quick 톤은 그대로 보존. 이건 묵직한 일격용 (Wide/Overhead Shape 매칭).
+    //   4 레이어 구조:
+    //     1) 굵은 황금 코어      — 칼날 본체
+    //     2) 두꺼운 적색 외층    — 무게감
+    //     3) 검은 잔열 mist     — 호 뒤 lingering 잔열
+    //     4) 불티 spark cloud   — 호 끝 분출 파편
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Boss_CrescentSigil_Fire_Heavy";
+        def.element = ElementType::Fire;
+
+        // [v2 튜닝 — 너무 cloud-like / 투박했음. sharper arc 강조: 입자 크기 ↓, count ↓,
+        //   thickness ↓, arcAngle 좁힘. mist 대폭 축소. 무게감은 유지하되 호 라인 또렷.]
+
+        // [L1] 굵은 황금 코어 — 칼날 본체 (sharp arc)
+        EffectLayer core;
+        core.type           = EmitterType::Crescent;
+        core.element        = ElementType::Fire;
+        core.overrideColors = true;
+        core.coreColor      = { 1.35f, 1.05f, 0.55f, 1.0f };
+        core.edgeColor      = { 1.15f, 0.30f, 0.05f, 0.0f };
+        core.particleCount  = 420;     // 720 → 420
+        core.sizeScale      = 4.0f;    // 6.5 → 4.0 (입자 sharp)
+        core.lifetimeMin    = 0.32f;
+        core.lifetimeMax    = 0.55f;
+        core.duration       = 0.55f;
+
+        core.crescent.radius         = 6.0f;
+        core.crescent.thickness      = 1.6f;   // 2.8 → 1.6 (얇고 sharp)
+        core.crescent.arcAngle       = 140.0f; // 170 → 140 (좁은 호)
+        core.crescent.arcOffset      = -70.0f;
+        core.crescent.tiltX          = 0.0f;
+        core.crescent.normalSpeedMin = 28.f;
+        core.crescent.normalSpeedMax = 42.f;
+        core.crescent.rotateSpeed    = 0.0f;
+        def.layers.push_back(core);
+
+        // [L2] 두꺼운 적색 외층 — 무게감 (sharper, cloud 줄임)
+        EffectLayer heat;
+        heat.type           = EmitterType::Crescent;
+        heat.element        = ElementType::Fire;
+        heat.overrideColors = true;
+        heat.coreColor      = { 1.05f, 0.45f, 0.10f, 0.90f };
+        heat.edgeColor      = { 0.55f, 0.10f, 0.0f,  0.0f };
+        heat.particleCount  = 280;     // 420 → 280
+        heat.sizeScale      = 5.5f;    // 9.0 → 5.5
+        heat.lifetimeMin    = 0.40f;
+        heat.lifetimeMax    = 0.62f;
+        heat.duration       = 0.55f;
+
+        heat.crescent.radius         = 6.5f;
+        heat.crescent.thickness      = 2.4f;   // 4.0 → 2.4
+        heat.crescent.arcAngle       = 160.0f; // 195 → 160
+        heat.crescent.arcOffset      = -80.0f;
+        heat.crescent.normalSpeedMin = 18.f;
+        heat.crescent.normalSpeedMax = 28.f;
+        heat.crescent.rotateSpeed    = 0.0f;
+        def.layers.push_back(heat);
+
+        // [L3] 검은 잔열 mist — 대폭 축소 (cloud 형태의 주범이었음)
+        EffectLayer mist;
+        mist.type           = EmitterType::Crescent;
+        mist.element        = ElementType::Fire;
+        mist.overrideColors = true;
+        mist.coreColor      = { 0.55f, 0.15f, 0.03f, 0.65f };
+        mist.edgeColor      = { 0.15f, 0.04f, 0.0f,  0.0f };
+        mist.particleCount  = 140;     // 240 → 140
+        mist.sizeScale      = 6.0f;    // 11.0 → 6.0 (절반)
+        mist.lifetimeMin    = 0.45f;
+        mist.lifetimeMax    = 0.70f;   // 1.10 → 0.70
+        mist.duration       = 0.55f;
+
+        mist.crescent.radius         = 6.8f;
+        mist.crescent.thickness      = 2.8f;   // 5.5 → 2.8 (절반)
+        mist.crescent.arcAngle       = 180.0f; // 210 → 180
+        mist.crescent.arcOffset      = -90.0f;
+        mist.crescent.normalSpeedMin = 10.f;
+        mist.crescent.normalSpeedMax = 16.f;
+        mist.crescent.rotateSpeed    = 0.0f;
+        def.layers.push_back(mist);
+
+        // [L4] 불티 spark — 호 sweep 방향으로 sharp 분출
+        EffectLayer spark;
+        spark.type           = EmitterType::Cone;
+        spark.element        = ElementType::Fire;
+        spark.overrideColors = true;
+        spark.coreColor      = { 1.0f, 0.92f, 0.50f, 1.0f };
+        spark.edgeColor      = { 1.0f, 0.30f, 0.04f, 0.0f };
+        spark.particleCount  = 80;     // 120 → 80
+        spark.emitRate       = 160.f;
+        spark.speedMin       = 8.f;
+        spark.speedMax       = 22.f;
+        spark.lifetimeMin    = 0.18f;
+        spark.lifetimeMax    = 0.38f;
+        spark.sizeScale      = 1.1f;   // 1.4 → 1.1 (sharp)
+        spark.duration       = 0.32f;
+        spark.cone.halfAngle     = 45.f;   // 60 → 45 (호 sweep 방향 강조)
+        spark.cone.gravityScale  = 0.45f;
+        spark.cone.startSizeMult = 1.0f;
+        spark.cone.endSizeMult   = 0.0f;
+        spark.cone.fadeAlpha     = true;
+        spark.cone.fadeSize      = true;
+        def.layers.push_back(spark);
+
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Boss_SigilImpact_Fire — 검기 충돌 임팩트 (L5 Impact)
+    //   Ring 충격파 (지면 확장) + Cone spark burst (불티 사방 분출).
+    //   참고: E_GaleRush_Ring (확장 링), sub_strike_spark (스파크 콘).
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectDef def;
+        def.name    = "Boss_SigilImpact_Fire";
+        def.element = ElementType::Fire;
+
+        // Ring — 지면 충격파 (얇은 황금 링이 빠르게 확장)
+        EffectLayer ring;
+        ring.type           = EmitterType::Ring;
+        ring.element        = ElementType::Fire;
+        ring.overrideColors = true;
+        ring.coreColor      = { 1.00f, 0.95f, 0.65f, 1.0f };
+        ring.edgeColor      = { 1.00f, 0.45f, 0.10f, 0.0f };
+        ring.particleCount  = 140;
+        ring.duration       = 0.22f;
+        ring.speedMin       = 3.f;  ring.speedMax    = 9.f;
+        ring.lifetimeMin    = 0.18f; ring.lifetimeMax = 0.32f;
+        ring.sizeScale      = 2.4f;
+
+        ring.ring.radius         = 0.6f;
+        ring.ring.width          = 1.8f;
+        ring.ring.expandSpeed    = 32.f;   // 빠르게 확장
+        ring.ring.tiltX          = 0.f;
+        ring.ring.rotateSpeed    = 0.f;
+        ring.ring.normalSpeedMin = 4.f;
+        ring.ring.normalSpeedMax = 11.f;
+        def.layers.push_back(ring);
+
+        // Cone spark burst — 사방 불티
+        EffectLayer spark;
+        spark.type           = EmitterType::Cone;
+        spark.element        = ElementType::Fire;
+        spark.overrideColors = true;
+        spark.coreColor      = { 1.0f, 0.95f, 0.55f, 1.0f };
+        spark.edgeColor      = { 1.0f, 0.32f, 0.05f, 0.0f };
+        spark.particleCount  = 80;
+        spark.emitRate       = 0.f;        // duration 동안 한번에 분출 (burst)
+        spark.speedMin       = 8.f;
+        spark.speedMax       = 22.f;
+        spark.lifetimeMin    = 0.16f;
+        spark.lifetimeMax    = 0.34f;
+        spark.sizeScale      = 1.0f;
+        spark.duration       = 0.15f;
+        spark.cone.halfAngle     = 75.f;   // 사방으로 — 넓은 cone
+        spark.cone.gravityScale  = 0.3f;   // 살짝 떨어짐 (불티 ↓)
+        spark.cone.startSizeMult = 1.1f;
+        spark.cone.endSizeMult   = 0.0f;
+        spark.cone.fadeAlpha     = true;
+        spark.cone.fadeSize      = true;
+        def.layers.push_back(spark);
+
+        Register(std::move(def));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ─── 원소별 검기 EffectDef 일괄 등록 (Water / Wind / Earth) ──────────────
+    //   Fire 정의 4개 (위 블록들) 는 v3 튜닝 완료 상태로 그대로 유지. 여기서는
+    //   Water/Wind/Earth 변형을 동일 골격 + 색상만 교체로 추가 등록한다.
+    //   GetElementTone(e) 가 원소별 색상 6종 (coreBright/edgeDark/heatMid/heatDark
+    //   /mistDark/ringMid) 을 제공. 텍스처는 PickSlashTextureForElement 자동 매핑.
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // L1 차징 오라 (Boss_SwordCharge_{Element})
+    auto registerSwordCharge = [this](ElementType e)
+    {
+        const ElementTone t = GetElementTone(e);
+        EffectLayer layer;
+        layer.type           = EmitterType::Sphere;
+        layer.element        = e;
+        layer.overrideColors = true;
+        layer.coreColor      = t.coreBright;
+        layer.edgeColor      = t.edgeDark;
+        layer.particleCount  = 110;
+        layer.sizeScale      = 1.4f;
+        layer.speedMin       = 6.0f;
+        layer.speedMax       = 11.0f;
+        layer.lifetimeMin    = 0.06f;
+        layer.lifetimeMax    = 0.14f;
+        layer.duration       = -1.f;
+        layer.emitRate       = 130.f;
+        layer.sphere.radius        = 1.2f;
+        layer.sphere.shellFraction = 0.90f;
+        layer.sphere.inward        = true;
+        layer.sphere.rotationSpeed = 2.5f;
+
+        EffectDef def;
+        def.name    = MakeBossEffectName("Boss_SwordCharge", e);
+        def.element = e;
+        def.layers.push_back(std::move(layer));
+        this->Register(std::move(def));
+    };
+
+    // L3 검기 본체 Quick (Boss_CrescentSigil_{Element}) — 2 레이어 (core + heat)
+    auto registerCrescentSigil = [this](ElementType e)
+    {
+        const ElementTone t = GetElementTone(e);
+        EffectDef def;
+        def.name    = MakeBossEffectName("Boss_CrescentSigil", e);
+        def.element = e;
+
+        // 코어
+        EffectLayer core;
+        core.type           = EmitterType::Crescent;
+        core.element        = e;
+        core.overrideColors = true;
+        core.coreColor      = { t.coreBright.x * 1.20f, t.coreBright.y * 1.10f, t.coreBright.z * 1.10f, 1.0f };
+        core.edgeColor      = { t.edgeDark.x,   t.edgeDark.y,   t.edgeDark.z,   0.0f };
+        core.particleCount  = 480;
+        core.sizeScale      = 4.5f;
+        core.lifetimeMin    = 0.30f;
+        core.lifetimeMax    = 0.50f;
+        core.duration       = 0.55f;
+        core.crescent.radius         = 5.2f;
+        core.crescent.thickness      = 1.8f;
+        core.crescent.arcAngle       = 160.0f;
+        core.crescent.arcOffset      = -80.0f;
+        core.crescent.normalSpeedMin = 32.f;
+        core.crescent.normalSpeedMax = 48.f;
+        def.layers.push_back(core);
+
+        // 외층 heat
+        EffectLayer heat;
+        heat.type           = EmitterType::Crescent;
+        heat.element        = e;
+        heat.overrideColors = true;
+        heat.coreColor      = t.heatMid;
+        heat.edgeColor      = t.heatDark;
+        heat.particleCount  = 280;
+        heat.sizeScale      = 6.0f;
+        heat.lifetimeMin    = 0.40f;
+        heat.lifetimeMax    = 0.65f;
+        heat.duration       = 0.55f;
+        heat.crescent.radius         = 5.8f;
+        heat.crescent.thickness      = 2.6f;
+        heat.crescent.arcAngle       = 180.0f;
+        heat.crescent.arcOffset      = -90.0f;
+        heat.crescent.normalSpeedMin = 18.f;
+        heat.crescent.normalSpeedMax = 28.f;
+        def.layers.push_back(heat);
+
+        this->Register(std::move(def));
+    };
+
+    // L3 검기 본체 Heavy (Boss_CrescentSigil_{Element}_Heavy) — 4 레이어
+    auto registerCrescentSigilHeavy = [this](ElementType e)
+    {
+        const ElementTone t = GetElementTone(e);
+        EffectDef def;
+        def.name    = MakeBossEffectName("Boss_CrescentSigil", e) + "_Heavy";
+        def.element = e;
+
+        // [L1] 코어
+        EffectLayer core;
+        core.type           = EmitterType::Crescent;
+        core.element        = e;
+        core.overrideColors = true;
+        core.coreColor      = { t.coreBright.x * 1.35f, t.coreBright.y * 1.20f, t.coreBright.z * 1.20f, 1.0f };
+        core.edgeColor      = { t.edgeDark.x,   t.edgeDark.y,   t.edgeDark.z,   0.0f };
+        core.particleCount  = 420;
+        core.sizeScale      = 4.0f;
+        core.lifetimeMin    = 0.32f;
+        core.lifetimeMax    = 0.55f;
+        core.duration       = 0.55f;
+        core.crescent.radius         = 6.0f;
+        core.crescent.thickness      = 1.6f;
+        core.crescent.arcAngle       = 140.0f;
+        core.crescent.arcOffset      = -70.0f;
+        core.crescent.normalSpeedMin = 28.f;
+        core.crescent.normalSpeedMax = 42.f;
+        def.layers.push_back(core);
+
+        // [L2] heat
+        EffectLayer heat;
+        heat.type           = EmitterType::Crescent;
+        heat.element        = e;
+        heat.overrideColors = true;
+        heat.coreColor      = t.heatMid;
+        heat.edgeColor      = t.heatDark;
+        heat.particleCount  = 280;
+        heat.sizeScale      = 5.5f;
+        heat.lifetimeMin    = 0.40f;
+        heat.lifetimeMax    = 0.62f;
+        heat.duration       = 0.55f;
+        heat.crescent.radius         = 6.5f;
+        heat.crescent.thickness      = 2.4f;
+        heat.crescent.arcAngle       = 160.0f;
+        heat.crescent.arcOffset      = -80.0f;
+        heat.crescent.normalSpeedMin = 18.f;
+        heat.crescent.normalSpeedMax = 28.f;
+        def.layers.push_back(heat);
+
+        // [L3] mist (어두운 잔열)
+        EffectLayer mist;
+        mist.type           = EmitterType::Crescent;
+        mist.element        = e;
+        mist.overrideColors = true;
+        mist.coreColor      = t.mistDark;
+        mist.edgeColor      = { t.mistDark.x * 0.3f, t.mistDark.y * 0.3f, t.mistDark.z * 0.3f, 0.0f };
+        mist.particleCount  = 140;
+        mist.sizeScale      = 6.0f;
+        mist.lifetimeMin    = 0.45f;
+        mist.lifetimeMax    = 0.70f;
+        mist.duration       = 0.55f;
+        mist.crescent.radius         = 6.8f;
+        mist.crescent.thickness      = 2.8f;
+        mist.crescent.arcAngle       = 180.0f;
+        mist.crescent.arcOffset      = -90.0f;
+        mist.crescent.normalSpeedMin = 10.f;
+        mist.crescent.normalSpeedMax = 16.f;
+        def.layers.push_back(mist);
+
+        // [L4] spark cone (호 sweep 방향)
+        EffectLayer spark;
+        spark.type           = EmitterType::Cone;
+        spark.element        = e;
+        spark.overrideColors = true;
+        spark.coreColor      = t.coreBright;
+        spark.edgeColor      = { t.edgeDark.x, t.edgeDark.y, t.edgeDark.z, 0.0f };
+        spark.particleCount  = 80;
+        spark.emitRate       = 160.f;
+        spark.speedMin       = 8.f;
+        spark.speedMax       = 22.f;
+        spark.lifetimeMin    = 0.18f;
+        spark.lifetimeMax    = 0.38f;
+        spark.sizeScale      = 1.1f;
+        spark.duration       = 0.32f;
+        spark.cone.halfAngle     = 45.f;
+        spark.cone.gravityScale  = 0.45f;
+        spark.cone.startSizeMult = 1.0f;
+        spark.cone.endSizeMult   = 0.0f;
+        spark.cone.fadeAlpha     = true;
+        spark.cone.fadeSize      = true;
+        def.layers.push_back(spark);
+
+        this->Register(std::move(def));
+    };
+
+    // L3 Projectile-style Bolt (Boss_CrescentBolt_{Element})
+    //   — 발사된 검기 톤. 좁고 sharp 한 호가 빠르게·멀리·오래 sweep.
+    //     duration ↑↑, normalSpeed ↑↑, radius·thickness ↓ (sharp).
+    auto registerCrescentBolt = [this](ElementType e)
+    {
+        const ElementTone t = GetElementTone(e);
+        EffectDef def;
+        def.name    = MakeBossEffectName("Boss_CrescentBolt", e);
+        def.element = e;
+
+        // [v2 튜닝 — 사용자 피드백: 더 크고 더 느리게]
+        // 코어 — 크고 천천히 떠가는 발사 호
+        EffectLayer core;
+        core.type           = EmitterType::Crescent;
+        core.element        = e;
+        core.overrideColors = true;
+        core.coreColor      = { t.coreBright.x * 1.30f, t.coreBright.y * 1.15f, t.coreBright.z * 1.15f, 1.0f };
+        core.edgeColor      = { t.edgeDark.x, t.edgeDark.y, t.edgeDark.z, 0.0f };
+        core.particleCount  = 720;       // 600 → 720 (잔상 ↑)
+        core.sizeScale      = 5.5f;      // 3.2 → 5.5 (크게)
+        core.lifetimeMin    = 1.20f;     // 0.80 → 1.20 (더 오래)
+        core.lifetimeMax    = 1.90f;     // 1.30 → 1.90
+        core.duration       = 2.00f;     // 1.50 → 2.00
+        core.crescent.radius         = 6.0f;   // 3.8 → 6.0 (큰 호)
+        core.crescent.thickness      = 2.0f;   // 1.1 → 2.0 (굵게)
+        core.crescent.arcAngle       = 130.0f;
+        core.crescent.arcOffset      = -65.0f;
+        core.crescent.normalSpeedMin = 50.f;   // 90 → 50 (느리게)
+        core.crescent.normalSpeedMax = 65.f;   // 105 → 65
+        def.layers.push_back(core);
+
+        // 트레일 잔열 — 발사 흔적 (더 크고 느리게)
+        EffectLayer trail;
+        trail.type           = EmitterType::Crescent;
+        trail.element        = e;
+        trail.overrideColors = true;
+        trail.coreColor      = t.heatMid;
+        trail.edgeColor      = { t.heatDark.x, t.heatDark.y, t.heatDark.z, 0.0f };
+        trail.particleCount  = 400;       // 320 → 400
+        trail.sizeScale      = 7.5f;      // 4.5 → 7.5
+        trail.lifetimeMin    = 1.10f;
+        trail.lifetimeMax    = 1.70f;
+        trail.duration       = 2.00f;
+        trail.crescent.radius         = 6.5f;
+        trail.crescent.thickness      = 3.0f;
+        trail.crescent.arcAngle       = 145.0f;
+        trail.crescent.arcOffset      = -72.0f;
+        trail.crescent.normalSpeedMin = 40.f;   // 75 → 40
+        trail.crescent.normalSpeedMax = 55.f;   // 90 → 55
+        def.layers.push_back(trail);
+
+        this->Register(std::move(def));
+    };
+
+    // L4 지면 잔류 (Boss_GroundResidue_{Element})
+    //   검기 hit 자리에 일정 시간 떠다니는 원소별 잔재 (불티/얼음조각/먼지/돌부스러기).
+    //   Cone emitter (느린 spawn, 짧은 거리, 중력↓) + 긴 lifetime → 바닥 잔류.
+    auto registerGroundResidue = [this](ElementType e)
+    {
+        const ElementTone t = GetElementTone(e);
+        EffectDef def;
+        def.name    = MakeBossEffectName("Boss_GroundResidue", e);
+        def.element = e;
+
+        EffectLayer ember;
+        ember.type           = EmitterType::Cone;
+        ember.element        = e;
+        ember.overrideColors = true;
+        ember.coreColor      = t.coreBright;
+        ember.edgeColor      = { t.edgeDark.x, t.edgeDark.y, t.edgeDark.z, 0.0f };
+        ember.particleCount  = 60;
+        ember.emitRate       = 25.f;
+        ember.speedMin       = 1.0f;
+        ember.speedMax       = 3.5f;
+        ember.lifetimeMin    = 1.20f;
+        ember.lifetimeMax    = 2.40f;
+        ember.sizeScale      = 1.6f;
+        ember.duration       = 2.20f;
+        ember.cone.halfAngle     = 35.f;
+        ember.cone.gravityScale  = 0.30f;     // 약한 중력 (불티 떠다님)
+        ember.cone.startSizeMult = 1.0f;
+        ember.cone.endSizeMult   = 0.0f;
+        ember.cone.fadeAlpha     = true;
+        ember.cone.fadeSize      = true;
+        def.layers.push_back(ember);
+
+        this->Register(std::move(def));
+    };
+
+    // L5 임팩트 (Boss_SigilImpact_{Element}) — Ring + Spark
+    auto registerSigilImpact = [this](ElementType e)
+    {
+        const ElementTone t = GetElementTone(e);
+        EffectDef def;
+        def.name    = MakeBossEffectName("Boss_SigilImpact", e);
+        def.element = e;
+
+        // Ring 충격파
+        EffectLayer ring;
+        ring.type           = EmitterType::Ring;
+        ring.element        = e;
+        ring.overrideColors = true;
+        ring.coreColor      = t.coreBright;
+        ring.edgeColor      = t.ringMid;
+        ring.particleCount  = 140;
+        ring.duration       = 0.22f;
+        ring.speedMin       = 3.f;  ring.speedMax    = 9.f;
+        ring.lifetimeMin    = 0.18f; ring.lifetimeMax = 0.32f;
+        ring.sizeScale      = 2.4f;
+        ring.ring.radius         = 0.6f;
+        ring.ring.width          = 1.8f;
+        ring.ring.expandSpeed    = 32.f;
+        ring.ring.tiltX          = 0.f;
+        ring.ring.rotateSpeed    = 0.f;
+        ring.ring.normalSpeedMin = 4.f;
+        ring.ring.normalSpeedMax = 11.f;
+        def.layers.push_back(ring);
+
+        // Spark burst cone
+        EffectLayer spark;
+        spark.type           = EmitterType::Cone;
+        spark.element        = e;
+        spark.overrideColors = true;
+        spark.coreColor      = t.coreBright;
+        spark.edgeColor      = { t.edgeDark.x, t.edgeDark.y, t.edgeDark.z, 0.0f };
+        spark.particleCount  = 80;
+        spark.emitRate       = 0.f;
+        spark.speedMin       = 8.f;
+        spark.speedMax       = 22.f;
+        spark.lifetimeMin    = 0.16f;
+        spark.lifetimeMax    = 0.34f;
+        spark.sizeScale      = 1.0f;
+        spark.duration       = 0.15f;
+        spark.cone.halfAngle     = 75.f;
+        spark.cone.gravityScale  = 0.3f;
+        spark.cone.startSizeMult = 1.1f;
+        spark.cone.endSizeMult   = 0.0f;
+        spark.cone.fadeAlpha     = true;
+        spark.cone.fadeSize      = true;
+        def.layers.push_back(spark);
+
+        this->Register(std::move(def));
+    };
+
+    // ─── 4원소 일괄 등록 (Fire 는 위에 직접 정의됨, 여기서는 나머지 3원소) ──
+    for (ElementType e : { ElementType::Water, ElementType::Wind, ElementType::Earth })
+    {
+        registerSwordCharge(e);
+        registerCrescentSigil(e);
+        registerCrescentSigilHeavy(e);
+        registerSigilImpact(e);
+    }
+    // Bolt 는 Fire 도 helper 로 등록 (위 Fire 4종은 Heavy/Quick/Charge/Impact만)
+    for (ElementType e : { ElementType::Fire, ElementType::Water, ElementType::Wind, ElementType::Earth })
+    {
+        registerCrescentBolt(e);
+        registerGroundResidue(e);
+    }
+
+    // ─── Sanctum Pillar (Sanctum 컷씬 4 zone 의 떠오르는 원소 컬럼) ──────────
+    //   기존 Wind_UpdraftSmall 흰 톤 → 원소별 풍성 vivid 톤. 2 레이어 (코어 + 외층).
+    auto registerSanctumPillar = [this](ElementType e)
+    {
+        const ElementTone t = GetElementTone(e);
+        EffectDef def;
+        def.name    = MakeBossEffectName("Sanctum_Pillar", e);
+        def.element = e;
+
+        // [L1] 코어 — 밝은 vivid, 위로 떠오르는 입자 (Cone 위 방향)
+        EffectLayer core;
+        core.type           = EmitterType::Cone;
+        core.element        = e;
+        core.overrideColors = true;
+        core.coreColor      = { t.coreBright.x * 1.20f, t.coreBright.y * 1.10f, t.coreBright.z * 1.10f, 1.0f };
+        core.edgeColor      = { t.edgeDark.x, t.edgeDark.y, t.edgeDark.z, 0.0f };
+        core.particleCount  = 220;
+        core.emitRate       = 90.f;
+        core.speedMin       = 3.5f;
+        core.speedMax       = 7.5f;
+        core.lifetimeMin    = 1.20f;
+        core.lifetimeMax    = 2.20f;
+        core.sizeScale      = 2.5f;
+        core.duration       = -1.f;          // 무한 (CleanupElementalSanctum 가 명시적 stop)
+        core.cone.halfAngle     = 12.f;       // 좁은 cone → 컬럼 형태
+        core.cone.gravityScale  = -0.20f;     // 음수 = 위로 가속 (떠오름)
+        core.cone.startSizeMult = 1.0f;
+        core.cone.endSizeMult   = 0.0f;
+        core.cone.fadeAlpha     = true;
+        core.cone.fadeSize      = true;
+        def.layers.push_back(core);
+
+        // [L2] 외층 — 어두운 vivid 톤, 더 넓은 cone (조명감 ↑)
+        EffectLayer aura;
+        aura.type           = EmitterType::Cone;
+        aura.element        = e;
+        aura.overrideColors = true;
+        aura.coreColor      = t.heatMid;
+        aura.edgeColor      = { t.heatDark.x, t.heatDark.y, t.heatDark.z, 0.0f };
+        aura.particleCount  = 120;
+        aura.emitRate       = 50.f;
+        aura.speedMin       = 1.5f;
+        aura.speedMax       = 4.0f;
+        aura.lifetimeMin    = 1.50f;
+        aura.lifetimeMax    = 2.80f;
+        aura.sizeScale      = 4.0f;          // 더 큰 입자 → 풍성한 안개감
+        aura.duration       = -1.f;
+        aura.cone.halfAngle     = 25.f;
+        aura.cone.gravityScale  = -0.10f;
+        aura.cone.startSizeMult = 1.2f;
+        aura.cone.endSizeMult   = 0.0f;
+        aura.cone.fadeAlpha     = true;
+        aura.cone.fadeSize      = true;
+        def.layers.push_back(aura);
+
+        this->Register(std::move(def));
+    };
+    for (ElementType e : { ElementType::Fire, ElementType::Water, ElementType::Wind, ElementType::Earth })
+        registerSanctumPillar(e);
+    // ══════════════════════════════════════════════════════════════════════════
 
     // ──────────────────────────────────────────────────────────────────────────
     // 상태이상 VFX — 적 머리 위로 솟아오르는 연기/파티클 (루프)

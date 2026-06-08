@@ -514,9 +514,9 @@ VS_OUTLINE_OUTPUT VS_Outline(VS_INPUT input)
 
     // Canonical inverted hull: push outward in world space along the normal.
     // Scale by clip-w to keep the on-screen thickness roughly constant.
-    // 0.0040 → 0.0025: DarkLord 등 대형 보스에서 outline 너무 두꺼워 보이는 문제 완화.
+    // 0.0040 → 0.0025 → 0.0015: DarkLord 대형 보스에서 outline 너무 두꺼워 보이는 문제.
     float4 clipFirst = mul(worldPos, ViewProj);
-    float thickness  = 0.0025f * clipFirst.w;
+    float thickness  = 0.0015f * clipFirst.w;
     worldPos.xyz += worldNormal * thickness;
 
     output.position = mul(worldPos, ViewProj);
@@ -1115,8 +1115,9 @@ float4 PS(PS_INPUT input) : SV_TARGET
     
     // --- Ambient Light Calculation ---
     // In cel mode reduced — full ambient washes out the hard light/shadow boundary.
-    // 캐릭터는 lightTerm=1 강제로 이미 풀 lit. ambient 추가 부스트 불필요 → 환경과 동일 0.30.
-    float ambientScale = (g_ToonEnabled != 0) ? 0.30f : 1.00f;
+    // [v2] 0.30 → 0.55: DarkLord 같은 어두운 텍스처가 거의 검정으로 묻히는 문제 — ambient ↑.
+    //   원본 텍스처 hue 가 살아나도록.
+    float ambientScale = (g_ToonEnabled != 0) ? 0.55f : 1.00f;
     float4 ambient = g_AmbientLight * gMaterial.m_cAmbient * albedoColor * ambientScale;
     
     // Final color is the sum of all light components + emissive

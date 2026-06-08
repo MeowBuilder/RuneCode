@@ -30,6 +30,11 @@ public:
     void StopBGM();
     void SetBGMVolume(float v);   // 0.0 ~ 1.0
 
+    // SFX — name 은 확장자 없는 파일명 (Assets/Audio/SFX/<name>.ogg)
+    //   파일이 없으면 silent 로 무시 (Day 1 stub — 실제 에셋은 후순위)
+    //   one-shot 재생. volume 0.0~1.0.
+    void PlaySFX(const std::wstring& name, float volume = 1.0f);
+
     void  SetMasterVolume(float v);
     float GetMasterVolume() const;
 
@@ -37,10 +42,13 @@ public:
 
 private:
     DirectX::SoundEffect* GetOrLoadBGM(const std::wstring& name);
+    DirectX::SoundEffect* GetOrLoadSFX(const std::wstring& name);
 
     std::unique_ptr<DirectX::AudioEngine>           m_engine;
     std::unordered_map<std::wstring,
         std::unique_ptr<DirectX::SoundEffect>>      m_bgmCache;
+    std::unordered_map<std::wstring,
+        std::unique_ptr<DirectX::SoundEffect>>      m_sfxCache;
     std::unique_ptr<DirectX::SoundEffectInstance>   m_bgmInstance;
     std::wstring m_currentBGM;
     float        m_bgmVolume   = 0.6f;

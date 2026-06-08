@@ -203,6 +203,58 @@ void AudioManager::SetBGMVolume(float v)
         m_bgmInstance->SetVolume(v);
 }
 
+// ─── SFX (one-shot 효과음, Day 1 hook) ───────────────────────────────────────
+// BGM 디코딩 경로를 그대로 재사용하되 cache 만 분리. 파일이 없으면 silent 무시.
+DirectX::SoundEffect* AudioManager::GetOrLoadSFX(const std::wstring& name)
+{
+    auto it = m_sfxCache.find(name);
+    if (it != m_sfxCache.end())
+        return it->second.get();
+
+    // 파일 자체가 없을 가능성이 높음 (Day 1 단계) — 한번만 시도하고 캐시에 null 마커는 안 둠.
+    const std::wstring path = L"Assets\\Audio\\SFX\\" + name + L".ogg";
+    int channels = 0, sampleRate = 0, frames = 0;
+    short* pcm = DecodeOgg(path, channels, sampleRate, frames);
+    if (!pcm) return nullptr;
+
+    const size_t audioBytes = static_cast<size_t>(frames) * channels * sizeof(short);
+    const size_t fmtSize    = sizeof(WAVEFORMATEX);
+    auto blob = std::make_unique<uint8_t[]>(fmtSize + audioBytes);
+
+    auto* wfx = reinterpret_cast<WAVEFORMATEX*>(blob.get());
+    wfx->wFormatTag      = WAVE_FORMAT_PCM;
+    wfx->nChannels       = static_cast<WORD>(channels);
+    wfx->nSamplesPerSec  = static_cast<DWORD>(sampleRate);
+    wfx->wBitsPerSample  = 16;
+    wfx->nBlockAlign     = static_cast<WORD>(channels * sizeof(short));
+    wfx->nAvgBytesPerSec = wfx->nSamplesPerSec * wfx->nBlockAlign;
+    wfx->cbSize          = 0;
+
+    uint8_t* startAudio = blob.get() + fmtSize;
+    memcpy(startAudio, pcm, audioBytes);
+    free(pcm);
+
+    std::unique_ptr<SoundEffect> effect;
+    try {
+        effect = std::make_unique<SoundEffect>(
+            m_engine.get(), blob, wfx, startAudio, audioBytes);
+    }
+    catch (...) { return nullptr; }
+
+    SoundEffect* raw = effect.get();
+    m_sfxCache.emplace(name, std::move(effect));
+    return raw;
+}
+
+void AudioManager::PlaySFX(const std::wstring& name, float volume)
+{
+    if (!m_engine) return;
+    SoundEffect* effect = GetOrLoadSFX(name);
+    if (!effect) return;   // 파일 없으면 silent (Day 1 — 정상)
+    if (volume < 0.0f) volume = 0.0f; else if (volume > 1.0f) volume = 1.0f;
+    effect->Play(volume, 0.0f, 0.0f);
+}
+
 void AudioManager::SetMasterVolume(float v)
 {
     if (m_engine) m_engine->SetMasterVolume(v);

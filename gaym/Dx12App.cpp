@@ -3,6 +3,8 @@
 #include "DamageNumberManager.h"
 #include "Camera.h"
 #include "d3dx12.h"
+#include "WhiteFlashOverlay.h"
+#include "ScreenSplitOverlay.h"
 #include "SkillComponent.h"
 #include "ISkillBehavior.h"
 #include "SkillData.h"
@@ -160,6 +162,14 @@ void Dx12App::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
     // tonemap+composited to the LDR swap-chain back buffer).
     m_pBloom = std::make_unique<BloomPostProcess>();
     m_pBloom->Init(m_pd3dDevice.Get(), m_nWndClientWidth, m_nWndClientHeight);
+
+    // 검기용 풀스크린 화이트 플래시 (Bloom 직후 호출)
+    m_pWhiteFlash = std::make_unique<WhiteFlashOverlay>();
+    m_pWhiteFlash->Init(m_pd3dDevice.Get());
+
+    // 화면 분리 후처리 (Sever 페이즈 화면 베기 후 두 조각 슬라이드)
+    m_pScreenSplit = std::make_unique<ScreenSplitOverlay>();
+    m_pScreenSplit->Init(m_pd3dDevice.Get(), m_nWndClientWidth, m_nWndClientHeight);
 
     // 텍스트 렌더링 먼저 초기화 (캐릭터 선택 화면에서 사용)
     InitializeText();
@@ -1325,6 +1335,25 @@ void Dx12App::FrameAdvance()
                     d3dRtvCPUDescriptorHandle,
                     m_nWndClientWidth, m_nWndClientHeight);
 
+    // 화면 분리 후처리 — Bloom 직후, WhiteFlash 전. capture → split shader → backbuffer.
+    if (m_pScreenSplit)
+    {
+        m_pScreenSplit->Tick(deltaTime);
+        m_pScreenSplit->Apply(m_pd3dCommandList.Get(),
+                              m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get(),
+                              d3dRtvCPUDescriptorHandle,
+                              m_nWndClientWidth, m_nWndClientHeight);
+    }
+
+    // 검기 화이트 플래시 — Bloom 직후, 텍스트/HUD 직전.
+    if (m_pWhiteFlash)
+    {
+        m_pWhiteFlash->Tick(deltaTime);
+        m_pWhiteFlash->Apply(m_pd3dCommandList.Get(),
+                             d3dRtvCPUDescriptorHandle,
+                             m_nWndClientWidth, m_nWndClientHeight);
+    }
+
     // Text rendering (2D overlay on top of 3D scene + bloom)
     RenderText();
 
@@ -1374,6 +1403,8 @@ void Dx12App::OnResize(UINT nWidth, UINT nHeight)
     // HDR scene RT + bloom chain
     if (m_pBloom)
         m_pBloom->OnResize(m_pd3dDevice.Get(), m_nWndClientWidth, m_nWndClientHeight);
+    if (m_pScreenSplit)
+        m_pScreenSplit->OnResize(m_pd3dDevice.Get(), m_nWndClientWidth, m_nWndClientHeight);
 
     // Screen-Space Fluid 텍스처 리사이즈
     if (m_pScene)

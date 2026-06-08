@@ -6,6 +6,10 @@
 #include "ColliderComponent.h"
 #include "TransformComponent.h"
 #include "InputSystem.h" // Added for InputSystem
+#include "HitStopSystem.h"
+#include "SlashCue.h"   // ImpactEffectName / ChargeAuraEffectName (Sanctum 원소별 spawn)
+#include "WhiteFlashOverlay.h"  // Dominion 시그니처 발동 시 화이트플래시
+#include "ScreenSplitOverlay.h" // Sever 화면 베기 후 분리 슬라이드
 #include "EnemyComponent.h"
 #include "MegaBreathAttackBehavior.h"
 #include "Room.h"
@@ -708,6 +712,12 @@ void Scene::AddRenderComponentsToHierarchy(ID3D12Device* pDevice, ID3D12Graphics
 
 void Scene::Update(float deltaTime, InputSystem* pInputSystem)
 {
+    // ── Hit-Stop: 검기 임팩트 등에서 Request 된 dt 정지를 게임 로직에만 반영 ──
+    //   카메라/플래시/VFX 는 m_fRawDeltaTime (정지 영향 X) 사용
+    //   게임 로직 (이동·애니·물리) 은 deltaTime (effective) 사용
+    m_fRawDeltaTime = deltaTime;
+    deltaTime       = HitStopSystem::Get().Tick(deltaTime);
+
     m_fLastDeltaTime = deltaTime;
 
     // LOD 용 전역 프레임 카운터 — AnimationComponent 의 phase offset 분산에 사용
@@ -4958,6 +4968,45 @@ void Scene::TransitionToDarkLordRoom()
         m_bIntroSeverShakeTriggered = false;
         m_bIntroBossSpawned         = false;
         m_nIntroAbsorbCount         = 0;
+        m_bScreenSplitTriggered     = false;
+
+        // ── 입장 컷씬 동안 플레이어/포탈 hide ────────────────────────────────
+        //   플레이어가 hierarchy mesh (parent + children) 일 가능성 — RenderComponent
+        //   flag 만으로는 자식 mesh 안 가려짐. Transform 자체를 화면 밖으로 이동해서
+        //   확실히 hide. 컷씬 종료 시 원래 위치로 복귀.
+        if (m_pPlayerGameObject)
+        {
+            // 1) RenderComponent flag (root mesh 라도 끔)
+            if (auto* pRC = m_pPlayerGameObject->GetComponent<RenderComponent>())
+                pRC->SetVisible(false);
+            // 2) Hierarchy 자식들도 — m_pChild / m_pSibling 트리 traverse 해서 모두 hide.
+            std::function<void(GameObject*)> hideTree = [&](GameObject* pGO) {
+                if (!pGO) return;
+                if (auto* pRC = pGO->GetComponent<RenderComponent>())
+                    pRC->SetVisible(false);
+                hideTree(pGO->m_pChild);
+                hideTree(pGO->m_pSibling);
+            };
+            hideTree(m_pPlayerGameObject->m_pChild);
+            // 3) Transform Y stash + 멀리 이동 (안전망 — flag 가 일부 경로 못 잡아도)
+            XMFLOAT3 origPos = m_pPlayerGameObject->GetTransform()->GetPosition();
+            m_xmf3PlayerIntroStashPos = origPos;
+            m_bPlayerIntroStashed = true;
+            m_pPlayerGameObject->GetTransform()->SetPosition(origPos.x, -3000.0f, origPos.z);
+        }
+        if (m_pInteractionCube)
+        {
+            if (auto* pRC = m_pInteractionCube->GetComponent<RenderComponent>())
+                pRC->SetVisible(false);
+            std::function<void(GameObject*)> hideTree = [&](GameObject* pGO) {
+                if (!pGO) return;
+                if (auto* pRC = pGO->GetComponent<RenderComponent>())
+                    pRC->SetVisible(false);
+                hideTree(pGO->m_pChild);
+                hideTree(pGO->m_pSibling);
+            };
+            hideTree(m_pInteractionCube->m_pChild);
+        }
 
         if (m_pCamera)
         {
@@ -4986,25 +5035,22 @@ void Scene::SetupElementalSanctum(const BoundingBox& roomBB)
     // BB 반경의 60% 위치에 4방향 배치.
     const float r = ((roomBB.Extents.x < roomBB.Extents.z)
                      ? roomBB.Extents.x : roomBB.Extents.z) * 0.60f;
-    // ★ 4 원소 모두 동일 VFX 타입 — 통일감 우선. 색 차이는 sigil + aura 데칼이 담당.
-    //   "마법진 위쪽에 많은 양의 원소 파티클" — 같은 효과를 dense 하게 스택해 두꺼운 column.
-    struct Slot { XMFLOAT3 offset; XMFLOAT4 color; };
+    // ★ 4 원소별 vivid 파티클 컬럼 + 색조명. (이전 흰 톤 Wind_UpdraftSmall 폐기)
+    struct Slot { XMFLOAT3 offset; XMFLOAT4 color; ElementType element; const char* pillarFx; };
     Slot slots[4] = {
-        { {  0.0f, 0.0f, +r }, { 0.30f, 1.05f, 0.70f, 1.0f } },   // 북 — 바람 색
-        { { +r,    0.0f, 0.0f}, { 1.20f, 0.45f, 0.15f, 1.0f } },   // 동 — 불 색
-        { {  0.0f, 0.0f, -r }, { 1.10f, 0.65f, 0.18f, 1.0f } },   // 남 — 땅 색
-        { { -r,    0.0f, 0.0f}, { 0.22f, 0.68f, 1.20f, 1.0f } },   // 서 — 물 색
+        { {  0.0f, 0.0f, +r }, { 0.30f, 1.05f, 0.70f, 1.0f }, ElementType::Wind,  "Sanctum_Pillar_Wind"  },   // 북 — 바람
+        { { +r,    0.0f, 0.0f}, { 1.20f, 0.45f, 0.15f, 1.0f }, ElementType::Fire,  "Sanctum_Pillar_Fire"  },   // 동 — 불
+        { {  0.0f, 0.0f, -r }, { 1.10f, 0.65f, 0.18f, 1.0f }, ElementType::Earth, "Sanctum_Pillar_Earth" },   // 남 — 땅
+        { { -r,    0.0f, 0.0f}, { 0.22f, 0.68f, 1.20f, 1.0f }, ElementType::Water, "Sanctum_Pillar_Water" },   // 서 — 물
     };
-    // 통일된 VFX: Wind_UpdraftSmall — 위로 떠오르는 작은 입자 컬럼 (원소 중립적 외형).
-    const char* kUnifiedPillarFX = "Wind_UpdraftSmall";
 
     const float kAuraSize    = 55.0f;     // zone 한가운데 큰 색 wash
     const float kAuraRotSpd  = 0.15f;
     const float kLifetime    = 1e9f;
     const float kRevealDur   = 1.2f;
-    const int   kSigilsPerZone   = 4;     // zone 당 흩뿌릴 작은 sigil 수
-    const int   kPillarsPerZone  = 6;     // zone 당 흩뿌릴 파티클 컬럼 수
-    const float kZoneScatterRadius = 14.0f;  // 흩뿌림 반경 — zone 한 칸 안에서
+    const int   kSigilsPerZone   = 6;     // 4 → 6 (마법진 밀도 ↑)
+    const int   kPillarsPerZone  = 10;    // 6 → 10 (컬럼 풍성)
+    const float kZoneScatterRadius = 14.0f;
 
     // 결정론적 PRNG — 매 실행 동일 패턴, 단 cardinal 직선 배치 아니라 organic.
     auto frand = [seed = (uint32_t)0u](float lo, float hi) mutable {
@@ -5019,11 +5065,17 @@ void Scene::SetupElementalSanctum(const BoundingBox& roomBB)
 
         SanctumElement el{};
 
-        // (1) Zone 한가운데 큰 aura wash — 색조명 느낌. 알파 0.65 (조금 더 진하게).
-        XMFLOAT4 auraColor(s.color.x * 0.65f, s.color.y * 0.65f, s.color.z * 0.65f, 0.65f);
+        // (1) Zone 큰 aura wash — 강한 색조명. 알파 1.0 + 색감 풀세기.
+        XMFLOAT4 auraColor(s.color.x, s.color.y, s.color.z, 1.0f);
         el.auraDecalSlot = m_pDecalManager->Spawn(
             DecalTexture::MagicCircle, zoneCenter, kAuraSize,
             0.0f, kLifetime, auraColor, kAuraRotSpd, kRevealDur * 1.3f);
+        // (1b) 코어 강조 decal — zone 정중앙에 작고 강한 색 hotspot (대비 ↑).
+        XMFLOAT4 coreColor(s.color.x * 1.20f, s.color.y * 1.20f, s.color.z * 1.20f, 1.0f);
+        int coreSlot = m_pDecalManager->Spawn(
+            DecalTexture::MagicCircle, zoneCenter, kAuraSize * 0.35f,
+            45.0f, kLifetime, coreColor, kAuraRotSpd * 2.5f, kRevealDur * 0.8f);
+        if (coreSlot >= 0) el.sigilDecalSlots.push_back(coreSlot);
 
         // (2) 작은 sigil 들을 zone 안에 흩뿌리기 — 크기·각도·위치 무작위.
         for (int k = 0; k < kSigilsPerZone; ++k)
@@ -5044,24 +5096,30 @@ void Scene::SetupElementalSanctum(const BoundingBox& roomBB)
             if (slot >= 0) el.sigilDecalSlots.push_back(slot);
         }
 
-        // (3) 통일 파티클 컬럼 — zone 안에 흩뿌리기. 색 차이는 ground decal 이 담당.
-        const char* kUnifiedPillarFX = "Wind_UpdraftSmall";
+        // (3) 원소별 파티클 컬럼 — 균일 분포 (sqrt → 원판 균등, 중앙 집중 X).
+        //     최소 거리 0.30 보장 → 코어 decal 위에 안 겹침. 외곽까지 풍성히 흩뿌림.
         for (int k = 0; k < kPillarsPerZone; ++k)
         {
-            float ang = frand(0.0f, 6.2832f);
-            float dist = frand(0.0f, 1.0f) * kZoneScatterRadius;
+            float ang  = frand(0.0f, 6.2832f);
+            float u    = frand(0.0f, 1.0f);
+            // sqrt 분포 — 면적 균등. 최소 0.30 (코어 비워둠).
+            float dist = (0.30f + sqrtf(u) * 0.70f) * kZoneScatterRadius;
             XMFLOAT3 pp = {
                 zoneCenter.x + cosf(ang) * dist,
                 zoneCenter.y,
                 zoneCenter.z + sinf(ang) * dist
             };
-            int fxId = m_pVFXManager->Spawn(kUnifiedPillarFX, pp,
+            int fxId = m_pVFXManager->Spawn(s.pillarFx, pp,
                                              XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
             if (fxId >= 0) el.pillarVFXIds.push_back(fxId);
         }
 
-        // (4) 진입 임팩트 — zone 중앙에 burst 1발 (통일).
-        m_pVFXManager->Spawn("Wind_GustBurst", zoneCenter,
+        // (4) 진입 임팩트 — zone 중앙에 SigilImpact 1발 (원소색 ring + spark burst).
+        m_pVFXManager->Spawn(SlashCue::ImpactEffectName(s.element), zoneCenter,
+                              XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
+
+        // (5) Charge aura — zone 중앙에 떠다니는 원소 응축 오라 (추가 vivid).
+        m_pVFXManager->Spawn(SlashCue::ChargeAuraEffectName(s.element), zoneCenter,
                               XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
 
         m_vSanctumElements.push_back(el);
@@ -5372,6 +5430,23 @@ void Scene::UpdateDarkLordIntro(float dt)
         // 라이팅: 0.35 → 1.0 으로 빠르게 lerp (전반부 0.5 에서 거의 도달).
         m_fSanctumBlend = lerp(0.35f, 1.0f, easeOutCubic(std::clamp(severT * 2.0f, 0.0f, 1.0f)));
 
+        // ★ 화면 분리 후처리 — Sever 후반 (severT >= 0.55) 에서 1회 trigger.
+        //   베기 라인이 화면에 자리잡은 후 화면 두 조각이 -45° 수직 방향으로 슬라이드.
+        //   duration 1.2s 동안 진행 → Devour 페이즈 일부까지 잔존하다 자연스럽게 종료.
+        if (!m_bScreenSplitTriggered && severT >= 0.55f)
+        {
+            m_bScreenSplitTriggered = true;
+            if (auto* pApp = Dx12App::GetInstance())
+            {
+                if (auto* pSplit = pApp->GetScreenSplit())
+                {
+                    constexpr float kSlashAngle = -0.7853982f;   // -45° (베기 라인과 동일)
+                    pSplit->RequestSplit(1.20f, kSlashAngle, 0.22f);
+                }
+            }
+            HitStopSystem::Get().Request(0.06f);   // 분리 시작 순간 짧은 정지
+        }
+
         // 스크린 슬래시 오버레이는 GetIntroSlashScreenAlpha() 가 매 프레임 계산해서 SpriteBatch
         //   로 그림. 여기선 별도 처리 불필요 — 라이팅 lerp 만 위에서 진행.
 
@@ -5459,8 +5534,71 @@ void Scene::UpdateDarkLordIntro(float dt)
                 if (auto* pAnim = pBoss->GetComponent<AnimationComponent>())
                     pAnim->CrossFade("Unreal Take", 0.15f, false);
             }
-            if (m_pCamera) m_pCamera->StartShake(1.5f, 0.6f);
-            OutputDebugString(L"[Scene] DarkLord intro: DOMINION\n");
+            if (m_pCamera) m_pCamera->StartShake(4.0f, 1.0f);   // 셰이크 ↑↑ (게임 최강)
+
+            // ★ 보스 등장 시그니처 — 8방향 × 4원소 + 보스 발치 거대 폭발
+            //   거리 ↓ (12→9), Bolt 도 같이 spawn (8방향 호 + 8 발사형), 보스 발치 거대 ring
+            if (pBoss && m_pVFXManager)
+            {
+                TransformComponent* pBT = pBoss->GetTransform();
+                XMFLOAT3 bossPos = pBT->GetPosition();
+                float baseYaw = XMConvertToRadians(pBT->GetRotation().y);
+                const float kDist = 9.0f;   // 12 → 9 (보스 더 가까이 호)
+                struct { float angleDeg; ElementType elem; } k8[8] = {
+                    {   0.0f, ElementType::Fire  }, {  45.0f, ElementType::Wind  },
+                    {  90.0f, ElementType::Water }, { 135.0f, ElementType::Earth },
+                    { 180.0f, ElementType::Fire  }, { 225.0f, ElementType::Wind  },
+                    { 270.0f, ElementType::Water }, { 315.0f, ElementType::Earth },
+                };
+                for (auto& s : k8)
+                {
+                    float yaw = baseYaw + XMConvertToRadians(s.angleDeg);
+                    XMFLOAT3 fwd = { sinf(yaw), 0.0f, cosf(yaw) };
+                    XMFLOAT3 sp  = { bossPos.x + fwd.x * kDist,
+                                     bossPos.y + 5.0f,
+                                     bossPos.z + fwd.z * kDist };
+                    std::string crescentName = "Boss_CrescentSigil_";
+                    std::string boltName     = "Boss_CrescentBolt_";
+                    switch (s.elem)
+                    {
+                    case ElementType::Fire:  crescentName += "Fire";  boltName += "Fire";  break;
+                    case ElementType::Water: crescentName += "Water"; boltName += "Water"; break;
+                    case ElementType::Wind:  crescentName += "Wind";  boltName += "Wind";  break;
+                    case ElementType::Earth: crescentName += "Earth"; boltName += "Earth"; break;
+                    default: crescentName += "Fire"; boltName += "Fire"; break;
+                    }
+                    crescentName += "_Heavy";
+                    m_pVFXManager->Spawn(crescentName, sp, fwd, 0u, false);
+
+                    // 발치 ring 충격파
+                    XMFLOAT3 ringPos = { sp.x, bossPos.y + 0.2f, sp.z };
+                    m_pVFXManager->Spawn(SlashCue::ImpactEffectName(s.elem),
+                                          ringPos, fwd, 0u, false);
+
+                    // ★ 추가: 발사형 Bolt — 8 방향 외곽으로 발사 (사방 leakage 시각)
+                    XMFLOAT3 boltPos = { bossPos.x + fwd.x * (kDist + 4.0f),
+                                         bossPos.y + 5.0f,
+                                         bossPos.z + fwd.z * (kDist + 4.0f) };
+                    m_pVFXManager->Spawn(boltName, boltPos, fwd, 0u, false);
+                }
+
+                // ★ 보스 발치 거대 폭발 — 4 원소 ring 모두 spawn (color stacked)
+                XMFLOAT3 footPos = { bossPos.x, bossPos.y + 0.3f, bossPos.z };
+                m_pVFXManager->Spawn(SlashCue::ImpactEffectName(ElementType::Fire),  footPos, XMFLOAT3(1,0,0), 0u, false);
+                m_pVFXManager->Spawn(SlashCue::ImpactEffectName(ElementType::Water), footPos, XMFLOAT3(0,0,1), 0u, false);
+                m_pVFXManager->Spawn(SlashCue::ImpactEffectName(ElementType::Wind),  footPos, XMFLOAT3(-1,0,0), 0u, false);
+                m_pVFXManager->Spawn(SlashCue::ImpactEffectName(ElementType::Earth), footPos, XMFLOAT3(0,0,-1), 0u, false);
+
+                // 화이트플래시 풀파워 + 긴 히트스톱
+                if (auto* pApp = Dx12App::GetInstance())
+                {
+                    if (auto* pFlash = pApp->GetWhiteFlash())
+                        pFlash->RequestFlash(0.95f, 0.40f);     // 0.80→0.95, 0.28→0.40
+                }
+                HitStopSystem::Get().Request(0.18f);            // 0.10→0.18 (찰나 길게)
+            }
+
+            OutputDebugString(L"[Scene] DarkLord intro: DOMINION (8방향 시그니처 발동)\n");
         }
         return;
     }
@@ -5468,11 +5606,27 @@ void Scene::UpdateDarkLordIntro(float dt)
     // ── Phase 5: Dominion (DLI_T_DEVOUR ~ DLI_T_DOMINION) → 입력 복구 ─────────
     if (m_eDarkLordIntroStage == DarkLordIntroStage::Dominion)
     {
-        // 카메라 — 천천히 zoom out 으로 전투 자세 잡기. 거대 보스 풀바디 framing 유지.
+        // 카메라 — 시그니처 발동 순간 매우 가까이 (보스 + 9m 호 다 보임), 후반 zoom-out.
+        //   0~0.6s : dist 55 → 75 (8방향 검기 dominant 하게 보임)
+        //   0.6~1.2s : dist 75 → 105 (zoom out, 전투 자세 framing)
         float t = (T - DLI_T_DEVOUR) / (DLI_T_DOMINION - DLI_T_DEVOUR);
         t = std::clamp(t, 0.0f, 1.0f);
-        float dist = lerp(115.0f, 135.0f, t);
-        float pitch = lerp(18.0f, 24.0f, t);
+        float dist;
+        float pitch;
+        if (t < 0.5f)
+        {
+            // 시그니처 발동 직후 — 매우 가까이 framing (게임 최근접)
+            float u = t / 0.5f;
+            dist  = lerp(55.0f, 75.0f, u);
+            pitch = lerp(12.0f, 16.0f, u);
+        }
+        else
+        {
+            // 후반 — 점차 zoom out 으로 전투 자세
+            float u = (t - 0.5f) / 0.5f;
+            dist  = lerp(75.0f, 105.0f, u);
+            pitch = lerp(16.0f, 22.0f, u);
+        }
         if (m_pCamera) m_pCamera->SetCinematicOrbit(dist, pitch, 180.0f);
 
         if (T >= DLI_T_DOMINION)
@@ -5480,6 +5634,29 @@ void Scene::UpdateDarkLordIntro(float dt)
             // 컷씬 종료 — 카메라 해제, 룸 Active, 보스 Idle 전환, 입력 복구.
             m_eDarkLordIntroStage = DarkLordIntroStage::None;
             m_fDarkLordIntroTimer = 0.0f;
+
+            // 플레이어 mesh 복원 — RenderComponent flag + hierarchy 자식 + Transform 복귀.
+            //   발판/포탈은 최종 보스에서 불필요 → hidden 유지.
+            if (m_pPlayerGameObject)
+            {
+                if (auto* pRC = m_pPlayerGameObject->GetComponent<RenderComponent>())
+                    pRC->SetVisible(true);
+                std::function<void(GameObject*)> showTree = [&](GameObject* pGO) {
+                    if (!pGO) return;
+                    if (auto* pRC = pGO->GetComponent<RenderComponent>())
+                        pRC->SetVisible(true);
+                    showTree(pGO->m_pChild);
+                    showTree(pGO->m_pSibling);
+                };
+                showTree(m_pPlayerGameObject->m_pChild);
+                // Transform 복귀
+                if (m_bPlayerIntroStashed)
+                {
+                    m_pPlayerGameObject->GetTransform()->SetPosition(
+                        m_xmf3PlayerIntroStashPos.x, 0.0f, m_xmf3PlayerIntroStashPos.z);
+                    m_bPlayerIntroStashed = false;
+                }
+            }
 
             if (m_pCamera) m_pCamera->StopCinematic();
             if (m_pCurrentRoom) m_pCurrentRoom->SetState(RoomState::Active);

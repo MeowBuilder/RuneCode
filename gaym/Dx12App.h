@@ -57,6 +57,9 @@ public:
     ID3D12Device* GetDevice() const { return m_pd3dDevice.Get(); }
     ID3D12GraphicsCommandList* GetCommandList() const { return m_pd3dCommandList.Get(); }
     Scene* GetScene() const { return m_pScene.get(); }
+    class AudioManager* GetAudio() const { return m_pAudio.get(); }
+    class WhiteFlashOverlay* GetWhiteFlash() const { return m_pWhiteFlash.get(); }
+    class ScreenSplitOverlay* GetScreenSplit() const { return m_pScreenSplit.get(); }
 
     // 런타임 윈도우 크기 (NDC 변환용)
     UINT GetWindowWidth() const { return m_nWndClientWidth; }
@@ -173,6 +176,12 @@ private:
 
     // Bloom post-process (owns HDR scene RT + blur chain + tonemap composite)
     std::unique_ptr<BloomPostProcess> m_pBloom;
+
+    // 검기 임팩트용 풀스크린 화이트 플래시 (Bloom 직후 알파-블렌딩 패스)
+    std::unique_ptr<class WhiteFlashOverlay> m_pWhiteFlash;
+
+    // 화면 베기 후 두 조각 분리 슬라이드 (DarkLord Sever 페이즈)
+    std::unique_ptr<class ScreenSplitOverlay> m_pScreenSplit;
 
     // Network Manager
     NetworkManager* m_pNetworkManager = nullptr;

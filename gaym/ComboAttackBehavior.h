@@ -95,6 +95,26 @@ public:
     static ComboAttackBehavior* CreateHeavyCombo();   // Slow 2-hit high damage
     static ComboAttackBehavior* CreateFuryCombo();    // Fast 5-hit flurry
 
+    // ── 서브클래스(DarkLordSigilSlash 등)가 phase 전환을 감지하기 위한 read-only 게터 ──
+    enum class HitPhase { Windup, Hit, Recovery };
+    HitPhase GetCurrentHitPhase() const { return m_eHitPhase; }
+    int      GetCurrentHitIndex()  const { return m_nCurrentHit; }
+    float    GetCurrentHitTimer()  const { return m_fTimer; }
+    int      GetHitCount()         const { return (int)m_vHits.size(); }
+    const ComboHit* GetCurrentHit() const {
+        if (m_nCurrentHit < 0 || m_nCurrentHit >= (int)m_vHits.size()) return nullptr;
+        return &m_vHits[m_nCurrentHit];
+    }
+    // 서브클래스에서 검 본 위치 활용 (L1 차징 오라 부착 등)
+    class TransformComponent* GetSwordBone() const { return m_pCachedSwordBone; }
+    // 검 본을 명시적으로 사전 캐싱 — Execute 시점에 본을 확보하고 싶을 때.
+    class TransformComponent* EnsureSwordBoneCached(class EnemyComponent* pEnemy)
+    { return FindSwordBone(pEnemy); }
+
+    // 정적 SwordTrailMesh crescent flash 비활성화 — 서브클래스(DarkLordSigilSlash 등) 가
+    // 자체 EffectDef 로 검기 본체를 그릴 때 중복 호 잔재 차단용.
+    void SetDisableStaticCrescent(bool b) { m_bDisableStaticCrescent = b; }
+
 private:
     void DealConeDamage(EnemyComponent* pEnemy, const ComboHit& hit);
     void SpawnHitVFX(EnemyComponent* pEnemy, const ComboHit& hit);
@@ -182,10 +202,11 @@ private:
     //   m_fCrescentFadeInDur  : 0 → 1 부드러운 등장.
     //   m_fCrescentHoldDur    : alpha 1 유지 (swing window).
     //   m_fCrescentFadeOutDur : 1 → 0 사라짐.
+    //   [v2 튜닝] 정적 호 잔재가 검에 남는다는 피드백 → hold/fade 단축. "찰나에 튀는" 톤.
     float                   m_fCrescentTime        = 0.0f;
-    float                   m_fCrescentFadeInDur   = 0.06f;
-    float                   m_fCrescentHoldDur     = 0.30f;
-    float                   m_fCrescentFadeOutDur  = 0.15f;
+    float                   m_fCrescentFadeInDur   = 0.02f;   // 0.06 → 0.02 (거의 즉시 등장)
+    float                   m_fCrescentHoldDur     = 0.16f;   // 0.30 → 0.16
+    float                   m_fCrescentFadeOutDur  = 0.08f;   // 0.15 → 0.08 (잔재 빠르게 제거)
     // Hit-burst flash — Hit phase 진입 순간 짧게 1로 솟고 빠르게 0 로 감쇠.
     //   셰이더에 diffuse.b 로 전달 → noise mask 무력화 + 흰빛 코어 + HDR ×2.5 부스트.
     //   "검이 닿는 순간 번쩍" 임팩트 모먼트. 호 spawn (windup 65%) 과 분리되어 swing 직전 정확히 터짐.
@@ -202,8 +223,7 @@ private:
 private:
     std::vector<ComboHit> m_vHits;
 
-    // Runtime state
-    enum class HitPhase { Windup, Hit, Recovery };
+    // Runtime state — HitPhase enum 은 위 public 블록으로 이동.
     HitPhase m_eHitPhase = HitPhase::Windup;
     int m_nCurrentHit = 0;
     float m_fTimer = 0.0f;
@@ -218,4 +238,6 @@ private:
     int   m_nCurrentElementId = 0;
     // Crescent prearm 트리거 가드 — windup 동안 한 번만 spawn.
     bool m_bCrescentSpawned = false;
+    // 정적 crescent flash 비활성화 옵션 — 서브클래스가 자체 EffectDef 본체로 대체할 때.
+    bool m_bDisableStaticCrescent = false;
 };

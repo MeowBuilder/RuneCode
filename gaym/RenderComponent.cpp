@@ -27,7 +27,7 @@ void RenderComponent::Update(float deltaTime)
 
 void RenderComponent::Render(ID3D12GraphicsCommandList* pCommandList)
 {
-    if (!m_pMesh)
+    if (!m_pMesh || !m_bVisible)
         return;
 
 

@@ -194,6 +194,17 @@ void CCamera::Update(float mouseDeltaX, float mouseDeltaY, float scrollDelta, fl
     if (deltaTime > 0.0f)
     {
         m_fExtraOrbitDist += (m_fExtraOrbitDistTarget - m_fExtraOrbitDist) * 4.0f * deltaTime;
+
+        // 검기 펄스 자동 복귀 타이머 (RequestSlashPulse 가 hold 시간 종료 후 target=0 복귀)
+        if (m_fSlashZoomHoldTimer > 0.0f)
+        {
+            m_fSlashZoomHoldTimer -= deltaTime;
+            if (m_fSlashZoomHoldTimer <= 0.0f)
+            {
+                m_fSlashZoomHoldTimer = 0.0f;
+                m_fExtraOrbitDistTarget = 0.0f;
+            }
+        }
     }
 
     // Update camera shake
@@ -227,6 +238,24 @@ void CCamera::StartShake(float fIntensity, float fDuration)
     m_fShakeIntensity = fIntensity;
     m_fShakeDuration = fDuration;
     m_fShakeTimer = 0.0f;
+}
+
+void CCamera::RequestSlashPulse(float shakeIntensity, float shakeDuration,
+                                float zoomBoost, float zoomHoldSec)
+{
+    // 1) 셰이크
+    if (shakeIntensity > 0.0f && shakeDuration > 0.0f)
+        StartShake(shakeIntensity, shakeDuration);
+
+    // 2) orbit pull-back (음수면 pull in, 양수면 push back)
+    if (zoomBoost != 0.0f && zoomHoldSec > 0.0f)
+    {
+        // 이미 더 큰 부스트가 살아있으면 덮어쓰지 않음 (시그니처 패턴이 작은 펄스에 묻히지 않도록)
+        if (std::abs(zoomBoost) > std::abs(m_fExtraOrbitDistTarget))
+            m_fExtraOrbitDistTarget = zoomBoost;
+        m_fSlashZoomHoldTimer = (m_fSlashZoomHoldTimer > zoomHoldSec)
+                                 ? m_fSlashZoomHoldTimer : zoomHoldSec;
+    }
 }
 
 void CCamera::StopShake()

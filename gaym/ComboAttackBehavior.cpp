@@ -119,7 +119,8 @@ void ComboAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
             DealConeDamage(pEnemy, currentHit);
             SpawnHitVFX(pEnemy, currentHit);
             // 검기는 strVFXOnHit 가 명시된 hit 만 (= 보스 opt-in). goblin/일반 적은 amber 디폴트 호 안 뜸.
-            if (!m_bCrescentSpawned && !currentHit.strVFXOnHit.empty())
+            // 서브클래스가 자체 EffectDef 검기 본체로 대체할 때는 정적 호 skip (DarkLordSigilSlash 등).
+            if (!m_bCrescentSpawned && !m_bDisableStaticCrescent && !currentHit.strVFXOnHit.empty())
             {
                 SpawnCrescentFlash(pEnemy, currentHit);
                 m_bCrescentSpawned = true;
@@ -416,14 +417,17 @@ namespace
     ColorPair PickColorPairForEffect(const std::string& effectName)
     {
         // 불 — vivid 주황빨강 core / 핏빛 edge. 셰이더가 hot yellow core overlay 추가.
+        //   Boss_CrescentSigil_Fire / Boss_SigilImpact_Fire 등 대문자 "Fire" 도 매칭.
         if (effectName.find("burn")  != std::string::npos ||
             effectName.find("fire")  != std::string::npos ||
+            effectName.find("Fire")  != std::string::npos ||
             effectName.find("Meteor")!= std::string::npos)
             return { XMFLOAT4(1.10f, 0.40f, 0.10f, 1.0f), XMFLOAT4(0.55f, 0.08f, 0.00f, 1.0f), 1 };
 
         // 물 — vivid 코발트/시안 core / 깊은 군청 edge. 밝은 cyan highlight.
         if (effectName.find("chill") != std::string::npos ||
             effectName.find("water") != std::string::npos ||
+            effectName.find("Water") != std::string::npos ||
             effectName.find("Wave")  != std::string::npos ||
             effectName.find("Vortex")!= std::string::npos)
             return { XMFLOAT4(0.18f, 0.60f, 1.10f, 1.0f), XMFLOAT4(0.05f, 0.25f, 0.55f, 1.0f), 2 };
@@ -438,6 +442,7 @@ namespace
         // 땅 — vivid 황금/앰버 core / 흙갈색 edge. 셰이더가 chunky edge stepped.
         if (effectName.find("fracture")  != std::string::npos ||
             effectName.find("earth")     != std::string::npos ||
+            effectName.find("Earth")     != std::string::npos ||
             effectName.find("Stone")     != std::string::npos ||
             effectName.find("EarthArmor")!= std::string::npos)
             return { XMFLOAT4(1.05f, 0.55f, 0.10f, 1.0f), XMFLOAT4(0.45f, 0.15f, 0.02f, 1.0f), 3 };
