@@ -2686,10 +2686,27 @@ void Scene::SelectRune(int choice)
 
 void Scene::CancelDropInteraction()
 {
+    DropInteractionState prevState = m_eDropState;
+
+    // 룬 선택창을 보고 나온 경우에는 서버에 완료 알림을 보낸다.
+    // 룬을 장착하지 않았어도 "선택창 종료" 기준으로 포탈 잠금을 풀기 위함.
+    if (prevState == DropInteractionState::SelectingRune ||
+        prevState == DropInteractionState::SelectingSkill)
+    {
+        if (NetworkManager* pNet = NetworkManager::GetInstance())
+        {
+            if (pNet->IsConnected())
+            {
+                pNet->SendRuneRewardPick();
+            }
+        }
+    }
+
     m_eDropState = DropInteractionState::None;
     m_pCurrentDropItem = nullptr;
     m_sSelectedRuneId.clear();
     m_nSelectedRuneOptionIndex = -1;
+
     OutputDebugString(L"[Scene] Drop interaction cancelled\n");
 }
 

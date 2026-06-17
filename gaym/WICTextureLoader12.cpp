@@ -685,7 +685,7 @@ HRESULT DirectX::LoadWICTextureFromFileEx(
 #if !defined(NO_D3D12_DEBUG_NAME) && ( defined(_DEBUG) || defined(PROFILE) )
     if ( SUCCEEDED(hr) )
     {
-        const wchar_t* pstrName = wcsrchr(fileName, '\' );
+        const wchar_t* pstrName = wcsrchr(fileName, '\\' );
         if (!pstrName)
         {
             pstrName = fileName;

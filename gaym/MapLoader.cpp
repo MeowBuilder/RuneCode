@@ -22,6 +22,7 @@
 #include "Dx12App.h"
 #include "TorchSystem.h"
 #include "MeshLoader.h"
+#include "MapCollisionExporter.h"
 
 #include <fstream>
 #include <algorithm>
@@ -457,6 +458,59 @@ void MapLoader_RemapColorByTheme(std::string& meshPath, std::string& animPath, S
     // 모든 후보 실패 — 원본 유지
 }
 
+static float MapLoader_CalcYawFromQuat(float x, float y, float z, float w)
+{
+    // Y축 회전값만 추출한다.
+    return atan2f(
+        2.0f * (w * y + x * z),
+        1.0f - 2.0f * (y * y + z * z)
+    );
+}
+
+static std::string MapLoader_GetFileNameWithoutExt(const std::string& path)
+{
+    size_t slash = path.find_last_of("/\\");
+    size_t start = (slash == std::string::npos) ? 0 : slash + 1;
+
+    size_t dot = path.find_last_of('.');
+    if (dot == std::string::npos || dot < start)
+        dot = path.size();
+
+    return path.substr(start, dot - start);
+}
+
+static std::string MapLoader_GetCollisionOutputPath(const char* jsonPath)
+{
+    if (jsonPath == nullptr)
+        return "Assets/MapData/Collision/unknown.collision.json";
+
+    std::string path = jsonPath;
+    std::string baseName = MapLoader_GetFileNameWithoutExt(path);
+
+    size_t slash = path.find_last_of("/\\");
+    std::string dir = (slash == std::string::npos) ? "" : path.substr(0, slash + 1);
+
+    return dir + "Collision/" + baseName + ".collision.json";
+}
+
+static void MapLoader_AddRotatedCenterOffset(
+    float baseX,
+    float baseZ,
+    float localCenterX,
+    float localCenterZ,
+    float yawRad,
+    float& outX,
+    float& outZ
+)
+{
+    float c = cosf(yawRad);
+    float s = sinf(yawRad);
+
+    // local center를 yaw 기준으로 회전시켜 world center에 더한다.
+    outX = baseX + localCenterX * c - localCenterZ * s;
+    outZ = baseZ + localCenterX * s + localCenterZ * c;
+}
+
 } // namespace
 
 bool MapLoader::LoadIntoScene(
@@ -482,6 +536,9 @@ bool MapLoader::LoadIntoScene(
     }
     const JsonVal& root = s_jsonCache[jsonPath];
 
+    MapCollisionExporter collisionExporter;
+    collisionExporter.SetMapName(MapLoader_GetFileNameWithoutExt(jsonPath ? jsonPath : "unknown"));
+    
     // ── 1. Rooms ─────────────────────────────────────────────────────────────
     if (!skipRoomAndSpawn)
     {
@@ -742,10 +799,50 @@ bool MapLoader::LoadIntoScene(
             (objRes.aabbMin.y + objRes.aabbMax.y) * 0.5f,
             (objRes.aabbMin.z + objRes.aabbMax.z) * 0.5f);
 
+        // collision export용 공통 좌표 계산
+        float qx = rot[0].f();
+        float qy = rot[1].f();
+        float qz = -rot[2].f();
+        float qw = rot[3].f();
+
+        float yawRad = MapLoader_CalcYawFromQuat(qx, qy, qz, qw);
+
+        float objectWorldX = pos[0].f() * MAP_SCALE + positionOffset.x;
+        float objectWorldZ = -pos[2].f() * MAP_SCALE + positionOffset.z;
+
+        float localCenterScaledX = localCenter.x * sx;
+        float localCenterScaledZ = localCenter.z * sz;
+
+        float colliderCenterX = objectWorldX;
+        float colliderCenterZ = objectWorldZ;
+
+        MapLoader_AddRotatedCenterOffset(
+            objectWorldX,
+            objectWorldZ,
+            localCenterScaledX,
+            localCenterScaledZ,
+            yawRad,
+            colliderCenterX,
+            colliderCenterZ
+        );
+
         // World-space approximate extents (for skip checks only)
         float worldExtX = localExt.x * sx;
         float worldExtY = localExt.y * sy;
         float worldExtZ = localExt.z * sz;
+
+        // 바닥 타일은 서버/클라 공통 walkable 영역으로 export한다.
+        if (meshRelPath.find("LavaMaze_GridTile_01") != std::string::npos)
+        {
+            collisionExporter.AddWalkableRect(
+                colliderCenterX,
+                colliderCenterZ,
+                worldExtX,
+                worldExtZ,
+                yawRad
+            );
+        }
+
         float maxWorldExt = worldExtX;
         if (worldExtY > maxWorldExt) maxWorldExt = worldExtY;
         if (worldExtZ > maxWorldExt) maxWorldExt = worldExtZ;
@@ -761,11 +858,20 @@ bool MapLoader::LoadIntoScene(
             float maxWorldXZ = worldExtX > worldExtZ ? worldExtX : worldExtZ;
             bool isHorizontal = (worldExtY * 4.0f < maxWorldXZ);
             if (!isHorizontal) {
-            auto* pCol = pGO->AddComponent<ColliderComponent>();
-            pCol->SetExtents(localExt.x, localExt.y, localExt.z);
-            pCol->SetCenter(localCenter.x, localCenter.y, localCenter.z);
-            pCol->SetLayer(CollisionLayer::Wall);
-            pCol->SetCollisionMask(CollisionMask::Wall);
+                auto* pCol = pGO->AddComponent<ColliderComponent>();
+                pCol->SetExtents(localExt.x, localExt.y, localExt.z);
+                pCol->SetCenter(localCenter.x, localCenter.y, localCenter.z);
+                pCol->SetLayer(CollisionLayer::Wall);
+                pCol->SetCollisionMask(CollisionMask::Wall);
+
+                // 클라에서 Wall collider를 붙인 오브젝트와 같은 기준으로 서버용 wall도 export한다.
+                collisionExporter.AddWallRect(
+                    colliderCenterX,
+                    colliderCenterZ,
+                    worldExtX,
+                    worldExtZ,
+                    yawRad
+                );
             } // !isHorizontal
         } // !isProp && maxWorldExt > 0.3f
     }
@@ -791,6 +897,14 @@ bool MapLoader::LoadIntoScene(
         pCol->SetCenter(0.0f, 0.0f, 0.0f);
         pCol->SetLayer(CollisionLayer::Wall);
         pCol->SetCollisionMask(CollisionMask::Wall);
+
+        collisionExporter.AddWallRect(
+            center[0].f()* MAP_SCALE + positionOffset.x,
+            -center[2].f() * MAP_SCALE + positionOffset.z,
+            size[0].f()* MAP_SCALE * 0.5f,
+            size[2].f()* MAP_SCALE * 0.5f,
+            0.0f
+        );
     }
 
     // ── 5. Enemy spawns → RoomSpawnConfig ────────────────────────────────────
@@ -1114,6 +1228,27 @@ bool MapLoader::LoadIntoScene(
     sprintf_s(buf, "[MapLoader] Loaded: %zu rooms, %zu mapObjects, %zu obstacles, %zu enemySpawns\n",
         root["rooms"].size(), mapObjs.size(), obstacles.size(), enemySpawns.size());
     OutputDebugStringA(buf);
+
+    // 서버/클라 공통 충돌 데이터 export
+// Assets/MapData/Collision 폴더가 없으면 저장 실패한다.
+    {
+        std::string collisionPath = MapLoader_GetCollisionOutputPath(jsonPath);
+        bool saved = collisionExporter.SaveToFile(collisionPath);
+
+        if (saved)
+        {
+            std::string msg = "[MapCollisionExporter] saved: " + collisionPath +
+                " walkables=" + std::to_string(collisionExporter.GetWalkableCount()) +
+                " walls=" + std::to_string(collisionExporter.GetWallCount()) + "\n";
+            OutputDebugStringA(msg.c_str());
+        }
+        else
+        {
+            std::string msg = "[MapCollisionExporter] failed to save: " + collisionPath + "\n";
+            OutputDebugStringA(msg.c_str());
+        }
+    }
+
     return true;
 }
 

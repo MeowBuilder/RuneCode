@@ -172,17 +172,17 @@ bool Handle_S_MOVE(PacketSessionRef& session, Protocol::S_MOVE& pkt)
     float dirY = pkt.diry();
     float dirZ = pkt.dirz();
 
-    char buf[256];
-    sprintf_s(buf, "[Network] S_MOVE received: PlayerId=%llu Pos=(%.1f, %.1f, %.1f) Dir=(%.2f, %.2f, %.2f)",
-        playerId, x, y, z, dirX, dirY, dirZ);
-    WriteNetworkLog(buf);
+    //char buf[256];
+    //sprintf_s(buf, "[Network] S_MOVE received: PlayerId=%llu Pos=(%.1f, %.1f, %.1f) Dir=(%.2f, %.2f, %.2f)",
+    //    playerId, x, y, z, dirX, dirY, dirZ);
+    //WriteNetworkLog(buf);
 
     // NetworkManager를 통해 메인 스레드에서 처리
     NetworkManager* pNetMgr = NetworkManager::GetInstance();
     if (pNetMgr)
     {
         pNetMgr->QueueMovePlayer(playerId, x, y, z, dirX, dirY, dirZ);
-        WriteNetworkLog("[Network] QueueMovePlayer called");
+        // WriteNetworkLog("[Network] QueueMovePlayer called");
     }
 
     return true;

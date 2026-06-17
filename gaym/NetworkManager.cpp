@@ -526,7 +526,7 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             break;
 
         case NetworkCommand::Move:
-            ProcessMovePlayer(cmd.playerId, cmd.x, cmd.y, cmd.z, cmd.dirX, cmd.dirY, cmd.dirZ);
+            ProcessMovePlayer(pScene, cmd.playerId, cmd.x, cmd.y, cmd.z, cmd.dirX, cmd.dirY, cmd.dirZ);
             break;
 
         case NetworkCommand::Skill:
@@ -656,6 +656,9 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
 
 	// 원격 플레이어 포탈 Intro Fly 연출 처리
     UpdateRemotePlayerPortalIntroFlyEffects(deltaTime);
+
+    // 원격 플레이어 이동 보간
+    UpdateRemotePlayerInterpolation(deltaTime);
 
     // 입장 직후 서버가 내 위치를 0,0,0으로 들고 있을 수 있으므로,
     // 몇 프레임 동안 실제 시작 위치를 반복 전송한다.
@@ -1138,6 +1141,7 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     m_mapServerMonsterAttackTimer.clear();
     m_mapServerMonsterHitFlashTimer.clear();
     m_setDeadServerMonsters.clear();
+    m_mapRemotePlayerMoveTargets.clear();
 
     // 인디케이터도 같이 정리 (보스 방 → 일반 방 또는 방 전환 시 잔존 막기)
     for (auto& kv : m_mapServerMonsterIndicators)
@@ -1570,7 +1574,7 @@ void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
         swprintf_s(idLog, 256, L"[Network] Remote player %llu already exists. Updating position.\n", playerId);
         OutputDebugString(idLog);
         // Spawn에는 방향 정보가 없으므로 기본 방향 (0, 0, 1) 사용
-        ProcessMovePlayer(playerId, x, y, z, 0.0f, 0.0f, 1.0f);
+        ProcessMovePlayer(pScene, playerId, x, y, z, 0.0f, 0.0f, 1.0f);
         return;
     }
 
@@ -1730,17 +1734,34 @@ void NetworkManager::ProcessDespawnPlayer(Scene* pScene, uint64 playerId)
     m_mapRemotePlayerHitFlashTimer.erase(playerId);
     m_mapRemotePlayerActionLockTimer.erase(playerId);
     m_mapRemotePlayerPortalIntroFlyEffects.erase(playerId);
+    m_mapRemotePlayerMoveTargets.erase(playerId);
 
     wchar_t buf[128];
     swprintf_s(buf, L"[Network] Despawned remote player %llu\n", playerId);
     OutputDebugString(buf);
 }
 
-void NetworkManager::ProcessMovePlayer(uint64 playerId, float x, float y, float z, float dirX, float dirY, float dirZ)
+void NetworkManager::ProcessMovePlayer(Scene* pScene, uint64 playerId, float x, float y, float z, float dirX, float dirY, float dirZ)
 {
-    // 로컬 플레이어라면 무시 (로컬은 자체 업데이트)
+    // 서버 보정 좌표가 내 플레이어에게 온 경우에도 실제 Transform에 반영한다.
     if (playerId == m_nLocalPlayerId.load())
+    {
+        if (!pScene)
+            return;
+
+        GameObject* pLocalPlayer = pScene->GetPlayer();
+        if (!pLocalPlayer)
+            return;
+
+        TransformComponent* pTransform = pLocalPlayer->GetTransform();
+        if (!pTransform)
+            return;
+
+        // 서버가 확정한 위치로 로컬 플레이어를 보정한다.
+        pTransform->SetPosition(x, y, z);
+
         return;
+    }
 
     auto it = m_mapRemotePlayers.find(playerId);
     if (it == m_mapRemotePlayers.end())
@@ -1810,8 +1831,11 @@ void NetworkManager::ProcessMovePlayer(uint64 playerId, float x, float y, float 
             float dz = z - oldPos.z;
             bPositionMoved = (dx * dx + dz * dz) > 0.000001f;
 
-            // 일반 상태에서는 서버 위치를 그대로 반영한다.
-            pTransform->SetPosition(x, y, z);
+            // 일반 상태에서는 바로 위치를 박지 않고 목표 위치만 갱신한다.
+            // 실제 Transform 이동은 UpdateRemotePlayerInterpolation에서 부드럽게 처리한다.
+            RemotePlayerMoveTarget& moveTarget = m_mapRemotePlayerMoveTargets[playerId];
+            moveTarget.targetPos = XMFLOAT3(x, y, z);
+            moveTarget.hasTarget = true;
         }
 
         // 방향은 이동/회전 구분과 상관없이 항상 갱신한다.
@@ -1820,6 +1844,7 @@ void NetworkManager::ProcessMovePlayer(uint64 playerId, float x, float y, float 
         {
             float yaw = atan2f(dirX, dirZ);
             float yawDegrees = XMConvertToDegrees(yaw);
+            m_mapRemotePlayerMoveTargets[playerId].targetYaw = yawDegrees;
 
             XMFLOAT3 currentRot = pTransform->GetRotation();
             pTransform->SetRotation(currentRot.x, yawDegrees, currentRot.z);
@@ -1899,6 +1924,63 @@ void NetworkManager::CheckRemotePlayerIdle(float deltaTime)
         {
             ++it;
         }
+    }
+}
+
+void NetworkManager::UpdateRemotePlayerInterpolation(float deltaTime)
+{
+    constexpr float kRemotePlayerSmoothRate = 18.0f;
+    constexpr float kRemotePlayerSnapDistSq = 100.0f;   // 10m 이상 벌어지면 스냅
+    constexpr float kRemotePlayerTinyDistSq = 0.0025f;  // 거의 도착하면 스냅
+
+    float alpha = 1.0f - expf(-kRemotePlayerSmoothRate * deltaTime);
+
+    for (auto& kv : m_mapRemotePlayerMoveTargets)
+    {
+        uint64 playerId = kv.first;
+        RemotePlayerMoveTarget& target = kv.second;
+
+        if (!target.hasTarget)
+            continue;
+
+        auto playerIt = m_mapRemotePlayers.find(playerId);
+        if (playerIt == m_mapRemotePlayers.end() || !playerIt->second)
+            continue;
+
+        GameObject* pRemotePlayer = playerIt->second;
+        TransformComponent* pTransform = pRemotePlayer->GetTransform();
+
+        if (!pTransform)
+            continue;
+
+        // 포탈 낙하 연출 중에는 기존 IntroFly 로직이 위치를 직접 제어한다.
+        if (m_mapRemotePlayerPortalIntroFlyEffects.find(playerId) != m_mapRemotePlayerPortalIntroFlyEffects.end())
+            continue;
+
+        XMFLOAT3 cur = pTransform->GetPosition();
+
+        float dx = target.targetPos.x - cur.x;
+        float dy = target.targetPos.y - cur.y;
+        float dz = target.targetPos.z - cur.z;
+
+        float distSq = dx * dx + dy * dy + dz * dz;
+
+        if (distSq >= kRemotePlayerSnapDistSq || distSq <= kRemotePlayerTinyDistSq)
+        {
+            pTransform->SetPosition(target.targetPos);
+        }
+        else
+        {
+            XMFLOAT3 next;
+            next.x = cur.x + dx * alpha;
+            next.y = cur.y + dy * alpha;
+            next.z = cur.z + dz * alpha;
+
+            pTransform->SetPosition(next);
+        }
+
+        XMFLOAT3 rot = pTransform->GetRotation();
+        pTransform->SetRotation(rot.x, target.targetYaw, rot.z);
     }
 }
 

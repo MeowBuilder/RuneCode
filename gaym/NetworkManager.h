@@ -32,6 +32,14 @@ struct NetworkPlayerInfo
     float x, y, z;
 };
 
+// 원격 플레이어 위치 보간용 목표값
+struct RemotePlayerMoveTarget
+{
+    DirectX::XMFLOAT3 targetPos = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
+    float targetYaw = 0.0f;
+    bool hasTarget = false;
+};
+
 // 방 클리어 보상 룬 오브젝트 정보
 struct NetworkRewardRuneObjectInfo
 {
@@ -368,6 +376,8 @@ private:
 
     // 원격 플레이어 관리 (메인 스레드에서만 접근)
     std::unordered_map<uint64, GameObject*> m_mapRemotePlayers;
+    // 원격 플레이어 이동 보간 목표 위치
+    std::unordered_map<uint64, RemotePlayerMoveTarget> m_mapRemotePlayerMoveTargets;
     // 원격 플레이어의 캐릭터 원소 — ProcessSkill 에서 (element, slot) 매핑에 사용.
     std::unordered_map<uint64, ElementType> m_mapRemotePlayerElement;
 
@@ -403,7 +413,7 @@ private:
     // 메인 스레드에서 실행할 명령 처리
     void ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList, uint64 playerId, const std::string& name, int playerType, float x, float y, float z);
     void ProcessDespawnPlayer(Scene* pScene, uint64 playerId);
-    void ProcessMovePlayer(uint64 playerId, float x, float y, float z, float dirX, float dirY, float dirZ);
+    void ProcessMovePlayer(Scene* pScene, uint64 playerId, float x, float y, float z, float dirX, float dirY, float dirZ);
     void ProcessSkill(Scene* pScene, uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ,
                       int32 skillSlot = -1, float radiusMult = 1.0f, float damageMult = 1.0f);
     void ProcessPlayerAction(Scene* pScene, uint64 playerId, uint32 actionType, float x, float y, float z, float dirX, float dirY, float dirZ);
@@ -849,6 +859,9 @@ public:
     // 원격 플레이어 idle 전환 체크 (Update에서 호출)
     void CheckRemotePlayerIdle(float deltaTime);
 
+    // 원격 플레이어 끊김 방지 체크
+    void UpdateRemotePlayerInterpolation(float deltaTime);
+    
     // 원격 플레이어 VFX 타임아웃 체크 (Update에서 호출)
     void CheckRemotePlayerVFXTimeout(Scene* pScene, float deltaTime);
 

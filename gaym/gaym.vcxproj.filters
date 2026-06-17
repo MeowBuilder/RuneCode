@@ -513,6 +513,15 @@
     <ClInclude Include="LoadingScreen.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="AudioManager.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="MapCollisionCore.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="MapCollisionExporter.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="gaym.cpp">
@@ -953,6 +962,18 @@
     <ClCompile Include="LoadingScreen.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="AudioManager.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\stb_vorbis.c">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="MapCollisionCore.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="MapCollisionExporter.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="gaym.rc">
@@ -972,6 +993,9 @@
     <FxCompile Include="fluid_particles.hlsl" />
     <FxCompile Include="terrain.hlsl" />
     <FxCompile Include="bloom.hlsl" />
+    <FxCompile Include="whiteflash.hlsl" />
+    <FxCompile Include="screen_split.hlsl" />
+    <FxCompile Include="leaf_particle.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <None Include="GameObject.inl">

@@ -184,6 +184,8 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClInclude Include="DescriptorHeap.h" />
     <ClInclude Include="Dx12App.h" />
     <ClInclude Include="EnemyComponent.h" />
+    <ClInclude Include="MapCollisionCore.h" />
+    <ClInclude Include="MapCollisionExporter.h" />
     <ClInclude Include="ThreatConstants.h" />
     <ClInclude Include="ThreatSystem.h" />
     <ClInclude Include="BossPhaseConfig.h" />
@@ -346,6 +348,8 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClCompile Include="Animation.cpp" />
     <ClCompile Include="AnimationComponent.cpp" />
     <ClCompile Include="AudioManager.cpp" />
+    <ClCompile Include="MapCollisionCore.cpp" />
+    <ClCompile Include="MapCollisionExporter.cpp" />
     <ClCompile Include="ThirdParty\stb_vorbis.c" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="ColliderComponent.cpp" />
