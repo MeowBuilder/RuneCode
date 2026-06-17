@@ -6,6 +6,7 @@
 #include "Room.h"
 #include "Scene.h"
 #include "VFXManager.h"
+#include "ProjectileManager.h"
 
 using namespace DirectX;
 
@@ -62,6 +63,13 @@ DarkLordSigilSlash::DarkLordSigilSlash(const SlashVFXDesc& desc,
     // 부모 ComboAttackBehavior 의 정적 SwordTrailMesh crescent flash 는 중복 → 끈다.
     //   ribbon (검 본 추적) 은 그대로 유지 — 보조 코어 역할.
     SetDisableStaticCrescent(true);
+
+    // 발사형 검기는 보스 옆 cone 판정 대신 실제 투사체가 피격을 담당.
+    //   cone 데미지를 끄지 않으면 보스 옆에 있는 플레이어가 검기 발사와 동시에 cone 으로도 맞음.
+    if (m_desc.presentation == SlashPresentation::Projectile)
+    {
+        SetSuppressConeDamage(true);
+    }
 }
 
 DarkLordSigilSlash::~DarkLordSigilSlash()
@@ -289,6 +297,35 @@ void DarkLordSigilSlash::Update(float dt, EnemyComponent* pEnemy)
                                     spawnDir = dir;
                                 }
                                 pVFX->Spawn(effectName, spawnPos, spawnDir, 0u, false);
+
+                                // 발사형 — 실제 피격용 ProjectileManager 투사체를 함께 spawn.
+                                //   VFX 는 시각, 투사체가 데미지. 보스 cone 데미지는 생성자에서 끔.
+                                //   [중요] 검 끝 Y(~8) 그대로 두면 플레이어 중심 Y=1 과 sphere 충돌 X.
+                                //   플레이어 가슴 높이(보스 base + 2.0)로 낮추고 반경도 5.5 로 키워 안정 피격.
+                                if (m_desc.presentation == SlashPresentation::Projectile)
+                                {
+                                    if (auto* pProj = pScene->GetProjectileManager())
+                                    {
+                                        XMFLOAT3 bossPos = pEnemy->GetOwner()->GetTransform()->GetPosition();
+                                        float fireY = bossPos.y + 2.0f;   // 플레이어 가슴 높이
+                                        XMFLOAT3 fireStart = { spawnPos.x, fireY, spawnPos.z };
+                                        XMFLOAT3 fireTarget = { fireStart.x + spawnDir.x * 60.0f,
+                                                                fireY,
+                                                                fireStart.z + spawnDir.z * 60.0f };
+                                        pProj->SpawnProjectile(
+                                            fireStart,
+                                            fireTarget,
+                                            pHit->fDamage,           // damage
+                                            34.0f,                   // speed
+                                            5.5f,                    // hit radius — 검기 폭 + 안정 마진
+                                            0.0f,                    // no explosion AoE
+                                            m_desc.element,
+                                            pEnemy->GetOwner(),
+                                            false,                   // enemy projectile (→ Player.TakeDamage)
+                                            1.0f                     // scale
+                                        );
+                                    }
+                                }
 
                                 // Massive 화면 임팩트 — 추가 Ring 충격파를 보스 발치에 spawn.
                                 //   기존 Impact 와 별개로 즉시 발생 → 화면이 진짜 흔들리는 시그널.

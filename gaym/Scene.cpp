@@ -1351,6 +1351,20 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         }
     }
 
+    // F12: [DEBUG] 플레이어 풀힐 — 보스 검기 데미지 확인용 (원콤 후 재시도)
+    if (pInputSystem && pInputSystem->IsKeyPressed(VK_F12))
+    {
+        if (m_pPlayerGameObject)
+        {
+            auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>();
+            if (pPC)
+            {
+                pPC->SetCurrentHP(pPC->GetMaxHP());
+                OutputDebugString(L"[Debug] Player HP fully restored\n");
+            }
+        }
+    }
+
     // F8: [DEBUG] 현재 방 살아있는 몬스터 전체 즉사 (서버 권위) — 온라인 모드만 의미 있음
     // F11 은 전체화면 토글과 겹쳐서 F8 사용
     if (pInputSystem && pInputSystem->IsKeyPressed(VK_F8))

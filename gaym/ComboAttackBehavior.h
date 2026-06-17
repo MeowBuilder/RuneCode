@@ -115,6 +115,10 @@ public:
     // 자체 EffectDef 로 검기 본체를 그릴 때 중복 호 잔재 차단용.
     void SetDisableStaticCrescent(bool b) { m_bDisableStaticCrescent = b; }
 
+    // 부모의 cone 피격 판정 억제 — 발사형 검기는 ProjectileManager 투사체가 피격을 담당하므로
+    // 보스 옆에서의 cone 데미지를 끄지 않으면 이중 피격 발생.
+    void SetSuppressConeDamage(bool b) { m_bSuppressConeDamage = b; }
+
 private:
     void DealConeDamage(EnemyComponent* pEnemy, const ComboHit& hit);
     void SpawnHitVFX(EnemyComponent* pEnemy, const ComboHit& hit);
@@ -240,4 +244,6 @@ private:
     bool m_bCrescentSpawned = false;
     // 정적 crescent flash 비활성화 옵션 — 서브클래스가 자체 EffectDef 본체로 대체할 때.
     bool m_bDisableStaticCrescent = false;
+    // cone 피격 판정 억제 — 발사형(Projectile) 검기 전용.
+    bool m_bSuppressConeDamage = false;
 };

@@ -205,6 +205,8 @@ void ComboAttackBehavior::Reset()
 void ComboAttackBehavior::DealConeDamage(EnemyComponent* pEnemy, const ComboHit& hit)
 {
     if (!pEnemy) return;
+    // 발사형 검기는 ProjectileManager 투사체가 피격을 담당 — cone 판정은 끔.
+    if (m_bSuppressConeDamage) return;
 
     GameObject* pOwner = pEnemy->GetOwner();
     GameObject* pTarget = pEnemy->GetTarget();

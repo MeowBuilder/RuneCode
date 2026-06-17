@@ -32,6 +32,10 @@ public:
     void Update(float dt, EnemyComponent* pEnemy) override;
     void Reset() override;
 
+    // DarkLord 전용 — 검기 컷씬 자체가 텔레그래프이므로 평면 인디케이터는 끈다.
+    //   ShowIndicators 가 None 을 보면 즉시 return → 빨간 박스 안 뜸.
+    int GetIndicatorTypeOverride() const override { return 0; /* IndicatorType::None */ }
+
 private:
     SlashVFXDesc m_desc;
     SlashCue     m_cue;

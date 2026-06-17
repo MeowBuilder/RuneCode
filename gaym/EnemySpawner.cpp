@@ -63,17 +63,18 @@ namespace
     }
 
     // 공통 ComboHit 기본값. 호출자가 dmg/animation/eShape/strVFXOnHit 만 set.
+    //   [튜닝] 전반적 크기 ↑ — 검기 시각 + cone 사거리 약 10% up. 피격 체감 개선용.
     CHit BaseHit()
     {
         CHit h;
         h.fWindupTime       = 0.55f;
         h.fHitTime          = 0.22f;
         h.fRecoveryTime     = 0.35f;
-        h.fHitRange         = 10.5f;
-        h.fConeAngle        = 110.0f;
+        h.fHitRange         = 11.5f;   // 10.5 → 11.5
+        h.fConeAngle        = 115.0f;  // 110 → 115
         h.fVFXForwardOffset = 3.0f;
         h.fVFXYOffset       = 8.0f;
-        h.fVFXScale         = 4.0f;
+        h.fVFXScale         = 5.0f;    // 4.0 → 5.0 (ribbon 트레일 굵게)
         h.strVFXImpact      = "";  // SlashCue::Impact 가 발사
         return h;
     }
@@ -88,8 +89,8 @@ namespace
         h.fWindupTime   = 0.40f;
         h.fHitTime      = 0.18f;
         h.fRecoveryTime = 0.28f;
-        h.fHitRange     = 10.0f;
-        h.fConeAngle    = 90.0f;
+        h.fHitRange     = 11.0f;   // 10 → 11
+        h.fConeAngle    = 95.0f;   // 90 → 95
         h.strAnimation  = "attack1";
         h.strVFXOnHit   = BossSigilName(e, false);
         h.eShape        = EShape::Slim;
@@ -103,11 +104,11 @@ namespace
         h.fDamage       = 80.0f;
         h.fWindupTime   = 0.50f;
         h.fHitTime      = 0.20f;
-        h.fHitRange     = 10.5f;
-        h.fConeAngle    = 120.0f;
+        h.fHitRange     = 11.5f;   // 10.5 → 11.5
+        h.fConeAngle    = 125.0f;  // 120 → 125
         h.strAnimation  = "attack2";
         h.strVFXOnHit   = BossSigilName(e, false);
-        h.fVFXScale     = 5.0f;
+        h.fVFXScale     = 6.0f;    // 5 → 6
         h.eShape        = EShape::Wide;
         return h;
     }
@@ -119,8 +120,8 @@ namespace
         h.fDamage       = 85.0f;
         h.fWindupTime   = 0.45f;
         h.fHitTime      = 0.20f;
-        h.fHitRange     = 11.5f;
-        h.fConeAngle    = 80.0f;     // 좁고 길게
+        h.fHitRange     = 13.0f;   // 11.5 → 13 (가장 멀리)
+        h.fConeAngle    = 85.0f;   // 80 → 85
         h.strAnimation  = "attack4";
         h.strVFXOnHit   = BossSigilName(e, false);
         h.fVFXForwardOffset = 3.5f;
@@ -136,11 +137,11 @@ namespace
         h.fWindupTime   = 0.75f;
         h.fHitTime      = 0.30f;
         h.fRecoveryTime = 0.50f;
-        h.fHitRange     = 11.5f;
-        h.fConeAngle    = 125.0f;
+        h.fHitRange     = 13.0f;   // 11.5 → 13
+        h.fConeAngle    = 130.0f;  // 125 → 130
         h.strAnimation  = "Attack6";
         h.strVFXOnHit   = BossSigilName(e, true);   // Heavy
-        h.fVFXScale     = 7.0f;
+        h.fVFXScale     = 8.0f;    // 7 → 8
         h.eShape        = EShape::Wide;
         return h;
     }
@@ -152,11 +153,11 @@ namespace
         h.fDamage       = 95.0f;
         h.fWindupTime   = 0.55f;
         h.fHitTime      = 0.28f;
-        h.fHitRange     = 11.0f;
-        h.fConeAngle    = 240.0f;    // 회전 — 광역
+        h.fHitRange     = 12.5f;   // 11 → 12.5
+        h.fConeAngle    = 250.0f;  // 240 → 250 (광역)
         h.strAnimation  = "attack9";
         h.strVFXOnHit   = BossSigilName(e, true);
-        h.fVFXScale     = 6.0f;
+        h.fVFXScale     = 7.0f;    // 6 → 7
         h.eShape        = EShape::Double;
         return h;
     }
@@ -171,11 +172,11 @@ namespace
         h.fWindupTime   = 0.40f;
         h.fHitTime      = 0.30f;     // 길게 → ribbon emission 길어짐
         h.fRecoveryTime = 0.55f;     // 길게 → ribbon 잔존 길어짐
-        h.fHitRange     = 11.5f;
-        h.fConeAngle    = 95.0f;
+        h.fHitRange     = 13.0f;     // 11.5 → 13
+        h.fConeAngle    = 100.0f;    // 95 → 100
         h.strAnimation  = "attack2"; // 넓은 sweep 모션
         h.strVFXOnHit   = BossSigilName(e, false);   // ribbon 색 매핑용 (emitter spawn 안 됨)
-        h.fVFXScale     = 7.5f;      // ribbon 두께 ↑↑
+        h.fVFXScale     = 8.5f;      // 7.5 → 8.5 (ribbon 두께 ↑↑)
         h.eShape        = EShape::Long;
         return h;
     }
