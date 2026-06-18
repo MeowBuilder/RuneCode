@@ -433,6 +433,24 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             m_fMegaBreathInputLockTimer = 0.0f;
     }
 
+    if (m_fLocalMoveCorrectionBlockTimer > 0.0f)
+    {
+        m_fLocalMoveCorrectionBlockTimer -= deltaTime;
+        if (m_fLocalMoveCorrectionBlockTimer < 0.0f)
+            m_fLocalMoveCorrectionBlockTimer = 0.0f;
+    }
+
+    for (auto it = m_mapServerMonsterHitAnimCooldown.begin();
+        it != m_mapServerMonsterHitAnimCooldown.end(); )
+    {
+        it->second -= deltaTime;
+
+        if (it->second <= 0.0f)
+            it = m_mapServerMonsterHitAnimCooldown.erase(it);
+        else
+            ++it;
+    }
+
     // 이번 Update에서 방 전환이 처리됐는지 확인
     // 같은 프레임에 TorchInteract까지 보내지 않기 위한 방어
     bool roomTransitionProcessedThisFrame = false;
@@ -482,20 +500,49 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
         {
             if (auto* pLocalT = pLocal->GetTransform())
             {
-                XMFLOAT3 pos = pLocalT->GetPosition();
+                XMFLOAT3 groundPos = pLocalT->GetPosition();
 
-                // 처음 인트로 낙하 중이면 현재 y는 공중 높이일 수 있다.
-                // 서버에는 시각용 공중 y가 아니라 착지 기준 y를 저장해야 한다.
-                float syncY = pos.y;
-                if (syncY > 10.0f)
-                    syncY -= kPlayerPortalIntroStartHeight;
+                // 현재 위치를 착지 기준점으로 사용한다.
+                float groundY = groundPos.y;
+                if (groundY > 10.0f)
+                    groundY -= kPlayerPortalIntroStartHeight;
 
-                // 서버의 player->x/y/z를 실제 맵 스폰 위치로 초기 보정한다.
+                groundPos.y = groundY;
+
+                // 서버에는 착지 기준 좌표를 먼저 알려준다.
                 SendMove(
-                    pos.x, syncY, pos.z,
-                    0.0f, 0.0f, 1.0f);
+                    groundPos.x,
+                    groundPos.y,
+                    groundPos.z,
+                    0.0f,
+                    0.0f,
+                    1.0f
+                );
 
-                WriteNetworkLog("[Network] Initial local spawn position synced to server");
+                // 로컬 플레이어는 위에서 떨어지는 연출로 시작한다.
+                pLocalT->SetPosition(
+                    groundPos.x,
+                    groundPos.y + kPlayerPortalIntroStartHeight,
+                    groundPos.z
+                );
+
+                if (auto* pPC = pLocal->GetComponent<PlayerComponent>())
+                {
+                    pPC->StartIntroFly(
+                        kPlayerPortalIntroDuration,
+                        groundPos.y,
+                        XMFLOAT3(groundPos.x, groundPos.y, groundPos.z),
+                        kPlayerPortalIntroStandRadius
+                    );
+                }
+
+                // 낙하 인트로 중에는 서버 S_MOVE 보정이 Transform을 덮어쓰지 않게 막는다.
+                m_fLocalMoveCorrectionBlockTimer = kPlayerPortalIntroDuration + 0.35f;
+
+                // 서버가 초기 위치를 안정적으로 잡도록 몇 프레임 반복 동기화
+                m_nInitialLocalPositionSyncFrames = 60;
+
+                WriteNetworkLog("[Network] Initial local portal intro started");
             }
         }
     }
@@ -1142,6 +1189,7 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     m_mapServerMonsterHitFlashTimer.clear();
     m_setDeadServerMonsters.clear();
     m_mapRemotePlayerMoveTargets.clear();
+    m_mapServerMonsterHitAnimCooldown.clear();
 
     // 인디케이터도 같이 정리 (보스 방 → 일반 방 또는 방 전환 시 잔존 막기)
     for (auto& kv : m_mapServerMonsterIndicators)
@@ -1245,6 +1293,10 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
         {
             XMFLOAT3 groundPos = pLocalT->GetPosition();
 
+            // 1스테이지 보스방은 시작 단상이 없으므로 착지 기준 Y를 평지로 고정한다.
+            if (isBossRoom && stageIndex == 1)
+                groundPos.y = 0.0f;
+
             // 원격 플레이어 좌표 리셋
             // 이전 방 좌표가 그대로 남으면 새 맵에서 맵 밖/이상한 위치로 보일 수 있으므로
             // 우선 착지 기준점으로 모아둔다.
@@ -1273,6 +1325,12 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
                     groundPos.y,
                     XMFLOAT3(groundPos.x, groundPos.y, groundPos.z),
                     kPlayerPortalIntroStandRadius);
+            
+                // 포탈 낙하 연출 중에는 서버 S_MOVE 보정이 로컬 Transform을 덮어쓰지 않게 막는다.
+                m_fLocalMoveCorrectionBlockTimer = kPlayerPortalIntroDuration + 0.35f;
+
+                // 새 방 시작 위치를 서버에도 바로 알려서 이전 방 좌표가 다시 내려오지 않게 한다.
+                SyncLocalPlayerPositionToServer(pScene);
             }
 
             // 네트워크 연출 액션 — 다른 클라에도 이 플레이어의 포탈 Intro Fly를 재생시킨다.
@@ -1746,6 +1804,10 @@ void NetworkManager::ProcessMovePlayer(Scene* pScene, uint64 playerId, float x, 
     // 서버 보정 좌표가 내 플레이어에게 온 경우에도 실제 Transform에 반영한다.
     if (playerId == m_nLocalPlayerId.load())
     {
+        // 포탈 낙하 인트로 중에는 서버 위치 보정이 연출을 덮어쓰지 않게 무시한다.
+        if (m_fLocalMoveCorrectionBlockTimer > 0.0f)
+            return;
+
         if (!pScene)
             return;
 
@@ -1759,7 +1821,6 @@ void NetworkManager::ProcessMovePlayer(Scene* pScene, uint64 playerId, float x, 
 
         // 서버가 확정한 위치로 로컬 플레이어를 보정한다.
         pTransform->SetPosition(x, y, z);
-
         return;
     }
 
@@ -6713,20 +6774,53 @@ void NetworkManager::ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float
     }
     else
     {
-        // 공격 중인 몬스터는 공격 모션 유지.
-        // 공격 중이 아닐 때만 피격/수비 반응을 재생한다.
-        auto atkIt = m_mapServerMonsterAttackTimer.find(monsterId);
-        bool bAttackLocked = (atkIt != m_mapServerMonsterAttackTimer.end() && atkIt->second > 0.0f);
+        bool isBoss = false;
+        bool isMiniBoss = false;
 
-        if (pAnim && !bAttackLocked)
+        if (clipIt != m_mapServerMonsterClips.end())
         {
-            const char* hitClip = GetMonsterHitReactClip(mt);
-            pAnim->CrossFade(hitClip, 0.08f, false, true);
-            m_mapServerMonsterCurrentAnimClip[monsterId] = hitClip;
+            isBoss = clipIt->second.isBoss;
+            isMiniBoss = clipIt->second.isMiniBoss;
+        }
 
-            // 피격 모션이 바로 Walk/Idle로 덮이지 않도록 짧게 잠금
-            m_mapServerMonsterAttackTimer[monsterId] = 0.45f;
-            m_mapServerMonsterMoveTime.erase(monsterId);
+        // 보스는 일반 피격 모션을 거의 재생하지 않는다.
+        // 데미지 숫자와 hit flash만으로 피격 피드백을 준다.
+        if (isBoss)
+        {
+            // 보스는 gethit으로 패턴/공격 모션이 끊기지 않게 한다.
+        }
+        else
+        {
+            // 공격 중인 몬스터는 공격 모션 유지.
+            auto atkIt = m_mapServerMonsterAttackTimer.find(monsterId);
+            bool bAttackLocked = (atkIt != m_mapServerMonsterAttackTimer.end() && atkIt->second > 0.0f);
+
+            // 공격 모션 중이면 일반 피격 모션 생략
+            if (!bAttackLocked)
+            {
+                // 일반몹/중간보스별 피격 모션 재생 간격
+                float hitAnimCooldown = isMiniBoss ? 1.0f : 0.5f;
+
+                // 너무 작은 연속 피해는 모션 없이 데미지 숫자 + flash만 보여준다.
+                float minHitAnimDamage = isMiniBoss ? 15.0f : 5.0f;
+
+                bool bCooldownActive =
+                    (m_mapServerMonsterHitAnimCooldown.find(monsterId) != m_mapServerMonsterHitAnimCooldown.end());
+
+                if (pAnim && !bCooldownActive && damage >= minHitAnimDamage)
+                {
+                    const char* hitClip = GetMonsterHitReactClip(mt);
+                    pAnim->CrossFade(hitClip, 0.08f, false, true);
+                    m_mapServerMonsterCurrentAnimClip[monsterId] = hitClip;
+
+                    // 피격 모션이 바로 Walk/Idle로 덮이지 않도록 짧게 잠금
+                    m_mapServerMonsterAttackTimer[monsterId] = 0.25f;
+                    m_mapServerMonsterMoveTime.erase(monsterId);
+
+                    // 데미지는 계속 들어와도 gethit 모션은 일정 간격으로만 재생한다.
+                    m_mapServerMonsterHitAnimCooldown[monsterId] = hitAnimCooldown;
+                }
+            }
         }
     }
 
@@ -7030,6 +7124,35 @@ void NetworkManager::ProcessRuneHomingTarget(Scene* pScene, uint64 playerId, int
         attached ? 1 : 0);
 
     WriteNetworkLog(attachBuf);
+
+    // 비투사체 유도 룬은 붙일 투사체가 없을 수 있으므로 텍스트로도 발동을 표시한다.
+    if (!attached && skillSlot != 3)
+    {
+        GameObject* pCaster = nullptr;
+
+        if (playerId == GetLocalPlayerId())
+        {
+            pCaster = pScene ? pScene->GetPlayer() : nullptr;
+        }
+        else
+        {
+            auto it = m_mapRemotePlayers.find(playerId);
+            if (it != m_mapRemotePlayers.end())
+                pCaster = it->second;
+        }
+
+        DirectX::XMFLOAT3 textPos = originPos;
+
+        if (pCaster && pCaster->GetTransform())
+            textPos = pCaster->GetTransform()->GetPosition();
+
+        textPos.y += 3.0f;
+
+        DamageNumberManager::Get().AddText(
+            textPos,
+            L"HOMING!",
+            DirectX::XMFLOAT4(0.65f, 1.0f, 0.75f, 1.0f));
+    }
 }
 
 // ─── ProcessRuneTrigger ─────────────────────────────────────────────────────
@@ -7345,16 +7468,62 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
         return;
     }
 
+    // ─── TRF_MLT: 다연발 — 비투사체에서는 추가 타격 보정으로 적용됨 ─────────────
+    if (runeId == "TRF_MLT")
+    {
+        wchar_t buf[64];
+        swprintf_s(buf, L"MULTI x%.0f", value1);
+
+        DamageNumberManager::Get().AddText(
+            GetDisplayPos(pCaster),
+            buf,
+            DirectX::XMFLOAT4(0.75f, 0.95f, 1.0f, 1.0f));
+
+        return;
+    }
+
+    // ─── TRF_PRC: 관통 — 비투사체에서는 관통 보정 피해로 적용됨 ────────────────
+    if (runeId == "TRF_PRC")
+    {
+        DamageNumberManager::Get().AddText(
+            GetDisplayPos(pCaster),
+            L"PIERCE!",
+            DirectX::XMFLOAT4(0.85f, 0.85f, 1.0f, 1.0f));
+
+        return;
+    }
+
+    // ─── ABY_RES: 원소 공명 — 서로 다른 원소 룬 2종 이상일 때 발동 ─────────────
+    if (runeId == "ABY_RES")
+    {
+        DamageNumberManager::Get().AddText(
+            GetDisplayPos(pCaster),
+            L"RESONANCE!",
+            DirectX::XMFLOAT4(1.0f, 0.85f, 0.35f, 1.0f));
+
+        return;
+    }
+
     // ─── ABY_SHD: 보호막 — value1 생성/흡수량, value2 현재 보호막 ────────────────
     if (runeId == "ABY_SHD")
     {
-        if (bLocalCaster && pCaster)
+        if (pCaster)
         {
             if (PlayerComponent* pPlayer = pCaster->GetComponent<PlayerComponent>())
             {
+                // 서버가 보낸 현재 보호막 수치를 로컬/원격 모두 반영한다.
+                // 원격 플레이어도 이 값이 들어가야 기존 보호막 표시가 동일하게 보인다.
                 pPlayer->SetShield(value2);
+
+                // 보호막 흡수 이벤트라면 기존 흡수 VFX도 원격에서 재생한다.
+                // 서버의 보호막 흡수 패킷은 skillSlot = -1로 들어온다.
+                if (skillSlot < 0)
+                {
+                    pPlayer->TriggerShieldBreakVFX();
+                }
             }
         }
+
         wchar_t buf[32];
         swprintf_s(buf, L"+%.0f SHIELD", value1);
         DamageNumberManager::Get().AddText(
