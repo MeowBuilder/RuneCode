@@ -118,6 +118,7 @@ void SlashVFXDesc::ApplyPresentation(SlashPresentation s)
         //   → ComboHit 의 fVFXScale (ribbon 두께), eShape Long (긴 호), fHitTime/Recovery
         //     길게 잡힌 helper 사용 시 진짜 채찍 톤. 카메라/플래시는 가볍게.
         skipBladeEmitter       = true;
+        useGroundResidue       = false;   // 채찍 톤은 잔재 X
         hitStopSeconds        *= 0.30f;
         whiteFlashAlpha       *= 0.20f;
         whiteFlashFade        *= 0.7f;
@@ -147,8 +148,11 @@ void SlashVFXDesc::ApplyPresentation(SlashPresentation s)
 
     case SlashPresentation::Projectile:
         // 검기가 발사된 호 — 멀리·길게·빠르게.
+        // 발사형은 spawn 지점에 GroundResidue 가 누적되어 "작은 잔재" 가 화면에 차오름.
+        // → 잔재는 끄고 임팩트 펄스만 유지 (Day 6 + 사용자 피드백).
         bladeForwardMultiplier = 2.40f;
         bladeScaleMultiplier   = 1.10f;
+        useGroundResidue       = false;
         cameraShakeIntensity  *= 0.85f;
         cameraShakeDuration   *= 0.90f;
         cameraZoomBoost       *= 1.10f;
@@ -181,6 +185,22 @@ void SlashVFXDesc::ApplyPresentation(SlashPresentation s)
         cameraZoomBoost       *= 1.30f;
         impactHitStopSeconds  *= 1.20f;
         impactShakeIntensity  *= 1.30f;
+        break;
+
+    case SlashPresentation::TwinCleave:
+        // 좌/우 동시 검기 — 두 방향 cone 동시 + 본체 두 개. Massive 와 비슷한 톤이되 살짝 약하게.
+        preferHeavyBlade       = true;
+        bladeForwardMultiplier = 1.10f;
+        bladeScaleMultiplier   = 1.20f;
+        hitStopSeconds        *= 1.40f;
+        whiteFlashAlpha       *= 1.40f;
+        whiteFlashFade        *= 1.20f;
+        cameraShakeIntensity  *= 1.60f;
+        cameraShakeDuration   *= 1.30f;
+        cameraZoomBoost       *= 1.50f;
+        impactHitStopSeconds  *= 1.40f;
+        impactShakeIntensity  *= 1.60f;
+        impactFlashAlpha      *= 1.50f;
         break;
 
     case SlashPresentation::FinalJudgment:

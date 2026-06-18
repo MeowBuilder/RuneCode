@@ -3,6 +3,7 @@
 #include "EnemyComponent.h"
 #include "GameObject.h"
 #include "TransformComponent.h"
+#include "PlayerComponent.h"
 #include "Room.h"
 #include "Scene.h"
 #include "VFXManager.h"
@@ -67,6 +68,11 @@ DarkLordSigilSlash::DarkLordSigilSlash(const SlashVFXDesc& desc,
     // 발사형 검기는 보스 옆 cone 판정 대신 실제 투사체가 피격을 담당.
     //   cone 데미지를 끄지 않으면 보스 옆에 있는 플레이어가 검기 발사와 동시에 cone 으로도 맞음.
     if (m_desc.presentation == SlashPresentation::Projectile)
+    {
+        SetSuppressConeDamage(true);
+    }
+    // TwinCleave 는 좌/우 두 방향 cone 을 우리가 직접 처리 — 부모의 정면 cone 끔.
+    if (m_desc.presentation == SlashPresentation::TwinCleave)
     {
         SetSuppressConeDamage(true);
     }
@@ -158,7 +164,8 @@ void DarkLordSigilSlash::Update(float dt, EnemyComponent* pEnemy)
         {
             if (m_desc.presentation == SlashPresentation::CrossSigil
                 || m_desc.presentation == SlashPresentation::Phantom
-                || m_desc.presentation == SlashPresentation::FinalJudgment)
+                || m_desc.presentation == SlashPresentation::FinalJudgment
+                || m_desc.presentation == SlashPresentation::TwinCleave)
             {
                 if (const ComboHit* pHit = GetCurrentHit())
                 {
@@ -214,6 +221,47 @@ void DarkLordSigilSlash::Update(float dt, EnemyComponent* pEnemy)
                                     SpawnAtAngle( -75.f, m_desc.element);
                                     SpawnAtAngle(  75.f, m_desc.element);
                                     SpawnAtAngle( 180.f, m_desc.element);
+                                }
+                                else if (m_desc.presentation == SlashPresentation::TwinCleave)
+                                {
+                                    // 정면 ±separation° 두 방향 동시 검기 — 회피 라인 압박.
+                                    float sep = m_desc.twinSeparationDeg;
+                                    SpawnAtAngle(-sep, m_desc.element);
+                                    SpawnAtAngle(+sep, m_desc.element);
+
+                                    // ── 자체 cone 데미지 (좌/우 둘 중 하나라도 cone 안이면 hit) ──
+                                    if (GameObject* pTarget = pEnemy->GetTarget())
+                                    {
+                                        TransformComponent* pTargetT = pTarget->GetTransform();
+                                        if (pTargetT)
+                                        {
+                                            XMFLOAT3 tgtPos = pTargetT->GetPosition();
+                                            float dx = tgtPos.x - bossPos.x;
+                                            float dz = tgtPos.z - bossPos.z;
+                                            float dist = sqrtf(dx*dx + dz*dz);
+                                            if (dist <= pHit->fHitRange)
+                                            {
+                                                if (dist > 1e-4f) { dx /= dist; dz /= dist; }
+                                                float halfConeRad = XMConvertToRadians(pHit->fConeAngle * 0.5f);
+                                                float cosHalfCone = cosf(halfConeRad);
+                                                bool bHit = false;
+                                                const float offsets[2] = { -sep, +sep };
+                                                for (int i = 0; i < 2; ++i)
+                                                {
+                                                    float yawRad = baseYawRad + XMConvertToRadians(offsets[i]);
+                                                    float fX = sinf(yawRad);
+                                                    float fZ = cosf(yawRad);
+                                                    if (dx * fX + dz * fZ >= cosHalfCone)
+                                                    { bHit = true; break; }
+                                                }
+                                                if (bHit)
+                                                {
+                                                    if (PlayerComponent* pPC = pTarget->GetComponent<PlayerComponent>())
+                                                        pPC->TakeDamage(pHit->fDamage);
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                                 else // FinalJudgment
                                 {
@@ -324,6 +372,18 @@ void DarkLordSigilSlash::Update(float dt, EnemyComponent* pEnemy)
                                             false,                   // enemy projectile (→ Player.TakeDamage)
                                             1.0f                     // scale
                                         );
+
+                                        // 검기 폭격 — burst 가 켜져 있으면 후속 N-1 발을 인터벌로 발사하기 위해 state 저장.
+                                        //   첫 발은 위에서 spawn 했으므로 remaining = burstCount - 1.
+                                        if (m_desc.projectileBurstCount > 1)
+                                        {
+                                            m_nBurstRemaining   = m_desc.projectileBurstCount - 1;
+                                            m_nBurstShotIndex   = 1;     // 다음 발 index
+                                            m_fBurstTimer       = m_desc.projectileBurstInterval;
+                                            m_xmf3BurstStartPos = fireStart;
+                                            m_xmf3BurstBaseDir  = spawnDir;
+                                            m_fBurstDamage      = pHit->fDamage;
+                                        }
                                     }
                                 }
 
@@ -383,6 +443,77 @@ void DarkLordSigilSlash::Update(float dt, EnemyComponent* pEnemy)
         }
     }
 
+    // ── 검기 폭격 burst tick — 후속 발 인터벌 발사 ──────────────────────────
+    if (m_nBurstRemaining > 0 && pEnemy)
+    {
+        float rawDt = dt;
+        if (CRoom* pRoom = pEnemy->GetRoom())
+            if (Scene* pScene = pRoom->GetScene())
+                rawDt = pScene->GetRawDeltaTime();
+        m_fBurstTimer -= rawDt;
+        if (m_fBurstTimer <= 0.0f)
+        {
+            // 발사: index → spread offset 매핑. 중앙 (0) 기준 좌우 등분 spread.
+            int   N        = m_desc.projectileBurstCount;
+            float offsetDeg = (static_cast<float>(m_nBurstShotIndex)
+                               - static_cast<float>(N - 1) * 0.5f)
+                             * m_desc.projectileBurstSpreadDeg;
+            float yawOff   = XMConvertToRadians(offsetDeg);
+            float cs = cosf(yawOff), sn = sinf(yawOff);
+            // y축 yaw 회전: (x,z) → (cs*x + sn*z, -sn*x + cs*z)
+            XMFLOAT3 dir = { cs * m_xmf3BurstBaseDir.x + sn * m_xmf3BurstBaseDir.z,
+                             m_xmf3BurstBaseDir.y,
+                            -sn * m_xmf3BurstBaseDir.x + cs * m_xmf3BurstBaseDir.z };
+
+            if (CRoom* pRoom = pEnemy->GetRoom())
+            {
+                if (Scene* pScene = pRoom->GetScene())
+                {
+                    // VFX (시각용 Boss_CrescentBolt_{element})
+                    if (auto* pVFX = pScene->GetVFXManager())
+                    {
+                        const char* elemName = "Fire";
+                        switch (m_desc.element)
+                        {
+                        case ElementType::Fire:  elemName = "Fire";  break;
+                        case ElementType::Water: elemName = "Water"; break;
+                        case ElementType::Wind:  elemName = "Wind";  break;
+                        case ElementType::Earth: elemName = "Earth"; break;
+                        default: break;
+                        }
+                        std::string boltName = std::string("Boss_CrescentBolt_") + elemName;
+                        pVFX->Spawn(boltName, m_xmf3BurstStartPos, dir, 0u, false);
+                    }
+                    // 실제 피격 — ProjectileManager
+                    if (auto* pProj = pScene->GetProjectileManager())
+                    {
+                        XMFLOAT3 fireTarget = {
+                            m_xmf3BurstStartPos.x + dir.x * 60.0f,
+                            m_xmf3BurstStartPos.y,
+                            m_xmf3BurstStartPos.z + dir.z * 60.0f
+                        };
+                        pProj->SpawnProjectile(
+                            m_xmf3BurstStartPos,
+                            fireTarget,
+                            m_fBurstDamage,
+                            34.0f,
+                            5.5f,
+                            0.0f,
+                            m_desc.element,
+                            pEnemy->GetOwner(),
+                            false,
+                            1.0f
+                        );
+                    }
+                }
+            }
+
+            m_nBurstShotIndex += 1;
+            m_nBurstRemaining -= 1;
+            m_fBurstTimer = m_desc.projectileBurstInterval;
+        }
+    }
+
     m_ePrevPhase = curPhase;
     m_nPrevHit   = curHit;
 }
@@ -395,4 +526,8 @@ void DarkLordSigilSlash::Reset()
     m_nPrevHit         = -1;
     m_bInitialized     = false;
     m_fImpactCountdown = -1.0f;
+    m_nBurstRemaining  = 0;
+    m_nBurstShotIndex  = 0;
+    m_fBurstTimer      = 0.0f;
+    m_fBurstDamage     = 0.0f;
 }

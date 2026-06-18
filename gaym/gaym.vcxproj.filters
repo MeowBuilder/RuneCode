@@ -267,6 +267,12 @@
     <ClInclude Include="DarkLordSigilSlash.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="DarkLordSigilField.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="DarkLordSwordRain.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
     <ClInclude Include="DropItemComponent.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -741,6 +747,12 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="DarkLordSigilSlash.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="DarkLordSigilField.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="DarkLordSwordRain.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="DropItemComponent.cpp">

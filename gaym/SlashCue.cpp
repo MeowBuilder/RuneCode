@@ -150,17 +150,21 @@ void SlashCue::Impact(const XMFLOAT3& impactPos,
             const char* impactFx = ImpactEffectName(m_desc.element);
             pVFX->Spawn(impactFx, groundPos, dir, 0u, false);
 
-            // 잔류 데칼 — 같은 위치, 더 긴 lifetime (Cone emitter)
-            std::string residueName = "Boss_GroundResidue_";
-            switch (m_desc.element)
+            // 잔류 데칼 — desc.useGroundResidue 가 true 일 때만. Light/Projectile 등
+            // 가벼운 톤은 잔재 안 남김 (Day 6 +: 검기 발사 후 작은 잔재 누적 방지).
+            if (m_desc.useGroundResidue)
             {
-            case ElementType::Fire:  residueName += "Fire";  break;
-            case ElementType::Water: residueName += "Water"; break;
-            case ElementType::Wind:  residueName += "Wind";  break;
-            case ElementType::Earth: residueName += "Earth"; break;
-            default:                 residueName += "Fire";  break;
+                std::string residueName = "Boss_GroundResidue_";
+                switch (m_desc.element)
+                {
+                case ElementType::Fire:  residueName += "Fire";  break;
+                case ElementType::Water: residueName += "Water"; break;
+                case ElementType::Wind:  residueName += "Wind";  break;
+                case ElementType::Earth: residueName += "Earth"; break;
+                default:                 residueName += "Fire";  break;
+                }
+                pVFX->Spawn(residueName, groundPos, dir, 0u, false);
             }
-            pVFX->Spawn(residueName, groundPos, dir, 0u, false);
         }
     }
 

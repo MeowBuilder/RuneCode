@@ -49,4 +49,14 @@ private:
     //   <=0 인 동안 Impact 미발사. Hit entry 에서 m_fImpactDelay 로 초기화.
     float    m_fImpactCountdown = -1.0f;
     static constexpr float kImpactDelay = 0.04f;  // 발도 직후 ~40ms 뒤 진짜 임팩트
+
+    // ── Projectile burst (검기 폭격) — desc.projectileBurstCount > 1 일 때만 활성 ──
+    //   Hit entry 시 spawn 위치/방향을 lock 하고 interval 마다 1발씩 발사.
+    //   index → offset 매핑: (idx - (N-1)/2) * spreadDeg (중앙 0 기준 좌우 spread).
+    int               m_nBurstRemaining   = 0;
+    int               m_nBurstShotIndex   = 0;     // 0-based; 0 = 첫 발 (중앙)
+    float             m_fBurstTimer       = 0.0f;
+    DirectX::XMFLOAT3 m_xmf3BurstStartPos = { 0,0,0 };
+    DirectX::XMFLOAT3 m_xmf3BurstBaseDir  = { 0,0,1 };
+    float             m_fBurstDamage      = 0.0f;
 };

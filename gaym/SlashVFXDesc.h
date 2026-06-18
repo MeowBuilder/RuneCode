@@ -34,6 +34,7 @@ enum class BladeAimMode : uint8_t
 //   CrossSigil    : 4방향(N/E/S/W) 에 4원소 동시 발사 — 시그니처 (P1→P2 전환).
 //   Phantom       : 보스 주변 3~5곳에 분신처럼 시간차 spawn — P3/P4 시그니처.
 //   FinalJudgment : Windup 동안 십자 라인 사전 시각화 → Hit 에 4원소 폭발 — P4 마무리.
+//   TwinCleave    : 정면 ±separation° 두 방향 동시 cone — 회피 라인 압박 (P2 Wind 톤).
 enum class SlashPresentation : uint8_t
 {
     Light,
@@ -43,6 +44,7 @@ enum class SlashPresentation : uint8_t
     CrossSigil,
     Phantom,
     FinalJudgment,
+    TwinCleave,
 };
 
 struct SlashVFXDesc
@@ -58,6 +60,15 @@ struct SlashVFXDesc
     float bladeForwardMultiplier = 1.0f;    // Projectile: spawn 거리 배수
     float bladeScaleMultiplier   = 1.0f;    // Massive: emitter 규모 (현재 후처리 X — VFXManager 호출 후 size override 미지원이라 일단 보스 forward Y 만 조정)
     bool  preferHeavyBlade       = false;   // Massive: HitTpl 의 Quick → Heavy 자동 승격
+
+    // Projectile burst — Projectile presentation 일 때만 의미.
+    //   burstCount > 1 이면 한 hit 에서 N발 연속 발사. burstInterval(초) 간격, ±burstSpread(도) 좌우 spread.
+    int   projectileBurstCount    = 1;
+    float projectileBurstInterval = 0.12f;
+    float projectileBurstSpreadDeg = 5.0f;
+
+    // TwinCleave — 정면 ±twinSeparation° 두 방향 동시 cone 데미지 + VFX.
+    float twinSeparationDeg      = 35.0f;
 
     // L1 Charge — 검 본에 원소 오라가 응축되는 시간 (0=비활성)
     float chargeDuration       = 0.6f;

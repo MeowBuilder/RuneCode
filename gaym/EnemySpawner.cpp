@@ -24,6 +24,8 @@
 #include "JumpSlamAttackBehavior.h"
 #include "ComboAttackBehavior.h"
 #include "DarkLordSigilSlash.h"
+#include "DarkLordSigilField.h"
+#include "DarkLordSwordRain.h"
 #include "MegaBreathAttackBehavior.h"
 #include "RockFallAttackBehavior.h"
 #include "RockBarrageAttackBehavior.h"
@@ -1213,12 +1215,18 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
             };
             // Special: 십자 균열 — 광장 전체 가로/세로 4 가닥 솟구침
             // [Day 3] P0 Special — Earth Ultimate Massive (시그니처: 거대 지진 베기)
+            // [Day 6] P0 Special — SigilField (지면 인장 지연 폭발) 35% 추가.
             p.m_fnSpecialAttack = []() -> std::unique_ptr<IAttackBehavior> {
                 int roll = rand() % 100;
+                // 35% : 검역 SigilField — 3개 인장 (플레이어 발치 1 + 보스 주변 2)
+                if (roll < 35)
+                    return std::make_unique<DarkLordSigilField>(
+                        ElementType::Earth, 75.0f /*dmg*/, 7.0f /*radius*/,
+                        1.30f /*delay*/, 3 /*count*/, 14.0f /*spread*/);
                 CHit hit;
                 SlashPresentation style = SlashPresentation::Massive;
                 SlashPowerLevel  lvl   = SlashPowerLevel::Ultimate;
-                if (roll < 60)      { hit = MakeHeavySlam(ElementType::Earth);  }
+                if (roll < 70)      { hit = MakeHeavySlam(ElementType::Earth);  }
                 else                { hit = MakeSpinCleave(ElementType::Earth); }
                 SlashVFXDesc desc = SlashVFXDesc::Preset(ElementType::Earth, lvl);
                 desc.ApplyPresentation(style);
@@ -1258,14 +1266,28 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
             };
             // Special: 풀맵 충격파 링 (36 반경)
             // [Day 3] P1 Special — Water Ultimate Massive + 가끔 CrossSigil
+            // [Day 6] P1 Special — 검기 폭격 Barrage (Projectile burst 5발) 30% 추가.
             p.m_fnSpecialAttack = []() -> std::unique_ptr<IAttackBehavior> {
                 int roll = rand() % 100;
                 CHit hit;
                 SlashPresentation style = SlashPresentation::Massive;
                 SlashPowerLevel  lvl   = SlashPowerLevel::Ultimate;
                 ElementType element = ElementType::Water;
-                if (roll < 20)      { hit = MakeHeavySlam(ElementType::Fire); style = SlashPresentation::CrossSigil; element = ElementType::Fire; }  // 4원소 동시
-                else if (roll < 60) { hit = MakeSpinCleave(ElementType::Water); }
+                if (roll < 30)
+                {
+                    // 검기 폭격 — Projectile 5연발 spread ±5°.
+                    hit = MakeLongReach(ElementType::Water);
+                    style = SlashPresentation::Projectile;
+                    lvl   = SlashPowerLevel::Signature;
+                    SlashVFXDesc desc = SlashVFXDesc::Preset(ElementType::Water, lvl);
+                    desc.ApplyPresentation(style);
+                    desc.projectileBurstCount     = 5;
+                    desc.projectileBurstInterval  = 0.14f;   // 0.12 → 0.14 (시간 간격 ↑)
+                    desc.projectileBurstSpreadDeg = 12.0f;   // 6 → 12 (좌우 부채꼴 ↑)
+                    return std::make_unique<DarkLordSigilSlash>(desc, std::vector<CHit>{ hit });
+                }
+                if (roll < 45)      { hit = MakeHeavySlam(ElementType::Fire); style = SlashPresentation::CrossSigil; element = ElementType::Fire; }  // 4원소 동시
+                else if (roll < 75) { hit = MakeSpinCleave(ElementType::Water); }
                 else                { hit = MakeHeavySlam(ElementType::Water); }
                 SlashVFXDesc desc = SlashVFXDesc::Preset(element, lvl);
                 desc.ApplyPresentation(style);
@@ -1305,14 +1327,26 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
             };
             // Special: GaleSlash X자 진공파 — length 36, 4면 동시 발사
             // [Day 3] P2 Special — Wind Ultimate Projectile + CrossSigil
+            // [Day 6] P2 Special — 십자검광 TwinCleave (±35° 동시 두 cone) 35% 추가.
             p.m_fnSpecialAttack = []() -> std::unique_ptr<IAttackBehavior> {
                 int roll = rand() % 100;
                 CHit hit;
                 SlashPresentation style = SlashPresentation::Projectile;
                 SlashPowerLevel  lvl   = SlashPowerLevel::Ultimate;
                 ElementType element = ElementType::Wind;
-                if (roll < 35)      { hit = MakeHeavySlam(ElementType::Fire); style = SlashPresentation::CrossSigil; element = ElementType::Fire; }
-                else if (roll < 70) { hit = MakeLongReach(ElementType::Wind); }
+                if (roll < 35)
+                {
+                    // 십자검광 — 정면 ±35° 두 cone 동시.
+                    hit = MakeSideCleave(ElementType::Wind);
+                    style = SlashPresentation::TwinCleave;
+                    lvl   = SlashPowerLevel::Signature;
+                    SlashVFXDesc desc = SlashVFXDesc::Preset(ElementType::Wind, lvl);
+                    desc.ApplyPresentation(style);
+                    desc.twinSeparationDeg = 35.0f;
+                    return std::make_unique<DarkLordSigilSlash>(desc, std::vector<CHit>{ hit });
+                }
+                if (roll < 60)      { hit = MakeHeavySlam(ElementType::Fire); style = SlashPresentation::CrossSigil; element = ElementType::Fire; }
+                else if (roll < 85) { hit = MakeLongReach(ElementType::Wind); }
                 else                { hit = MakeSpinCleave(ElementType::Wind); style = SlashPresentation::Massive; }
                 SlashVFXDesc desc = SlashVFXDesc::Preset(element, lvl);
                 desc.ApplyPresentation(style);
@@ -1352,15 +1386,21 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
             };
             // Special: 메테오 폭격 — 8발, 20~55 반경 사이 무작위 착탄
             // [Day 3] P3 Special — Fire Ultimate Massive + CrossSigil + FinalJudgment
+            // [Day 6] P3 Special — 검의 비 SwordRain (광장 7곳 동시 낙하 AoE) 35% 추가.
             p.m_fnSpecialAttack = []() -> std::unique_ptr<IAttackBehavior> {
                 int roll = rand() % 100;
+                if (roll < 35)
+                    return std::make_unique<DarkLordSwordRain>(
+                        ElementType::Fire, 7 /*count*/, 60.0f /*dmg*/,
+                        6.5f /*radius*/, 9.0f /*min*/, 32.0f /*max*/,
+                        1.7f /*windup*/, 1.5f /*recovery*/);
                 CHit hit;
                 SlashPresentation style = SlashPresentation::Massive;
                 SlashPowerLevel  lvl   = SlashPowerLevel::Ultimate;
                 ElementType element = ElementType::Fire;
-                if (roll < 35)      { hit = MakeHeavySlam(ElementType::Fire); style = SlashPresentation::CrossSigil; }
-                else if (roll < 55) { hit = MakeHeavySlam(ElementType::Fire); style = SlashPresentation::FinalJudgment; }
-                else if (roll < 80) { hit = MakeHeavySlam(ElementType::Fire); }
+                if (roll < 55)      { hit = MakeHeavySlam(ElementType::Fire); style = SlashPresentation::CrossSigil; }
+                else if (roll < 70) { hit = MakeHeavySlam(ElementType::Fire); style = SlashPresentation::FinalJudgment; }
+                else if (roll < 88) { hit = MakeHeavySlam(ElementType::Fire); }
                 else                { hit = MakeSpinCleave(ElementType::Fire); }
                 SlashVFXDesc desc = SlashVFXDesc::Preset(element, lvl);
                 desc.ApplyPresentation(style);
@@ -1422,33 +1462,70 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
             };
             // Special: 시그니처 풀맵 패턴 5종 중 랜덤
             // [Day 3] P4 Special — 시그니처 잔치 (CrossSigil + FinalJudgment 위주)
+            // [Day 6] P4 Special — 신규 4종 잔치 합류 (SigilField/Barrage/TwinCleave/SwordRain).
+            //   잔치 톤이라 신규 패턴 비중 ~40% 로 자주 등장.
             p.m_fnSpecialAttack = []() -> std::unique_ptr<IAttackBehavior> {
                 int roll = rand() % 100;
+
+                // 4원소 순환 헬퍼.
+                static const ElementType kRotate[4] = {
+                    ElementType::Earth, ElementType::Water,
+                    ElementType::Wind,  ElementType::Fire };
+                ElementType pickElem = kRotate[rand() % 4];
+
+                if (roll < 10)
+                {
+                    // 검역 SigilField — 4방향 인장 (잔치 톤).
+                    return std::make_unique<DarkLordSigilField>(
+                        pickElem, 80.0f, 7.5f, 1.20f, 4, 18.0f);
+                }
+                if (roll < 20)
+                {
+                    // 검의 비 SwordRain — 10발 광역.
+                    return std::make_unique<DarkLordSwordRain>(
+                        pickElem, 10, 60.0f, 7.0f, 8.0f, 38.0f, 1.5f, 1.4f);
+                }
+                if (roll < 30)
+                {
+                    // 검기 폭격 Barrage — 6발 연속.
+                    CHit hit = MakeLongReach(pickElem);
+                    SlashVFXDesc desc = SlashVFXDesc::Preset(pickElem, SlashPowerLevel::Signature);
+                    desc.ApplyPresentation(SlashPresentation::Projectile);
+                    desc.projectileBurstCount     = 6;
+                    desc.projectileBurstInterval  = 0.13f;   // 0.10 → 0.13
+                    desc.projectileBurstSpreadDeg = 14.0f;   // 7 → 14 (잔치 톤 더 화려하게)
+                    return std::make_unique<DarkLordSigilSlash>(desc, std::vector<CHit>{ hit });
+                }
+                if (roll < 40)
+                {
+                    // 십자검광 TwinCleave — Final 페이즈는 좀 더 좁은 분리각.
+                    CHit hit = MakeSideCleave(pickElem);
+                    SlashVFXDesc desc = SlashVFXDesc::Preset(pickElem, SlashPowerLevel::Signature);
+                    desc.ApplyPresentation(SlashPresentation::TwinCleave);
+                    desc.twinSeparationDeg = 30.0f;
+                    return std::make_unique<DarkLordSigilSlash>(desc, std::vector<CHit>{ hit });
+                }
+
+                // 기존: CrossSigil / FinalJudgment / 4원소 Massive.
                 CHit hit;
                 SlashPresentation style;
-                SlashPowerLevel  lvl   = SlashPowerLevel::Ultimate;
+                SlashPowerLevel  lvl    = SlashPowerLevel::Ultimate;
                 ElementType element = ElementType::Fire;
-                if (roll < 45)
+                if (roll < 65)
                 {
-                    // CrossSigil — 4방향 4원소
                     hit   = MakeHeavySlam(ElementType::Fire);
                     style = SlashPresentation::CrossSigil;
                 }
-                else if (roll < 75)
+                else if (roll < 85)
                 {
-                    // Final Judgment — 8방향 4원소 폭발
                     hit   = MakeHeavySlam(ElementType::Fire);
                     style = SlashPresentation::FinalJudgment;
                 }
                 else
                 {
-                    // 4원소 순환 Massive
-                    static const ElementType kRotate[4] = {
-                        ElementType::Earth, ElementType::Water,
-                        ElementType::Wind,  ElementType::Fire };
-                    element = kRotate[rand() % 4];
-                    hit   = MakeHeavySlam(element);
-                    style = SlashPresentation::Massive;
+                    element = pickElem;
+                    hit     = MakeHeavySlam(element);
+                    style   = SlashPresentation::Massive;
                 }
                 SlashVFXDesc desc = SlashVFXDesc::Preset(element, lvl);
                 desc.ApplyPresentation(style);
