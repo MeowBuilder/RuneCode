@@ -96,6 +96,15 @@ public:
     // 투사체 소멸 시 이펙트 정지
     void StopEffect(int id);
 
+    // ── 보스 SPH 브레스 전용: 제트 분사 + 원기둥 충돌 ──────────────────────────
+    // 슬롯의 SPH 시스템에 제트(분사/재순환)와 방 경계를 설정.
+    void SetEffectJet(int id, const XMFLOAT3& mouth, const XMFLOAT3& dir,
+                      float speed, float length, float spawnRadius, float spread,
+                      float lifetime, const XMFLOAT3& roomMin, const XMFLOAT3& roomMax,
+                      bool converge = false);
+    // 수직 원기둥 장애물 (xy=중심XZ, z=반경). 최대 4개.
+    void SetEffectObstacles(int id, const XMFLOAT4* obstacles, int count);
+
     // 피격 시 파티클을 충돌 위치로 수렴시킨 뒤 소멸
     void ImpactEffect(int id, const XMFLOAT3& impactPos);
 

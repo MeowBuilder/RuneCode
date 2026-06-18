@@ -243,9 +243,8 @@ void MegaBreathAttackBehavior::Update(float dt, EnemyComponent* pEnemy)
                     pCamera->StartShake(2.5f, m_fBreathDuration);  // 거대 파도 강렬한 진동
                 }
             }
-            // (2) 집결된 charge 파티클을 입 위치에서 방사형 폭발 → shockwave 연출.
-            //     StopEffect 대신 ExplodeEffect 로 모인 파티클이 흩어지며 자연 소멸.
-            TriggerMouthShockwave();
+            // 수렴 charge VFX 정지 후 메인 분사 시작 (입으로 모였다가 → 쫙 분사)
+            DestroyChargeVFX();
             SpawnFireWave(pEnemy);
 
         }
@@ -907,27 +906,36 @@ void MegaBreathAttackBehavior::DestroyCoverObjects()
 
 bool MegaBreathAttackBehavior::IsPlayerBehindCover(const XMFLOAT3& breathOrigin, const XMFLOAT3& playerPos)
 {
-    // 브레스 원점에서 플레이어까지의 방향
-    XMFLOAT3 dir;
-    dir.x = playerPos.x - breathOrigin.x;
-    dir.y = playerPos.y - breathOrigin.y;
-    dir.z = playerPos.z - breathOrigin.z;
+    UNREFERENCED_PARAMETER(breathOrigin);
+    // 평행 커튼 그림자 판정 — 불길이 진행 방향(jetDir)으로 평행하게 흐르므로
+    //   안전지대는 각 기둥의 "진행방향 하류" 그림자뿐. 유체 원기둥과 동일 반경.
+    //   기둥은 수직이라 높이 무시 (XZ 평면).
+    float fx = m_xmf3BeamDirection.x;
+    float fz = m_xmf3BeamDirection.z;
+    float flen = sqrtf(fx * fx + fz * fz);
+    if (flen < 0.001f) return false;
+    fx /= flen; fz /= flen;
 
-    float dist = sqrtf(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
-    if (dist < 0.001f) return false;
+    // 유체 원기둥(SpawnFireWave)과 동일 반경 — 살짝 여유(+0.5)
+    const float kCoverRadius = 4.0f + 0.5f;
 
-    // 정규화
-    dir.x /= dist;
-    dir.y /= dist;
-    dir.z /= dist;
-
-    // 모든 장애물에 대해 Ray-AABB 교차 검사
-    for (const BoundingBox& obstacle : m_vObstacles)
+    for (GameObject* pCover : m_vCoverObjects)
     {
-        if (RayIntersectsAABB(breathOrigin, dir, obstacle, dist))
-        {
-            return true;  // 엄폐 성공
-        }
+        if (!pCover) continue;
+        TransformComponent* pT = pCover->GetTransform();
+        if (!pT) continue;
+        XMFLOAT3 c = pT->GetPosition();
+
+        // 기둥 → 플레이어 벡터를 진행축으로 분해
+        float vx = playerPos.x - c.x;
+        float vz = playerPos.z - c.z;
+        float alongFlow = vx * fx + vz * fz;          // >0: 플레이어가 기둥 하류(그림자 쪽)
+        if (alongFlow <= 0.0f) continue;              // 기둥이 상류가 아님 → 그림자 없음
+
+        float perpX = vx - fx * alongFlow;
+        float perpZ = vz - fz * alongFlow;
+        float perp = sqrtf(perpX * perpX + perpZ * perpZ);
+        if (perp < kCoverRadius) return true;         // 기둥 진행방향 그림자 안 → 안전
     }
 
     return false;  // 노출됨
@@ -1013,46 +1021,33 @@ void MegaBreathAttackBehavior::ApplyBreathDamage(EnemyComponent* pEnemy)
     XMFLOAT3 playerPos = pTargetTransform->GetPosition();
     playerPos.y += 1.0f;
 
-    // ── 3-Fan Beam 판정: 메인 + 좌우 15° 빔 중 하나라도 걸리면 히트 ──────────
+    // ── 평행 커튼 판정: 진행축으로 쓸고 지나가는 불의 장막 ───────────────────
+    //   히트 = (커튼이 도달한 진행축 구간) AND (커튼 반폭 안) AND (기둥 그림자 아님)
     if (m_fBeamLength <= 0.0f) return;
+
+    float fx = m_xmf3BeamDirection.x;
+    float fz = m_xmf3BeamDirection.z;
+    float flen = sqrtf(fx * fx + fz * fz);
+    if (flen < 0.001f) return;
+    fx /= flen; fz /= flen;
 
     float rx = playerPos.x - m_xmf3BeamOrigin.x;
     float rz = playerPos.z - m_xmf3BeamOrigin.z;
-    float vertDist = fabsf(playerPos.y - m_xmf3BeamOrigin.y);
 
-    auto CheckConeHit = [&](float dirX, float dirZ, float endR) -> bool
-    {
-        float alongDir = rx * dirX + rz * dirZ;
-        if (alongDir < 0.0f || alongDir > m_fBeamLength) return false;
-        float perpX = rx - dirX * alongDir;
-        float perpZ = rz - dirZ * alongDir;
-        float horizDist = sqrtf(perpX * perpX + perpZ * perpZ);
-        float tCone = alongDir / m_fBeamLength;
-        float coneR = endR * tCone;
-        if (horizDist > coneR) return false;
-        if (vertDist > coneR * 0.5f + 2.0f) return false;
-        return true;
-    };
+    float along = rx * fx + rz * fz;             // 진행축 좌표 (0=시작 라인)
+    float perpX = rx - fx * along;
+    float perpZ = rz - fz * along;
+    float lateral = sqrtf(perpX * perpX + perpZ * perpZ);
 
-    // 5-fan 판정 — SpawnFireWave 와 동일 각도/spread
-    const float kFanAnglesDeg[5] = { -12.0f, -6.0f, 0.0f, 6.0f, 12.0f };
-    const float kSpreadMults[5]  = {  0.85f, 0.95f, 1.00f, 0.95f, 0.85f };
+    // 커튼 선두 위치 = 속도 × 경과시간 (+ 약간 여유). m_fTimer = Breath 경과.
+    float front = m_fJetSpeed * m_fTimer + 6.0f;
 
-    bool bHit = false;
-    for (int i = 0; i < 5 && !bHit; ++i)
-    {
-        float a = XMConvertToRadians(kFanAnglesDeg[i]);
-        float cs = cosf(a), sn = sinf(a);
-        float dirX = m_xmf3BeamDirection.x * cs - m_xmf3BeamDirection.z * sn;
-        float dirZ = m_xmf3BeamDirection.x * sn + m_xmf3BeamDirection.z * cs;
-        if (CheckConeHit(dirX, dirZ, m_fBeamEndRadius * kSpreadMults[i]))
-            bHit = true;
-    }
-    if (!bHit) return;
+    if (along < -4.0f || along > m_fBeamLength) return; // 진행축 범위 밖 (뒤/끝 너머)
+    if (along > front) return;                          // 아직 불길이 안 닿음
+    if (lateral > m_fBeamEndRadius + 2.0f) return;      // 커튼 폭 밖
 
-    // 엄폐 판정 — 입에서 플레이어 방향 ray 가 장애물에 막히면 safe
-    XMFLOAT3 mouthForRay = m_xmf3BeamOrigin;
-    if (IsPlayerBehindCover(mouthForRay, playerPos))
+    // 엄폐 판정 — 기둥 진행방향 그림자 안이면 safe
+    if (IsPlayerBehindCover(m_xmf3BeamOrigin, playerPos))
     {
         return;
     }
@@ -1100,89 +1095,120 @@ void MegaBreathAttackBehavior::SpawnFireWave(EnemyComponent* pEnemy)
 
     m_xmf3BeamDirection = { sinf(yawRad), 0.0f, cosf(yawRad) };
 
-    // 빔 길이: 보스 입 → 방 반대편 경계까지
-    //   방 AABB 내 정확한 경계 거리 계산 (2D slab method 생략 — 간단히 대각선 전체 거리 상한 사용)
+    // 진행축 사거리(입→맵 반대편) + 커튼 반폭. 화염은 맵 전체를 균일하게 덮고
+    //   안전지대는 기둥 진행방향 그림자뿐 (평행 커튼 모델).
     float diagX = rb.Extents.x * 2.0f;
     float diagZ = rb.Extents.z * 2.0f;
-    m_fBeamLength   = sqrtf(diagX * diagX + diagZ * diagZ) * 0.9f;
-    // cone 끝 반경 — 방 반폭의 1.4배로 복원 (1.8은 너무 과함)
+    m_fBeamLength   = sqrtf(diagX * diagX + diagZ * diagZ) * 1.15f;
+    // 커튼 반폭 — 진행 방향에 수직인 방 반폭의 0.95배 (벽 안쪽 → 벽 충돌 squirt 방지)
     float perpExtent = (fabsf(m_xmf3BeamDirection.x) > 0.5f) ? rb.Extents.z : rb.Extents.x;
-    m_fBeamEndRadius = perpExtent * 1.4f;
+    m_fBeamEndRadius = perpExtent * 0.95f;
 
-    // ── Beam 모드 EffectDef — 입에서 끝까지 연속 분사 ───────────────────────
+    // ════════════════════════════════════════════════════════════════════════
+    //  진짜 SPH 화염 홍수: 입에서 분사된 유체가 바닥을 타고 흐르며,
+    //  엄폐 기둥(수직 원기둥)에 부딪혀 갈라지고 옆으로 퍼진다.
+    //  - 단일 SPH_Gravity 이미터 + GPU 제트 분사/재순환
+    //  - 컴퓨트 셰이더가 원기둥 충돌·바닥·방 경계를 처리 (FluidParticleSystem)
+    // ════════════════════════════════════════════════════════════════════════
+    for (int i = 0; i < NUM_BEAMS; ++i) m_nFluidVFXIds[i] = -1;
+
+    // 바닥 높이 = 실제 지면(보스 발치). 방 AABB 바닥(rb.Center.y-Extents.y)은 지면보다
+    //   훨씬 아래라 그걸 floor로 쓰면 화염이 지면 밑으로 가라앉아 안 보임 → bossPos.y 사용.
+    const float floorY = bossPos.y;
+    const float inset  = 2.0f;
+    XMFLOAT3 roomMin = { rb.Center.x - rb.Extents.x + inset, floorY,
+                         rb.Center.z - rb.Extents.z + inset };
+    XMFLOAT3 roomMax = { rb.Center.x + rb.Extents.x - inset, floorY + 30.0f,
+                         rb.Center.z + rb.Extents.z - inset };
+
+    // 분사 파라미터 — 맵 전체를 덮도록 부채꼴로 넓게, 빠르고 멀리 분사
+    //   제트 사거리는 방 대각선 전체(여유 1.15배)로 잡아 반대편 벽·구석까지 도달.
+    const float roomDiag    = sqrtf((rb.Extents.x * 2.0f) * (rb.Extents.x * 2.0f)
+                                  + (rb.Extents.z * 2.0f) * (rb.Extents.z * 2.0f));
+    const float jetLength   = roomDiag * 1.15f;                           // 축방향 사거리 (구석까지)
+    const float jetSpeed    = jetLength / (m_fBreathDuration * 0.26f);    // 축방향 도달 속도 (빠르게)
+    const float jetLifetime = m_fBreathDuration * 0.55f;                  // 짧은 수명 → 라인에서 계속 재방출
+    const float jetVertJit  = 2.0f;              // 재방출 시 높이 산포 (작게 → 낮게 깔리게)
+    const float curtainHalfW = m_fBeamEndRadius; // 커튼 반폭 = 맵 폭 전체
+    m_fJetSpeed             = jetSpeed;           // 데미지 front 계산용 저장
+
+    // ── 단일 SPH_Gravity 화염 홍수 EffectDef ──
     EffectDef def;
     def.name    = "Dragon_MegaBreath";
     def.element = ElementType::Fire;
 
     EffectLayer layer;
-    layer.type      = EmitterType::SPH_Beam;
-    layer.element   = ElementType::Fire;
-    // ColorWeightedRT 아키텍처: core ≈ edge 로 동색상 유지 (구슬 경계 방지)
-    layer.coreColor = { 1.0f, 0.45f, 0.1f, 1.0f };
-    layer.edgeColor = { 0.95f, 0.35f, 0.08f, 0.95f };
-    layer.useSSF    = true;
+    layer.type       = EmitterType::SPH_Gravity;
+    layer.element    = ElementType::Fire;
+    layer.coreColor  = { 1.0f, 0.5f, 0.12f, 1.0f };
+    layer.edgeColor  = { 0.9f, 0.22f, 0.04f, 0.9f };
+    layer.overrideColors = true;
+    layer.useSSF     = true;
 
     SPHEmitterParams& s = layer.sph;
-    s.particleCount    = 6000;
-    s.spawnRadius      = 3.0f;
-    s.particleSize     = 1.8f;
+    s.particleCount    = 12288;         // 최대치 — 입자 구분 안 되게 조밀하게
+    s.spawnRadius      = curtainHalfW;  // 초기 스폰 폭 (SetSPHJet에서 커튼으로 재배치)
+    s.particleSize     = 1.7f;          // 수가 2배라 약간 작게도 빈틈 없이 연속 화염
+    s.maxParticleSpeed = jetSpeed * 1.8f;
+    // 화염은 점성 낮고 잘 흩어지게 — 흐르는 용암 느낌. 응집/점성 낮춰 기둥 옆 정체 완화.
+    s.overridePhysics     = true;
+    s.sphStiffness        = 45.0f;
+    s.sphNearPressureMult = 1.2f;       // 근접 반발 ↓ → 기둥 옆에 빽빽이 고이지 않게
+    s.sphRestDensity      = 4.0f;       // 자기 응집 ↓ → 정지된 덩어리로 안 뭉침
+    s.sphViscosity        = 0.05f;      // 점성 ↓ → 더 빠르게 흘러감 (느린 흐름 완화)
+    s.sphSmoothingRadius  = 2.0f;
 
     VFXPhase p;
-    p.startTime             = 0.f;
-    p.duration              = m_fBreathDuration + 0.5f;
-    p.motionMode            = ParticleMotionMode::Beam;
-    p.beamDesc.speedMin     = m_fBeamLength / (m_fBreathDuration * 0.7f);
-    p.beamDesc.speedMax     = p.beamDesc.speedMin * 1.4f;
-    p.beamDesc.spreadRadius = m_fBeamEndRadius;
-    p.beamDesc.swirlExpand  = true;
-    p.beamDesc.swirlSpeed   = 0.6f;
-    p.beamDesc.beamLength   = m_fBeamLength;
-    p.beamDesc.swirlFadeEnd = 0.f;
-    p.beamDesc.enableFlow   = true;
-    p.beamDesc.verticalScale = 0.18f;
+    p.startTime              = 0.f;
+    p.duration               = m_fBreathDuration + 0.5f;
+    p.motionMode             = ParticleMotionMode::Gravity;
+    p.gravityDesc.gravity    = { 0.f, -14.0f, 0.f };  // 중력 ↑ → 공중에 흩어지지 않고 바닥에 깔린 조밀한 홍수
+    p.gravityDesc.initialSpeedMin = 0.f;              // 초기 방사 폭발 비활성 (제트가 속도 부여)
+    p.gravityDesc.initialSpeedMax = 0.f;
+    p.globalGravityStrength  = 0.f;                   // 중복 중력 방지 (gravityDesc만 사용)
+    p.boxDesc.active         = false;                 // 경계는 제트 방 클램프로 처리
     s.phases.push_back(p);
-
-    s.maxParticleSpeed = p.beamDesc.speedMax * 1.2f;
 
     def.layers.push_back(std::move(layer));
 
-    // 5개 빔을 팬-아웃 스폰 — -12°, -6°, 0°, +6°, +12°
-    const float kFanAnglesDeg[NUM_BEAMS]   = { -12.0f, -6.0f, 0.0f, 6.0f, 12.0f };
-    const int   kParticleCounts[NUM_BEAMS] = { 2800, 3600, 4400, 3600, 2800 };
-    const float kSpreadMults[NUM_BEAMS]    = { 0.85f, 0.95f, 1.00f, 0.95f, 0.85f };
+    int id = m_pFluidVFXManager->SpawnEffectDef(m_xmf3BeamOrigin, m_xmf3BeamDirection, def, true);
+    m_nFluidVFXIds[0] = id;
+    if (id < 0) return;
 
-    for (int i = 0; i < NUM_BEAMS; ++i)
+    // 제트 분사/재순환 + 방 경계 설정
+    // spawnRadius 인자 = 높이 산포(jetVertJit), spread 인자 = 커튼 반폭(curtainHalfW)
+    //   분사 높이는 입(비주얼)보다 낮은 바닥+4u에서 → 공중에 안 뜨고 바닥에 깔린 홍수.
+    XMFLOAT3 jetOrigin = m_xmf3BeamOrigin;
+    jetOrigin.y = floorY + 4.0f;
+    m_pFluidVFXManager->SetEffectJet(
+        id, jetOrigin, m_xmf3BeamDirection,
+        jetSpeed, jetLength, jetVertJit, curtainHalfW, jetLifetime,
+        roomMin, roomMax);
+
+    // 엄폐 기둥을 수직 원기둥 장애물로 등록 — 유체가 부딪혀 갈라지고 옆으로 퍼짐.
+    //   콜라이더(반경 1.5)보다 크게 잡아 거대 모델 비주얼을 감싸며 명확히 갈라지게.
+    XMFLOAT4 obstacles[4];
+    int oc = 0;
+    for (GameObject* pCover : m_vCoverObjects)
     {
-        float ang = XMConvertToRadians(kFanAnglesDeg[i]);
-        float cs = cosf(ang), sn = sinf(ang);
-        XMFLOAT3 dir;
-        dir.x = m_xmf3BeamDirection.x * cs - m_xmf3BeamDirection.z * sn;
-        dir.y = 0.f;
-        dir.z = m_xmf3BeamDirection.x * sn + m_xmf3BeamDirection.z * cs;
-
-        EffectDef beamDef = def;
-        EffectLayer& bl   = beamDef.layers[0];
-        bl.sph.particleCount               = kParticleCounts[i];
-        bl.sph.spawnRadius                 = (i == NUM_BEAMS / 2) ? 3.0f : 2.5f;
-        bl.sph.phases[0].beamDesc.spreadRadius = m_fBeamEndRadius * kSpreadMults[i];
-
-        m_nFluidVFXIds[i] = m_pFluidVFXManager->SpawnEffectDef(
-            m_xmf3BeamOrigin, dir, beamDef, true);
+        if (oc >= 4) break;
+        if (!pCover) continue;
+        TransformComponent* pCT = pCover->GetTransform();
+        if (!pCT) continue;
+        XMFLOAT3 cp = pCT->GetPosition();
+        obstacles[oc] = { cp.x, cp.z, 3.0f, 0.0f };  // xy=중심XZ, z=반경 (후류 dead zone 축소)
+        ++oc;
     }
+    if (oc > 0) m_pFluidVFXManager->SetEffectObstacles(id, obstacles, oc);
 
 }
 
 void MegaBreathAttackBehavior::UpdateFireWave(float dt, EnemyComponent* pEnemy)
 {
+    UNREFERENCED_PARAMETER(dt);
     UNREFERENCED_PARAMETER(pEnemy);
-
-    // (3) 파도 전진 위치에 heat trail 주기 드롭 — 지나간 자리에 잔불
-    m_fTrailDropTimer += dt;
-    if (m_fTrailDropTimer >= TRAIL_DROP_INTERVAL)
-    {
-        m_fTrailDropTimer -= TRAIL_DROP_INTERVAL;
-        DropHeatTrail();
-    }
+    // Heat trail / shockwave 제거됨 — Fire Wave(SPH 화염 홍수) 단독 운용.
+    // GPU 제트 재순환이 분사를 지속하므로 별도 업데이트 불필요.
 }
 
 // ─── Charge VFX: 입 주변 파티클 집결 "곧 뭔가 온다" ────────────────────────
@@ -1217,32 +1243,76 @@ void MegaBreathAttackBehavior::SpawnChargeVFX(EnemyComponent* pEnemy)
     mouth.z = bossPos.z + cosf(yawRad) * 17.0f;
     XMFLOAT3 forward = { sinf(yawRad), 0.0f, cosf(yawRad) };
 
-    // 플레이어 RightClick 의 EffectDef 를 가져와서 보스 스케일로 확대.
-    EffectDef def = EffectRegistry::Get().GetEffect("RC_Fireball", RUNE_NONE);
-    def.name = "Dragon_MegaBreath_Charge";
+    // ════════════════════════════════════════════════════════════════════════
+    //  수렴 화염: Fire Wave(분사)를 반대로 재생 — 맵 전역에 흩어진 작은 불씨들이
+    //  입으로 빨려 들어오는 "곧 터진다" 예고. 같은 SPH_Gravity + 제트(converge) 사용.
+    //  입자 크기↓ 수↓ 로 분사 본체와 시각적으로 구분.
+    // ════════════════════════════════════════════════════════════════════════
+    const BoundingBox& rb = m_pRoom->GetBoundingBox();
+    const float floorY = bossPos.y;   // 실제 지면(보스 발치) — AABB 바닥 쓰면 지면 밑으로 감
+    const float inset  = 2.0f;
+    XMFLOAT3 roomMin = { rb.Center.x - rb.Extents.x + inset, floorY,
+                         rb.Center.z - rb.Extents.z + inset };
+    XMFLOAT3 roomMax = { rb.Center.x + rb.Extents.x - inset, floorY + 20.0f,  // 지면~머리 위 부피
+                         rb.Center.z + rb.Extents.z - inset };
 
-    if (!def.layers.empty())
-    {
-        EffectLayer& l = def.layers[0];
-        SPHEmitterParams& s = l.sph;
+    const float roomDiag   = sqrtf((rb.Extents.x * 2.f) * (rb.Extents.x * 2.f)
+                                 + (rb.Extents.z * 2.f) * (rb.Extents.z * 2.f));
+    const float jetLength  = roomDiag * 1.15f;
+    const float perpExtent = (fabsf(forward.x) > 0.5f) ? rb.Extents.z : rb.Extents.x;
+    const float curtainHalfW = perpExtent * 0.95f;   // 맵 폭 전체에서 빨려듦
+    const float vertJit    = 6.0f;                    // 높이 산포 (바닥~위)
+    // 수렴 속도: Windup 동안 맵 끝 불씨가 입까지 도달 → 재순환 반복
+    const float convSpeed   = jetLength / (m_fWindupTime * 0.45f);
+    const float convLifetime = m_fWindupTime * 0.9f;
 
-        // 보스용 스케일 업 — 입 앞에 맺히는 거대 화염구 느낌
-        s.particleCount      = static_cast<int>(s.particleCount * 4);  // 420 → 1680
-        s.spawnRadius       *= 2.0f;
-        s.cardinalSpawnRadius *= 2.0f;
-        if (s.particleSize > 0.f) s.particleSize *= 1.3f;
-        else                       s.particleSize  = 0.35f * 1.3f;
+    EffectDef def;
+    def.name    = "Dragon_MegaBreath_Charge";
+    def.element = ElementType::Fire;
 
-        // CP 조정: 인력은 완만하게(Windup 1.2s 동안 빨려드는 타임), 목표 구체 크게
-        if (!s.cpDescs.empty())
-        {
-            s.cpDescs[0].attractionStrength *= 0.6f;
-            s.cpDescs[0].sphereRadius       *= 2.0f;
-        }
-    }
+    EffectLayer layer;
+    layer.type       = EmitterType::SPH_Gravity;
+    layer.element    = ElementType::Fire;
+    layer.coreColor  = { 1.0f, 0.55f, 0.15f, 1.0f };
+    layer.edgeColor  = { 0.9f, 0.25f, 0.05f, 0.85f };
+    layer.overrideColors = true;
+    layer.useSSF     = true;
 
-    // origin 고정 — offsetParticlesWithOrigin=true 이지만 origin 자체가 안 움직이므로 제자리
-    m_nChargeVFXId = m_pFluidVFXManager->SpawnEffectDef(mouth, forward, def, true);
+    SPHEmitterParams& s = layer.sph;
+    s.particleCount    = 150;      // 듬성듬성 — 개별 불씨가 띄엄띄엄 빨려드는 느낌
+    s.spawnRadius      = curtainHalfW;
+    s.particleSize     = 1.4f;     // 수가 적은 만큼 약간 키워 개별 불씨로 보이게
+    s.maxParticleSpeed = convSpeed * 1.8f;
+    // 응집 거의 없음 → 일자 스트림으로 뭉치지 않고 흩어진 입자로 유지
+    s.overridePhysics     = true;
+    s.sphStiffness        = 12.0f;
+    s.sphNearPressureMult = 0.5f;
+    s.sphRestDensity      = 0.0f;  // 0 = 반발만(인력 없음) → 서로 안 들러붙음
+    s.sphViscosity        = 0.05f;
+    s.sphSmoothingRadius  = 1.2f;
+
+    VFXPhase p;
+    p.startTime              = 0.f;
+    p.duration               = m_fWindupTime + 0.5f;
+    p.motionMode             = ParticleMotionMode::Gravity;
+    p.gravityDesc.gravity    = { 0.f, 0.f, 0.f };   // 중력 없이 입으로 곧장 빨려듦
+    p.gravityDesc.initialSpeedMin = 0.f;
+    p.gravityDesc.initialSpeedMax = 0.f;
+    p.globalGravityStrength  = 0.f;
+    p.boxDesc.active         = false;
+    s.phases.push_back(p);
+
+    def.layers.push_back(std::move(layer));
+
+    int id = m_pFluidVFXManager->SpawnEffectDef(mouth, forward, def, true);
+    m_nChargeVFXId = id;
+    if (id < 0) return;
+
+    // 수렴 제트 활성화 (converge=true) — 장애물 없음(예고 연출이라 기둥 충돌 불필요)
+    m_pFluidVFXManager->SetEffectJet(
+        id, mouth, forward,
+        convSpeed, jetLength, vertJit, curtainHalfW, convLifetime,
+        roomMin, roomMax, true);
 }
 
 void MegaBreathAttackBehavior::UpdateChargeVFX(EnemyComponent* /*pEnemy*/)

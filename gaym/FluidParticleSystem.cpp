@@ -613,6 +613,10 @@ void FluidParticleSystem::Spawn(const XMFLOAT3& center, const FluidParticleConfi
     m_ControlPoints.clear();
     m_vGPUPendingOffset    = {};
     m_vGPUPendingVelDelta  = {};
+    // 보스 SPH 브레스 제트/원기둥 상태 초기화 (슬롯 재사용 시 오염 방지)
+    m_JetActive     = false;
+    m_JetConverge   = false;
+    m_ObstacleCount = 0;
 
     m_Config = config;
     m_Colors = config.overrideColors
@@ -713,32 +717,42 @@ void FluidParticleSystem::Spawn(const XMFLOAT3& center, const FluidParticleConfi
     }
 
     // GPU SPH: 초기 파티클 상태를 업로드 버퍼에 저장
-    if (m_pInitUpload && m_bGPUInited)
-    {
-        GPUParticle* pMapped = nullptr;
-        m_pInitUpload->Map(0, nullptr, (void**)&pMapped);
-        if (pMapped)
-        {
-            memset(pMapped, 0, sizeof(GPUParticle) * MAX_PARTICLES);
-            for (int i = 0; i < count; ++i)
-            {
-                pMapped[i].pos         = m_Particles[i].position;
-                pMapped[i].density     = m_Particles[i].density;
-                pMapped[i].vel         = m_Particles[i].velocity;
-                pMapped[i].nearDensity = 0.f;
-                pMapped[i].force       = { 0, 0, 0 };
-                pMapped[i].mass        = m_Particles[i].mass;
-                pMapped[i].active      = m_Particles[i].active ? 1 : 0;
-                pMapped[i].cpGroup     = m_Particles[i].cpGroup;
-                pMapped[i]._pad[0]     = 0.f;
-                pMapped[i]._pad[1]     = 0.f;
-            }
-            m_pInitUpload->Unmap(0, nullptr);
-        }
-        m_bNeedsUpload = true;
-    }
+    UploadInitialStateToGPU();
 
     OutputDebugStringA("[FluidPS] Spawned particles\n");
+}
+
+// 현재 m_Particles 상태(pos/vel/...)를 GPU 초기 업로드 버퍼에 기록.
+// Spawn 직후, 그리고 SetSPHJet에서 입자를 제트 경로로 재배치한 뒤 호출.
+void FluidParticleSystem::UploadInitialStateToGPU()
+{
+    if (!m_pInitUpload || !m_bGPUInited) return;
+
+    int count = (int)m_Particles.size();
+    GPUParticle* pMapped = nullptr;
+    m_pInitUpload->Map(0, nullptr, (void**)&pMapped);
+    if (pMapped)
+    {
+        memset(pMapped, 0, sizeof(GPUParticle) * MAX_PARTICLES);
+        for (int i = 0; i < count; ++i)
+        {
+            pMapped[i].pos         = m_Particles[i].position;
+            pMapped[i].density     = m_Particles[i].density;
+            pMapped[i].vel         = m_Particles[i].velocity;
+            pMapped[i].nearDensity = 0.f;
+            pMapped[i].force       = { 0, 0, 0 };
+            pMapped[i].mass        = m_Particles[i].mass;
+            pMapped[i].active      = m_Particles[i].active ? 1 : 0;
+            pMapped[i].cpGroup     = m_Particles[i].cpGroup;
+            // _pad[0] = 제트 파티클 나이(age). 비제트 스폰은 beamT=0 → 0.
+            //   제트는 SetSPHJet에서 경로상 위치에 비례한 초기 나이를 beamT에 실어 보냄
+            //   → 재순환 시점이 분산되어 입에서 끊김 없이 계속 재방출.
+            pMapped[i]._pad[0]     = m_Particles[i].beamT;
+            pMapped[i]._pad[1]     = 0.f;
+        }
+        m_pInitUpload->Unmap(0, nullptr);
+    }
+    m_bNeedsUpload = true;
 }
 
 void FluidParticleSystem::Clear()
@@ -746,6 +760,9 @@ void FluidParticleSystem::Clear()
     m_Particles.clear();
     m_ControlPoints.clear();
     m_nActiveCount = 0;
+    m_JetActive     = false;   // 제트/원기둥 상태도 해제 (슬롯 재사용 오염 방지)
+    m_JetConverge   = false;
+    m_ObstacleCount = 0;
 }
 
 void FluidParticleSystem::SetControlPoints(const std::vector<FluidControlPoint>& cps)
@@ -1372,6 +1389,93 @@ void FluidParticleSystem::SetGlobalGravity(float strength)
     m_GlobalGravityStrength = strength;
 }
 
+void FluidParticleSystem::SetSPHJet(const XMFLOAT3& mouth, const XMFLOAT3& dir,
+                                    float speed, float length, float spawnRadius, float spread,
+                                    float lifetime, const XMFLOAT3& roomMin, const XMFLOAT3& roomMax,
+                                    bool enable, bool converge)
+{
+    m_JetActive      = enable;
+    m_JetConverge    = converge;
+    m_JetMouth       = mouth;
+    // 방향 정규화
+    XMVECTOR d = XMVector3Normalize(XMLoadFloat3(&dir));
+    XMStoreFloat3(&m_JetDir, d);
+    m_JetSpeed       = speed;
+    m_JetLength      = length;
+    m_JetSpawnRadius = spawnRadius;
+    m_JetSpread      = spread;
+    m_JetLifetime    = lifetime;
+    m_JetRoomMin     = roomMin;
+    m_JetRoomMax     = roomMax;
+
+    // 활성화 순간: 입자를 입 앞 한 점이 아니라 제트 경로 전체에 분산 배치.
+    //   → 첫 프레임부터 꽉 찬 흐름으로 보여 "초기 뭉침(클럼프)" 제거.
+    //   각 입자: 축방향으로 균등 배치 + 부채꼴 측면 오프셋, 전방 속도 부여.
+    if (enable && !m_Particles.empty())
+    {
+        XMVECTOR mouthV = XMLoadFloat3(&m_JetMouth);
+        XMVECTOR dirV   = XMLoadFloat3(&m_JetDir);
+        XMVECTOR upW    = XMVectorSet(0, 1, 0, 0);
+        XMVECTOR rightV = XMVector3Normalize(XMVector3Cross(upW, dirV));
+        float floorY    = m_JetRoomMin.y;
+
+        int N = (int)m_Particles.size();
+        for (int i = 0; i < N; ++i)
+        {
+            FluidParticle& p = m_Particles[i];
+            if (!p.active) continue;
+
+            // 초기 분포: 진행축 전역 × 측면 폭 × 높이에 흩뿌림.
+            float along = (converge ? (0.25f + 0.75f * Rand01()) * m_JetLength
+                                    : ((i + Rand01()) / (float)N) * m_JetLength);
+            float latH  = (Rand01() * 2.f - 1.f) * m_JetSpread;        // 폭 전체 균일
+
+            XMVECTOR pos = XMVectorAdd(
+                XMVectorAdd(mouthV, XMVectorScale(dirV, along)),
+                XMVectorScale(rightV, latH));
+            XMFLOAT3 pos3; XMStoreFloat3(&pos3, pos);
+            if (converge)
+                // 수렴: 바닥~천장 부피형 높이 (수평 시트 일자 수축 방지)
+                pos3.y = floorY + 1.f + Rand01() * (m_JetRoomMax.y - floorY - 1.f);
+            else
+                pos3.y += (Rand01() * 2.f - 1.f) * m_JetSpawnRadius;
+            if (pos3.y < floorY) pos3.y = floorY;
+            p.position = pos3;
+
+            float spd = m_JetSpeed * (0.9f + 0.2f * Rand01());
+            if (converge)
+            {
+                // 입 쪽으로 빨려드는 초기 속도 (맵 전역 → 입 수렴)
+                XMVECTOR toMouth = XMVector3Normalize(XMVectorSubtract(mouthV, pos));
+                XMStoreFloat3(&p.velocity, XMVectorScale(toMouth, spd));
+            }
+            else
+            {
+                // 평행 전방 속도 (측면 발산 거의 없음 → 커튼 형태 유지)
+                XMVECTOR vel = XMVectorAdd(
+                    XMVectorScale(dirV, spd),
+                    XMVectorScale(rightV, (Rand01() * 2.f - 1.f) * spd * 0.03f));
+                XMStoreFloat3(&p.velocity, vel);
+            }
+
+            // 초기 나이 — 재순환 시점 분산용 (분사: 경로상 위치 비례, 수렴: 랜덤)
+            //   beamT를 age 운반 필드로 사용 (UploadInitialStateToGPU가 _pad[0]로 전달)
+            p.beamT = converge ? (Rand01() * m_JetLifetime * 0.5f)
+                               : (along / (std::max)(m_JetSpeed, 0.001f));
+        }
+
+        // 분산 배치한 초기 상태를 GPU로 업로드 (Spawn의 클럼프 업로드를 덮어씀)
+        UploadInitialStateToGPU();
+    }
+}
+
+void FluidParticleSystem::SetSPHObstacles(const XMFLOAT4* obstacles, int count)
+{
+    m_ObstacleCount = (count < 0) ? 0 : ((count > 4) ? 4 : count);
+    for (int i = 0; i < m_ObstacleCount; ++i) m_Obstacles[i] = obstacles[i];
+    for (int i = m_ObstacleCount; i < 4; ++i) m_Obstacles[i] = XMFLOAT4{ 0, 0, 0, 0 };
+}
+
 void FluidParticleSystem::InitBeamParticles()
 {
     // Beam 모드용 파티클 초기화: startPos에서 endPos까지 전체 길이에 균등하게 배치
@@ -1746,6 +1850,14 @@ static const char* g_SPHComputeShader = R"_SPH_A_(
         float  gWaveOscAmplitude; float gWaveOscFrequency; float gWaveOscWaveNumber; float gWaveOscEnabled;
         float3 gWaveOscFwdDir;  float _gWOPad0;
         float3 gWaveOscUpDir;   float _gWOPad1;
+        // 보스 SPH 브레스: 제트 분사 + 원기둥 충돌 + 방 경계
+        float3 gJetMouth;       float gJetSpeed;
+        float3 gJetDir;         float gJetLength;
+        float3 gJetRoomMin;     float gJetSpawnRadius;
+        float3 gJetRoomMax;     float gJetSpread;
+        float  gJetActive;      float gJetLifetime; uint gJetFrameSeed; int gObstacleCount;
+        float  gJetConverge;    float3 _gJetPad2;   // 1=수렴(맵→입), 0=분사(입→맵)
+        float4 gObstacles[4];   // xy=중심XZ, z=반경
     };
 
     RWStructuredBuffer<GPUParticle>             gParticles   : register(u0);
@@ -1991,9 +2103,33 @@ R"_SPH_B_(
                 f += gBoxAxisZH.xyz * bStiff * (-gBoxAxisZH.w - localZ);
         }
 
+        // ── 원기둥 소프트 유도: 충돌 직전부터 옆으로 흘려보냄 (정면 감속 최소화) ──
+        //   순수 반경 반발은 입자를 머리부터 세워 정체 능선을 만든다 → 반경 반발은 약하게,
+        //   접선(옆) 유도는 강하게 주어 기둥 앞에서 갈라져 매끄럽게 스쳐가게 한다.
+        for (int ob = 0; ob < gObstacleCount; ++ob) {
+            float2 toP = float2(gParticles[i].pos.x - gObstacles[ob].x,
+                                gParticles[i].pos.z - gObstacles[ob].y);
+            float R    = gObstacles[ob].z;
+            float infl = R + gH * 1.5f;
+            float d    = length(toP);
+            if (R > 0.0f && d < infl && d > 1e-4f) {
+                float2 n    = toP / d;
+                float2 tang = float2(-n.y, n.x);
+                float ramp  = (infl - d);
+                // 입자가 이미 흐르는 접선 방향으로 유도 (정체점 좌우 갈라짐 유지)
+                float vt   = gParticles[i].vel.x * tang.x + gParticles[i].vel.z * tang.y;
+                float side = (vt >= 0.0f) ? 1.0f : -1.0f;
+                float radialPush = ramp * 35.0f;   // 약한 반경 반발 (파고들기만 방지)
+                float tangPush   = ramp * 70.0f;   // 강한 접선 유도 (옆으로 흘려보냄)
+                f.x += n.x * radialPush + tang.x * side * tangPush;
+                f.z += n.y * radialPush + tang.y * side * tangPush;
+            }
+        }
+
         gParticles[i].force = f;
     }
-
+)_SPH_B_"
+R"_SPH_C_(
     // ---- CS_Integrate ----
     [numthreads(64,1,1)]
     void CS_Integrate(uint3 dtid : SV_DispatchThreadID)
@@ -2060,8 +2196,161 @@ R"_SPH_B_(
 
         gParticles[i].pos += gParticles[i].vel * gDt;
 
+        // ── 보스 SPH 브레스: 바닥/원기둥 충돌 + 방 경계 + 제트 재순환 ──────────
+        if (gJetActive > 0.5f && gJetConverge > 0.5f) {
+            // ════ 수렴 모드: 맵 전역에 흩어진 입자가 입(gJetMouth)으로 빨려듦 (Windup 예고) ════
+            gParticles[i].pad.x += gDt;
+            float3 upC    = float3(0, 1, 0);
+            float3 rightC = normalize(cross(upC, gJetDir));
+
+            // 입 방향으로 조향 — SPH 속도와 블렌드해 곧게가 아니라 곡선형으로 빨려듦
+            float3 toMouth = gJetMouth - gParticles[i].pos;
+            float  distM   = length(toMouth);
+            float3 dirM    = toMouth / max(distM, 0.001f);
+            gParticles[i].vel = lerp(gParticles[i].vel, dirM * gJetSpeed, 0.30f);
+
+            // 바닥 아래 금지 + 방 경계 클램프
+            gParticles[i].pos.y = max(gParticles[i].pos.y, gJetRoomMin.y);
+            gParticles[i].pos.x = clamp(gParticles[i].pos.x, gJetRoomMin.x, gJetRoomMax.x);
+            gParticles[i].pos.z = clamp(gParticles[i].pos.z, gJetRoomMin.z, gJetRoomMax.z);
+
+            // 입 도달(빨려 들어감) 또는 수명 초과 → 맵 전역 먼 곳에서 재생성
+            //   수렴점에 쌓이기 전(5u)에 재순환시켜 입 근처 뭉침 방지
+            float lifeJitterC = 0.55f + 0.9f * frac(sin((float)i * 12.9898f) * 43758.5453f);
+            if (distM < 5.0f || gParticles[i].pad.x > gJetLifetime * lifeJitterC) {
+                uint js = (uint)i * 2654435761u ^ gJetFrameSeed;
+                js = js * 1664525u + 1013904223u; float ra = (float)(js >> 1) / 1073741823.0f;
+                js = js * 1664525u + 1013904223u; float rb = (float)(js >> 1) / 1073741823.0f;
+                js = js * 1664525u + 1013904223u; float rc = (float)(js >> 1) / 1073741823.0f;
+                js = js * 1664525u + 1013904223u; float rd = (float)(js >> 1) / 1073741823.0f;
+
+                // 진행축 [0.25,1.0]×길이 (맵 전역) + 측면 폭 + 바닥~천장 부피 높이.
+                //   높이를 바닥~천장으로 펼쳐 "수평 시트가 일자로 수축" 현상 방지 → 사방에서 모임.
+                float spawnAlong = (0.25f + 0.75f * ra) * gJetLength;
+                gParticles[i].pos = gJetMouth
+                                  + gJetDir * spawnAlong
+                                  + rightC  * ((rb * 2.0f - 1.0f) * gJetSpread);
+                gParticles[i].pos.y = lerp(gJetRoomMin.y + 1.0f, gJetRoomMax.y, rc); // 부피형 높이
+                // 입 쪽으로 초기 속도
+                float3 toM = normalize(gJetMouth - gParticles[i].pos);
+                gParticles[i].vel = toM * (gJetSpeed * (0.9f + 0.2f * rd));
+                gParticles[i].pad.x = 0.0f;
+                gParticles[i].density = gRestDensity;
+            }
+        }
+        else if (gJetActive > 0.5f) {
+            // 파티클 수명 누적 (pad.x = age)
+            gParticles[i].pad.x += gDt;
+
+            // 가장 가까운 기둥 표면까지 거리 + 중심 + 반경 — 근처면 측면 비킴 처리.
+            float  nearObs = 1e9f;
+            float2 nearCtr = float2(0, 0);
+            float  nearR   = 0.0f;
+            for (int ob = 0; ob < gObstacleCount; ++ob) {
+                float2 toC = float2(gParticles[i].pos.x - gObstacles[ob].x,
+                                    gParticles[i].pos.z - gObstacles[ob].y);
+                float dEdge = length(toC) - gObstacles[ob].z;
+                if (dEdge < nearObs) { nearObs = dEdge; nearCtr = float2(gObstacles[ob].x, gObstacles[ob].y); nearR = gObstacles[ob].z; }
+            }
+            bool slipping = (nearObs < 9.0f);   // 기둥 영향권 (뒤쪽 재합류 구간 포함)
+
+            if (slipping) {
+                // 기둥 통과: 앞/옆에서는 바깥으로 비키고, 기둥을 지난 뒤(하류)엔 살짝 안쪽으로
+                //   당겨 그림자가 "조금 뒤에서" 다시 닫히게 한다 (완전 빈 그림자 → 살짝 재합류).
+                float2 fxz  = normalize(float2(gJetDir.x, gJetDir.z) + 1e-6f);
+                float2 rel  = float2(gParticles[i].pos.x - nearCtr.x,
+                                     gParticles[i].pos.z - nearCtr.y);
+                float  along = dot(rel, fxz);            // 기둥 기준 진행축 위치 (<0 앞, >0 뒤)
+                float2 perp  = rel - fxz * along;        // 측면 성분 (흐름축에서 벗어난 정도)
+                float  pLen  = length(perp);
+                float2 perpDir = (pLen > 1e-3f) ? perp / pLen : float2(-fxz.y, fxz.x); // 정면이면 한쪽
+                float  aR = along / max(nearR, 0.001f);  // 반경 단위 진행축 위치
+                float  outward = saturate(1.3f - aR) * 1.6f;          // 앞/옆: 바깥 비킴
+                float  inward  = saturate((aR - 1.6f) * 0.7f) * 0.7f; // 뒤: 안쪽 당김 (살짝 재합류)
+                float  lat = outward - inward;
+                float2 dir = normalize(fxz + perpDir * lat);
+                float  spd = max(length(gParticles[i].vel.xz), gJetSpeed * 0.95f); // 감속 금지
+                gParticles[i].vel.x = dir.x * spd;
+                gParticles[i].vel.z = dir.y * spd;
+            } else {
+                // 평지: 방향성 댐핑 — 진행축 속도 유지, 측면 성분 감쇠로 좌우 튕김 제거.
+                float vFwd   = dot(gParticles[i].vel, gJetDir);
+                float3 vPerp = gParticles[i].vel - gJetDir * vFwd;
+                if (vFwd < 0.0f) vFwd *= 0.25f;  // 역방향 성분 죽임 ("반대로 날아가는" 제거)
+                gParticles[i].vel = gJetDir * vFwd + vPerp * 0.86f;
+            }
+
+            // 바닥 충돌: 바닥 아래로 못 내려감, 하향 속도 약하게 반사 + 수평 마찰
+            float floorY = gJetRoomMin.y;
+            if (gParticles[i].pos.y < floorY) {
+                gParticles[i].pos.y = floorY;
+                if (gParticles[i].vel.y < 0.0f) gParticles[i].vel.y *= -0.15f;
+                gParticles[i].vel.xz *= 0.99f;  // 바닥 마찰 약하게 → 계속 앞으로 미끄러져 맵 끝까지 커버
+            }
+
+            // 원기둥 하드 충돌: 위치만 표면 밖으로 밀어냄 (속도는 위 슬립 로직이 전담).
+            //   반경 진입 속도만 제거해 파고들기 방지 — 접선/측면 방향은 슬립이 정한 대로 유지.
+            for (int ob = 0; ob < gObstacleCount; ++ob) {
+                float2 toP = float2(gParticles[i].pos.x - gObstacles[ob].x,
+                                    gParticles[i].pos.z - gObstacles[ob].y);
+                float R  = gObstacles[ob].z;
+                float d2 = dot(toP, toP);
+                if (R > 0.0f && d2 < R * R) {
+                    float d = sqrt(max(d2, 1e-6f));
+                    float2 n = toP / d;                 // 바깥 반경 방향
+                    gParticles[i].pos.x = gObstacles[ob].x + n.x * R;
+                    gParticles[i].pos.z = gObstacles[ob].y + n.y * R;
+                    float vn = gParticles[i].vel.x * n.x + gParticles[i].vel.z * n.y;
+                    if (vn < 0.0f) {            // 안으로 파고드는 속도만 제거
+                        gParticles[i].vel.x -= n.x * vn;
+                        gParticles[i].vel.z -= n.y * vn;
+                    }
+                }
+            }
+
+            // 방 경계 클램프 (벽 밖으로 새지 않게) + 화염 홍수 높이 상한 (너무 높이 안 솟게)
+            gParticles[i].pos.y = min(gParticles[i].pos.y, gJetRoomMin.y + 7.0f);
+)_SPH_C_"
+R"_SPH_D_(
+            gParticles[i].pos.x = clamp(gParticles[i].pos.x, gJetRoomMin.x, gJetRoomMax.x);
+            gParticles[i].pos.z = clamp(gParticles[i].pos.z, gJetRoomMin.z, gJetRoomMax.z);
+
+            // 제트 재순환: 수명 초과 또는 축방향 사거리 도달 → 입에서 재분사
+            //   수명은 파티클별로 흩뜨려(0.55~1.45배) 동시 재순환(맥동) 방지
+            float lifeJitter = 0.55f + 0.9f * frac(sin((float)i * 12.9898f) * 43758.5453f);
+            float along = dot(gParticles[i].pos - gJetMouth, gJetDir);
+            if (gParticles[i].pad.x > gJetLifetime * lifeJitter || along > gJetLength) {
+                uint js = (uint)i * 2654435761u ^ gJetFrameSeed;
+                js = js * 1664525u + 1013904223u; float ra = (float)(js >> 1) / 1073741823.0f;
+                js = js * 1664525u + 1013904223u; float rb = (float)(js >> 1) / 1073741823.0f;
+                js = js * 1664525u + 1013904223u; float rc = (float)(js >> 1) / 1073741823.0f;
+                js = js * 1664525u + 1013904223u; float rd = (float)(js >> 1) / 1073741823.0f;
+
+                // 평행 커튼: 진행축에 수직인 폭(gJetSpread=반폭) 라인 위에서 스폰,
+                //   전부 같은 진행 방향으로 평행 분사 → 부채꼴 발산 없이 균일한 불의 장막.
+                float3 up    = float3(0, 1, 0);
+                float3 right = normalize(cross(up, gJetDir));
+                gParticles[i].pos = gJetMouth
+                                  + right * ((ra * 2.0f - 1.0f) * gJetSpread)
+                                  + up    * ((rb * 2.0f - 1.0f) * gJetSpawnRadius);
+                float speed = gJetSpeed * (0.9f + 0.2f * rd);
+                // 평행 전방 속도 + 아주 작은 jitter (사방 발산 방지)
+                gParticles[i].vel = gJetDir * speed
+                                  + right * ((rc * 2.0f - 1.0f) * speed * 0.03f)
+                                  + up    * (speed * 0.04f);
+                gParticles[i].pad.x = 0.0f;
+                gParticles[i].density = gRestDensity;
+            }
+        }
+
         // ── 속성색 + foam + 속도 기반 색상 ──────────────────────
         float rho    = gParticles[i].density / max(gColorRestDensity, 0.001f);
+        // 제트 재분사 직후 파티클은 주변 밀도가 낮아 진한 edgeColor로 깜빡임 →
+        //   age(pad.x)가 작은 동안 색 전용 rho를 1로 끌어올려 페이드인 (물리 밀도는 불변)
+        if (gJetActive > 0.5f) {
+            float ageFade = saturate(gParticles[i].pad.x / max(gJetLifetime * 0.25f, 0.001f));
+            rho = lerp(1.0f, rho, ageFade);
+        }
         float speed  = length(gParticles[i].vel);
         float speedT = saturate(speed / max(gMaxSpeed * 0.4f, 0.001f));
 
@@ -2090,6 +2379,18 @@ R"_SPH_B_(
         float explodeAlpha = gCoreColor.a * fadeMult;
         float finalA = lerp(normalAlpha, explodeAlpha, isExplodingF);
 
+        // 제트 재순환 페이드인: 재사용된 입자(age≈0)는 투명 상태로 입에 복귀 후
+        //   서서히 나타남 → "끝→입으로 되돌아가는" 가시적 팝 제거.
+        if (gJetActive > 0.5f) {
+            finalA *= saturate(gParticles[i].pad.x / 0.18f);
+        }
+        // 수렴(차지): 입에 가까워질수록 페이드아웃 → 수렴점에 겹쳐 쌓여 하얗게 뭉치는
+        //   블로우아웃 제거. 입자가 입 근처에서 사라지며 빨려드는 것처럼 보임.
+        if (gJetActive > 0.5f && gJetConverge > 0.5f) {
+            float dm = length(gJetMouth - gParticles[i].pos);
+            finalA *= saturate((dm - 4.0f) / 14.0f);  // 입 18u 이내부터, 4u에서 완전 투명
+        }
+
         // 속도에 따른 동적 크기
         float spd = length(gParticles[i].vel);
         float dynSize = lerp(0.42f, 0.25f, saturate(spd / max(gMaxSpeed * 0.6f, 0.001f)));
@@ -2103,7 +2404,7 @@ R"_SPH_B_(
         gRenderData[i].size     = dynSize;
         gRenderData[i].color    = float4(finalRGB, finalA);
     }
-)_SPH_B_";
+)_SPH_D_";
 
 // ============================================================================
 // BuildSPHPipeline (static) - GPU SPH 파이프라인 빌드
@@ -2314,7 +2615,8 @@ void FluidParticleSystem::DispatchSPH(ID3D12GraphicsCommandList* pCmdList, float
         cb.stiffness     = m_Config.stiffness;
         cb.viscosity     = m_Config.viscosity;
         cb.dt            = (std::min)(dt, 0.016f);
-        cb.damping       = 0.995f;
+        // 제트(보스 브레스)는 댐핑을 거의 1로 → 속도 감소폭 최소화, 맵 끝까지 빠르게 도달
+        cb.damping       = m_JetActive ? 0.9996f : 0.995f;
         cb.maxSpeed      = m_Config.maxParticleSpeed;
         cb.motionMode    = (m_MotionMode == ParticleMotionMode::Gravity) ? 1 : 0;
         cb.globalGravity = m_GlobalGravityStrength;
@@ -2387,6 +2689,22 @@ void FluidParticleSystem::DispatchSPH(ID3D12GraphicsCommandList* pCmdList, float
         cb.opBurstMinSpeed   = m_fOpBurstMinSpeed;
         cb.opBurstMaxSpeed   = m_fOpBurstMaxSpeed;
 
+        // ── 보스 SPH 브레스: 제트 분사 + 원기둥 충돌 + 방 경계 ──
+        cb.jetMouth       = m_JetMouth;
+        cb.jetSpeed       = m_JetSpeed;
+        cb.jetDir         = m_JetDir;
+        cb.jetLength      = m_JetLength;
+        cb.jetRoomMin     = m_JetRoomMin;
+        cb.jetSpawnRadius = m_JetSpawnRadius;
+        cb.jetRoomMax     = m_JetRoomMax;
+        cb.jetSpread      = m_JetSpread;
+        cb.jetActive      = m_JetActive ? 1.f : 0.f;
+        cb.jetConverge    = m_JetConverge ? 1.f : 0.f;
+        cb.jetLifetime    = m_JetLifetime;
+        cb.jetFrameSeed   = (++m_JetFrameCounter) * 2654435761u + 12345u;
+        cb.obstacleCount  = m_ObstacleCount;
+        for (int o = 0; o < 4; ++o) cb.obstacles[o] = m_Obstacles[o];
+
         // ── 3 서브스텝 CB 준비 ──
         const UINT64 cbStride = ((sizeof(SPHConstants) + 255u) & ~255u);
         float subDt = cb.dt / 3.0f;
@@ -2395,7 +2713,7 @@ void FluidParticleSystem::DispatchSPH(ID3D12GraphicsCommandList* pCmdList, float
         cb.dt = subDt;
         memcpy(m_pMappedSPHCB + 0, &cb, sizeof(cb));
 
-        // Substep 1, 2: one-shot 필드 초기화 (dt = subDt)
+        // Substep 1, 2: one-shot 필드 초기화 (dt = subDt), jet 시드는 서브스텝마다 다르게
         SPHConstants cbSub = cb;
         cbSub.opFlags         = 0;
         cbSub.opFrameSeed     = 0;
@@ -2403,7 +2721,9 @@ void FluidParticleSystem::DispatchSPH(ID3D12GraphicsCommandList* pCmdList, float
         cbSub._padPO          = 0.f;
         cbSub.velDelta        = { 0, 0, 0 };
         cbSub._padVD          = 0.f;
+        cbSub.jetFrameSeed    = cb.jetFrameSeed ^ 0x9E3779B9u;
         memcpy(m_pMappedSPHCB + cbStride,     &cbSub, sizeof(cbSub));
+        cbSub.jetFrameSeed    = cb.jetFrameSeed ^ 0x85EBCA6Bu;
         memcpy(m_pMappedSPHCB + cbStride * 2, &cbSub, sizeof(cbSub));
 
         // GPU에 전달 완료 -> 초기화
