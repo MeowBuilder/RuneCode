@@ -1665,6 +1665,9 @@ void EffectRegistry::Initialize()
 
     // ──────────────────────────────────────────────────────────────────────────
     // Wind_DriftLeaves — 수평 드리프트 (맵 가로질러 떠다니는 잎/먼지)
+    //   width 50 → 18 로 좁혀 좁은 빔/스트림 흐름으로 (이전: disk 반경 50 이라 바닥~천장
+    //   까지 입자가 펼쳐져 "바닥 쓰는 sheet" 인상). swirl ↑ 로 회오리 강조, 속도 ↑ 로 휙휙
+    //   지나가는 강풍감. 밀도/사이즈 ↓ 로 sheet 느낌 완화.
     // ──────────────────────────────────────────────────────────────────────────
     {
         EffectDef def;
@@ -1674,20 +1677,20 @@ void EffectRegistry::Initialize()
         EffectLayer drift;
         drift.type           = EmitterType::Linear;
         drift.element        = ElementType::Wind;
-        drift.particleCount  = 180;            // 인스턴스당 수 줄이고 인스턴스 수 늘림
+        drift.particleCount  = 120;            // 180 → 120 (밀도 ↓, sheet 인상 완화)
         drift.overrideColors = true;
         drift.coreColor      = { 0.78f, 0.92f, 0.55f, 1.0f };  // 옅은 잎녹색
         drift.edgeColor      = { 0.38f, 0.55f, 0.20f, 0.45f };
-        drift.sizeScale      = 1.1f;
-        drift.speedMin       = 2.5f;
-        drift.speedMax       = 5.0f;
-        drift.lifetimeMin    = 8.0f;
-        drift.lifetimeMax    = 14.0f;
+        drift.sizeScale      = 0.8f;           // 1.1 → 0.8 (입자 작게)
+        drift.speedMin       = 4.5f;           // 2.5 → 4.5 (휙휙 지나감)
+        drift.speedMax       = 8.0f;           // 5.0 → 8.0
+        drift.lifetimeMin    = 6.0f;           // 8 → 6 (빠르게 흘러도 거리 비슷)
+        drift.lifetimeMax    = 11.0f;          // 14 → 11
         drift.duration       = -1.f;
-        drift.linear.length      = 160.0f;
-        drift.linear.width       = 50.0f;      // 너비 살짝 키움
+        drift.linear.length      = 120.0f;     // 160 → 120
+        drift.linear.width       = 18.0f;      // 50 → 18 (좁은 빔/스트림)
         drift.linear.recycleRate = 1.0f;
-        drift.linear.swirlSpeed  = 1.2f;
+        drift.linear.swirlSpeed  = 2.8f;       // 1.2 → 2.8 (회오리 강조)
         def.layers.push_back(drift);
 
         Register(std::move(def));

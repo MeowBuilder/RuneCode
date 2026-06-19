@@ -1503,20 +1503,25 @@ float4 PS(PS_INPUT input) : SV_TARGET
         // (b) 지면 wind flow — domain warp 된 2D 노이즈, 곡선 결로 흐름.
         //   1D 노이즈는 평행 직선 띠 → "선" 으로 보임. 2D + domain warp 로 곡선/소용돌이 만들기.
         //   wind 방향으로 noise field scroll → 결이 wind 방향으로 흘러감.
+        //   톤다운: noise 스케일 ↑(0.18→0.35) 잔무늬, peak smoothstep 폭 넓혀 부드럽게,
+        //   strength/dim 절반 수준 — "바닥에 정직한 줄무늬" 인상 제거. gust 시에만 살짝 보임.
         if (!bIsSkinned && !bIsGrass && upFacing > 0.30f)
         {
             float slopeMul = smoothstep(0.30f, 0.75f, upFacing);
-            float speedMul = lerp(1.0f, 2.4f, gust);
+            // 속도 고정 — gust 따라 변하게 두면 (g_Time * speedMul) 곱이 envelope 변할 때
+            //   wind offset 이 점프해 "흐르다가 반대 방향으로 멈춤" 어색함 발생. baseline 만 유지.
+            const float speedMul = 11.0f;
 
             float2 wind = float2(0.85f, 0.30f);
-            float2 q    = input.worldPosition.xz * 0.18f - wind * (g_Time * 0.42f * speedMul);
+            // noise scale 살짝 줄여 (0.35 → 0.28) 결이 너무 작은 점박이 인상 방지.
+            float2 q    = input.worldPosition.xz * 0.28f - wind * (g_Time * 0.42f * speedMul);
 
-            // Domain warp — q 를 다른 노이즈로 흔들어 curling 패턴 만들기.
-            //   warp 강도 0.85 (큼) → 결이 직선에서 곡선/소용돌이로 변형.
+            // Domain warp — animated 성분 키워서 정적 인상 제거.
+            //   w.x 도 시간 성분 추가 — warp 자체가 흔들리며 결이 살아 움직임.
             float2 w;
-            w.x = _vnoise(q * 1.4f + 1.7f) * 2.0f - 1.0f;
-            w.y = _vnoise(q * 1.4f + 9.3f + g_Time * 0.12f) * 2.0f - 1.0f;
-            float2 wq = q + w * 0.85f;
+            w.x = _vnoise(q * 1.4f + 1.7f + g_Time * 0.18f) * 2.0f - 1.0f;
+            w.y = _vnoise(q * 1.4f + 9.3f + g_Time * 0.28f) * 2.0f - 1.0f;
+            float2 wq = q + w * 1.05f;   // warp 강도 0.85 → 1.05 (더 동적 curl)
 
             // 옥타브별 회전 — axis bias 제거 (격자 회피).
             const float2x2 rot53g = float2x2(0.6f, 0.8f, -0.8f, 0.6f);
@@ -1526,23 +1531,25 @@ float4 PS(PS_INPUT input) : SV_TARGET
             float n2  = _vnoise(p2);
             float flow = saturate(n1 * 0.62f + n2 * 0.45f);
 
-            // 결: peak (햇살) + 골 (그늘) — 명도 굴곡으로 wind flow 인지.
-            float flowHi = smoothstep(0.55f, 0.92f, flow);
-            float flowLo = 1.0f - smoothstep(0.0f, 0.35f, flow);
-            float3 flowBase = lerp(float3(0.030f, 0.058f, 0.024f),
-                                   float3(0.018f, 0.070f, 0.044f), gust);
-            float flowStrength = lerp(0.55f, 1.10f, gust);
+            // 결: peak (햇살) + 골 (그늘) — strength 살짝 ↑ 로 흐름 가시성 확보.
+            //   peak smoothstep 폭은 유지 (부드러운 결).
+            float flowHi = smoothstep(0.42f, 0.96f, flow);
+            float flowLo = 1.0f - smoothstep(0.0f, 0.45f, flow);
+            float3 flowBase = lerp(float3(0.028f, 0.054f, 0.024f),
+                                   float3(0.022f, 0.068f, 0.040f), gust);
+            float flowStrength = lerp(0.35f, 0.80f, gust);  // 0.22~0.55 → 0.35~0.80
             finalColor.rgb += flowBase * flowHi * slopeMul * flowStrength;
-            finalColor.rgb *= 1.0f - flowLo * slopeMul * lerp(0.05f, 0.10f, gust);
+            finalColor.rgb *= 1.0f - flowLo * slopeMul * lerp(0.03f, 0.06f, gust);
         }
 
         // (c) 돌풍 화면 톤 — gust peak 시 옅은 cool 그린 wash + 명도 살짝 dim.
         //     "강풍이 부는 순간 풀밭이 한 톤 차가워지고 빛이 갇히는" 느낌.
+        //     wash 영향 축소 (0.35 → 0.18) — 흐름이 보이도록 "색만 칠해지는" 인상 완화.
         if (gust > 0.0f)
         {
-            float3 gustTint = float3(0.78f, 0.92f, 0.82f);
-            finalColor.rgb = lerp(finalColor.rgb, finalColor.rgb * gustTint, gust * 0.35f);
-            finalColor.rgb *= 1.0f - gust * 0.04f;  // 살짝 dim
+            float3 gustTint = float3(0.85f, 0.94f, 0.88f);  // 톤 차이 줄여 자연스럽게
+            finalColor.rgb = lerp(finalColor.rgb, finalColor.rgb * gustTint, gust * 0.18f);
+            finalColor.rgb *= 1.0f - gust * 0.02f;
         }
 
         // (d) 거리 haze — 자연광 톤, 옅게. 멀어질수록 살짝 흐려지는 정도.

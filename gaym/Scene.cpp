@@ -2227,7 +2227,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
                     XMFLOAT3 center = bb.Center; center.y = 5.0f;
                     XMFLOAT3 half(bb.Extents.x * 0.95f, 18.0f, bb.Extents.z * 0.95f);
                     pLeaves->SetSpawnArea(center, half);
-                    pLeaves->SetWind(XMFLOAT3(0.5f, 0.0f, 0.3f), 2.5f);
+                    pLeaves->SetWind(XMFLOAT3(0.5f, 0.0f, 0.3f), 4.5f);  // 2.5 → 4.5 (수평 drift ↑)
                 }
                 pLeaves->SetEnabled(bWind);
             }
@@ -6235,19 +6235,20 @@ void Scene::SetupWindAmbient(const BoundingBox& roomBB)
     // (작은 업드래프트 기둥 5종 제거 — 방 전환 시 정리되지 않고 누적되어 시각 노이즈 유발)
 
     // 잎 드리프트 6 인스턴스 — 맵 전역에 흩뿌려지도록 위치/방향 다양화
-    //   각 인스턴스 width 50, length 160 → 영역 곳곳에서 흘러나오는 잎이 맵을 가로지름
+    //   각 인스턴스 width 18, length 120 → 좁은 스트림이 휙휙 지나가는 강풍 흐름.
+    //   Y 위치 전반 상향 (이전 3~11 → 6~14) + dir.y 살짝 양수 → 바닥에 깔리지 않게.
     struct DriftCfg { XMFLOAT3 pos; XMFLOAT3 dir; };
     DriftCfg drifts[6] = {
         // 좌측에서 우로 (다른 Y 높이)
-        { { center.x - ex * 1.3f, 3.0f,  center.z + ez * 0.4f }, { 1.0f, 0.05f, 0.0f } },
-        { { center.x - ex * 1.2f, 8.5f,  center.z - ez * 0.5f }, { 0.92f, 0.0f, 0.40f } },  // 좌→우상
+        { { center.x - ex * 1.3f, 7.0f,  center.z + ez * 0.4f }, { 1.0f, 0.12f, 0.0f } },
+        { { center.x - ex * 1.2f, 12.0f, center.z - ez * 0.5f }, { 0.92f, 0.08f, 0.40f } },
         // 후방에서 전방
-        { { center.x + ex * 0.5f, 5.0f,  center.z - ez * 1.3f }, { -0.30f, 0.05f, 0.95f } },
-        { { center.x - ex * 0.6f, 11.0f, center.z - ez * 1.2f }, { 0.20f, 0.0f, 0.98f } },
+        { { center.x + ex * 0.5f, 9.0f,  center.z - ez * 1.3f }, { -0.30f, 0.12f, 0.95f } },
+        { { center.x - ex * 0.6f, 14.0f, center.z - ez * 1.2f }, { 0.20f, 0.05f, 0.98f } },
         // 대각선 — 우상 → 좌하
-        { { center.x + ex * 1.2f, 6.5f,  center.z + ez * 1.2f }, { -0.7071f, 0.0f, -0.7071f } },
+        { { center.x + ex * 1.2f, 10.0f, center.z + ez * 1.2f }, { -0.7071f, 0.10f, -0.7071f } },
         // 우하 → 좌상
-        { { center.x + ex * 1.1f, 4.0f,  center.z - ez * 0.8f }, { -0.85f, 0.05f, 0.53f } },
+        { { center.x + ex * 1.1f, 8.0f,  center.z - ez * 0.8f }, { -0.85f, 0.12f, 0.53f } },
     };
     for (auto& d : drifts)
     {

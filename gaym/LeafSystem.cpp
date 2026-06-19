@@ -261,10 +261,10 @@ void LeafSystem::RespawnLeaf(Leaf& leaf, bool initialSpawn)
         leaf.pos.y = m_spawnCenter.y + m_spawnHalfExt.y * 1.5f;
     leaf.pos.z = m_spawnCenter.z + frand(-m_spawnHalfExt.z, m_spawnHalfExt.z);
 
-    // 기본 drift — 약한 바람 따라가는 속도. swirl 이 진짜 움직임 만듦.
-    leaf.baseVel.x = m_windDir.x * m_windStrength * 0.5f;
-    leaf.baseVel.y = -frand(2.5f, 4.5f);                           // 1.5~2.8 → 2.5~4.5 (살짝 더 빠르게)
-    leaf.baseVel.z = m_windDir.z * m_windStrength * 0.5f;
+    // 기본 drift — wind 풍속 키움. 0.5 → 1.0 (windStrength 그대로 흡수)
+    leaf.baseVel.x = m_windDir.x * m_windStrength * 1.0f;
+    leaf.baseVel.y = -frand(4.5f, 7.5f);                           // 2.5~4.5 → 4.5~7.5 (낙하 빠르게)
+    leaf.baseVel.z = m_windDir.z * m_windStrength * 1.0f;
 
     leaf.size        = frand(0.9f, 2.0f);
     leaf.maxLifetime = frand(8.0f, 14.0f);
@@ -274,11 +274,11 @@ void LeafSystem::RespawnLeaf(Leaf& leaf, bool initialSpawn)
 
     // ── 입자별 swirl/회전 파라미터 — 다양성 ────────────────────────────────
     leaf.swirlPhase   = frand(0.0f, 6.2832f);
-    leaf.swirlFreqXZ  = frand(0.6f, 1.4f);                         // 좌우 회오리 주기 다양
-    leaf.swirlFreqY   = frand(1.3f, 2.4f);                         // 위/아래 떨림 빠르게
-    leaf.swirlAmpXZ   = frand(3.5f, 6.5f);                         // 좌우 진폭 — 더 격하게 (사용자 요청)
+    leaf.swirlFreqXZ  = frand(1.0f, 2.0f);                         // 0.6~1.4 → 1.0~2.0 (분주하게)
+    leaf.swirlFreqY   = frand(2.0f, 3.5f);                         // 1.3~2.4 → 2.0~3.5 (빠른 떨림)
+    leaf.swirlAmpXZ   = frand(5.0f, 9.0f);                         // 3.5~6.5 → 5.0~9.0 (큰 진폭)
     leaf.yawAng       = frand(0.0f, 6.2832f);
-    leaf.yawVel       = frand(-3.0f, 3.0f);                         // 입자별 다른 회전 속도 (±)
+    leaf.yawVel       = frand(-4.5f, 4.5f);                         // -3~3 → -4.5~4.5 (빠른 회전)
     leaf.pitchPhase   = frand(0.0f, 6.2832f);
 }
 

@@ -399,9 +399,10 @@ private:
     float m_fWindGustDuration    = 0.0f;
     float m_fWindGustStrength    = 0.0f;
     bool  m_bWindGustActive      = false;
-    static constexpr float kWindGustCycleSec   = 30.0f;
-    static constexpr float kWindGustDefaultSec = 5.0f;
-    static constexpr float kWindGustRampSec    = 1.5f;
+    // TODO 테스트용 단축값 — 확인 끝나면 원래 (30 / 5 / 1.5) 로 복구
+    static constexpr float kWindGustCycleSec   = 6.0f;
+    static constexpr float kWindGustDefaultSec = 3.0f;
+    static constexpr float kWindGustRampSec    = 0.8f;
     bool m_bToonEnabled = true;  // F7로 토글: 원신풍 셀 셰이딩 (기본 ON)
     GameObject* m_pLavaPlane = nullptr; // 용암 바닥 평면
     GameObject* m_pWaterPlane = nullptr; // 물 바닥 평면
