@@ -265,6 +265,7 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClInclude Include="DarkLordSigilSlash.h" />
     <ClInclude Include="DarkLordSigilField.h" />
     <ClInclude Include="DarkLordSwordRain.h" />
+    <ClInclude Include="DarkLordSwordSeal.h" />
     <ClInclude Include="FluidParticle.h" />
     <ClInclude Include="FluidParticleSystem.h" />
     <ClInclude Include="EffectRegistry.h" />
@@ -433,6 +434,7 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClCompile Include="DarkLordSigilSlash.cpp" />
     <ClCompile Include="DarkLordSigilField.cpp" />
     <ClCompile Include="DarkLordSwordRain.cpp" />
+    <ClCompile Include="DarkLordSwordSeal.cpp" />
     <ClCompile Include="FluidParticleSystem.cpp" />
     <ClCompile Include="EffectRegistry.cpp" />
     <ClCompile Include="FluidSkillVFXManager.cpp" />

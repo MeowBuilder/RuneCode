@@ -128,6 +128,18 @@ void SkillComponent::Update(float deltaTime)
 
         if (m_bIsChanneling)
         {
+            // 컷신 등으로 채널을 강제 종료할 때, 채널 behavior(FireBeam 등)의 VFX를
+            // 반드시 Reset 해야 한다. 호출하지 않으면 빔이 살아남아 무한 지속되고,
+            // 이후 다른 스킬(우클릭 화염구 등)과 시선 방향이 겹쳐 "빔이 화염구에서
+            // 나가는" 것처럼 보인다.
+            size_t chIdx = static_cast<size_t>(m_ActiveSkillSlot);
+            if (chIdx < m_Skills.size() && m_Skills[chIdx])
+            {
+                m_Skills[chIdx]->OnChannelEnd(m_pOwner);
+                m_Skills[chIdx]->Reset();
+                if (m_SkillStates[chIdx] == SkillState::Casting)
+                    m_SkillStates[chIdx] = SkillState::Cooldown;
+            }
             m_bIsChanneling = false;
             m_fChannelTime = 0.0f;
             m_fChannelTickAccum = 0.0f;
@@ -292,6 +304,12 @@ void SkillComponent::Update(float deltaTime)
             [&](DelayedCast& dc) -> bool
             {
                 if (dc.timeRemain > 0.f) return false;
+                // 다른 스킬이 채널/차지 중이면 발동을 보류한다.
+                //   채널/차지 상태는 m_ActiveSkillSlot / m_ChargingSlot 같은 전역 변수 하나로
+                //   관리되므로, 지금 지연 스킬을 발동하면 그 변수를 덮어써 진행 중인 채널이
+                //   영원히 종료되지 않는다(예: 파이어빔 무한 지속). 채널/차지가 끝날 때까지
+                //   큐에 유지했다가 그 직후 프레임에 발동한다.
+                if (m_bIsChanneling || m_bIsCharging) return false;
                 // 상태를 Ready로 되돌려 ExecuteWithActivationType 통과
                 m_SkillStates[dc.skillIndex] = SkillState::Ready;
                 m_bRSkillExecuting = true;
@@ -1741,6 +1759,16 @@ void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XM
     }
 
     if (m_SkillStates[index] != SkillState::Ready)
+    {
+        return;
+    }
+
+    // 다른 슬롯이 채널/차지 중이면 새 스킬을 시작하지 않는다.
+    //   채널/차지는 m_ActiveSkillSlot/m_ChargingSlot 등 전역 단일 변수로 관리되므로,
+    //   진행 중에 다른 스킬을 시작하면 그 상태가 오염돼(채널 무한 지속 등) 버그가 난다.
+    //   (정상 입력 경로는 ProcessSkillInput 에서 이미 차단되지만, 지연 발동 등 다른 진입에 대한 방어.)
+    if ((m_bIsChanneling && slot != m_ActiveSkillSlot) ||
+        (m_bIsCharging   && slot != m_ChargingSlot))
     {
         return;
     }

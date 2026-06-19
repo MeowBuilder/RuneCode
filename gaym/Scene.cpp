@@ -43,6 +43,7 @@
 #include "DropItemComponent.h"
 #include "InteractableComponent.h"
 #include "EnemyComponent.h"
+#include "DarkLordSwordSeal.h"
 #include "MathUtils.h"
 #include "LavaGeyserManager.h"
 #include "EffectRegistry.h"
@@ -1586,6 +1587,28 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
             {
                 pPC->SetCurrentHP(pPC->GetMaxHP());
                 OutputDebugString(L"[Debug] Player HP fully restored\n");
+            }
+        }
+    }
+
+    // Home: [DEBUG] DarkLord 강제 검의 봉인 발동 — 페이즈/쿨다운 무시.
+    if (pInputSystem && pInputSystem->IsKeyPressed(VK_HOME))
+    {
+        if (m_pCurrentRoom)
+        {
+            const auto& vEnemies = m_pCurrentRoom->GetEnemies();
+            EnemyComponent* pBoss = nullptr;
+            for (EnemyComponent* pE : vEnemies)
+                if (pE && pE->IsBoss()) { pBoss = pE; break; }
+            if (pBoss)
+            {
+                pBoss->DebugForceSpecialAttack(std::make_unique<DarkLordSwordSeal>(
+                    ElementType::Fire, 45.0f, 7.0f, 20.0f, 65.0f, 3.0f, 15.0f, 4));
+                OutputDebugString(L"[Debug] DarkLord SwordSeal force-trigger\n");
+            }
+            else
+            {
+                OutputDebugString(L"[Debug] No boss in current room\n");
             }
         }
     }

@@ -6,6 +6,8 @@
 #include "TransformComponent.h"
 #include "IAttackBehavior.h"
 #include "AnimationComponent.h"
+#include "PlayerComponent.h"
+#include "VFXManager.h"
 #include "Room.h"
 #include "Scene.h"
 #include "Dx12App.h"
@@ -25,10 +27,133 @@ EnemyComponent::EnemyComponent(GameObject* pOwner)
 
 EnemyComponent::~EnemyComponent()
 {
+    ClearOrbitingSwords();
+}
+
+// ── Orbiting Swords (DarkLord 봉인 검 — attack behavior 종료 후 검 자율 회전) ──
+void EnemyComponent::AddOrbitingSword(const OrbitingSwordEntry& entry)
+{
+    m_vOrbitingSwords.push_back(entry);
+}
+
+void EnemyComponent::SetOrbitingSwordParams(float fRadius, float fSpeedDeg, float fYOffset,
+                                            float fDamage, float fHitRadius, float fLifetime,
+                                            ElementType element)
+{
+    m_fOrbitRadius       = fRadius;
+    m_fOrbitSpeedDeg     = fSpeedDeg;
+    m_fOrbitYOffset      = fYOffset;
+    m_fOrbitDamage       = fDamage;
+    m_fOrbitHitRadius    = fHitRadius;
+    m_fOrbitRemainingSec = fLifetime;
+    m_fOrbitAngleDeg     = 0.0f;
+    m_fOrbitDmgCooldown  = 0.0f;
+    m_eOrbitElement      = element;
+}
+
+void EnemyComponent::ClearOrbitingSwords()
+{
+    Scene* pScene = nullptr;
+    if (m_pRoom) pScene = m_pRoom->GetScene();
+    for (auto& sw : m_vOrbitingSwords)
+    {
+        if (pScene)
+        {
+            if (sw.vfxSlot >= 0)
+                if (auto* pVFX = pScene->GetVFXManager())
+                    pVFX->Stop(sw.vfxSlot);
+            if (sw.pObj) pScene->MarkForDeletion(sw.pObj);
+        }
+    }
+    m_vOrbitingSwords.clear();
+    m_fOrbitRemainingSec = 0.0f;
+}
+
+void EnemyComponent::UpdateOrbitingSwords(float dt)
+{
+    if (m_vOrbitingSwords.empty()) return;
+
+    m_fOrbitRemainingSec -= dt;
+    if (m_fOrbitRemainingSec <= 0.0f)
+    {
+        ClearOrbitingSwords();
+        return;
+    }
+
+    GameObject* pOwner = GetOwner();
+    if (!pOwner) return;
+    TransformComponent* pBossT = pOwner->GetTransform();
+    if (!pBossT) return;
+    XMFLOAT3 bossPos = pBossT->GetPosition();
+
+    m_fOrbitAngleDeg += m_fOrbitSpeedDeg * dt;
+    if (m_fOrbitAngleDeg > 360.0f) m_fOrbitAngleDeg -= 360.0f;
+
+    Scene* pScene = m_pRoom ? m_pRoom->GetScene() : nullptr;
+    VFXManager* pVFX = pScene ? pScene->GetVFXManager() : nullptr;
+
+    // 검 transform + VFX 추적
+    for (auto& sw : m_vOrbitingSwords)
+    {
+        if (!sw.pObj) continue;
+        float angDeg = sw.baseAngleDeg + m_fOrbitAngleDeg;
+        float yawRad = XMConvertToRadians(angDeg);
+        XMFLOAT3 pos = {
+            bossPos.x + sinf(yawRad) * m_fOrbitRadius,
+            bossPos.y + m_fOrbitYOffset,
+            bossPos.z + cosf(yawRad) * m_fOrbitRadius
+        };
+        auto* pT = sw.pObj->GetTransform();
+        if (pT)
+        {
+            pT->SetPosition(pos);
+            pT->SetRotation(0.0f, angDeg + 90.0f, 0.0f);
+        }
+        if (pVFX && sw.vfxSlot >= 0)
+        {
+            XMFLOAT3 dirOut = { sinf(yawRad), 0.0f, cosf(yawRad) };
+            pVFX->Track(sw.vfxSlot, pos, dirOut);
+        }
+    }
+
+    // 플레이어 충돌 데미지 — 쿨다운 간격으로 (다중 검 동시 hit 방지)
+    if (m_fOrbitDmgCooldown > 0.0f) m_fOrbitDmgCooldown -= dt;
+    if (m_fOrbitDmgCooldown <= 0.0f && pScene)
+    {
+        auto vPlayers = pScene->GetAllPlayers();
+        for (GameObject* pPO : vPlayers)
+        {
+            if (!pPO) continue;
+            auto* pPT = pPO->GetTransform();
+            if (!pPT) continue;
+            PlayerComponent* pPC = pPO->GetComponent<PlayerComponent>();
+            if (!pPC) continue;
+            XMFLOAT3 pp = pPT->GetPosition();
+            bool bHit = false;
+            for (auto& sw : m_vOrbitingSwords)
+            {
+                if (!sw.pObj) continue;
+                XMFLOAT3 sp = sw.pObj->GetTransform()->GetPosition();
+                float dx = pp.x - sp.x;
+                float dz = pp.z - sp.z;
+                if (sqrtf(dx*dx + dz*dz) <= m_fOrbitHitRadius)
+                { bHit = true; break; }
+            }
+            if (bHit)
+            {
+                pPC->TakeDamage(m_fOrbitDamage);
+                m_fOrbitDmgCooldown = 0.55f;
+                break;
+            }
+        }
+    }
 }
 
 void EnemyComponent::Update(float deltaTime)
 {
+    // Orbiting swords (independent of attack behavior — 보스가 다른 패턴 진행 중에도 검 유지)
+    UpdateOrbitingSwords(deltaTime);
+
     // Decay hit flash every frame
     if (m_fHitFlashTimer > 0.f)
     {
@@ -652,6 +777,20 @@ void EnemyComponent::SetAttackBehavior(std::unique_ptr<IAttackBehavior> pBehavio
 void EnemyComponent::SetSpecialAttackBehavior(std::unique_ptr<IAttackBehavior> pBehavior)
 {
     m_pSpecialAttackBehavior = std::move(pBehavior);
+}
+
+void EnemyComponent::DebugForceSpecialAttack(std::unique_ptr<IAttackBehavior> pBehavior)
+{
+    if (m_eCurrentState == EnemyState::Dead) return;
+    // 진행 중인 attack 안전하게 중단 — ChangeState 가 Reset 호출.
+    if (m_eCurrentState == EnemyState::Attack)
+        ChangeState(EnemyState::Idle);
+
+    m_pSpecialAttackBehavior = std::move(pBehavior);
+    m_bUsingSpecialAttack    = true;
+    m_bUsingFlyingAttack     = false;
+    m_fAttackCooldownTimer   = 0.0f;   // 쿨다운 무시
+    ChangeState(EnemyState::Attack);
 }
 
 void EnemyComponent::SetFlyingAttackBehavior(std::unique_ptr<IAttackBehavior> pBehavior)
