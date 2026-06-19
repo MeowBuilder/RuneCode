@@ -157,23 +157,37 @@ void CollisionManager::ResolveWallPenetration(ColliderComponent* pDynamic, Colli
 
     if (overlapX <= 0.0f || overlapZ <= 0.0f) return;
 
-    // 밀어내기 양 제한 (텔레포트 방지)
-    const float MAX_PUSH = 0.5f;
-    overlapX = min(overlapX, MAX_PUSH);
-    overlapZ = min(overlapZ, MAX_PUSH);
+    // 침투량 캡 — 침투가 작을 땐 전부 해소, 깊을 땐 1.5/frame 까지 허용 (이전 0.5 → 깊은 침투에서
+    // 여러 프레임 동안 못 빠져나와 흔들리던 문제 해결).
+    const float MAX_PUSH = 1.5f;
+    float pushX = min(overlapX, MAX_PUSH);
+    float pushZ = min(overlapZ, MAX_PUSH);
 
     XMFLOAT3 pos = pTransform->GetPosition();
 
-    // Push along the axis with the smallest penetration (minimum translation vector)
-    if (overlapX < overlapZ)
+    // MTV(minimum translation vector) — 더 얕은 침투 축으로 push.
+    //   코너에서 X/Z 침투가 비슷하면 매 프레임 다른 축 선택되며 떨림.
+    //   비슷할 때(차이 < 0.05) 는 양 축 동시 push 로 코너 빠짐.
+    const float EPS = 0.05f;
+    bool similar = fabsf(overlapX - overlapZ) < EPS;
+
+    if (similar)
+    {
+        // 코너 — 양 축 동시에 해소 (떨림 방지)
+        float signX = (dynBox.Center.x >= wallBox.Center.x) ? 1.0f : -1.0f;
+        float signZ = (dynBox.Center.z >= wallBox.Center.z) ? 1.0f : -1.0f;
+        pos.x += signX * pushX * 0.707f;   // √2/2 — 대각선 분배
+        pos.z += signZ * pushZ * 0.707f;
+    }
+    else if (overlapX < overlapZ)
     {
         float sign = (dynBox.Center.x >= wallBox.Center.x) ? 1.0f : -1.0f;
-        pos.x += sign * overlapX;
+        pos.x += sign * pushX;
     }
     else
     {
         float sign = (dynBox.Center.z >= wallBox.Center.z) ? 1.0f : -1.0f;
-        pos.z += sign * overlapZ;
+        pos.z += sign * pushZ;
     }
 
     pTransform->SetPosition(pos);

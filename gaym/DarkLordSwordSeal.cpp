@@ -116,13 +116,11 @@ void DarkLordSwordSeal::SpawnSwords(EnemyComponent* pEnemy)
             continue;
         }
 
-        // 위치 / 자세
-        //   mesh origin 이 검의 그립/중앙 기준 → scale 25 일 때 칼날 길이 ~25 만큼 -Y 로 늘어남.
-        //   보스 머리 위 (Y+25 ~ Y+30) 에 origin 두면 검 전체가 지면 위에 안전하게 떠있음.
+        // 위치 / 자세 — 보스 머리 위 (스케일 14 → Y+39 정도).
         float yawRad = XMConvertToRadians(angDeg);
         XMFLOAT3 pos = {
             bossPos.x + sinf(yawRad) * m_fOrbitRadius,
-            bossPos.y + 28.0f,
+            bossPos.y + 39.0f,
             bossPos.z + cosf(yawRad) * m_fOrbitRadius
         };
         auto* pT = pSword->GetTransform();
@@ -167,7 +165,7 @@ void DarkLordSwordSeal::SpawnSwords(EnemyComponent* pEnemy)
 
     // 보스에 orbit 파라미터 전달 — lifetime 동안 EnemyComponent 가 회전/충돌 처리.
     pEnemy->SetOrbitingSwordParams(
-        m_fOrbitRadius, m_fOrbitSpeedDegPerSec, 28.0f,
+        m_fOrbitRadius, m_fOrbitSpeedDegPerSec, 39.0f,
         m_fDamage, m_fSwordHitRadius, m_fDuration,
         m_eElement);
 
@@ -207,7 +205,7 @@ void DarkLordSwordSeal::UpdateOrbit(float dt, EnemyComponent* pEnemy)
         float yawRad = XMConvertToRadians(angDeg);
         XMFLOAT3 pos = {
             bossPos.x + sinf(yawRad) * m_fOrbitRadius,
-            bossPos.y + 28.0f,
+            bossPos.y + 39.0f,
             bossPos.z + cosf(yawRad) * m_fOrbitRadius
         };
         auto* pT = sw.pObj->GetTransform();

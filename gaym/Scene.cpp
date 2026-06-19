@@ -1378,7 +1378,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
             if (pBoss)
             {
                 pBoss->DebugForceSpecialAttack(std::make_unique<DarkLordSwordSeal>(
-                    ElementType::Fire, 45.0f, 7.0f, 20.0f, 65.0f, 3.0f, 15.0f, 4));
+                    ElementType::Fire, 45.0f, 7.0f, 26.0f, 65.0f, 4.0f, 21.0f, 4));
                 OutputDebugString(L"[Debug] DarkLord SwordSeal force-trigger\n");
             }
             else
