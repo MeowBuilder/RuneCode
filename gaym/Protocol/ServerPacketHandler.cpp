@@ -703,6 +703,12 @@ bool Handle_S_RUNE_TRIGGER(PacketSessionRef& session, Protocol::S_RUNE_TRIGGER& 
 
     uint64 targetMonsterId = pkt.targetmonsterid();
     uint64 targetPlayerId = pkt.targetplayerid();
+
+    // 서버가 보낸 objectId를 살려서 NetworkManager까지 넘긴다.
+    // TRF_DEP: trapId
+    // TRF_CHA / TRF_ECH: sourceMonsterId
+    // TRF_ORB: orbitalId
+    // TRF_EMP: 0 = READY, 1 = CONSUME
     uint64 objectId = pkt.objectid();
 
     float x = pkt.x();
@@ -741,6 +747,7 @@ bool Handle_S_RUNE_TRIGGER(PacketSessionRef& session, Protocol::S_RUNE_TRIGGER& 
             triggerType,
             targetMonsterId,
             targetPlayerId,
+            objectId,
             DirectX::XMFLOAT3(x, y, z),
             value1,
             value2);

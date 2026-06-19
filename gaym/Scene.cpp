@@ -47,6 +47,7 @@
 #include "MathUtils.h"
 #include "LavaGeyserManager.h"
 #include "EffectRegistry.h"
+#include "VFXSpriteManager.h"
 #include <functional> // Added for std::function
 #include "MapLoader.h"
 #include "WICTextureLoader12.h"
@@ -369,13 +370,237 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
     m_pProjectileManager->Init(this, pDevice, pCommandList, m_pDescriptorHeap.get(), nProjectileDescriptorStart);
     OutputDebugString(L"[Scene] Projectile system initialized\n");
 
-    // Decal Manager (32 CB slots + 텍스처 SRV)
-    m_pDecalManager->Init(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex, pShader.get());
-    m_pDecalManager->LoadTexture(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
-        DecalTexture::MagicCircle, L"Assets/Textures/VFX/MagicCircle.png");
-    m_pDecalManager->LoadTexture(pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
-        DecalTexture::Star08, L"Assets/Textures/VFX/star_08.png");
+    // Decal Manager
+    m_pDecalManager->Init(
+        pDevice,
+        pCommandList,
+        m_pDescriptorHeap.get(),
+        m_nNextDescriptorIndex,
+        pShader.get());
+
+    // 실제 PNG 파일명 기준으로 로드
+    m_pDecalManager->LoadTexture(
+        pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
+        DecalTexture::MagicCircle,
+        L"Assets/Textures/VFX/MagicCircle.png");
+
+    m_pDecalManager->LoadTexture(
+        pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
+        DecalTexture::Skull,
+        L"Assets/Textures/VFX/human-skull.png");
+
+    m_pDecalManager->LoadTexture(
+        pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
+        DecalTexture::Magic2,
+        L"Assets/Textures/VFX/magic_02.png");
+
+    m_pDecalManager->LoadTexture(
+        pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
+        DecalTexture::Magic3,
+        L"Assets/Textures/VFX/magic_03.png");
+
+    m_pDecalManager->LoadTexture(
+        pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
+        DecalTexture::Scorch1,
+        L"Assets/Textures/VFX/scorch_01.png");
+
+    m_pDecalManager->LoadTexture(
+        pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
+        DecalTexture::Scorch2,
+        L"Assets/Textures/VFX/scorch_02.png");
+
+    m_pDecalManager->LoadTexture(
+        pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
+        DecalTexture::Scorch3,
+        L"Assets/Textures/VFX/scorch_03.png");
+
+    m_pDecalManager->LoadTexture(
+        pDevice, pCommandList, m_pDescriptorHeap.get(), m_nNextDescriptorIndex,
+        DecalTexture::Star08,
+        L"Assets/Textures/VFX/star_08.png");
+
     OutputDebugString(L"[Scene] DecalManager initialized\n");
+
+    // ─────────────────────────────────────────────
+// VFXSpriteManager 텍스처 등록
+// VFXSpriteManager::Spawn("fire1", ...) 같은 호출은
+// 여기서 texId가 등록되어 있어야 실제로 화면에 렌더된다.
+// ─────────────────────────────────────────────
+    auto RegisterRuneSpriteTexture = [&](const std::string& id, const wchar_t* path)
+        {
+            ComPtr<ID3D12Resource> tex;
+            std::unique_ptr<uint8_t[]> decodedData;
+            D3D12_SUBRESOURCE_DATA subresource{};
+
+            HRESULT hr = DirectX::LoadWICTextureFromFile(
+                pDevice,
+                path,
+                tex.GetAddressOf(),
+                decodedData,
+                subresource);
+
+            if (FAILED(hr) || !tex)
+            {
+                wchar_t wbuf[512];
+                swprintf_s(wbuf, L"[VFXSpriteManager] Texture load failed: id=%hs path=%s\n",
+                    id.c_str(), path);
+                OutputDebugString(wbuf);
+                return;
+            }
+
+            UINT64 uploadSize = GetRequiredIntermediateSize(tex.Get(), 0, 1);
+
+            ComPtr<ID3D12Resource> upload = CreateBufferResource(
+                pDevice,
+                pCommandList,
+                nullptr,
+                uploadSize,
+                D3D12_HEAP_TYPE_UPLOAD,
+                D3D12_RESOURCE_STATE_GENERIC_READ,
+                nullptr);
+
+            if (!upload)
+            {
+                wchar_t wbuf[512];
+                swprintf_s(wbuf, L"[VFXSpriteManager] Upload buffer create failed: id=%hs path=%s\n",
+                    id.c_str(), path);
+                OutputDebugString(wbuf);
+                return;
+            }
+
+            UpdateSubresources(
+                pCommandList,
+                tex.Get(),
+                upload.Get(),
+                0,
+                0,
+                1,
+                &subresource);
+
+            D3D12_RESOURCE_BARRIER barrier =
+                CD3DX12_RESOURCE_BARRIER::Transition(
+                    tex.Get(),
+                    D3D12_RESOURCE_STATE_COPY_DEST,
+                    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+            pCommandList->ResourceBarrier(1, &barrier);
+
+            D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle;
+            D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle;
+            AllocateDescriptor(&cpuHandle, &gpuHandle);
+
+            D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+            srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            srvDesc.Format = tex->GetDesc().Format;
+            srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            srvDesc.Texture2D.MipLevels = tex->GetDesc().MipLevels;
+
+            pDevice->CreateShaderResourceView(tex.Get(), &srvDesc, cpuHandle);
+
+            D3D12_RESOURCE_DESC desc = tex->GetDesc();
+
+            VFXSpriteManager::Get().RegisterTex(
+                id,
+                gpuHandle,
+                static_cast<UINT>(desc.Width),
+                static_cast<UINT>(desc.Height));
+
+            // SRV가 참조하는 실제 텍스처/업로드 리소스 수명 유지
+            m_vRuneSpriteTextures.push_back(tex);
+            m_vRuneSpriteUploads.push_back(upload);
+
+            wchar_t wbuf[512];
+            swprintf_s(wbuf, L"[VFXSpriteManager] Registered: id=%hs path=%s\n",
+                id.c_str(), path);
+            OutputDebugString(wbuf);
+        };
+
+    // ─────────────────────────────────────────────
+    // 실제 PNG 파일명 기준 등록
+    // ─────────────────────────────────────────────
+
+    // 예전 코드 호환 alias
+    RegisterRuneSpriteTexture("fire1", L"Assets/Textures/VFX/fire_01.png");
+    RegisterRuneSpriteTexture("fire2", L"Assets/Textures/VFX/fire_02.png");
+    RegisterRuneSpriteTexture("flare1", L"Assets/Textures/VFX/flare_01.png");
+    RegisterRuneSpriteTexture("twirl1", L"Assets/Textures/VFX/twirl_01.png");
+    RegisterRuneSpriteTexture("twirl2", L"Assets/Textures/VFX/twirl_02.png");
+    RegisterRuneSpriteTexture("twirl3", L"Assets/Textures/VFX/twirl_03.png");
+    RegisterRuneSpriteTexture("magic2", L"Assets/Textures/VFX/magic_02.png");
+    RegisterRuneSpriteTexture("magic3", L"Assets/Textures/VFX/magic_03.png");
+    RegisterRuneSpriteTexture("skull", L"Assets/Textures/VFX/human-skull.png");
+
+    // 실제 파일명 id
+    RegisterRuneSpriteTexture("fire_01", L"Assets/Textures/VFX/fire_01.png");
+    RegisterRuneSpriteTexture("fire_02", L"Assets/Textures/VFX/fire_02.png");
+    RegisterRuneSpriteTexture("flare_01", L"Assets/Textures/VFX/flare_01.png");
+
+    RegisterRuneSpriteTexture("twirl_01", L"Assets/Textures/VFX/twirl_01.png");
+    RegisterRuneSpriteTexture("twirl_02", L"Assets/Textures/VFX/twirl_02.png");
+    RegisterRuneSpriteTexture("twirl_03", L"Assets/Textures/VFX/twirl_03.png");
+
+    RegisterRuneSpriteTexture("magic_01", L"Assets/Textures/VFX/magic_01.png");
+    RegisterRuneSpriteTexture("magic_02", L"Assets/Textures/VFX/magic_02.png");
+    RegisterRuneSpriteTexture("magic_03", L"Assets/Textures/VFX/magic_03.png");
+    RegisterRuneSpriteTexture("magic_04", L"Assets/Textures/VFX/magic_04.png");
+    RegisterRuneSpriteTexture("magic_05", L"Assets/Textures/VFX/magic_05.png");
+
+    RegisterRuneSpriteTexture("human-skull", L"Assets/Textures/VFX/human-skull.png");
+
+    RegisterRuneSpriteTexture("slash_01", L"Assets/Textures/VFX/slash_01.png");
+    RegisterRuneSpriteTexture("slash_02", L"Assets/Textures/VFX/slash_02.png");
+    RegisterRuneSpriteTexture("slash_03", L"Assets/Textures/VFX/slash_03.png");
+    RegisterRuneSpriteTexture("slash_04", L"Assets/Textures/VFX/slash_04.png");
+
+    RegisterRuneSpriteTexture("trace_01", L"Assets/Textures/VFX/trace_01.png");
+    RegisterRuneSpriteTexture("trace_02", L"Assets/Textures/VFX/trace_02.png");
+    RegisterRuneSpriteTexture("trace_03", L"Assets/Textures/VFX/trace_03.png");
+    RegisterRuneSpriteTexture("trace_04", L"Assets/Textures/VFX/trace_04.png");
+    RegisterRuneSpriteTexture("trace_05", L"Assets/Textures/VFX/trace_05.png");
+    RegisterRuneSpriteTexture("trace_06", L"Assets/Textures/VFX/trace_06.png");
+    RegisterRuneSpriteTexture("trace_07", L"Assets/Textures/VFX/trace_07.png");
+
+    RegisterRuneSpriteTexture("spark_01", L"Assets/Textures/VFX/spark_01.png");
+    RegisterRuneSpriteTexture("spark_02", L"Assets/Textures/VFX/spark_02.png");
+    RegisterRuneSpriteTexture("spark_03", L"Assets/Textures/VFX/spark_03.png");
+    RegisterRuneSpriteTexture("spark_04", L"Assets/Textures/VFX/spark_04.png");
+    RegisterRuneSpriteTexture("spark_05", L"Assets/Textures/VFX/spark_05.png");
+    RegisterRuneSpriteTexture("spark_06", L"Assets/Textures/VFX/spark_06.png");
+    RegisterRuneSpriteTexture("spark_07", L"Assets/Textures/VFX/spark_07.png");
+
+    RegisterRuneSpriteTexture("smoke_01", L"Assets/Textures/VFX/smoke_01.png");
+    RegisterRuneSpriteTexture("smoke_02", L"Assets/Textures/VFX/smoke_02.png");
+    RegisterRuneSpriteTexture("smoke_03", L"Assets/Textures/VFX/smoke_03.png");
+    RegisterRuneSpriteTexture("smoke_04", L"Assets/Textures/VFX/smoke_04.png");
+    RegisterRuneSpriteTexture("smoke_05", L"Assets/Textures/VFX/smoke_05.png");
+    RegisterRuneSpriteTexture("smoke_06", L"Assets/Textures/VFX/smoke_06.png");
+    RegisterRuneSpriteTexture("smoke_07", L"Assets/Textures/VFX/smoke_07.png");
+    RegisterRuneSpriteTexture("smoke_08", L"Assets/Textures/VFX/smoke_08.png");
+    RegisterRuneSpriteTexture("smoke_09", L"Assets/Textures/VFX/smoke_09.png");
+    RegisterRuneSpriteTexture("smoke_10", L"Assets/Textures/VFX/smoke_10.png");
+
+    RegisterRuneSpriteTexture("star_01", L"Assets/Textures/VFX/star_01.png");
+    RegisterRuneSpriteTexture("star_02", L"Assets/Textures/VFX/star_02.png");
+    RegisterRuneSpriteTexture("star_03", L"Assets/Textures/VFX/star_03.png");
+    RegisterRuneSpriteTexture("star_04", L"Assets/Textures/VFX/star_04.png");
+    RegisterRuneSpriteTexture("star_05", L"Assets/Textures/VFX/star_05.png");
+    RegisterRuneSpriteTexture("star_06", L"Assets/Textures/VFX/star_06.png");
+    RegisterRuneSpriteTexture("star_07", L"Assets/Textures/VFX/star_07.png");
+    RegisterRuneSpriteTexture("star_08", L"Assets/Textures/VFX/star_08.png");
+    RegisterRuneSpriteTexture("star_09", L"Assets/Textures/VFX/star_09.png");
+
+    RegisterRuneSpriteTexture("symbol_01", L"Assets/Textures/VFX/symbol_01.png");
+    RegisterRuneSpriteTexture("symbol_02", L"Assets/Textures/VFX/symbol_02.png");
+
+    // ABY_TIM에서 "clock"을 쓰고 있으므로 우선 star_03에 alias 연결.
+    // 나중에 전용 시계 PNG가 생기면 path만 바꾸면 됨.
+    RegisterRuneSpriteTexture("clock", L"Assets/Textures/VFX/star_03.png");
+
+    // ABY_VMP에서 "fang"을 쓰고 있으므로 우선 slash_03에 alias 연결.
+    // 송곳니 느낌이 더 필요하면 별도 fang.png 추가 후 path 교체.
+    RegisterRuneSpriteTexture("fang", L"Assets/Textures/VFX/slash_03.png");
+
+    OutputDebugString(L"[Scene] VFXSpriteManager rune textures registered\n");
 
     // Debug Renderer (no descriptors)
     m_pDebugRenderer->Init(pDevice, pCommandList);
@@ -1447,43 +1672,103 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         if (pInputSystem && pInputSystem->IsKeyPressed(VK_F10)) cycleBossClip(-1);
     }
 
-    // B 키: 현재 테마에 맞는 보스전
+    static uint64 s_lastDebugRoomActionTick = 0;
+    const uint64 nowDebugRoomActionTick = GetTickCount64();
+
+    auto CanSendDebugRoomAction = [&]() -> bool
+        {
+            if (nowDebugRoomActionTick - s_lastDebugRoomActionTick < 2000)
+            {
+                OutputDebugString(L"[Scene] Debug room action blocked: cooldown\n");
+                return false;
+            }
+
+            s_lastDebugRoomActionTick = nowDebugRoomActionTick;
+            return true;
+        };
+
+    // B 키: 현재 스테이지 보스방 이동
     if (pInputSystem && pInputSystem->IsKeyPressed('B'))
     {
-        switch (m_eCurrentTheme)
+        NetworkManager* pNet = NetworkManager::GetInstance();
+
+        if (pNet && pNet->IsConnected())
         {
-        case StageTheme::Water:
-            OutputDebugString(L"[Scene] B key - Water boss (Kraken)\n");
-            TransitionToWaterBossRoom(); break;
-        case StageTheme::Earth:
-            OutputDebugString(L"[Scene] B key - Earth boss (Golem)\n");
-            TransitionToEarthBossRoom(); break;
-        case StageTheme::Grass:
-            OutputDebugString(L"[Scene] B key - Grass boss (Demon)\n");
-            TransitionToGrassBossRoom(); break;
-        default:
-            OutputDebugString(L"[Scene] B key - Fire boss (Dragon)\n");
-            TransitionToBossRoom(); break;
+            if (CanSendDebugRoomAction())
+            {
+                // 온라인에서는 서버가 모든 플레이어를 함께 보스방으로 보낸다.
+                pNet->SendDebugRoomAction(0); // 0 = DEBUG_ROOM_ACTION_GO_BOSS
+                OutputDebugString(L"[Scene] B key - C_DEBUG_ROOM_ACTION GO_BOSS requested\n");
+            }
+        }
+        else
+        {
+            switch (m_eCurrentTheme)
+            {
+            case StageTheme::Water:
+                OutputDebugString(L"[Scene] B key - Water boss (Kraken)\n");
+                TransitionToWaterBossRoom();
+                break;
+
+            case StageTheme::Earth:
+                OutputDebugString(L"[Scene] B key - Earth boss (Golem)\n");
+                TransitionToEarthBossRoom();
+                break;
+
+            case StageTheme::Grass:
+                OutputDebugString(L"[Scene] B key - Grass boss (Demon)\n");
+                TransitionToGrassBossRoom();
+                break;
+
+            default:
+                OutputDebugString(L"[Scene] B key - Fire boss (Dragon)\n");
+                TransitionToBossRoom();
+                break;
+            }
         }
     }
-
-    // N 키: 다음 스테이지로 전환 (불→물→땅→풀)
+    
+    // N 키: 다음 스테이지 이동
     if (pInputSystem && pInputSystem->IsKeyPressed('N'))
     {
-        switch (m_eCurrentTheme)
+        NetworkManager* pNet = NetworkManager::GetInstance();
+
+        if (pNet && pNet->IsConnected())
         {
-        case StageTheme::Fire:
-            OutputDebugString(L"[Scene] N key - Fire → Water\n");
-            TransitionToWaterStage(); break;
-        case StageTheme::Water:
-            OutputDebugString(L"[Scene] N key - Water → Earth\n");
-            TransitionToEarthStage(); break;
-        case StageTheme::Earth:
-            OutputDebugString(L"[Scene] N key - Earth → Grass\n");
-            TransitionToGrassStage(); break;
-        case StageTheme::Grass:
-            OutputDebugString(L"[Scene] N key - Grass → Fire\n");
-            TransitionToBossRoom(); break;  // 풀 이후는 처음으로
+            if (CanSendDebugRoomAction())
+            {
+                // 온라인에서는 서버가 모든 플레이어를 함께 다음 스테이지로 보낸다.
+                pNet->SendDebugRoomAction(1); // 1 = DEBUG_ROOM_ACTION_NEXT_STAGE
+                OutputDebugString(L"[Scene] N key - C_DEBUG_ROOM_ACTION NEXT_STAGE requested\n");
+            }
+        }
+        else
+        {
+            switch (m_eCurrentTheme)
+            {
+            case StageTheme::Fire:
+                OutputDebugString(L"[Scene] N key - Fire -> Water\n");
+                TransitionToWaterStage();
+                break;
+
+            case StageTheme::Water:
+                OutputDebugString(L"[Scene] N key - Water -> Earth\n");
+                TransitionToEarthStage();
+                break;
+
+            case StageTheme::Earth:
+                OutputDebugString(L"[Scene] N key - Earth -> Grass\n");
+                TransitionToGrassStage();
+                break;
+
+            case StageTheme::Grass:
+                OutputDebugString(L"[Scene] N key - Grass -> Fire boss\n");
+                TransitionToBossRoom();
+                break;
+
+            default:
+                break;
+            }
         }
     }
 
@@ -1897,6 +2182,9 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
 
     if (m_pDecalManager)
         m_pDecalManager->Update(deltaTime);
+
+    // 룬/상태이상 2D 월드 스프라이트 VFX 갱신
+    VFXSpriteManager::Get().Update(deltaTime);
 
     // 디버그 wind VFX 영구 재스폰 — 90s 마다 자동 재시작 (sub_wind 페이즈 99s 직전)
     //   m_bInBossRoom 일 때만 동작. 보스방 벗어나면 정리.

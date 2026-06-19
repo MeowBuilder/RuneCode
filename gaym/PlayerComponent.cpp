@@ -859,6 +859,12 @@ void PlayerComponent::TriggerShieldBreakVFX()
         DirectX::XMFLOAT4(0.55f, 0.85f, 1.0f, 1.0f), 0.f, VFXSpriteAnim::FadeOut);
 }
 
+void PlayerComponent::UpdateNetworkRuneVFX(float deltaTime)
+{
+    // 원격 플레이어는 이동/입력 업데이트 없이 룬 오라만 갱신한다.
+    UpdateAbyssAuraVFX(deltaTime);
+}
+
 void PlayerComponent::UpdateAbyssAuraVFX(float deltaTime)
 {
     // 매 프레임 위치 추적이 필요한 지속 VFX 두 가지:

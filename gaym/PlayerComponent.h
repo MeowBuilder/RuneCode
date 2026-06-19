@@ -70,6 +70,10 @@ public:
     //   보호막 흡수 펄스 — 플레이어 주변 청백 충격파 (피격 흡수 순간)
     void TriggerShieldBreakVFX();
 
+    // 네트워크 원격 플레이어용 룬 오라 갱신.
+    // 원격 플레이어는 PlayerUpdate를 타지 않으므로 VFX만 별도로 갱신한다.
+    void UpdateNetworkRuneVFX(float deltaTime);
+
     // Reset velocity when teleported — 중력이 플레이어를 바닥까지 끌어내리도록 onGround=false
     // (텔레포트 Y가 바닥보다 높으면 gravity가 자연스럽게 스냅; Y=0이면 즉시 ground 판정)
     void ResetGroundY() { m_fVelocityY = 0.0f; m_bOnGround = false; }

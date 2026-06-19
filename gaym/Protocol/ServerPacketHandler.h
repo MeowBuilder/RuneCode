@@ -46,6 +46,8 @@ enum : uint16
 	PKT_S_RUNE_EQUIP = 1035,
 	PKT_S_RUNE_HOMING_TARGET = 1036,
 	PKT_S_RUNE_TRIGGER = 1037,
+	PKT_C_DEBUG_RUNE_EQUIP = 1038,
+	PKT_C_DEBUG_ROOM_ACTION = 1039,
 };
 
 // Custom Handlers
@@ -127,6 +129,8 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::C_PLAYER_ACTION& pkt) { return MakeSendBuffer(pkt, PKT_C_PLAYER_ACTION); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_RUNE_REWARD_PICK& pkt) { return MakeSendBuffer(pkt, PKT_C_RUNE_REWARD_PICK); }
 	static SendBufferRef MakeSendBuffer(Protocol::C_RUNE_EQUIP& pkt) { return MakeSendBuffer(pkt, PKT_C_RUNE_EQUIP); }
+	static SendBufferRef MakeSendBuffer(Protocol::C_DEBUG_RUNE_EQUIP& pkt) { return MakeSendBuffer(pkt, PKT_C_DEBUG_RUNE_EQUIP); }
+	static SendBufferRef MakeSendBuffer(Protocol::C_DEBUG_ROOM_ACTION& pkt) { return MakeSendBuffer(pkt, PKT_C_DEBUG_ROOM_ACTION); }
 	// [DEBUG] 빈 본문 — C_PORTAL_INTERACT 메시지 형식만 빌려서 ID 만 다르게 보냄
 	static SendBufferRef MakeDebugKillAllSendBuffer() { Protocol::C_PORTAL_INTERACT pkt; return MakeSendBuffer(pkt, PKT_C_DEBUG_KILL_ALL); }
 	

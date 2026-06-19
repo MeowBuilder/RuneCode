@@ -310,6 +310,11 @@ public:
         m_nNextDescriptorIndex++;
     }
 
+    ID3D12DescriptorHeap* GetDescriptorHeapRaw() const
+    {
+        return m_pDescriptorHeap ? m_pDescriptorHeap->GetHeap() : nullptr;
+    }
+
     // Update persistent descriptor watermark (call after allocating permanent descriptors like Shadow Map SRV)
     void UpdatePersistentDescriptorEnd()
     {
@@ -630,6 +635,12 @@ private:
 
     // Ground Decal Manager (회전 마법진, 스코치 마크 등)
     std::unique_ptr<DecalManager> m_pDecalManager;
+
+    // 룬/상태이상 월드 스프라이트 텍스처 리소스 보관.
+    // VFXSpriteManager는 GPU descriptor handle만 저장하므로,
+    // 실제 ID3D12Resource는 Scene이 들고 있어야 한다.
+    std::vector<ComPtr<ID3D12Resource>> m_vRuneSpriteTextures;
+    std::vector<ComPtr<ID3D12Resource>> m_vRuneSpriteUploads;
 
     // Decorative terrain (장식용, 충돌 없음)
     std::unique_ptr<Terrain> m_pTerrain;
