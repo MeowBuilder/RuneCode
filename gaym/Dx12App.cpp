@@ -19,6 +19,7 @@
 #include "Room.h"
 #include "EnemyComponent.h"
 #include "AnimationComponent.h"   // ClearAnimationCache (종료 시 호출)
+#include "VFXSpriteManager.h"
 #include <DescriptorHeap.h>  // DirectXTK12
 #include <sstream>
 #include <iomanip>
@@ -960,7 +961,6 @@ void Dx12App::FrameAdvance()
 
     // Update damage number animations
     DamageNumberManager::Get().Update(m_GameTimer.GetTimeElapsed());
-    VFXSpriteManager::Get().Update(m_GameTimer.GetTimeElapsed());
 
     // ========================================================================
     // Shadow Pass: Render depth from light's perspective
@@ -1228,8 +1228,33 @@ void Dx12App::FrameAdvance()
                             mousePos.y >= slotY && mousePos.y <= slotY + 35.0f)
                         {
                             if (pDbgSkill)
-                                pDbgSkill->SetRuneSlot(static_cast<SkillSlot>(skillIdx),
-                                                       runeIdx, m_debugSelectedRuneId, 1);
+                            {
+                                // 로컬 화면에는 즉시 반영한다.
+                                pDbgSkill->SetRuneSlot(
+                                    static_cast<SkillSlot>(skillIdx),
+                                    runeIdx,
+                                    m_debugSelectedRuneId,
+                                    1);
+                            }
+
+                            // 온라인이면 서버에도 디버그 룬 장착을 요청한다.
+                            // 서버가 S_RUNE_EQUIP을 다시 브로드캐스트해서 모든 클라에 동기화한다.
+                            if (m_pNetworkManager && m_pNetworkManager->IsConnected())
+                            {
+                                m_pNetworkManager->SendDebugRuneEquip(
+                                    static_cast<uint32>(skillIdx),
+                                    static_cast<uint32>(runeIdx),
+                                    m_debugSelectedRuneId);
+
+                                char logBuf[256];
+                                sprintf_s(logBuf,
+                                    "[DebugRuneUI] SendDebugRuneEquip skillSlot=%d runeSlot=%d runeId=%s\n",
+                                    skillIdx,
+                                    runeIdx,
+                                    m_debugSelectedRuneId.c_str());
+                                OutputDebugStringA(logBuf);
+                            }
+
                             m_debugRuneState = DebugRuneUIState::SelectingRune;
                             equipped = true;
                         }
@@ -2214,6 +2239,45 @@ void Dx12App::RenderText()
         }
     }
 
+    // ─────────────────────────────────────────────
+// Rune / world sprite VFX pass
+// VFXSpriteManager 텍스처는 Scene descriptor heap에 등록되어 있으므로,
+// fontDescriptorHeap을 바인딩하기 전에 Scene heap으로 별도 SpriteBatch 패스를 돌린다.
+// ─────────────────────────────────────────────
+    if (m_pScene && m_pScene->GetCamera() && m_spriteBatch)
+    {
+        ID3D12DescriptorHeap* sceneHeap = m_pScene->GetDescriptorHeapRaw();
+
+        if (sceneHeap)
+        {
+            ID3D12DescriptorHeap* sceneHeaps[] = { sceneHeap };
+            m_pd3dCommandList->SetDescriptorHeaps(1, sceneHeaps);
+
+            CCamera* pCam = m_pScene->GetCamera();
+
+            XMMATRIX view =
+                XMLoadFloat4x4(&pCam->GetViewMatrix());
+
+            XMMATRIX proj =
+                XMLoadFloat4x4(&pCam->GetProjectionMatrix());
+
+            XMMATRIX viewProj = view * proj;
+
+            XMFLOAT4X4 viewProjMatrix;
+            XMStoreFloat4x4(&viewProjMatrix, viewProj);
+
+            m_spriteBatch->Begin(m_pd3dCommandList.Get());
+
+            VFXSpriteManager::Get().Render(
+                m_spriteBatch.get(),
+                viewProjMatrix,
+                (int)m_nWndClientWidth,
+                (int)m_nWndClientHeight);
+
+            m_spriteBatch->End();
+        }
+    }
+
     // Bind descriptor heap
     ID3D12DescriptorHeap* heaps[] = { m_fontDescriptorHeap->Heap() };
     m_pd3dCommandList->SetDescriptorHeaps(1, heaps);
@@ -2415,13 +2479,17 @@ void Dx12App::RenderText()
     {
         CCamera* pCam = m_pScene->GetCamera();
         XMMATRIX vp = XMLoadFloat4x4(&pCam->GetViewMatrix()) *
-                      XMLoadFloat4x4(&pCam->GetProjectionMatrix());
+            XMLoadFloat4x4(&pCam->GetProjectionMatrix());
+
         XMFLOAT4X4 vp4x4;
         XMStoreFloat4x4(&vp4x4, vp);
-        DamageNumberManager::Get().Render(m_spriteBatch.get(), m_spriteFont.get(),
-                                          vp4x4, (int)m_nWndClientWidth, (int)m_nWndClientHeight);
-        VFXSpriteManager::Get().Render(m_spriteBatch.get(),
-                                       vp4x4, (int)m_nWndClientWidth, (int)m_nWndClientHeight);
+
+        DamageNumberManager::Get().Render(
+            m_spriteBatch.get(),
+            m_spriteFont.get(),
+            vp4x4,
+            (int)m_nWndClientWidth,
+            (int)m_nWndClientHeight);
     }
 
     // ========== Debug Rune Inspector (overlay) ==========

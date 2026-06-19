@@ -412,3 +412,15 @@ message S_RUNE_TRIGGER
     float value1 = 15;
     float value2 = 16;
 }
+
+message C_DEBUG_RUNE_EQUIP // 클라 -> 서버 디버그 룬 직접 장착 요청 패킷
+{
+	uint32 skillSlot = 1;      // 0=Q, 1=E, 2=R, 3=RightClick
+	uint32 runeSlotIndex = 2;  // 해당 스킬의 룬 슬롯 번호: 0~2
+	string runeId = 3;         // 직접 장착할 룬 ID
+}
+
+message C_DEBUG_ROOM_ACTION // 클라 -> 서버 발표/테스트용 방 이동 요청 패킷
+{
+	DebugRoomActionType actionType = 1; // 보스방 이동 / 다음 스테이지 이동
+}

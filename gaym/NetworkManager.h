@@ -12,6 +12,7 @@
 #include <vector>
 #include <array>
 #include <DirectXMath.h>
+#include <string>
 #include "SkillTypes.h"   // ElementType (PendingMonsterVFX)
 #include "IAttackBehavior.h" // 네트워크 Golem AttackBehavior 보관용
 
@@ -189,13 +190,14 @@ struct NetworkCommandData
     float runeHomingOriginZ = 0.0f;
 
     // S_RUNE_TRIGGER 필드 (runeId 는 위 공용 필드 재사용, x/y/z 도 재사용)
-    int32  runeTriggerSkillSlot       = -1;
-    int32  runeTriggerSkillType       = 0;
-    int32  runeTriggerType            = 0;
+    int32  runeTriggerSkillSlot = -1;
+    int32  runeTriggerSkillType = 0;
+    int32  runeTriggerType = 0;
     uint64 runeTriggerTargetMonsterId = 0;
-    uint64 runeTriggerTargetPlayerId  = 0;
-    float  runeTriggerValue1          = 0.0f;
-    float  runeTriggerValue2          = 0.0f;
+    uint64 runeTriggerTargetPlayerId = 0;
+    uint64 runeTriggerObjectId = 0; // 서버 objectId: trapId/sourceMonsterId/orbitalId 등
+    float  runeTriggerValue1 = 0.0f;
+    float  runeTriggerValue2 = 0.0f;
 
     // S_SKILL 룬 보정 필드 — 서버 권위 radius/damage 배율을 원격 클라가 그대로 사용
     int32  skillSlot                  = -1;
@@ -272,6 +274,10 @@ public:
     // 룬 장착 요청 전송
     void SendRuneEquip(uint32 rewardOptionIndex, uint32 skillSlot, uint32 runeSlotIndex);
 
+    // 테스트용 디버그 패킷
+    void SendDebugRuneEquip(uint32 skillSlot, uint32 runeSlotIndex, const std::string& runeId);
+    void SendDebugRoomAction(uint32 actionType);
+
     // 플레이어 공격(히트 판정 요청) 전송 — 서버가 히트 판정 후 S_MONSTER_DAMAGE 브로드캐스트
     void SendPlayerAttack(int skillType,
                           float x, float y, float z,
@@ -338,10 +344,7 @@ public:
     void QueueRuneHomingTarget(uint64 playerId, int32 skillSlot, int32 skillType, uint64 targetMonsterId, const DirectX::XMFLOAT3& targetPos, const DirectX::XMFLOAT3& originPos);
 
     // 룬 발동(S_RUNE_TRIGGER) 큐잉 — 서버 권위 룬 결과를 클라 시각화에 전달
-    void QueueRuneTrigger(uint64 playerId, int32 skillSlot, int32 skillType,
-                          const std::string& runeId, int32 triggerType,
-                          uint64 targetMonsterId, uint64 targetPlayerId,
-                          const DirectX::XMFLOAT3& pos, float value1, float value2);
+    void QueueRuneTrigger(uint64 playerId, int32 skillSlot, int32 skillType, const std::string& runeId, int32 triggerType, uint64 targetMonsterId, uint64 targetPlayerId, uint64 objectId, const DirectX::XMFLOAT3& pos, float value1, float value2);
 
     // 보스 이벤트 (인트로/페이즈 전환/사망 컷씬)
     void QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 phaseIndex);
@@ -434,11 +437,7 @@ private:
     void ProcessRuneRewardPicked(Scene* pScene, uint64 ownerPlayerId);
     void ProcessRuneEquip(Scene* pScene, uint64 playerId, uint32 skillSlot, uint32 runeSlotIndex, const std::string& runeId, uint32 stackCount);
     void ProcessRuneHomingTarget(Scene* pScene, uint64 playerId, int32 skillSlot, int32 skillType, uint64 targetMonsterId, const DirectX::XMFLOAT3& targetPos, const DirectX::XMFLOAT3& originPos);
-    void ProcessRuneTrigger(Scene* pScene,
-                            uint64 playerId, int32 skillSlot, int32 skillType,
-                            const std::string& runeId, int32 triggerType,
-                            uint64 targetMonsterId, uint64 targetPlayerId,
-                            const DirectX::XMFLOAT3& pos, float value1, float value2);
+    void ProcessRuneTrigger(Scene* pScene, uint64 playerId, int32 skillSlot, int32 skillType, const std::string& runeId, int32 triggerType, uint64 targetMonsterId, uint64 targetPlayerId, uint64 objectId, const DirectX::XMFLOAT3& pos, float value1, float value2);
 
     // 메아리(ABY_ECO) ECHO_FIRE 시 원본 스킬 시각을 echo 위치에 50% 스케일로 재생
     void SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType element,
@@ -477,7 +476,7 @@ private:
     // 공격 애니 재생 중인 몬스터 — 이 시간 동안은 Move 와서도 Walk 로 덮어쓰지 않음
     std::unordered_map<uint64, float> m_mapServerMonsterAttackTimer;
     static constexpr float ATTACK_ANIM_LOCK = 1.4f;  // 공격 애니 지속 (대략)
-
+   
     // 서버 몬스터 hit flash 타이머 — 피격 시 glow 페이드아웃 (원격 플레이어와 동일 패턴)
     std::unordered_map<uint64, float> m_mapServerMonsterHitFlashTimer;
     static constexpr float SERVER_MONSTER_HIT_FLASH_DURATION = 0.15f;
@@ -781,6 +780,28 @@ private:
     // 원격 플레이어 설치 룬(TRF_DEP) 데칼 ID — (playerId, skillSlot) 단위로 추적해서
     //   같은 슬롯 재설치 시 이전 데칼을 Stop. lifetime 30s 가 남아 화면에 잔류하는 문제 방지.
     std::unordered_map<uint64, std::array<int, 4>> m_mapRemotePlaceDecalIds;
+
+    // 서버 objectId 기준 설치 룬 VFX 추적.
+// TRF_DEP는 서버 trapId를 objectId로 보내므로, 같은 슬롯이 아니라 같은 함정 ID로 정확히 제거한다.
+    struct NetworkRuneTrapVFX
+    {
+        int decalId = -1;
+        DirectX::XMFLOAT3 pos = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
+        uint64 ownerPlayerId = 0;
+        int32 skillSlot = -1;
+    };
+
+    std::unordered_map<uint64, NetworkRuneTrapVFX> m_mapNetworkTrapVFXByObjectId;
+
+    // 서버 objectId 기준 궤도 룬 VFX 추적.
+    // TRF_ORB start/fire를 같은 orbitalId로 묶기 위한 상태값이다.
+    struct NetworkOrbitalRuneVFX
+    {
+        int vfxId = -1;
+        uint64 ownerPlayerId = 0;
+    };
+
+    std::unordered_map<uint64, NetworkOrbitalRuneVFX> m_mapNetworkOrbitalVFXByObjectId;
 
     // 궤도 룬(TRF_ORB) — 원격 플레이어 RC 발사 시 0.5초 공전 visual 후 실제 투사체 spawn.
     //   서버는 즉시 데미지 처리하므로 visual 만 살짝 늦지만 수용 가능.

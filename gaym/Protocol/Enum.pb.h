@@ -138,6 +138,31 @@ inline bool BossEventType_Parse(
   return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<BossEventType>(
     BossEventType_descriptor(), name, value);
 }
+enum DebugRoomActionType : int {
+  DEBUG_ROOM_ACTION_GO_BOSS = 0,
+  DEBUG_ROOM_ACTION_NEXT_STAGE = 1,
+  DebugRoomActionType_INT_MIN_SENTINEL_DO_NOT_USE_ = std::numeric_limits<::PROTOBUF_NAMESPACE_ID::int32>::min(),
+  DebugRoomActionType_INT_MAX_SENTINEL_DO_NOT_USE_ = std::numeric_limits<::PROTOBUF_NAMESPACE_ID::int32>::max()
+};
+bool DebugRoomActionType_IsValid(int value);
+constexpr DebugRoomActionType DebugRoomActionType_MIN = DEBUG_ROOM_ACTION_GO_BOSS;
+constexpr DebugRoomActionType DebugRoomActionType_MAX = DEBUG_ROOM_ACTION_NEXT_STAGE;
+constexpr int DebugRoomActionType_ARRAYSIZE = DebugRoomActionType_MAX + 1;
+
+const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* DebugRoomActionType_descriptor();
+template<typename T>
+inline const std::string& DebugRoomActionType_Name(T enum_t_value) {
+  static_assert(::std::is_same<T, DebugRoomActionType>::value ||
+    ::std::is_integral<T>::value,
+    "Incorrect type passed to function DebugRoomActionType_Name.");
+  return ::PROTOBUF_NAMESPACE_ID::internal::NameOfEnum(
+    DebugRoomActionType_descriptor(), enum_t_value);
+}
+inline bool DebugRoomActionType_Parse(
+    ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, DebugRoomActionType* value) {
+  return ::PROTOBUF_NAMESPACE_ID::internal::ParseNamedEnum<DebugRoomActionType>(
+    DebugRoomActionType_descriptor(), name, value);
+}
 // ===================================================================
 
 
@@ -174,6 +199,11 @@ template <> struct is_proto_enum< ::Protocol::BossEventType> : ::std::true_type 
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::BossEventType>() {
   return ::Protocol::BossEventType_descriptor();
+}
+template <> struct is_proto_enum< ::Protocol::DebugRoomActionType> : ::std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::Protocol::DebugRoomActionType>() {
+  return ::Protocol::DebugRoomActionType_descriptor();
 }
 
 PROTOBUF_NAMESPACE_CLOSE

@@ -679,6 +679,7 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
                 cmd.runeTriggerType,
                 cmd.runeTriggerTargetMonsterId,
                 cmd.runeTriggerTargetPlayerId,
+                cmd.runeTriggerObjectId,
                 DirectX::XMFLOAT3(cmd.x, cmd.y, cmd.z),
                 cmd.runeTriggerValue1,
                 cmd.runeTriggerValue2
@@ -706,6 +707,21 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
 
     // 원격 플레이어 이동 보간
     UpdateRemotePlayerInterpolation(deltaTime);
+
+    // 원격 플레이어 룬 오라 갱신.
+    // 원격 플레이어는 Scene::Update의 PlayerUpdate를 타지 않으므로,
+    // 보호막/보복 같은 지속 VFX는 여기서 별도로 갱신해야 한다.
+    for (auto& kv : m_mapRemotePlayers)
+    {
+        GameObject* pRemote = kv.second;
+        if (!pRemote)
+            continue;
+
+        if (PlayerComponent* pPC = pRemote->GetComponent<PlayerComponent>())
+        {
+            pPC->UpdateNetworkRuneVFX(deltaTime);
+        }
+    }
 
     // 입장 직후 서버가 내 위치를 0,0,0으로 들고 있을 수 있으므로,
     // 몇 프레임 동안 실제 시작 위치를 반복 전송한다.
@@ -905,6 +921,68 @@ void NetworkManager::SendRuneEquip(uint32 rewardOptionIndex, uint32 skillSlot, u
         rewardOptionIndex,
         skillSlot,
         runeSlotIndex);
+    WriteNetworkLog(buf);
+}
+
+void NetworkManager::SendDebugRuneEquip(uint32 skillSlot, uint32 runeSlotIndex, const std::string& runeId)
+{
+    if (!m_bConnected || !m_pSession)
+        return;
+
+    if (skillSlot >= 4)
+    {
+        WriteNetworkLog("[Network] C_DEBUG_RUNE_EQUIP blocked: invalid skillSlot");
+        return;
+    }
+
+    if (runeSlotIndex >= 3)
+    {
+        WriteNetworkLog("[Network] C_DEBUG_RUNE_EQUIP blocked: invalid runeSlotIndex");
+        return;
+    }
+
+    if (runeId.empty())
+    {
+        WriteNetworkLog("[Network] C_DEBUG_RUNE_EQUIP blocked: empty runeId");
+        return;
+    }
+
+    Protocol::C_DEBUG_RUNE_EQUIP pkt;
+    pkt.set_skillslot(skillSlot);
+    pkt.set_runeslotindex(runeSlotIndex);
+    pkt.set_runeid(runeId);
+
+    auto sendBuffer = ServerPacketHandler::MakeSendBuffer(pkt);
+    m_pSession->Send(sendBuffer);
+
+    char buf[256];
+    sprintf_s(
+        buf,
+        "[Network] C_DEBUG_RUNE_EQUIP sent: skillSlot=%u runeSlotIndex=%u runeId=%s",
+        skillSlot,
+        runeSlotIndex,
+        runeId.c_str()
+    );
+    WriteNetworkLog(buf);
+}
+
+void NetworkManager::SendDebugRoomAction(uint32 actionType)
+{
+    if (!m_bConnected || !m_pSession)
+        return;
+
+    Protocol::C_DEBUG_ROOM_ACTION pkt;
+    pkt.set_actiontype(static_cast<Protocol::DebugRoomActionType>(actionType));
+
+    auto sendBuffer = ServerPacketHandler::MakeSendBuffer(pkt);
+    m_pSession->Send(sendBuffer);
+
+    char buf[160];
+    sprintf_s(
+        buf,
+        "[Network] C_DEBUG_ROOM_ACTION sent: actionType=%u",
+        actionType
+    );
     WriteNetworkLog(buf);
 }
 
@@ -1211,6 +1289,93 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     // 실제로 이미 생성된 투사체 / 유체 VFX / 보스 탄막 VFX 정리
     // m_vPendingMonsterVFX.clear()는 예약만 지우므로, 이미 Spawn된 VFX는 Scene 쪽에서 직접 정리해야 한다.
     pScene->ClearTransientCombatEffects();
+
+    // ─────────────────────────────────────────────
+// 방 전환 시 네트워크 룬 VFX 상태 정리
+// 설치/궤도/증강/차지처럼 "상태를 유지하는 룬"은
+// 새 방으로 넘어갈 때 반드시 map과 실제 VFX를 같이 비워야 한다.
+// ─────────────────────────────────────────────
+    {
+        DecalManager* pDecals = pScene ? pScene->GetDecalManager() : nullptr;
+
+        if (pDecals)
+        {
+            // 서버 trapId 기준 설치 룬 데칼 제거
+            for (auto& kv : m_mapNetworkTrapVFXByObjectId)
+            {
+                if (kv.second.decalId >= 0)
+                    pDecals->Stop(kv.second.decalId);
+            }
+
+            // 구형 playerId/skillSlot 기준 설치 룬 데칼도 같이 제거
+            for (auto& kv : m_mapRemotePlaceDecalIds)
+            {
+                for (int decalId : kv.second)
+                {
+                    if (decalId >= 0)
+                        pDecals->Stop(decalId);
+                }
+            }
+        }
+
+        FluidSkillVFXManager* pVFX = pScene ? pScene->GetFluidVFXManager() : nullptr;
+
+        if (pVFX)
+        {
+            // 원격 차지 오라 제거
+            for (auto& kv : m_mapRemoteChargeVFXId)
+            {
+                if (kv.second >= 0)
+                    pVFX->StopEffect(kv.second);
+            }
+
+            // 원격 증강 오라 제거
+            for (auto& kv : m_mapRemoteEnhanceVFXId)
+            {
+                if (kv.second >= 0)
+                    pVFX->StopEffect(kv.second);
+            }
+
+            // 서버 orbitalId 기준 궤도 룬 대기 VFX 제거
+            for (auto& kv : m_mapNetworkOrbitalVFXByObjectId)
+            {
+                if (kv.second.vfxId >= 0)
+                    pVFX->StopEffect(kv.second.vfxId);
+            }
+
+            // 원격 플레이어 지속형 스킬 VFX 제거
+            for (auto& kv : m_mapRemotePlayerVFX)
+            {
+                if (kv.second.vfxId >= 0)
+                    pVFX->StopEffect(kv.second.vfxId);
+            }
+
+            // 고정 lifetime VFX 큐에 남은 것도 즉시 제거
+            for (auto& kill : m_vTimedVFXKills)
+            {
+                if (kill.vfxId >= 0)
+                    pVFX->StopEffect(kill.vfxId);
+            }
+        }
+
+        m_mapNetworkTrapVFXByObjectId.clear();
+        m_mapNetworkOrbitalVFXByObjectId.clear();
+        m_mapRemotePlaceDecalIds.clear();
+
+        m_mapRemoteChargeVFXId.clear();
+        m_mapRemoteEnhanceVFXId.clear();
+
+        m_mapRemotePlayerVFX.clear();
+        m_vTimedVFXKills.clear();
+
+        m_setRemoteChannelingPlayers.clear();
+        m_mapRemoteChannelLastSpawnTime.clear();
+
+        // 클라 측 궤도 지연 투사체 큐도 새 방으로 넘어가면 무조건 제거
+        m_vPendingOrbitals.clear();
+
+        WriteNetworkLog("[Network] Cleared network rune VFX states on room transition");
+    }
 
     // 서버가 내려준 mapId 우선 분기. mapId 가 비었거나 미매칭이면 stageIndex/roomIndex 기반 fallback.
     bool bHandled = false;
@@ -1732,6 +1897,15 @@ void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
         // 원격 플레이어도 로컬 플레이어와 같은 영웅 톤 머티리얼을 적용한다.
         ApplyNetworkPlayerMaterial(pRemotePlayer, GetNetworkPlayerColor(remoteElement));
     }
+
+    // 원격 플레이어도 PlayerComponent가 있어야 보호막/보복/흡혈 추적 VFX가 보인다.
+    // 로컬처럼 입력 처리는 하지 않고, NetworkManager::Update에서 UpdateNetworkRuneVFX만 호출한다.
+    PlayerComponent* pRemotePC = pRemotePlayer->GetComponent<PlayerComponent>();
+    if (!pRemotePC)
+        pRemotePC = pRemotePlayer->AddComponent<PlayerComponent>();
+
+    if (pRemotePC)
+        pRemotePC->SetElementType(remoteElement);
 
     // 원격 플레이어용 SkillComponent — m_Skills 는 비워두고 m_SkillRunes 만 사용.
     //   ProcessRuneEquip 가 SetRuneSlot 으로 룬을 저장하고, ProcessSkill 이 BuildSkillStats 로
@@ -5740,6 +5914,33 @@ void NetworkManager::ProcessPlayerDamage(Scene* pScene, uint64 playerId, float d
         m_mapRemotePlayerHitFlashTimer[playerId] = REMOTE_HIT_FLASH_DURATION;
         pRemoteGO->SetHitFlashAll(1.0f);
 
+        // 원격 플레이어 보복 룬 READY 오라.
+        // 서버는 보복 준비 패킷을 따로 안 보내므로 로컬과 같은 조건으로 원격도 표시한다.
+        if (!isDead && damage > 0.f && attackerMonsterId != 0)
+        {
+            if (PlayerComponent* pPC = pRemoteGO->GetComponent<PlayerComponent>())
+            {
+                if (SkillComponent* pSkill = pRemoteGO->GetComponent<SkillComponent>())
+                {
+                    bool hasRvg = false;
+
+                    for (int s = 0; s < static_cast<int>(SkillSlot::Count); ++s)
+                    {
+                        if (pSkill->HasRuneEquipped(static_cast<SkillSlot>(s), "ABY_RVG"))
+                        {
+                            hasRvg = true;
+                            break;
+                        }
+                    }
+
+                    if (hasRvg && !pPC->IsVengeancePrimed())
+                    {
+                        pPC->TriggerVengeance(10.f);
+                    }
+                }
+            }
+        }
+
         if (isDead)
         {
             // 데스 애니 (MageBlue_Anim.bin 의 "Death1" 사용)
@@ -5872,9 +6073,10 @@ void NetworkManager::QueueRuneHomingTarget(uint64 playerId, int32 skillSlot, int
 }
 
 void NetworkManager::QueueRuneTrigger(uint64 playerId, int32 skillSlot, int32 skillType,
-                                      const std::string& runeId, int32 triggerType,
-                                      uint64 targetMonsterId, uint64 targetPlayerId,
-                                      const DirectX::XMFLOAT3& pos, float value1, float value2)
+    const std::string& runeId, int32 triggerType,
+    uint64 targetMonsterId, uint64 targetPlayerId,
+    uint64 objectId,
+    const DirectX::XMFLOAT3& pos, float value1, float value2)
 {
     NetworkCommandData cmd{};
     cmd.type = NetworkCommand::RuneTrigger;
@@ -5885,18 +6087,31 @@ void NetworkManager::QueueRuneTrigger(uint64 playerId, int32 skillSlot, int32 sk
     cmd.y = pos.y;
     cmd.z = pos.z;
 
-    cmd.runeTriggerSkillSlot       = skillSlot;
-    cmd.runeTriggerSkillType       = skillType;
-    cmd.runeTriggerType            = triggerType;
+    cmd.runeTriggerSkillSlot = skillSlot;
+    cmd.runeTriggerSkillType = skillType;
+    cmd.runeTriggerType = triggerType;
     cmd.runeTriggerTargetMonsterId = targetMonsterId;
-    cmd.runeTriggerTargetPlayerId  = targetPlayerId;
-    cmd.runeTriggerValue1          = value1;
-    cmd.runeTriggerValue2          = value2;
+    cmd.runeTriggerTargetPlayerId = targetPlayerId;
+    cmd.runeTriggerObjectId = objectId;
+    cmd.runeTriggerValue1 = value1;
+    cmd.runeTriggerValue2 = value2;
 
     {
         std::lock_guard<std::mutex> lock(m_queueMutex);
         m_vCommandQueue.push_back(cmd);
     }
+
+    char buf[256];
+    sprintf_s(buf,
+        "[Network] QueueRuneTrigger: playerId=%llu runeId=%s objectId=%llu targetMonsterId=%llu value1=%.2f value2=%.2f",
+        playerId,
+        runeId.c_str(),
+        objectId,
+        targetMonsterId,
+        value1,
+        value2);
+
+    WriteNetworkLog(buf);
 }
 
 void NetworkManager::QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 phaseIndex)
@@ -7160,10 +7375,11 @@ void NetworkManager::ProcessRuneHomingTarget(Scene* pScene, uint64 playerId, int
 //   클라는 데미지/회복/보호막 등 숫자를 다시 계산하지 않고 서버 값(value1/value2)을
 //   그대로 UI/VFX 에 반영한다. 룬 별 분기는 runeId 기준.
 void NetworkManager::ProcessRuneTrigger(Scene* pScene,
-                                        uint64 playerId, int32 skillSlot, int32 skillType,
-                                        const std::string& runeId, int32 triggerType,
-                                        uint64 targetMonsterId, uint64 targetPlayerId,
-                                        const DirectX::XMFLOAT3& pos, float value1, float value2)
+    uint64 playerId, int32 skillSlot, int32 skillType,
+    const std::string& runeId, int32 triggerType,
+    uint64 targetMonsterId, uint64 targetPlayerId,
+    uint64 objectId,
+    const DirectX::XMFLOAT3& pos, float value1, float value2)
 {
     if (!pScene)
         return;
@@ -7199,26 +7415,103 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
     };
 
     const bool bLocalCaster = (playerId == GetLocalPlayerId());
-    DecalManager* pDecals = pScene->GetDecalManager();
+    
+    // ─────────────────────────────────────────────
+    // 네트워크 룬 공통 VFX 헬퍼
+    // 서버 룬 패킷을 받은 모든 클라에서 같은 위치에 같은 VFX를 띄운다.
+    // ─────────────────────────────────────────────
+    DecalManager* pDecals = pScene ? pScene->GetDecalManager() : nullptr;
 
-    // 서버가 보낸 룬 이벤트의 타겟 몬스터 위치 — VFX 부착 기준점.
-    // 몬스터가 이미 despawn 됐거나 매핑 못 찾으면 패킷 좌표(pos) 로 fallback.
-    auto GetMonsterPos = [&](DirectX::XMFLOAT3& outPos) -> bool
-    {
-        if (targetMonsterId != 0)
+    auto GetCasterPos = [&]() -> DirectX::XMFLOAT3
         {
-            if (GameObject* pMon = GetServerMonster(targetMonsterId))
+            DirectX::XMFLOAT3 out = pos;
+
+            if (pCaster && pCaster->GetTransform())
+                out = pCaster->GetTransform()->GetPosition();
+
+            return out;
+        };
+
+    // 서버가 보낸 룬 이벤트의 타겟 몬스터 위치.
+    // 몬스터가 이미 사라졌으면 패킷 좌표 pos로 fallback.
+    auto GetMonsterPos = [&](DirectX::XMFLOAT3& outPos) -> bool
+        {
+            if (targetMonsterId != 0)
             {
-                if (auto* t = pMon->GetComponent<TransformComponent>())
+                if (GameObject* pMon = GetServerMonster(targetMonsterId))
                 {
-                    outPos = t->GetPosition();
-                    return true;
+                    if (auto* t = pMon->GetComponent<TransformComponent>())
+                    {
+                        outPos = t->GetPosition();
+                        return true;
+                    }
                 }
             }
-        }
-        outPos = pos;
-        return false;
-    };
+
+            outPos = pos;
+            return false;
+        };
+
+    // 서버가 보낸 특정 몬스터 ID의 월드 위치를 직접 조회한다.
+    // TRF_CHA / TRF_ECH에서는 objectId = sourceMonsterId,
+    // targetMonsterId = targetMonsterId 이므로 둘을 따로 조회해야 한다.
+    auto GetMonsterWorldPosById = [&](uint64 monsterId, DirectX::XMFLOAT3& outPos) -> bool
+        {
+            if (monsterId != 0)
+            {
+                if (GameObject* pMon = GetServerMonster(monsterId))
+                {
+                    if (auto* t = pMon->GetComponent<TransformComponent>())
+                    {
+                        outPos = t->GetPosition();
+                        return true;
+                    }
+                }
+            }
+
+            outPos = pos;
+            return false;
+        };
+
+    auto SpawnRuneBurstAt = [&](const DirectX::XMFLOAT3& basePos,
+        const char* spriteName,
+        float size,
+        float life,
+        const DirectX::XMFLOAT4& color,
+        float spin)
+        {
+            DirectX::XMFLOAT3 vfxPos = basePos;
+            vfxPos.y += 1.2f;
+
+            VFXSpriteManager::Get().Spawn(
+                spriteName,
+                vfxPos,
+                size,
+                life,
+                color,
+                spin,
+                VFXSpriteAnim::FadeOut);
+        };
+
+    auto SpawnRuneGroundPulseAt = [&](const DirectX::XMFLOAT3& basePos,
+        DecalTexture decal,
+        float radius,
+        const DirectX::XMFLOAT4& color)
+        {
+            if (!pDecals)
+                return;
+
+            DirectX::XMFLOAT3 decalPos = basePos;
+            decalPos.y += 0.05f;
+
+            pDecals->Spawn(
+                decal,
+                decalPos,
+                radius,
+                0.0f,
+                1.0f,
+                color);
+        };
 
     auto SpawnStatusSprite = [&](const std::string& tex, const DirectX::XMFLOAT3& origin,
                                  float size, float lifetime, DirectX::XMFLOAT4 color,
@@ -7231,6 +7524,58 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
 
     // 서버 이벤트 코드는 float 로 오지만 정수 의미 — 안전한 라운드.
     const int eventCode = static_cast<int>(value1 + 0.5f);
+
+    auto ShowRuneCastMarker = [&](const DirectX::XMFLOAT3& basePos,
+        const wchar_t* text,
+        const DirectX::XMFLOAT4& color,
+        const char* spriteName = "twirl1",
+        float size = 170.f)
+        {
+            SpawnRuneBurstAt(
+                basePos,
+                spriteName,
+                size,
+                0.45f,
+                color,
+                5.0f);
+
+            DamageNumberManager::Get().AddText(
+                basePos,
+                text,
+                color);
+        };
+
+    // 서버가 value1=0으로 보낸 것은 "상태이상 적용"이 아니라
+    // 장착 룬 시전 표시용 이벤트다.
+    if (eventCode == 0)
+    {
+        DirectX::XMFLOAT3 castPos = GetCasterPos();
+
+        if (runeId.rfind("FIR_", 0) == 0)
+        {
+            ShowRuneCastMarker(castPos, L"FIRE RUNE",
+                DirectX::XMFLOAT4(1.0f, 0.35f, 0.15f, 0.95f));
+            return;
+        }
+        if (runeId.rfind("WAT_", 0) == 0)
+        {
+            ShowRuneCastMarker(castPos, L"WATER RUNE",
+                DirectX::XMFLOAT4(0.35f, 0.85f, 1.0f, 0.95f));
+            return;
+        }
+        if (runeId.rfind("WND_", 0) == 0)
+        {
+            ShowRuneCastMarker(castPos, L"WIND RUNE",
+                DirectX::XMFLOAT4(0.55f, 1.0f, 0.55f, 0.95f));
+            return;
+        }
+        if (runeId.rfind("ERT_", 0) == 0)
+        {
+            ShowRuneCastMarker(castPos, L"EARTH RUNE",
+                DirectX::XMFLOAT4(1.0f, 0.75f, 0.35f, 0.95f));
+            return;
+        }
+    }
 
     // ─── 🔥 FIR_1~FIR_4: 화속성 (화상 적용 / 틱 / 종료 / 업화) ─────────────────
     if (runeId.rfind("FIR_", 0) == 0)
@@ -7410,10 +7755,28 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
             {
                 if (SkillComponent* pSkill = pCaster->GetComponent<SkillComponent>())
                 {
+                    // 실제 쿨타임 감소는 본인 클라에만 적용한다.
+                    // ReduceCooldown 내부에서 로컬 시계 VFX도 재생된다.
                     pSkill->ReduceCooldown(static_cast<SkillSlot>(skillSlot), value1);
                 }
             }
         }
+        else if (pCaster && pCaster->GetTransform())
+        {
+            // 원격 플레이어는 쿨타임 값을 건드리지 않고 시계 VFX만 재생한다.
+            DirectX::XMFLOAT3 clockPos = pCaster->GetTransform()->GetPosition();
+            clockPos.y += 2.2f;
+
+            VFXSpriteManager::Get().Spawn(
+                "clock",
+                clockPos,
+                150.f,
+                0.85f,
+                DirectX::XMFLOAT4(0.45f, 0.95f, 1.0f, 1.0f),
+                -4.5f,
+                VFXSpriteAnim::FadeOut);
+        }
+
         wchar_t buf[32];
         swprintf_s(buf, L"-%.1fs CD", value1);
         DamageNumberManager::Get().AddText(GetDisplayPos(pCaster), buf,
@@ -7434,17 +7797,35 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
                 }
             }
         }
-        // 본인/원격 모두 발동 — 텍스트 + twirl 폭발 (오프라인 TryTriggerInfiniteRune 과 동일 톤)
-        if (pCaster && pCaster->GetTransform())
-        {
-            DirectX::XMFLOAT3 pos = pCaster->GetTransform()->GetPosition();
-            pos.y += 1.4f;
-            VFXSpriteManager::Get().Spawn("twirl1", pos, 230.f, 0.65f,
-                DirectX::XMFLOAT4(1.0f, 0.88f, 0.25f, 1.0f), 9.0f, VFXSpriteAnim::FadeOut);
-        }
+
+        DirectX::XMFLOAT3 casterPos = GetCasterPos();
+        casterPos.y += 1.5f;
+
+        // 쿨초 발동 별 아이콘
+        VFXSpriteManager::Get().Spawn(
+            "star_08",
+            casterPos,
+            130.f,
+            0.85f,
+            DirectX::XMFLOAT4(1.0f, 0.95f, 0.35f, 1.0f),
+            0.0f,
+            VFXSpriteAnim::SkullPop);
+
+        // 시간/순환 느낌 회전
+        VFXSpriteManager::Get().Spawn(
+            "twirl1",
+            casterPos,
+            230.f,
+            0.65f,
+            DirectX::XMFLOAT4(1.0f, 0.88f, 0.25f, 0.9f),
+            9.0f,
+            VFXSpriteAnim::FadeOut);
+
         DamageNumberManager::Get().AddText(
-            GetDisplayPos(pCaster), L"INFINITE!",
+            GetDisplayPos(pCaster),
+            L"INFINITE!",
             DirectX::XMFLOAT4(1.0f, 0.95f, 0.4f, 1.0f));
+
         return;
     }
 
@@ -7455,28 +7836,64 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
         {
             if (PlayerComponent* pPlayer = pCaster->GetComponent<PlayerComponent>())
             {
-                if (bLocalCaster) pPlayer->SetCurrentHP(value2);
-                // 회복 펄스 — 로컬/원격 모두 표시 (다른 플레이어 흡혈도 보이게)
+                if (bLocalCaster)
+                    pPlayer->SetCurrentHP(value2);
+
+                // 기존 플레이어 컴포넌트 흡혈 펄스
                 pPlayer->TriggerLifestealVFX(value1);
             }
         }
+
+        DirectX::XMFLOAT3 casterPos = GetCasterPos();
+        casterPos.y += 1.7f;
+
+        // 흡혈 아이콘
+        VFXSpriteManager::Get().Spawn(
+            "symbol_01",
+            casterPos,
+            115.f,
+            0.85f,
+            DirectX::XMFLOAT4(0.55f, 1.0f, 0.55f, 1.0f),
+            0.0f,
+            VFXSpriteAnim::FadeOut);
+
+        // 흡수선 느낌
+        VFXSpriteManager::Get().Spawn(
+            "trace_05",
+            casterPos,
+            150.f,
+            0.55f,
+            DirectX::XMFLOAT4(0.45f, 1.0f, 0.55f, 0.9f),
+            2.0f,
+            VFXSpriteAnim::FadeOut);
+
         wchar_t buf[32];
         swprintf_s(buf, L"+%.0f HP", value1);
+
         DamageNumberManager::Get().AddText(
-            GetDisplayPos(pCaster), buf,
+            GetDisplayPos(pCaster),
+            buf,
             DirectX::XMFLOAT4(0.4f, 1.0f, 0.4f, 1.0f));
+
         return;
     }
 
     // ─── TRF_MLT: 다연발 — 비투사체에서는 추가 타격 보정으로 적용됨 ─────────────
     if (runeId == "TRF_MLT")
     {
-        wchar_t buf[64];
-        swprintf_s(buf, L"MULTI x%.0f", value1);
+        DirectX::XMFLOAT3 casterPos = GetCasterPos();
+
+        SpawnRuneBurstAt(
+            casterPos,
+            "twirl1",
+            180.f,
+            0.45f,
+            DirectX::XMFLOAT4(0.75f, 0.95f, 1.0f, 0.9f),
+            8.0f);
 
         DamageNumberManager::Get().AddText(
             GetDisplayPos(pCaster),
-            buf,
+            L"MULTI!",
             DirectX::XMFLOAT4(0.75f, 0.95f, 1.0f, 1.0f));
 
         return;
@@ -7485,6 +7902,17 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
     // ─── TRF_PRC: 관통 — 비투사체에서는 관통 보정 피해로 적용됨 ────────────────
     if (runeId == "TRF_PRC")
     {
+        DirectX::XMFLOAT3 hitPos;
+        GetMonsterPos(hitPos);
+
+        SpawnRuneBurstAt(
+            hitPos,
+            "flare1",
+            190.f,
+            0.35f,
+            DirectX::XMFLOAT4(0.85f, 0.85f, 1.0f, 0.95f),
+            0.0f);
+
         DamageNumberManager::Get().AddText(
             GetDisplayPos(pCaster),
             L"PIERCE!",
@@ -7493,9 +7921,27 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
         return;
     }
 
-    // ─── ABY_RES: 원소 공명 — 서로 다른 원소 룬 2종 이상일 때 발동 ─────────────
+    // ─── ABY_RES: 원소 공명 — 공명 펄스 ───────────────────────────────────────
     if (runeId == "ABY_RES")
     {
+        DirectX::XMFLOAT3 casterPos = GetCasterPos();
+
+        SpawnRuneBurstAt(
+            casterPos,
+            "flare1",
+            280.f,
+            0.50f,
+            DirectX::XMFLOAT4(1.0f, 0.85f, 0.25f, 1.0f),
+            0.0f);
+
+        SpawnRuneBurstAt(
+            casterPos,
+            "twirl1",
+            210.f,
+            0.65f,
+            DirectX::XMFLOAT4(0.45f, 0.85f, 1.0f, 0.85f),
+            5.5f);
+
         DamageNumberManager::Get().AddText(
             GetDisplayPos(pCaster),
             L"RESONANCE!",
@@ -7507,28 +7953,49 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
     // ─── ABY_SHD: 보호막 — value1 생성/흡수량, value2 현재 보호막 ────────────────
     if (runeId == "ABY_SHD")
     {
-        if (pCaster)
+        // 현재 서버는 보호막 대상이 시전자 본인이지만,
+        // targetPlayerId를 우선 쓰면 나중에 아군 보호막 룬이 생겨도 그대로 대응 가능하다.
+        GameObject* pShieldTarget = pTargetPlayer ? pTargetPlayer : pCaster;
+
+        if (pShieldTarget)
         {
-            if (PlayerComponent* pPlayer = pCaster->GetComponent<PlayerComponent>())
+            PlayerComponent* pPlayer = pShieldTarget->GetComponent<PlayerComponent>();
+
+            // 기존 원격 플레이어가 PlayerComponent 없이 생성돼 있었던 경우를 방어한다.
+            if (!pPlayer)
+            {
+                pPlayer = pShieldTarget->AddComponent<PlayerComponent>();
+
+                if (pPlayer)
+                {
+                    uint64 elemPlayerId = (targetPlayerId != 0) ? targetPlayerId : playerId;
+                    pPlayer->SetElementType(GetPlayerElement(elemPlayerId));
+                }
+            }
+
+            if (pPlayer)
             {
                 // 서버가 보낸 현재 보호막 수치를 로컬/원격 모두 반영한다.
-                // 원격 플레이어도 이 값이 들어가야 기존 보호막 표시가 동일하게 보인다.
                 pPlayer->SetShield(value2);
 
-                // 보호막 흡수 이벤트라면 기존 흡수 VFX도 원격에서 재생한다.
-                // 서버의 보호막 흡수 패킷은 skillSlot = -1로 들어온다.
+                // 보호막 흡수 이벤트는 skillSlot = -1로 들어온다.
+                // 이때는 깨짐 펄스도 전체 클라에서 재생한다.
                 if (skillSlot < 0)
-                {
                     pPlayer->TriggerShieldBreakVFX();
-                }
+
+                // 생성 직후 바로 한 번 갱신해서 다음 프레임까지 기다리지 않고 오라를 띄운다.
+                pPlayer->UpdateNetworkRuneVFX(0.0f);
             }
         }
 
         wchar_t buf[32];
         swprintf_s(buf, L"+%.0f SHIELD", value1);
+
         DamageNumberManager::Get().AddText(
-            GetDisplayPos(pCaster), buf,
+            GetDisplayPos(pShieldTarget ? pShieldTarget : pCaster),
+            buf,
             DirectX::XMFLOAT4(0.5f, 0.85f, 1.0f, 1.0f));
+
         return;
     }
 
@@ -7543,12 +8010,38 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
                               || (triggerType == 0  /* NONE — 현재 서버 동작 */);
         if (bConsume)
         {
-            // 소모 — 활성 오라 정리. 서버가 데미지에 이미 +30% 반영했으므로 클라는 표시만.
             if (pCaster)
+            {
                 if (auto* pPC = pCaster->GetComponent<PlayerComponent>())
                     pPC->ConsumeVengeance();
+            }
+
+            DirectX::XMFLOAT3 casterPos = GetCasterPos();
+            casterPos.y += 1.5f;
+
+            // 반격 베기 이펙트
+            VFXSpriteManager::Get().Spawn(
+                "slash_02",
+                casterPos,
+                180.f,
+                0.45f,
+                DirectX::XMFLOAT4(1.0f, 0.55f, 0.2f, 1.0f),
+                4.0f,
+                VFXSpriteAnim::FadeOut);
+
+            // 반격 스파크
+            VFXSpriteManager::Get().Spawn(
+                "spark_06",
+                casterPos,
+                140.f,
+                0.35f,
+                DirectX::XMFLOAT4(1.0f, 0.75f, 0.25f, 1.0f),
+                6.0f,
+                VFXSpriteAnim::FadeOut);
+
             DamageNumberManager::Get().AddText(
-                GetDisplayPos(pCaster), L"REVENGE!",
+                GetDisplayPos(pCaster),
+                L"REVENGE!",
                 DirectX::XMFLOAT4(1.0f, 0.55f, 0.2f, 1.0f));
         }
         else if (triggerType == 30 /* VENGEANCE_READY — 서버가 향후 보내올 경우 대비 */)
@@ -7560,12 +8053,50 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
         return;
     }
 
-    // ─── ABY_OVL: 과열 — value1 비율, value2 최종 데미지 ─────────────────────────
+    // ─── ABY_OVL: 과열 — READY / CONSUME 모두 네트워크 VFX 표시 ─────────────────
     if (runeId == "ABY_OVL")
     {
-        DamageNumberManager::Get().AddText(
-            GetDisplayPos(pCaster), L"OVERHEAT!",
-            DirectX::XMFLOAT4(1.0f, 0.4f, 0.15f, 1.0f));
+        DirectX::XMFLOAT3 casterPos = GetCasterPos();
+
+        if (triggerType == 40 /* RUNE_TRIGGER_OVERHEAT_READY */ || value1 < 0.0f)
+        {
+            // 과열 준비 — 시전자 주변에 붉은 예열 펄스
+            SpawnRuneBurstAt(
+                casterPos,
+                "twirl1",
+                210.f,
+                0.55f,
+                DirectX::XMFLOAT4(1.0f, 0.35f, 0.12f, 1.0f),
+                7.5f);
+
+            DamageNumberManager::Get().AddText(
+                GetDisplayPos(pCaster),
+                L"OVERHEAT READY",
+                DirectX::XMFLOAT4(1.0f, 0.45f, 0.15f, 1.0f));
+        }
+        else
+        {
+            // 과열 소모 — 실제 강화타 순간. 서버가 데미지는 이미 반영했으므로 연출만 한다.
+            SpawnRuneBurstAt(
+                casterPos,
+                "flare1",
+                320.f,
+                0.45f,
+                DirectX::XMFLOAT4(1.0f, 0.28f, 0.08f, 1.0f),
+                0.0f);
+
+            SpawnRuneGroundPulseAt(
+                casterPos,
+                DecalTexture::MagicCircle,
+                3.2f,
+                DirectX::XMFLOAT4(1.0f, 0.25f, 0.05f, 1.0f));
+
+            DamageNumberManager::Get().AddText(
+                GetDisplayPos(pCaster),
+                L"OVERHEAT!",
+                DirectX::XMFLOAT4(1.0f, 0.4f, 0.15f, 1.0f));
+        }
+
         return;
     }
 
@@ -7573,6 +8104,7 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
     if (runeId == "ABY_EXC")
     {
         GameObject* pMonster = GetServerMonster(targetMonsterId);
+
         DirectX::XMFLOAT3 markPos = pos;
         if (pMonster)
         {
@@ -7582,27 +8114,66 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
                 markPos.y += 0.05f;
             }
         }
+
+        // 바닥 해골 데칼
         if (pDecals)
         {
             pDecals->Spawn(
-                DecalTexture::Skull, markPos,
-                2.5f, 0.0f, 1.5f,
-                DirectX::XMFLOAT4(1.0f, 0.3f, 0.3f, 1.0f));
+                DecalTexture::Skull,
+                markPos,
+                2.7f,
+                0.0f,
+                1.6f,
+                DirectX::XMFLOAT4(1.0f, 0.25f, 0.25f, 1.0f));
         }
+
+        // 머리 위 해골 아이콘
+        {
+            DirectX::XMFLOAT3 iconPos = markPos;
+            iconPos.y += 2.6f;
+
+            VFXSpriteManager::Get().Spawn(
+                "skull",
+                iconPos,
+                120.f,
+                1.1f,
+                DirectX::XMFLOAT4(1.0f, 0.25f, 0.25f, 1.0f),
+                0.0f,
+                VFXSpriteAnim::SkullPop);
+        }
+
+        // 처형 스파크
+        {
+            DirectX::XMFLOAT3 sparkPos = markPos;
+            sparkPos.y += 1.7f;
+
+            VFXSpriteManager::Get().Spawn(
+                "spark_05",
+                sparkPos,
+                150.f,
+                0.45f,
+                DirectX::XMFLOAT4(1.0f, 0.35f, 0.25f, 1.0f),
+                6.0f,
+                VFXSpriteAnim::FadeOut);
+        }
+
         DirectX::XMFLOAT3 textPos = markPos;
-        textPos.y += 1.5f;
+        textPos.y += 2.0f;
+
         DamageNumberManager::Get().AddText(
-            textPos, L"EXECUTE!",
+            textPos,
+            L"EXECUTE!",
             DirectX::XMFLOAT4(1.0f, 0.25f, 0.25f, 1.0f));
+
         return;
     }
 
     // ─── ABY_ECO: 메아리 — ECHO_SCHEDULE(예약 마법진) / ECHO_FIRE(실제 추가타) ────
-    //   triggerType 10 = ECHO_SCHEDULE, 11 = ECHO_FIRE
+// triggerType 10 = ECHO_SCHEDULE, 11 = ECHO_FIRE
     if (runeId == "ABY_ECO")
     {
-        // 발동 위치: targetMonster 우선 → packet pos fallback
         GameObject* pMonster = GetServerMonster(targetMonsterId);
+
         DirectX::XMFLOAT3 ringPos = pos;
         if (pMonster)
         {
@@ -7613,15 +8184,20 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
             }
         }
 
-        if (triggerType == 11 /* ECHO_FIRE */)
+        const bool bEchoFire =
+            (triggerType == 11 /* ECHO_FIRE */) ||
+            (triggerType == 0 && value1 >= 0.0f);
+
+        if (bEchoFire)
         {
-            // 실제 추가타 — 원본 스킬 VFX 50% 스케일 + 임팩트 데칼 + 데미지 텍스트
-            //   시전자 SkillComponent 의 룬 콤보까지 적용하여 Charge/Enhance/Channel 시각 모디파이어 반영
+            // 실제 추가타 — 원본 스킬 VFX 50% 스케일
             ElementType casterElem = GetPlayerElement(playerId);
             uint32_t casterRuneFlags = RUNE_NONE;
+
             if (pCaster)
             {
                 SkillSlot echoSlot = SkillSlot::Count;
+
                 switch (skillSlot)
                 {
                 case 0: echoSlot = SkillSlot::Q;          break;
@@ -7630,6 +8206,7 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
                 case 3: echoSlot = SkillSlot::RightClick; break;
                 default: break;
                 }
+
                 if (echoSlot != SkillSlot::Count)
                 {
                     if (SkillComponent* pCasterSkill = pCaster->GetComponent<SkillComponent>())
@@ -7639,40 +8216,641 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
                     }
                 }
             }
+
             SpawnEchoSkillVFX(pScene, skillType, casterElem, ringPos, casterRuneFlags);
 
+            // 실제 발동 바닥 마법진
             if (pDecals)
             {
                 pDecals->Spawn(
-                    DecalTexture::Magic2, ringPos,
-                    3.0f, 0.0f, 0.8f,
-                    DirectX::XMFLOAT4(0.7f, 0.5f, 1.0f, 1.0f));
+                    DecalTexture::Magic2,
+                    ringPos,
+                    3.0f,
+                    0.0f,
+                    0.8f,
+                    DirectX::XMFLOAT4(0.85f, 0.55f, 1.0f, 1.0f));
             }
+
+            // 실제 발동 표적 아이콘
+            {
+                DirectX::XMFLOAT3 iconPos = ringPos;
+                iconPos.y += 2.3f;
+
+                VFXSpriteManager::Get().Spawn(
+                    "magic2",
+                    iconPos,
+                    135.f,
+                    0.85f,
+                    DirectX::XMFLOAT4(0.9f, 0.6f, 1.0f, 1.0f),
+                    3.0f,
+                    VFXSpriteAnim::FadeOut);
+            }
+
+            // 발동 회전 잔상
+            {
+                DirectX::XMFLOAT3 twirlPos = ringPos;
+                twirlPos.y += 1.8f;
+
+                VFXSpriteManager::Get().Spawn(
+                    "twirl2",
+                    twirlPos,
+                    170.f,
+                    0.65f,
+                    DirectX::XMFLOAT4(0.75f, 0.45f, 1.0f, 0.9f),
+                    7.0f,
+                    VFXSpriteAnim::FadeOut);
+            }
+
             DirectX::XMFLOAT3 textPos = ringPos;
-            textPos.y += 1.5f;
+            textPos.y += 2.0f;
+
             wchar_t buf[32];
             swprintf_s(buf, L"ECHO %.0f", value2);
+
             DamageNumberManager::Get().AddText(
-                textPos, buf,
+                textPos,
+                buf,
                 DirectX::XMFLOAT4(0.85f, 0.6f, 1.0f, 1.0f));
         }
         else
         {
-            // 예약 마법진 (회전) — 2초 lifetime, 발 아래 표시. 발동 시각 임팩트는 ECHO_FIRE 가 따로 옴.
+            // 예약 마법진
             if (pDecals)
             {
                 pDecals->Spawn(
-                    DecalTexture::Magic3, ringPos,
-                    3.5f, 0.0f, 2.0f,
+                    DecalTexture::Magic3,
+                    ringPos,
+                    3.5f,
+                    0.0f,
+                    2.0f,
                     DirectX::XMFLOAT4(0.7f, 0.5f, 1.0f, 1.0f),
-                    DirectX::XM_PI /* rotateSpeed rad/s */,
-                    0.3f /* revealDuration */);
+                    DirectX::XM_PI,
+                    0.3f);
+            }
+
+            // 예약 표적 아이콘
+            {
+                DirectX::XMFLOAT3 iconPos = ringPos;
+                iconPos.y += 2.2f;
+
+                VFXSpriteManager::Get().Spawn(
+                    "magic3",
+                    iconPos,
+                    115.f,
+                    1.6f,
+                    DirectX::XMFLOAT4(0.7f, 0.5f, 1.0f, 0.95f),
+                    2.5f,
+                    VFXSpriteAnim::FadeOut);
+            }
+
+            // 예약 회전 표시
+            {
+                DirectX::XMFLOAT3 twirlPos = ringPos;
+                twirlPos.y += 1.6f;
+
+                VFXSpriteManager::Get().Spawn(
+                    "twirl3",
+                    twirlPos,
+                    150.f,
+                    1.4f,
+                    DirectX::XMFLOAT4(0.6f, 0.45f, 1.0f, 0.85f),
+                    5.5f,
+                    VFXSpriteAnim::FadeOut);
             }
         }
+
         return;
     }
 
-    // 그 외 룬은 서버가 패시브로 처리하므로 별도 클라 표시 없음 (ABY_RES 등)
+    // ─── TRF_CHA: 연쇄 정밀 처리 ─────────────────────────────────────
+    // objectId = sourceMonsterId
+    // targetMonsterId = chainTargetMonsterId
+    if (runeId == "TRF_CHA")
+    {
+        DirectX::XMFLOAT3 sourcePos;
+        DirectX::XMFLOAT3 targetPos2;
+
+        GetMonsterWorldPosById(objectId, sourcePos);
+        GetMonsterWorldPosById(targetMonsterId, targetPos2);
+
+        SpawnRuneBurstAt(
+            sourcePos,
+            "twirl1",
+            140.f,
+            0.25f,
+            DirectX::XMFLOAT4(0.55f, 0.85f, 1.0f, 0.85f),
+            8.0f);
+
+        SpawnRuneBurstAt(
+            targetPos2,
+            "flare1",
+            230.f,
+            0.40f,
+            DirectX::XMFLOAT4(0.55f, 0.85f, 1.0f, 0.95f),
+            8.0f);
+
+        DamageNumberManager::Get().AddText(
+            DirectX::XMFLOAT3(targetPos2.x, targetPos2.y + 2.0f, targetPos2.z),
+            L"CHAIN!",
+            DirectX::XMFLOAT4(0.55f, 0.85f, 1.0f, 1.0f));
+
+        return;
+    }
+
+    // ─── TRF_ECH: 반향 정밀 처리 ─────────────────────────────────────
+    // objectId = sourceMonsterId
+    // targetMonsterId = echoTargetMonsterId
+    if (runeId == "TRF_ECH")
+    {
+        DirectX::XMFLOAT3 sourcePos;
+        DirectX::XMFLOAT3 targetPos2;
+
+        GetMonsterWorldPosById(objectId, sourcePos);
+        GetMonsterWorldPosById(targetMonsterId, targetPos2);
+
+        SpawnRuneBurstAt(
+            sourcePos,
+            "twirl1",
+            140.f,
+            0.30f,
+            DirectX::XMFLOAT4(0.75f, 0.55f, 1.0f, 0.85f),
+            6.5f);
+
+        SpawnRuneBurstAt(
+            targetPos2,
+            "flare1",
+            230.f,
+            0.42f,
+            DirectX::XMFLOAT4(0.80f, 0.60f, 1.0f, 0.95f),
+            6.5f);
+
+        DamageNumberManager::Get().AddText(
+            DirectX::XMFLOAT3(targetPos2.x, targetPos2.y + 2.0f, targetPos2.z),
+            L"ECHO SHOT",
+            DirectX::XMFLOAT4(0.8f, 0.6f, 1.0f, 1.0f));
+
+        return;
+    }
+
+    // ─── TRF_DEP: 설치 룬 정밀 처리 ─────────────────────────────────────
+    // objectId = 서버 trapId
+    // targetMonsterId == 0 : 설치
+    // targetMonsterId != 0 : 발동
+    if (runeId == "TRF_DEP")
+    {
+        const bool bPlaced = (targetMonsterId == 0);
+        const bool bTriggered = (targetMonsterId != 0);
+
+        if (bPlaced)
+        {
+            // 같은 trapId가 다시 오면 기존 표식을 제거하고 새로 만든다.
+            if (objectId != 0)
+            {
+                auto oldIt = m_mapNetworkTrapVFXByObjectId.find(objectId);
+                if (oldIt != m_mapNetworkTrapVFXByObjectId.end())
+                {
+                    if (pDecals && oldIt->second.decalId >= 0)
+                        pDecals->Stop(oldIt->second.decalId);
+
+                    m_mapNetworkTrapVFXByObjectId.erase(oldIt);
+                }
+            }
+
+            DirectX::XMFLOAT3 trapPos = pos;
+            trapPos.y += 0.05f;
+
+            int decalId = -1;
+
+            if (pDecals)
+            {
+                decalId = pDecals->Spawn(
+                    DecalTexture::Star08,
+                    trapPos,
+                    value2 > 0.0f ? value2 : 5.0f,
+                    0.0f,
+                    30.0f,
+                    DirectX::XMFLOAT4(0.75f, 0.90f, 1.0f, 0.95f),
+                    1.5f,
+                    0.2f);
+            }
+
+            if (objectId != 0)
+            {
+                NetworkRuneTrapVFX trapState;
+                trapState.decalId = decalId;
+                trapState.pos = trapPos;
+                trapState.ownerPlayerId = playerId;
+                trapState.skillSlot = skillSlot;
+
+                m_mapNetworkTrapVFXByObjectId[objectId] = trapState;
+            }
+
+            SpawnRuneBurstAt(
+                trapPos,
+                "twirl1",
+                150.f,
+                0.35f,
+                DirectX::XMFLOAT4(0.75f, 0.90f, 1.0f, 0.95f),
+                4.0f);
+
+            DamageNumberManager::Get().AddText(
+                DirectX::XMFLOAT3(trapPos.x, trapPos.y + 2.0f, trapPos.z),
+                L"TRAP SET",
+                DirectX::XMFLOAT4(0.75f, 0.90f, 1.0f, 1.0f));
+
+            return;
+        }
+
+        if (bTriggered)
+        {
+            DirectX::XMFLOAT3 hitPos;
+            GetMonsterWorldPosById(targetMonsterId, hitPos);
+
+            // trapId 기준으로 설치 표식 제거
+            if (objectId != 0)
+            {
+                auto it = m_mapNetworkTrapVFXByObjectId.find(objectId);
+                if (it != m_mapNetworkTrapVFXByObjectId.end())
+                {
+                    if (pDecals && it->second.decalId >= 0)
+                        pDecals->Stop(it->second.decalId);
+
+                    SpawnRuneBurstAt(
+                        it->second.pos,
+                        "flare1",
+                        260.f,
+                        0.40f,
+                        DirectX::XMFLOAT4(1.0f, 0.55f, 0.25f, 0.95f),
+                        0.0f);
+
+                    m_mapNetworkTrapVFXByObjectId.erase(it);
+                }
+            }
+
+            SpawnRuneBurstAt(
+                hitPos,
+                "flare1",
+                300.f,
+                0.45f,
+                DirectX::XMFLOAT4(1.0f, 0.55f, 0.25f, 0.95f),
+                0.0f);
+
+            DamageNumberManager::Get().AddText(
+                DirectX::XMFLOAT3(hitPos.x, hitPos.y + 2.0f, hitPos.z),
+                L"TRAP HIT",
+                DirectX::XMFLOAT4(1.0f, 0.65f, 0.3f, 1.0f));
+
+            return;
+        }
+    }
+
+    // ─── TRF_EMP: 증강 룬 정밀 처리 ─────────────────────────────────────
+    // objectId = 0 : 증강 버프 적용
+    // objectId = 1 : 다음 공격에 증강 소모
+    if (runeId == "TRF_EMP")
+    {
+        const bool bApply = (objectId == 0);
+        const bool bConsume = (objectId == 1);
+
+        DirectX::XMFLOAT3 casterPos = GetCasterPos();
+        casterPos.y += 1.5f;
+
+        FluidSkillVFXManager* pVFX = pScene ? pScene->GetFluidVFXManager() : nullptr;
+
+        if (bApply)
+        {
+            if (pVFX)
+            {
+                auto oldIt = m_mapRemoteEnhanceVFXId.find(playerId);
+                if (oldIt != m_mapRemoteEnhanceVFXId.end() && oldIt->second >= 0)
+                    pVFX->StopEffect(oldIt->second);
+
+                if (EffectRegistry::Get().HasEffect("charge_gather"))
+                {
+                    EffectDef def = EffectRegistry::Get().GetEffect("charge_gather");
+
+                    for (auto& l : def.layers)
+                    {
+                        l.overrideColors = true;
+                        l.coreColor = { 1.0f, 0.90f, 0.30f, 1.0f };
+                        l.edgeColor = { 1.0f, 0.55f, 0.10f, 0.90f };
+                        l.sizeScale *= 1.25f;
+                    }
+
+                    int vfxId = pVFX->SpawnEffectDef(
+                        casterPos,
+                        DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f),
+                        def,
+                        false);
+
+                    m_mapRemoteEnhanceVFXId[playerId] = vfxId;
+
+                    float duration = value2 > 0.0f ? value2 : 5.0f;
+                    if (vfxId >= 0)
+                        m_vTimedVFXKills.push_back({ vfxId, duration });
+                }
+            }
+
+            DamageNumberManager::Get().AddText(
+                GetDisplayPos(pCaster),
+                L"ENHANCE READY",
+                DirectX::XMFLOAT4(1.0f, 0.85f, 0.35f, 1.0f));
+
+            return;
+        }
+
+        if (bConsume)
+        {
+            if (pVFX)
+            {
+                auto it = m_mapRemoteEnhanceVFXId.find(playerId);
+                if (it != m_mapRemoteEnhanceVFXId.end())
+                {
+                    if (it->second >= 0)
+                        pVFX->StopEffect(it->second);
+
+                    m_mapRemoteEnhanceVFXId.erase(it);
+                }
+            }
+
+            SpawnRuneBurstAt(
+                casterPos,
+                "flare1",
+                270.f,
+                0.45f,
+                DirectX::XMFLOAT4(1.0f, 0.75f, 0.25f, 0.95f),
+                0.0f);
+
+            DamageNumberManager::Get().AddText(
+                GetDisplayPos(pCaster),
+                L"ENHANCE HIT",
+                DirectX::XMFLOAT4(1.0f, 0.75f, 0.25f, 1.0f));
+
+            return;
+        }
+    }
+
+    // ─── TRF_ORB: 궤도 룬 정밀 처리 ─────────────────────────────────────
+ // objectId = 서버 orbitalId
+ // start: targetMonsterId == 0 && 0 < value1 < 1.0f
+ // fire : value1 == 0.0f 또는 value1 >= 1.0f
+    if (runeId == "TRF_ORB")
+    {
+        DirectX::XMFLOAT3 casterPos = GetCasterPos();
+        casterPos.y += 1.5f;
+
+        FluidSkillVFXManager* pVFX = pScene ? pScene->GetFluidVFXManager() : nullptr;
+
+        const bool bStart =
+            objectId != 0 &&
+            targetMonsterId == 0 &&
+            value1 > 0.0f &&
+            value1 < 1.0f;
+
+        const bool bFire = !bStart;
+
+        if (bStart)
+        {
+            int vfxId = -1;
+
+            if (pVFX && EffectRegistry::Get().HasEffect("sub_orbital_halo"))
+            {
+                EffectDef def = EffectRegistry::Get().GetEffect("sub_orbital_halo");
+
+                vfxId = pVFX->SpawnEffectDef(
+                    casterPos,
+                    DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f),
+                    def,
+                    false);
+            }
+            else
+            {
+                SpawnRuneBurstAt(
+                    casterPos,
+                    "twirl1",
+                    230.f,
+                    0.60f,
+                    DirectX::XMFLOAT4(0.65f, 0.75f, 1.0f, 0.95f),
+                    9.0f);
+            }
+
+            NetworkOrbitalRuneVFX orbitalState;
+            orbitalState.vfxId = vfxId;
+            orbitalState.ownerPlayerId = playerId;
+
+            m_mapNetworkOrbitalVFXByObjectId[objectId] = orbitalState;
+
+            DamageNumberManager::Get().AddText(
+                GetDisplayPos(pCaster),
+                L"ORBIT READY",
+                DirectX::XMFLOAT4(0.65f, 0.75f, 1.0f, 1.0f));
+
+            return;
+        }
+
+        if (bFire)
+        {
+            if (objectId != 0)
+            {
+                auto it = m_mapNetworkOrbitalVFXByObjectId.find(objectId);
+                if (it != m_mapNetworkOrbitalVFXByObjectId.end())
+                {
+                    if (pVFX && it->second.vfxId >= 0)
+                        pVFX->StopEffect(it->second.vfxId);
+
+                    m_mapNetworkOrbitalVFXByObjectId.erase(it);
+                }
+            }
+
+            DirectX::XMFLOAT3 firePos = casterPos;
+
+            if (targetMonsterId != 0)
+                GetMonsterWorldPosById(targetMonsterId, firePos);
+
+            SpawnRuneBurstAt(
+                firePos,
+                "flare1",
+                260.f,
+                0.45f,
+                DirectX::XMFLOAT4(0.65f, 0.75f, 1.0f, 0.95f),
+                9.0f);
+
+            DamageNumberManager::Get().AddText(
+                DirectX::XMFLOAT3(firePos.x, firePos.y + 2.0f, firePos.z),
+                L"ORBIT FIRE",
+                DirectX::XMFLOAT4(0.65f, 0.75f, 1.0f, 1.0f));
+
+            return;
+        }
+    }
+
+    // ─── TRF_CHG / TRF_CHN / TRF_HOM ─────────────────────────────
+    if (runeId == "TRF_CHG" || runeId == "TRF_CHN" || runeId == "TRF_HOM")
+    {
+        DirectX::XMFLOAT3 casterPos = GetCasterPos();
+
+        const wchar_t* text = L"TRANSFORM";
+        DirectX::XMFLOAT4 color = DirectX::XMFLOAT4(0.75f, 0.75f, 1.0f, 0.95f);
+
+        if (runeId == "TRF_CHG")
+        {
+            text = L"CHARGE";
+            color = DirectX::XMFLOAT4(1.0f, 0.75f, 0.35f, 0.95f);
+        }
+        else if (runeId == "TRF_CHN")
+        {
+            text = L"CHANNEL";
+            color = DirectX::XMFLOAT4(0.55f, 0.95f, 1.0f, 0.95f);
+        }
+        else if (runeId == "TRF_HOM")
+        {
+            text = L"HOMING";
+            color = DirectX::XMFLOAT4(0.65f, 1.0f, 0.75f, 0.95f);
+        }
+
+        SpawnRuneBurstAt(
+            casterPos,
+            "twirl1",
+            190.f,
+            0.45f,
+            color,
+            6.0f);
+
+        DamageNumberManager::Get().AddText(
+            GetDisplayPos(pCaster),
+            text,
+            color);
+
+        return;
+    }
+
+    // ─── AMP_/CH_ 패시브 룬 표시 ──────────────────────────────────
+    if (runeId.rfind("AMP_", 0) == 0 || runeId.rfind("CH_", 0) == 0)
+    {
+        DirectX::XMFLOAT3 casterPos = GetCasterPos();
+
+        const wchar_t* text = L"AMPLIFY";
+        DirectX::XMFLOAT4 color = DirectX::XMFLOAT4(1.0f, 0.9f, 0.45f, 0.95f);
+
+        if (runeId.rfind("AMP_DMG", 0) == 0)
+            text = L"DMG AMP";
+        else if (runeId.rfind("AMP_RAD", 0) == 0)
+            text = L"RANGE AMP";
+        else if (runeId.rfind("AMP_CD", 0) == 0)
+            text = L"COOLDOWN";
+        else if (runeId.rfind("AMP_DUR", 0) == 0)
+            text = L"DURATION";
+        else if (runeId.rfind("AMP_SPD", 0) == 0)
+            text = L"SPEED AMP";
+        else if (runeId.rfind("AMP_MCO", 0) == 0)
+            text = L"MANA SAVE";
+        else if (runeId.rfind("CH_", 0) == 0)
+        {
+            text = L"CHANNEL+";
+            color = DirectX::XMFLOAT4(0.65f, 0.95f, 1.0f, 0.95f);
+        }
+
+        SpawnRuneBurstAt(
+            casterPos,
+            "twirl1",
+            170.f,
+            0.40f,
+            color,
+            5.0f);
+
+        DamageNumberManager::Get().AddText(
+            GetDisplayPos(pCaster),
+            text,
+            color);
+
+        return;
+    }
+
+    // ─────────────────────────────────────────────
+    // 최종 fallback
+    // 전용 분기가 없는 서버 룬 트리거도 최소한 양쪽 클라에 공통 룬 발동 표시를 띄운다.
+    // ─────────────────────────────────────────────
+    {
+        DirectX::XMFLOAT3 fallbackPos = GetCasterPos();
+
+        if (targetMonsterId != 0)
+            GetMonsterPos(fallbackPos);
+
+        DirectX::XMFLOAT4 color = DirectX::XMFLOAT4(0.8f, 0.9f, 1.0f, 0.9f);
+        const wchar_t* text = L"RUNE!";
+
+        if (runeId.rfind("FIR_", 0) == 0)
+        {
+            color = DirectX::XMFLOAT4(1.0f, 0.35f, 0.15f, 0.95f);
+            text = L"FIRE RUNE";
+        }
+        else if (runeId.rfind("WAT_", 0) == 0)
+        {
+            color = DirectX::XMFLOAT4(0.35f, 0.85f, 1.0f, 0.95f);
+            text = L"WATER RUNE";
+        }
+        else if (runeId.rfind("WND_", 0) == 0)
+        {
+            color = DirectX::XMFLOAT4(0.55f, 1.0f, 0.55f, 0.95f);
+            text = L"WIND RUNE";
+        }
+        else if (runeId.rfind("ERT_", 0) == 0)
+        {
+            color = DirectX::XMFLOAT4(1.0f, 0.75f, 0.35f, 0.95f);
+            text = L"EARTH RUNE";
+        }
+        else if (runeId.rfind("TRF_", 0) == 0)
+        {
+            color = DirectX::XMFLOAT4(0.75f, 0.75f, 1.0f, 0.95f);
+            text = L"TRANSFORM";
+        }
+        else if (runeId.rfind("AMP_", 0) == 0)
+        {
+            color = DirectX::XMFLOAT4(1.0f, 0.9f, 0.45f, 0.95f);
+
+            if (runeId.rfind("AMP_DMG", 0) == 0)
+                text = L"DMG AMP";
+            else if (runeId.rfind("AMP_RAD", 0) == 0)
+                text = L"RANGE AMP";
+            else if (runeId.rfind("AMP_CD", 0) == 0)
+                text = L"COOLDOWN";
+            else if (runeId.rfind("AMP_DUR", 0) == 0)
+                text = L"DURATION";
+            else if (runeId.rfind("AMP_SPD", 0) == 0)
+                text = L"SPEED AMP";
+            else if (runeId.rfind("AMP_MCO", 0) == 0)
+                text = L"AMPLIFY";
+            else
+                text = L"AMPLIFY";
+        }
+        else if (runeId.rfind("CH_", 0) == 0)
+        {
+            color = DirectX::XMFLOAT4(0.65f, 0.95f, 1.0f, 0.95f);
+
+            if (runeId.rfind("CH_DUR", 0) == 0)
+                text = L"CHANNEL+";
+            else
+                text = L"CHANNEL";
+        }
+        else if (runeId.rfind("ABY_", 0) == 0)
+        {
+            color = DirectX::XMFLOAT4(0.75f, 0.45f, 1.0f, 0.95f);
+            text = L"ABYSS";
+        }
+
+        SpawnRuneBurstAt(
+            fallbackPos,
+            "twirl1",
+            160.f,
+            0.40f,
+            color,
+            5.0f);
+
+        DamageNumberManager::Get().AddText(
+            fallbackPos,
+            text,
+            color);
+    }
 }
 
 ElementType NetworkManager::GetPlayerElement(uint64 playerId) const

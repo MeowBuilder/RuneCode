@@ -25,3 +25,9 @@ enum BossEventType
 	BOSS_EVENT_PHASE_CHANGE = 2;  // 보스 페이즈 전환 컷씬/패턴 시작
 	BOSS_EVENT_DEATH = 3;         // 보스 사망 컷씬/연출 시작
 }
+
+enum DebugRoomActionType
+{
+	DEBUG_ROOM_ACTION_GO_BOSS = 0;     // 현재 스테이지 보스방으로 이동
+	DEBUG_ROOM_ACTION_NEXT_STAGE = 1;  // 다음 스테이지 첫 방으로 이동
+}
