@@ -4581,7 +4581,15 @@ static float GetVfxStartDelay(uint32 monsterType, uint32 attackType, float serve
     case 6: // MegaBreath — 충전 길게 → release. 서버 windup 2.0s 이지만 애니상 1.5s 정도가 자연스러움
         return 1.5f;
     case 7: // JumpSlam — 점프 후 착지 임팩트. 서버 windup 1.5s
+        // Golem Primary: 클라 m_fWindupTime 3.35 + m_fJumpDuration 0.25 = 3.6s 임팩트
+        if (monsterType == 8) return 3.6f;
         return 1.0f;
+    case 21: // GolemJumpShock — 클라 windup 1.3 + jumpDur 1.8 = 3.1s
+        if (monsterType == 8) return 3.1f;
+        return fmaxf(serverWindupSec, 0.1f);
+    case 22: // GolemWideSlam — 클라 windup 3.3 + jumpDur 0.3 = 3.6s
+        if (monsterType == 8) return 3.6f;
+        return fmaxf(serverWindupSec, 0.1f);
     case 8: // TailSweep — 빠른 휩쓸기 (서버 windup 0)
         return 0.3f;
     case 9: // GroundRupture — 콤보 첫 hit
@@ -4687,17 +4695,15 @@ static NetIndicatorParams GetIndicatorParamsForAttack(uint32 monsterType, uint32
             break;
 
         case 21:
-            // GolemJumpShock
-            // JumpSlamAttackBehavior 기반이라 원형 영역이 필요함
+            // GolemJumpShock — 클라 m_fSlamRadius 85
             p.type = NetworkManager::NetIndicatorType::Circle;
-            p.radius = 55.0f;
+            p.radius = 85.0f;
             break;
 
         case 22:
-            // GolemWideSlam
-            // JumpSlamAttackBehavior 기반이라 원형 영역이 필요함
+            // GolemWideSlam — 클라 m_fSlamRadius 120
             p.type = NetworkManager::NetIndicatorType::Circle;
-            p.radius = 75.0f;
+            p.radius = 120.0f;
             break;
         case 23:
         case 24:
@@ -5353,21 +5359,47 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
     pAnim->CrossFade(attackClip, 0.08f, false, true);
     m_mapServerMonsterCurrentAnimClip[monsterId] = attackClip;
 
+    // 오프라인 EnemySpawner 의 JumpSlamAttackBehavior 가 SetPlaybackSpeed 로
+    //   Golem 슬램 클립을 느리게 재생함. 네트워크 경로도 동일하게 맞춰야
+    //   임팩트 프레임이 인디케이터 100% 와 일치함.
+    if (mt == 8)
+    {
+        float playbackSpeed = 1.0f;
+        switch (attackType)
+        {
+        case 7:  playbackSpeed = 0.7f;  break;   // Primary Slam (attack01)
+        case 21: playbackSpeed = 0.7f;  break;   // JumpShock (jump)
+        case 22: playbackSpeed = 0.65f; break;   // WideSlam (attack01)
+        default: playbackSpeed = 1.0f;  break;
+        }
+        pAnim->SetPlaybackSpeed(playbackSpeed);
+    }
+    else
+    {
+        // 다른 몬스터는 기본 속도. 이전 골렘 공격에서 변경된 값이 남지 않도록 명시 복원
+        pAnim->SetPlaybackSpeed(1.0f);
+    }
+
     // 공격 애니 지속 시간 등록 — 이 기간 Move 왔을 때 walk 로 덮지 않음
     //  서버 windupSec(예고) + 추정 재생시간. 짧은 windup 공격도 최소 ATTACK_ANIM_LOCK 은 유지
     float lockDur = fmaxf(windupSec + 0.4f, ATTACK_ANIM_LOCK);
 
     // Golem은 공격 모션이 길어서 서버 windupSec 기준으로 idle 복귀하면 모션이 중간에 끊김
+    //   오프라인 JumpSlamAttackBehavior 의 windup + jumpDur + recovery 합과 동기화 (재생속도 보정 후)
     if (mt == 8)
     {
         switch (attackType)
         {
-        case 21: // GolemJumpShock
-            lockDur = 2.8f;
+        case 7: // Primary Slam (windup 3.35 + jumpDur 0.25 + recovery 1.3 / 0.7배속 ≈ 약 5.0s)
+            lockDur = 5.0f;
             break;
 
-        case 22: // GolemWideSlam
-            lockDur = 4.8f;
+        case 21: // GolemJumpShock (windup 1.3 + jumpDur 1.8 + recovery 0.7 = 3.8s)
+            lockDur = 3.8f;
+            break;
+
+        case 22: // GolemWideSlam (windup 3.3 + jumpDur 0.3 + recovery 1.8 / 0.65배속 ≈ 약 5.4s)
+            lockDur = 5.4f;
             break;
 
         case 23: // GolemRockBarrage
