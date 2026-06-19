@@ -5,7 +5,8 @@
 
 cbuffer cbSplit : register(b0)
 {
-    float4 g_params;  // x=progress (0~1), y=peakOffsetUV, z=angleRad, w=slitWidthUV
+    float4 g_params;   // x=progress (0~1), y=peakOffsetUV, z=angleRad, w=slitWidthUV
+    float4 g_params2;  // x=aspect (W/H) — 화면 종횡비 보정용
 }
 
 Texture2D    g_capture : register(t0);
@@ -32,32 +33,38 @@ float4 PS_Split(VSOut input) : SV_TARGET
     float peakOffset  = g_params.y;
     float angle       = g_params.z;
     float slitWidth   = g_params.w;
+    float aspect      = g_params2.x;   // W/H (예: 16:9 → 1.778)
 
+    // ★ Aspect 보정: UV (0~1, 0~1) 는 비정사각. UV 공간에서의 45° 는 화면 픽셀에선
+    //   atan(H/W * tan(45°)) ≈ 29° (16:9) → 스프라이트 -45° 와 mismatch.
+    //   centered.x 에 aspect 곱해 "정사각 픽셀 공간" 으로 변환 — 이 공간에서 각도/normal
+    //   계산하면 SpriteBatch 가 그리는 -45° 와 정확히 일치.
     float2 normal = float2(sin(angle), -cos(angle));
-    float2 centered = input.uv - float2(0.5, 0.5);
+    float2 centered = (input.uv - 0.5f) * float2(aspect, 1.0f);
     float  dist     = dot(centered, normal);
 
     float ease   = 1.0f - pow(1.0f - progress, 3.0f);
     float offset = peakOffset * ease;
 
-    // 슬릿 영역 (가운데 검은 갭) — 진행도에 따라 두꺼워짐.
+    // 슬릿 (검정 갭) — 진행도 비례 두꺼워짐. dist 는 정사각공간이므로 slitWidth/offset 도
+    //   "H 단위" 로 해석되어 화면에서 perceptually 일정.
     float slitDynamic = slitWidth + offset * 0.5f;
     if (abs(dist) < slitDynamic)
         return float4(0.02f, 0.0f, 0.01f, 1.0f);
 
-    // ★ 진짜 "두 조각 분리" — 위쪽 절반(+normal)은 자기 콘텐츠를 +normal 방향으로
-    //   슬라이드 시킨 것처럼. 픽셀 P 가 자기 자리에서 보일 색 = (P - normal*offset).
-    //   sampleUV 의 dist 가 부호 반대편이거나 화면 밖이면 빈 공간 (검정).
     float side = (dist >= 0.0f) ? 1.0f : -1.0f;
-    float2 sampleUV = input.uv - normal * (offset * side);
 
-    // sampleUV 도 베기 라인 같은 쪽에 있어야 자기 콘텐츠. 반대편이면 빈 공간.
-    float2 sampleCentered = sampleUV - float2(0.5, 0.5);
+    // 샘플 오프셋: 정사각공간에서 (offset * normal) 만큼 슬라이드 → UV 공간으론 X 축만
+    //   aspect 로 나눠 환산해야 동일 픽셀 거리.
+    float2 normalUV = float2(normal.x / aspect, normal.y);
+    float2 sampleUV = input.uv - normalUV * (offset * side);
+
+    // sample 의 side 체크도 정사각공간에서.
+    float2 sampleCentered = (sampleUV - 0.5f) * float2(aspect, 1.0f);
     float  sampleDist     = dot(sampleCentered, normal);
     if (sampleDist * side < 0.0f)
-        return float4(0.0f, 0.0f, 0.0f, 1.0f);   // 빈 영역 — 검정
+        return float4(0.0f, 0.0f, 0.0f, 1.0f);
 
-    // 화면 밖 sample 도 검정.
     if (sampleUV.x < 0.0f || sampleUV.x > 1.0f
      || sampleUV.y < 0.0f || sampleUV.y > 1.0f)
         return float4(0.0f, 0.0f, 0.0f, 1.0f);

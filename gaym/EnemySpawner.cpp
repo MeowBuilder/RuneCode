@@ -73,12 +73,12 @@ namespace
         h.fWindupTime       = 0.55f;
         h.fHitTime          = 0.22f;
         h.fRecoveryTime     = 0.35f;
-        h.fHitRange         = 11.5f;   // 10.5 → 11.5
-        h.fConeAngle        = 115.0f;  // 110 → 115
-        h.fVFXForwardOffset = 3.0f;
-        h.fVFXYOffset       = 8.0f;
-        h.fVFXScale         = 5.0f;    // 4.0 → 5.0 (ribbon 트레일 굵게)
-        h.strVFXImpact      = "";  // SlashCue::Impact 가 발사
+        h.fHitRange         = 15.0f;   // 11.5 → 15 (보스 스케일 14 비례)
+        h.fConeAngle        = 115.0f;
+        h.fVFXForwardOffset = 4.0f;    // 3 → 4
+        h.fVFXYOffset       = 11.0f;   // 8 → 11 (스케일 ↑ → 검 위치 더 높이)
+        h.fVFXScale         = 6.5f;    // 5 → 6.5
+        h.strVFXImpact      = "";
         return h;
     }
 
@@ -92,8 +92,8 @@ namespace
         h.fWindupTime   = 0.40f;
         h.fHitTime      = 0.18f;
         h.fRecoveryTime = 0.28f;
-        h.fHitRange     = 11.0f;   // 10 → 11
-        h.fConeAngle    = 95.0f;   // 90 → 95
+        h.fHitRange     = 14.0f;   // 11 → 14
+        h.fConeAngle    = 95.0f;
         h.strAnimation  = "attack1";
         h.strVFXOnHit   = BossSigilName(e, false);
         h.eShape        = EShape::Slim;
@@ -107,11 +107,11 @@ namespace
         h.fDamage       = 80.0f;
         h.fWindupTime   = 0.50f;
         h.fHitTime      = 0.20f;
-        h.fHitRange     = 11.5f;   // 10.5 → 11.5
-        h.fConeAngle    = 125.0f;  // 120 → 125
+        h.fHitRange     = 15.0f;   // 11.5 → 15
+        h.fConeAngle    = 125.0f;
         h.strAnimation  = "attack2";
         h.strVFXOnHit   = BossSigilName(e, false);
-        h.fVFXScale     = 6.0f;    // 5 → 6
+        h.fVFXScale     = 7.5f;    // 6 → 7.5
         h.eShape        = EShape::Wide;
         return h;
     }
@@ -123,11 +123,11 @@ namespace
         h.fDamage       = 85.0f;
         h.fWindupTime   = 0.45f;
         h.fHitTime      = 0.20f;
-        h.fHitRange     = 13.0f;   // 11.5 → 13 (가장 멀리)
-        h.fConeAngle    = 85.0f;   // 80 → 85
+        h.fHitRange     = 17.0f;   // 13 → 17 (가장 멀리)
+        h.fConeAngle    = 85.0f;
         h.strAnimation  = "attack4";
         h.strVFXOnHit   = BossSigilName(e, false);
-        h.fVFXForwardOffset = 3.5f;
+        h.fVFXForwardOffset = 4.5f;   // 3.5 → 4.5
         h.eShape        = EShape::Long;
         return h;
     }
@@ -140,11 +140,11 @@ namespace
         h.fWindupTime   = 0.75f;
         h.fHitTime      = 0.30f;
         h.fRecoveryTime = 0.50f;
-        h.fHitRange     = 13.0f;   // 11.5 → 13
-        h.fConeAngle    = 130.0f;  // 125 → 130
+        h.fHitRange     = 17.0f;   // 13 → 17
+        h.fConeAngle    = 130.0f;
         h.strAnimation  = "Attack6";
         h.strVFXOnHit   = BossSigilName(e, true);   // Heavy
-        h.fVFXScale     = 8.0f;    // 7 → 8
+        h.fVFXScale     = 10.0f;   // 8 → 10
         h.eShape        = EShape::Wide;
         return h;
     }
@@ -156,11 +156,11 @@ namespace
         h.fDamage       = 95.0f;
         h.fWindupTime   = 0.55f;
         h.fHitTime      = 0.28f;
-        h.fHitRange     = 12.5f;   // 11 → 12.5
-        h.fConeAngle    = 250.0f;  // 240 → 250 (광역)
+        h.fHitRange     = 16.5f;   // 12.5 → 16.5
+        h.fConeAngle    = 250.0f;
         h.strAnimation  = "attack9";
         h.strVFXOnHit   = BossSigilName(e, true);
-        h.fVFXScale     = 7.0f;    // 6 → 7
+        h.fVFXScale     = 9.0f;    // 7 → 9
         h.eShape        = EShape::Double;
         return h;
     }
@@ -175,11 +175,11 @@ namespace
         h.fWindupTime   = 0.40f;
         h.fHitTime      = 0.30f;     // 길게 → ribbon emission 길어짐
         h.fRecoveryTime = 0.55f;     // 길게 → ribbon 잔존 길어짐
-        h.fHitRange     = 13.0f;     // 11.5 → 13
-        h.fConeAngle    = 100.0f;    // 95 → 100
+        h.fHitRange     = 17.0f;     // 13 → 17
+        h.fConeAngle    = 100.0f;
         h.strAnimation  = "attack2"; // 넓은 sweep 모션
         h.strVFXOnHit   = BossSigilName(e, false);   // ribbon 색 매핑용 (emitter spawn 안 됨)
-        h.fVFXScale     = 8.5f;      // 7.5 → 8.5 (ribbon 두께 ↑↑)
+        h.fVFXScale     = 11.0f;     // 8.5 → 11 (ribbon 두께 ↑↑)
         h.eShape        = EShape::Long;
         return h;
     }
@@ -1130,7 +1130,7 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         { "head",   "Assets/Enemies/DeathKnight/Textures/T_DeathKnigh_2_Mat_DarkKnight2_Head_Albedo.png" },
         { "Face",   "Assets/Enemies/DeathKnight/Textures/T_DeathKnigh_2_Mat_DarkKnight2_Head_Albedo.png" },
     };
-    darkLord.m_xmf3Scale = XMFLOAT3(10.0f, 10.0f, 10.0f);
+    darkLord.m_xmf3Scale = XMFLOAT3(14.0f, 14.0f, 14.0f);   // 10 → 14 (최종 보스 위엄 ↑)
     // 자연 텍스처 — 다크 아레나의 cool 라이트 (1.0, 1.1, 1.5) 가 이미 차가운 톤 보장.
     //   별도 tint 불필요.
     darkLord.m_xmf4Color = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -1143,15 +1143,20 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     darkLord.m_Stats.m_fMaxHP              = 1500.0f;
     darkLord.m_Stats.m_fCurrentHP          = 1500.0f;
     darkLord.m_Stats.m_fMoveSpeed          = 8.0f;
-    darkLord.m_Stats.m_fAttackRange        = 8.0f;
+    darkLord.m_Stats.m_fAttackRange        = 11.0f;   // 8 → 11 (스케일 1.4× 비례)
     darkLord.m_Stats.m_fAttackCooldown     = 1.4f;
-    darkLord.m_Stats.m_fLongRangeThreshold = 35.0f;
-    darkLord.m_Stats.m_fMidRangeThreshold  = 18.0f;
+    darkLord.m_Stats.m_fLongRangeThreshold = 45.0f;   // 35 → 45
+    darkLord.m_Stats.m_fMidRangeThreshold  = 24.0f;   // 18 → 24
 
     darkLord.m_bIsBoss = true;
     darkLord.m_fSpecialAttackCooldown = 6.0f;
     darkLord.m_nSpecialAttackChance   = 50;
     darkLord.m_fAnimationPlaybackSpeed = 1.0f;
+    // 콜라이더 XZ 폭 — 스케일 14 ↑ 후 통로/모서리 끼임 방지.
+    //   기본 0.3 * 14 = 4.2 → 통로 좁은 곳에서 코너에 낀다. 0.22 로 14 * 0.22 ≈ 3.08
+    //   (= 스케일 10 시절의 풋프린트 3.0 와 동등) 유지하여 네비 안정성 확보.
+    //   피격 판정용 콜라이더는 별도 시스템 — 이 콜라이더는 벽 통과 방지용.
+    darkLord.m_fColliderXZMultiplier = 0.22f;
 
     // 애니메이션 클립 매핑 (Assets/Enemies/DeathKnight/DarkKnight2_skin3_Anim.bin)
     darkLord.m_AnimConfig.m_strIdleClip    = "fightidle";
@@ -1161,20 +1166,20 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     darkLord.m_AnimConfig.m_strDeathClip   = "death1";
 
     darkLord.m_IndicatorConfig.m_eType      = IndicatorType::ForwardBox;
-    darkLord.m_IndicatorConfig.m_fHitRadius = 4.5f;
-    darkLord.m_IndicatorConfig.m_fHitLength = 9.0f;
+    darkLord.m_IndicatorConfig.m_fHitRadius = 6.5f;   // 4.5 → 6.5 (스케일 비례)
+    darkLord.m_IndicatorConfig.m_fHitLength = 13.0f;  // 9 → 13
 
     // 기본 공격 — 페이즈 컨트롤러가 처음 적용되기 전 fallback 용 단순 근접.
     darkLord.m_fnCreateAttack = []() {
         auto p = std::make_unique<MeleeAttackBehavior>(
             40.0f /*damage*/, 0.45f /*windup*/, 0.55f /*hit*/, 0.50f /*recovery*/);
-        p->SetHitRange(8.0f);
+        p->SetHitRange(11.0f);   // 8 → 11
         return p;
     };
     // Special fallback — phase 적용 전에만 사용
     darkLord.m_fnCreateSpecialAttack = []() {
         return std::make_unique<JumpSlamAttackBehavior>(
-            70.0f, 12.0f, 0.9f, 10.0f, 0.40f, 0.8f, true, 2.0f, 0.35f, "Attack10");
+            70.0f, 16.0f, 0.9f, 13.0f, 0.40f, 0.8f, true, 2.0f, 0.35f, "Attack10");  // 12→16, 10→13
     };
 
     // ── DarkLord 5단계 페이즈 (땅 → 물 → 바람 → 불 → Final) ─────────────────
@@ -1222,8 +1227,8 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
                 // 35% : 검역 SigilField — 3개 인장 (플레이어 발치 1 + 보스 주변 2)
                 if (roll < 35)
                     return std::make_unique<DarkLordSigilField>(
-                        ElementType::Earth, 75.0f /*dmg*/, 7.0f /*radius*/,
-                        1.30f /*delay*/, 3 /*count*/, 14.0f /*spread*/);
+                        ElementType::Earth, 75.0f /*dmg*/, 9.0f /*radius*/,
+                        1.30f /*delay*/, 3 /*count*/, 18.0f /*spread*/);  // R7→9, spread14→18
                 CHit hit;
                 SlashPresentation style = SlashPresentation::Massive;
                 SlashPowerLevel  lvl   = SlashPowerLevel::Ultimate;
@@ -1393,15 +1398,16 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
                 int roll = rand() % 100;
                 if (roll < 15)
                 {
-                    // 검의 봉인 — 보스 무적 + 검 4개 회전. 7초 봉인 후 풀림.
+                    // 검의 봉인 — 검 4자루 회전 (보스 일반 패턴 병행). 7초 후 소멸.
+                    //   스케일 14 비례: orbitR 20→26, visScale 15→21.
                     return std::make_unique<DarkLordSwordSeal>(
                         ElementType::Fire, 45.0f /*dmg*/, 7.0f /*duration*/,
-                        20.0f /*orbitR*/, 65.0f /*orbitSpeed*/,
-                        3.0f /*hitR*/, 15.0f /*visScale*/, 4 /*count*/);
+                        26.0f /*orbitR*/, 65.0f /*orbitSpeed*/,
+                        4.0f /*hitR*/, 21.0f /*visScale*/, 4 /*count*/);
                 }
                 if (roll < 40)
                     return std::make_unique<DarkLordSwordRain>(
-                        ElementType::Fire, 7, 60.0f, 6.5f, 9.0f, 32.0f, 1.7f, 1.5f);
+                        ElementType::Fire, 7, 60.0f, 8.5f, 9.0f, 42.0f, 1.7f, 1.5f);  // R6.5→8.5, spread32→42
                 CHit hit;
                 SlashPresentation style = SlashPresentation::Massive;
                 SlashPowerLevel  lvl   = SlashPowerLevel::Ultimate;
@@ -1483,15 +1489,15 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
 
                 if (roll < 10)
                 {
-                    // 검역 SigilField — 4방향 인장 (잔치 톤).
+                    // 검역 SigilField — 4방향 인장 (잔치 톤). R7.5→9.5, spread18→23.
                     return std::make_unique<DarkLordSigilField>(
-                        pickElem, 80.0f, 7.5f, 1.20f, 4, 18.0f);
+                        pickElem, 80.0f, 9.5f, 1.20f, 4, 23.0f);
                 }
                 if (roll < 20)
                 {
-                    // 검의 비 SwordRain — 10발 광역.
+                    // 검의 비 SwordRain — 10발 광역. R7→9, spread38→48.
                     return std::make_unique<DarkLordSwordRain>(
-                        pickElem, 10, 60.0f, 7.0f, 8.0f, 38.0f, 1.5f, 1.4f);
+                        pickElem, 10, 60.0f, 9.0f, 8.0f, 48.0f, 1.5f, 1.4f);
                 }
                 if (roll < 30)
                 {
@@ -1515,11 +1521,12 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
                 }
                 if (roll < 45)
                 {
-                    // 검의 봉인 SwordSeal — Final 시그니처 기믹. 봉인 시간 6초 (P3 7초 보다 짧음).
+                    // 검의 봉인 SwordSeal — Final 시그니처. 6초 (P3 7초 보다 짧음).
+                    //   스케일 14 비례: orbitR 20→26, visScale 15→21.
                     return std::make_unique<DarkLordSwordSeal>(
                         pickElem, 50.0f /*dmg*/, 6.0f /*duration*/,
-                        20.0f /*orbitR*/, 80.0f /*orbitSpeed*/,
-                        3.0f /*hitR*/, 15.0f /*visScale*/, 4 /*count*/);
+                        26.0f /*orbitR*/, 80.0f /*orbitSpeed*/,
+                        4.0f /*hitR*/, 21.0f /*visScale*/, 4 /*count*/);
                 }
 
                 // 기존: CrossSigil / FinalJudgment / 4원소 Massive.

@@ -247,6 +247,11 @@ void ScreenSplitOverlay::Apply(ID3D12GraphicsCommandList* pCmd,
     cb.params[1] = m_peakOffset;
     cb.params[2] = m_angleRad;
     cb.params[3] = m_slitWidth;
+    // Aspect (W/H) — 16:9 화면에서 UV 공간 -45° ≠ 화면 -45° 인 mismatch 보정.
+    cb.params2[0] = (height > 0) ? (float)width / (float)height : 1.0f;
+    cb.params2[1] = 0.0f;
+    cb.params2[2] = 0.0f;
+    cb.params2[3] = 0.0f;
     UINT slot = m_cbNextSlot;
     m_cbNextSlot = (m_cbNextSlot + 1) % kCBSlotCount;
     UINT8* dst = m_pCBMapped + slot * m_cbSlotBytes;

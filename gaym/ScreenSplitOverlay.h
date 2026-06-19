@@ -43,7 +43,8 @@ public:
 private:
     struct SplitCB
     {
-        float params[4];   // x=progress, y=peakOffset, z=angle, w=slitWidth
+        float params[4];    // x=progress, y=peakOffset, z=angle, w=slitWidth
+        float params2[4];   // x=aspect (W/H), y/z/w=reserved
     };
 
     void CreateRootSignature(ID3D12Device* pDevice);
