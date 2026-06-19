@@ -1466,7 +1466,10 @@ void EnemyComponent::ShowIndicators()
             if (pT)
             {
                 pT->SetPosition(attackOrigin.x, indY, attackOrigin.z);
-                float r = fullR * fillProgress;
+                // fillProgress=1.0 일 때 fill 이 정확히 border (fullR * 1.03) 까지 도달하도록
+                //   동일 1.03 배율 적용 — 이전엔 border 가 fill 보다 3% 컸어서 "끝까지 안 찬"
+                //   인상이 있었음.
+                float r = (fullR * 1.03f) * fillProgress;
                 if (r < 0.01f) r = 0.01f;  // 0 스케일 방지
                 pT->SetScale(r, 1.0f, r);
 

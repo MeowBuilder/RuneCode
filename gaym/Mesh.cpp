@@ -390,23 +390,36 @@ RingMesh::RingMesh(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dComm
     std::vector<XMFLOAT2> texCoords(m_nVertices);
     std::vector<UINT> indices(m_nIndices);
 
+    // ★ disc (inner≈0) 와 ring 구분 — 셰이더가 UV 기반 그라데이션을 적용해 ring outline 효과
+    //   만드는 코드라, disc 에 적용되면:
+    //     - V축: 양 끝 fade 가 중심까지 페이드 → "중간 깨짐"
+    //     - U축: 각도따라 emissive↔ambient lerp → "부채꼴 명암" 패턴
+    //   Disc 는 U/V 모두 0.5 로 통일해 fade/grad 영역 회피 → 완전 단색 채움.
+    //   Ring (inner > 0) 은 기존 U=각도, V=0/1 유지 — outline + 각도 텍스처 매핑 보존.
+    const bool bIsDisc = (fInnerRadius < 0.001f);
+    const float vOuter = bIsDisc ? 0.5f : 0.0f;
+    const float vInner = bIsDisc ? 0.5f : 1.0f;
+
     for (int i = 0; i < nSegments; i++)
     {
         float angle = XMConvertToRadians(360.0f * i / nSegments);
         float cosA = cosf(angle);
         float sinA = sinf(angle);
 
+        // U: ring 은 각도, disc 는 0.5 고정 (단색).
+        float uCoord = bIsDisc ? 0.5f : (static_cast<float>(i) / nSegments);
+
         // Outer vertex
         int outerIdx = i * 2;
         positions[outerIdx] = XMFLOAT3(cosA * fOuterRadius, 0.0f, sinA * fOuterRadius);
         normals[outerIdx] = XMFLOAT3(0.0f, 1.0f, 0.0f);
-        texCoords[outerIdx] = XMFLOAT2(static_cast<float>(i) / nSegments, 0.0f);
+        texCoords[outerIdx] = XMFLOAT2(uCoord, vOuter);
 
         // Inner vertex
         int innerIdx = i * 2 + 1;
         positions[innerIdx] = XMFLOAT3(cosA * fInnerRadius, 0.0f, sinA * fInnerRadius);
         normals[innerIdx] = XMFLOAT3(0.0f, 1.0f, 0.0f);
-        texCoords[innerIdx] = XMFLOAT2(static_cast<float>(i) / nSegments, 1.0f);
+        texCoords[innerIdx] = XMFLOAT2(uCoord, vInner);
     }
 
     for (int i = 0; i < nSegments; i++)

@@ -723,12 +723,11 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
     golem.m_IndicatorConfig.m_fHitRadius = 42.0f;
 
     // Primary: "주먹 내려찍기" — attack01 @ 0.7× = 8.1s
-    //   windup 을 애니 slam 피크 (~45% = 3.6s) 에 맞춤 → 찍는 순간에 데미지/파편 동기화
-    //   3.5 → 3.8: 사용자 체감상 데미지가 애니보다 빨라 windup 뒤로 살짝 이동
+    //   임팩트 ~45% = 3.6s 지점에 데미지 (애니 슬램 피크).
     golem.m_fnCreateAttack = []() {
         return std::make_unique<JumpSlamAttackBehavior>(
             160.0f, 0.0f, 0.25f, 70.0f,
-            3.8f, 1.3f,                     // windup 3.5→3.8
+            3.35f, 1.3f,                    // windup 3.35 (+ jumpDur 0.25 = 3.6s 데미지 @ ~45%)
             false,
             2.5f, 0.5f,
             "Golem_battle_attack01_ge"
@@ -757,10 +756,10 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
         }
         else if (r == 1)
         {
-            // 광역 내려찍기 (radius 120) — Primary 와 같은 slam 피크 타이밍
+            // 광역 내려찍기 (radius 120) — Primary 와 동일 임팩트 ~45% = 3.6s.
             return std::make_unique<JumpSlamAttackBehavior>(
                 150.0f, 0.0f, 0.3f, 120.0f,
-                3.6f, 1.8f,                 // windup 2.3→3.6 (피크 타이밍), recovery 2.0→1.8
+                3.3f, 1.8f,                 // windup 3.3 (+ jumpDur 0.3 = 3.6s 데미지 @ ~45%)
                 false,
                 3.4f, 0.65f,
                 "Golem_battle_attack01_ge"

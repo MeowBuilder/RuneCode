@@ -32,6 +32,9 @@ public:
     virtual float GetIndicatorRadius() const override { return m_fSlamRadius; }
     // windup 이 끝나고 slam 순간에 데미지 발생 → fill 는 windup 동안 진행
     virtual float GetTimeToHit() const override { return m_fWindupTime + m_fJumpDuration; }
+    // 슬램 애니는 loop X — 클립 끝(슬램 자세) 에 freeze 되어 데미지 임팩트와 자세 일치.
+    //   loop on 시 클립 끝나자마자 wind-up 모션이 다시 재생돼 임팩트 자세와 어긋남.
+    virtual bool ShouldLoopAnim() const override { return false; }
 
 private:
     void DealSlamDamage(EnemyComponent* pEnemy);
