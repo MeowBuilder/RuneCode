@@ -402,6 +402,26 @@ void FluidSkillVFXManager::StopEffect(int id)
     if (nextId >= 0) StopEffect(nextId);
 }
 
+void FluidSkillVFXManager::SetEffectJet(int id, const XMFLOAT3& mouth, const XMFLOAT3& dir,
+                                        float speed, float length, float spawnRadius, float spread,
+                                        float lifetime, const XMFLOAT3& roomMin, const XMFLOAT3& roomMax,
+                                        bool converge)
+{
+    if (id < 0 || id >= MAX_EFFECTS || !m_Slots[id].isActive) return;
+    FluidVFXSlot& slot = m_Slots[id];
+    if (slot.useLightEmitter || !slot.pSystem) return;
+    slot.pSystem->SetSPHJet(mouth, dir, speed, length, spawnRadius, spread,
+                            lifetime, roomMin, roomMax, true, converge);
+}
+
+void FluidSkillVFXManager::SetEffectObstacles(int id, const XMFLOAT4* obstacles, int count)
+{
+    if (id < 0 || id >= MAX_EFFECTS || !m_Slots[id].isActive) return;
+    FluidVFXSlot& slot = m_Slots[id];
+    if (slot.useLightEmitter || !slot.pSystem) return;
+    slot.pSystem->SetSPHObstacles(obstacles, count);
+}
+
 int FluidSkillVFXManager::SpawnFireTrailEffect(const XMFLOAT3& pos,
                                                 const XMFLOAT3& waveRight,
                                                 float halfWidth,

@@ -482,6 +482,10 @@ private:
     std::unordered_map<uint64, float> m_mapServerMonsterHitFlashTimer;
     static constexpr float SERVER_MONSTER_HIT_FLASH_DURATION = 0.15f;
 
+    // 몬스터 피격 애니메이션 재생 쿨다운
+    // 데미지는 자주 들어와도 gethit 모션은 일정 간격으로만 재생한다.
+    std::unordered_map<uint64, float> m_mapServerMonsterHitAnimCooldown;
+
     // 사망 애니 재생된 서버 몬스터 ID — 이후 Move/Idle/Attack 전환 skip
     std::unordered_set<uint64> m_setDeadServerMonsters;
 
@@ -795,6 +799,8 @@ private:
         float delay = 0.5f;
     };
     std::vector<PendingOrbitalProjectile> m_vPendingOrbitals;
+
+    float m_fLocalMoveCorrectionBlockTimer = 0.0f; // 포탈 낙하 중 서버 위치 보정 잠시 차단
 
 public:
     // 매 프레임 호출 — 궤도 deferred 큐 tick

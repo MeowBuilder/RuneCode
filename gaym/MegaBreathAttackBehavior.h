@@ -144,8 +144,9 @@ private:
     void UpdateChargeVFX(EnemyComponent* pEnemy);
     void DestroyChargeVFX();
     int  m_nChargeVFXId = -1;
-    XMFLOAT3                    m_xmf3BeamOrigin     = { 0.0f, 0.0f, 0.0f };  // 보스 입
-    XMFLOAT3                    m_xmf3BeamDirection  = { 0.0f, 0.0f, 1.0f };
-    float                       m_fBeamLength        = 0.0f;  // 입 → 맵 반대편
-    float                       m_fBeamEndRadius     = 0.0f;  // 끝 부분 반경 (cone 확장)
+    XMFLOAT3                    m_xmf3BeamOrigin     = { 0.0f, 0.0f, 0.0f };  // 보스 입(커튼 시작 라인 중심)
+    XMFLOAT3                    m_xmf3BeamDirection  = { 0.0f, 0.0f, 1.0f };  // 커튼 진행 방향
+    float                       m_fBeamLength        = 0.0f;  // 진행축 사거리 (입 → 맵 반대편)
+    float                       m_fBeamEndRadius     = 0.0f;  // 커튼 측면 반폭 (half-width)
+    float                       m_fJetSpeed          = 0.0f;  // 커튼 진행 속도 (데미지 front 계산용)
 };

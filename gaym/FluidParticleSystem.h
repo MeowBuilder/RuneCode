@@ -68,8 +68,16 @@ struct SPHConstants {
     float waveOscAmplitude; float waveOscFrequency; float waveOscWaveNumber; float waveOscEnabled; // 16 (offset 400)
     XMFLOAT3 waveOscFwdDir; float _woPad0;                                                          // 16 (offset 416)
     XMFLOAT3 waveOscUpDir;  float _woPad1;                                                          // 16 (offset 432)
-};  // total 448 bytes
-static_assert(sizeof(SPHConstants) <= 512, "SPHConstants exceeds 512 bytes");
+    // ── 보스 SPH 브레스: 제트 분사 + 원기둥 충돌 + 방 경계 (jetActive==0이면 전부 무시) ──
+    XMFLOAT3 jetMouth;    float jetSpeed;        // 16 (offset 448) 분사 시작점/속도
+    XMFLOAT3 jetDir;      float jetLength;       // 16 (offset 464) 분사 방향/축 최대 사거리
+    XMFLOAT3 jetRoomMin;  float jetSpawnRadius;  // 16 (offset 480) 방 AABB 최소 / 재분사 산포 반경
+    XMFLOAT3 jetRoomMax;  float jetSpread;       // 16 (offset 496) 방 AABB 최대 / 재분사 측면 속도
+    float    jetActive;   float jetLifetime; uint32_t jetFrameSeed; int obstacleCount; // 16 (offset 512)
+    float    jetConverge; XMFLOAT3 _jetPad2;     // 16 (offset 528) 1=수렴(맵→입), 0=분사(입→맵)
+    XMFLOAT4 obstacles[4];                       // 64 (offset 544) xy=중심XZ, z=반경 (수직 무한 원기둥)
+};  // total 608 bytes
+static_assert(sizeof(SPHConstants) <= 768, "SPHConstants exceeds 768 bytes");
 
 class FluidParticleSystem
 {
@@ -138,6 +146,15 @@ public:
     void ApplyDirectionalForce(const XMFLOAT3& direction, float impulse);
     void SetGlobalGravity(float strength);
 
+    // ── 보스 SPH 브레스 전용 ─────────────────────────────────────────────────
+    // 제트 분사/재순환 + 바닥/방 경계 설정. enable=false면 일반 SPH로 동작.
+    void SetSPHJet(const XMFLOAT3& mouth, const XMFLOAT3& dir,
+                   float speed, float length, float spawnRadius, float spread,
+                   float lifetime, const XMFLOAT3& roomMin, const XMFLOAT3& roomMax,
+                   bool enable, bool converge = false);
+    // 수직 무한 원기둥 장애물 (최대 4개). xz=중심, radius=충돌 반경.
+    void SetSPHObstacles(const XMFLOAT4* obstacles, int count);
+
     // Traveling wave 수직 진동 (Q스킬 파도용)
     // F_y(pos,t) = amplitude * sin(waveNumber * dot(pos,fwdDir) - frequency * t)
     void SetWaveOscillation(float amplitude, float frequency, float waveNumber,
@@ -182,6 +199,9 @@ private:
     // Upload visible particles to GPU buffer and set m_nActiveCount
     void UploadRenderData();
 
+    // 현재 m_Particles 상태를 GPU 초기 상태 버퍼(m_pInitUpload)에 기록 + m_bNeedsUpload=true
+    void UploadInitialStateToGPU();
+
     // Beam 모드: CPU 렌더 데이터를 GPU 렌더 버퍼로 복사
     void CopyBeamRenderDataToGPU(ID3D12GraphicsCommandList* pCmdList);
 
@@ -199,11 +219,27 @@ private:
     float                          m_GlobalGravityStrength = 0.f;
     std::vector<FluidControlPoint> m_OrbitalCPs; // OrbitalCP 모드 위성 CP 포함
 
+    // 보스 SPH 브레스: 제트 분사/재순환 + 원기둥 충돌 + 방 경계
+    bool     m_JetActive       = false;
+    bool     m_JetConverge     = false;   // true=맵 전역→입 수렴(Windup), false=입→맵 분사
+    XMFLOAT3 m_JetMouth        = {};
+    XMFLOAT3 m_JetDir          = { 0, 0, 1 };
+    float    m_JetSpeed        = 30.f;
+    float    m_JetLength       = 80.f;
+    float    m_JetSpawnRadius  = 3.f;
+    float    m_JetSpread       = 4.f;
+    float    m_JetLifetime     = 2.5f;
+    XMFLOAT3 m_JetRoomMin      = {};
+    XMFLOAT3 m_JetRoomMax      = {};
+    uint32_t m_JetFrameCounter = 0;
+    XMFLOAT4 m_Obstacles[4]    = {};
+    int      m_ObstacleCount   = 0;
+
     // Spatial hash (power-of-2 table, direct-mapped cells)
     static constexpr int HASH_TABLE_SIZE      = 8192;
     static constexpr int MAX_PER_CELL         = 32;
     static constexpr int MAX_NEIGHBOR_SEARCH  = 27 * MAX_PER_CELL;
-    static constexpr int MAX_PARTICLES        = 6144;
+    static constexpr int MAX_PARTICLES        = 12288;
 
     struct SpatialHashCell
     {
