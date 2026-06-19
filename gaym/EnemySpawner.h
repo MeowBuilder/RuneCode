@@ -56,6 +56,18 @@ public:
     // 네트워크 일반 몬스터용 인디케이터 세팅
     void SetupNetMonsterAttackIndicators(GameObject* pEnemy, EnemyComponent* pEnemyComp, const AttackIndicatorConfig& config, CRoom* pRoom) { SetupAttackIndicators(pEnemy, pEnemyComp, config, pRoom); }
 
+    // Add render components recursively to game object hierarchy
+    //   (보스 attack behavior 가 mesh 동적 spawn 시 RenderComponent 등록할 때 사용)
+    void AddRenderComponentsToHierarchy(GameObject* pGameObject);
+
+    // Load texture to all meshes in game object hierarchy.
+    //   동적 spawn 한 mesh 에 보스 텍스처 파이프라인 그대로 적용할 때 사용.
+    //   tint != (1,1,1,1) 일 때 diffuse 에 곱해져 텍스처 위에 카테고리 색이 입혀짐.
+    //   pOverrides: 프레임명 substring → 텍스처 경로 매핑.
+    void LoadTextureToHierarchy(GameObject* pGameObject, const std::string& texturePath,
+                                const XMFLOAT4& tint = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f),
+                                const std::vector<std::pair<std::string, std::string>>* pOverrides = nullptr);
+
 private:
     // Create a cube mesh enemy for testing
     GameObject* CreateCubeEnemy(CRoom* pRoom, const XMFLOAT3& position, const XMFLOAT3& scale, const XMFLOAT4& color);
@@ -63,18 +75,8 @@ private:
     // Create an enemy with loaded mesh from file
     GameObject* CreateMeshEnemy(CRoom* pRoom, const XMFLOAT3& position, const EnemySpawnData& data);
 
-    // Add render components recursively to game object hierarchy
-    void AddRenderComponentsToHierarchy(GameObject* pGameObject);
-
     // Apply color tint to all meshes in game object hierarchy
     void ApplyColorToHierarchy(GameObject* pGameObject, const XMFLOAT4& color);
-
-    // Load texture to all meshes in game object hierarchy.
-    // tint != (1,1,1,1) 일 때 diffuse 에 곱해져 텍스처 위에 카테고리 색이 입혀짐.
-    // pOverrides: 프레임명 substring → 텍스처 경로 매핑. 매칭되면 default 대신 사용.
-    void LoadTextureToHierarchy(GameObject* pGameObject, const std::string& texturePath,
-                                const XMFLOAT4& tint = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f),
-                                const std::vector<std::pair<std::string, std::string>>* pOverrides = nullptr);
 
     // Setup common enemy components
     void SetupEnemyComponents(GameObject* pEnemy, const EnemySpawnData& data, CRoom* pRoom, GameObject* pTarget);

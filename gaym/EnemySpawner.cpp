@@ -26,6 +26,7 @@
 #include "DarkLordSigilSlash.h"
 #include "DarkLordSigilField.h"
 #include "DarkLordSwordRain.h"
+#include "DarkLordSwordSeal.h"
 #include "MegaBreathAttackBehavior.h"
 #include "RockFallAttackBehavior.h"
 #include "RockBarrageAttackBehavior.h"
@@ -1387,20 +1388,27 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
             // Special: 메테오 폭격 — 8발, 20~55 반경 사이 무작위 착탄
             // [Day 3] P3 Special — Fire Ultimate Massive + CrossSigil + FinalJudgment
             // [Day 6] P3 Special — 검의 비 SwordRain (광장 7곳 동시 낙하 AoE) 35% 추가.
+            // [Day 7] P3 Special — 검의 봉인 SwordSeal (시그니처 기믹) 15% 추가.
             p.m_fnSpecialAttack = []() -> std::unique_ptr<IAttackBehavior> {
                 int roll = rand() % 100;
-                if (roll < 35)
+                if (roll < 15)
+                {
+                    // 검의 봉인 — 보스 무적 + 검 4개 회전. 7초 봉인 후 풀림.
+                    return std::make_unique<DarkLordSwordSeal>(
+                        ElementType::Fire, 45.0f /*dmg*/, 7.0f /*duration*/,
+                        20.0f /*orbitR*/, 65.0f /*orbitSpeed*/,
+                        3.0f /*hitR*/, 15.0f /*visScale*/, 4 /*count*/);
+                }
+                if (roll < 40)
                     return std::make_unique<DarkLordSwordRain>(
-                        ElementType::Fire, 7 /*count*/, 60.0f /*dmg*/,
-                        6.5f /*radius*/, 9.0f /*min*/, 32.0f /*max*/,
-                        1.7f /*windup*/, 1.5f /*recovery*/);
+                        ElementType::Fire, 7, 60.0f, 6.5f, 9.0f, 32.0f, 1.7f, 1.5f);
                 CHit hit;
                 SlashPresentation style = SlashPresentation::Massive;
                 SlashPowerLevel  lvl   = SlashPowerLevel::Ultimate;
                 ElementType element = ElementType::Fire;
-                if (roll < 55)      { hit = MakeHeavySlam(ElementType::Fire); style = SlashPresentation::CrossSigil; }
-                else if (roll < 70) { hit = MakeHeavySlam(ElementType::Fire); style = SlashPresentation::FinalJudgment; }
-                else if (roll < 88) { hit = MakeHeavySlam(ElementType::Fire); }
+                if (roll < 58)      { hit = MakeHeavySlam(ElementType::Fire); style = SlashPresentation::CrossSigil; }
+                else if (roll < 72) { hit = MakeHeavySlam(ElementType::Fire); style = SlashPresentation::FinalJudgment; }
+                else if (roll < 89) { hit = MakeHeavySlam(ElementType::Fire); }
                 else                { hit = MakeSpinCleave(ElementType::Fire); }
                 SlashVFXDesc desc = SlashVFXDesc::Preset(element, lvl);
                 desc.ApplyPresentation(style);
@@ -1504,6 +1512,14 @@ void EnemySpawner::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pComma
                     desc.ApplyPresentation(SlashPresentation::TwinCleave);
                     desc.twinSeparationDeg = 30.0f;
                     return std::make_unique<DarkLordSigilSlash>(desc, std::vector<CHit>{ hit });
+                }
+                if (roll < 45)
+                {
+                    // 검의 봉인 SwordSeal — Final 시그니처 기믹. 봉인 시간 6초 (P3 7초 보다 짧음).
+                    return std::make_unique<DarkLordSwordSeal>(
+                        pickElem, 50.0f /*dmg*/, 6.0f /*duration*/,
+                        20.0f /*orbitR*/, 80.0f /*orbitSpeed*/,
+                        3.0f /*hitR*/, 15.0f /*visScale*/, 4 /*count*/);
                 }
 
                 // 기존: CrossSigil / FinalJudgment / 4원소 Massive.

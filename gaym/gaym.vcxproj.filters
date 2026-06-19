@@ -273,6 +273,9 @@
     <ClInclude Include="DarkLordSwordRain.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="DarkLordSwordSeal.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
     <ClInclude Include="DropItemComponent.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -753,6 +756,9 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="DarkLordSwordRain.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="DarkLordSwordSeal.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="DropItemComponent.cpp">

@@ -167,6 +167,26 @@ public:
     IAttackBehavior* GetSpecialAttackBehavior() const { return m_pSpecialAttackBehavior.get(); }
     bool IsUsingSpecialAttack() const { return m_bUsingSpecialAttack; }
 
+    // [DEBUG] 즉시 임의 attack behavior 발동 — special 슬롯에 넣고 Attack state 강제 진입.
+    //   테스트용. 정상 흐름(쿨다운/페이즈 풀)을 우회.
+    void DebugForceSpecialAttack(std::unique_ptr<IAttackBehavior> pBehavior);
+
+    // ── Orbiting Swords (다크로드 봉인 검 — attack behavior 종료 후 검들이 자율 회전) ──
+    //   SwordSeal 이 spawn 한 검 GameObject 들을 보스에 넘기고, 보스가 매 프레임 transform
+    //   업데이트 + 충돌 + lifetime 처리. 보스는 그동안 다른 짤패턴 정상 진행.
+    struct OrbitingSwordEntry
+    {
+        class GameObject* pObj = nullptr;
+        int               vfxSlot = -1;
+        float             baseAngleDeg = 0.0f;
+    };
+    void AddOrbitingSword(const OrbitingSwordEntry& entry);
+    void SetOrbitingSwordParams(float fRadius, float fSpeedDeg, float fYOffset,
+                                float fDamage, float fHitRadius, float fLifetime,
+                                ElementType element);
+    void ClearOrbitingSwords();
+    bool HasOrbitingSwords() const { return !m_vOrbitingSwords.empty(); }
+
     // Factories: recreate behaviors each use so random selection actually varies
     void SetAttackFactory(std::function<std::unique_ptr<IAttackBehavior>()> fn) { m_fnAttackFactory = std::move(fn); }
     void SetSpecialAttackFactory(std::function<std::unique_ptr<IAttackBehavior>()> fn) { m_fnSpecialAttackFactory = std::move(fn); }
@@ -323,6 +343,19 @@ private:
     // Boss Phase System
     std::unique_ptr<BossPhaseController> m_pPhaseController;
     float m_fSpeedMultiplier = 1.0f;
+
+    // ── Orbiting Swords state ────────────────────────────────────────────
+    std::vector<OrbitingSwordEntry> m_vOrbitingSwords;
+    float       m_fOrbitAngleDeg     = 0.0f;
+    float       m_fOrbitRemainingSec = 0.0f;
+    float       m_fOrbitRadius       = 20.0f;
+    float       m_fOrbitSpeedDeg     = 65.0f;
+    float       m_fOrbitYOffset      = 28.0f;
+    float       m_fOrbitDamage       = 45.0f;
+    float       m_fOrbitHitRadius    = 3.0f;
+    float       m_fOrbitDmgCooldown  = 0.0f;
+    ElementType m_eOrbitElement      = ElementType::Fire;
+    void UpdateOrbitingSwords(float dt);
 
     // Special attack parameters
     float m_fSpecialAttackCooldown = 10.0f;
