@@ -1388,12 +1388,13 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
         else if (mapId == "grass_boss")     { pScene->TransitionToGrassBossRoom();   bHandled = true; }
         else if (mapId == "dark_lord")
         {
-            pScene->TransitionToDarkLordRoom();
+            // 네트워크 모드에서는 맵만 로드한다.
+            // 컷신은 서버 S_BOSS_EVENT_INTRO 수신 후 시작한다.
+            pScene->TransitionToDarkLordRoom(false);
             bHandled = true;
 
-            // 현재 작업은 DarkLord 방 입장까지만.
-            // 서버 최종보스 스폰/패턴 동기화는 다음 단계이므로 자동 C_TORCH_INTERACT는 보내지 않는다.
-            shouldAutoStartRoom = false;
+            // DarkLord도 포탈 진입 방이므로 자동 C_TORCH_INTERACT를 보내 서버 스폰을 요청한다.
+            shouldAutoStartRoom = true;
         }
         else if (mapId.rfind("fire_room_", 0) == 0)
         {
@@ -1437,8 +1438,8 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
             case 3: pScene->TransitionToEarthBossRoom();   break;
             case 4: pScene->TransitionToGrassBossRoom();   break;
             case 5:
-                pScene->TransitionToDarkLordRoom();
-                shouldAutoStartRoom = false;
+                pScene->TransitionToDarkLordRoom(false);
+                shouldAutoStartRoom = true;
                 break;
             default: pScene->TransitionToBossRoom();       break;
             }
@@ -1527,7 +1528,7 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     {
         m_bPendingTorchInteract = false;
         m_nPendingTorchInteractFrame = 0;
-        WriteNetworkLog("[Network] Pending C_TORCH_INTERACT skipped for dark_lord");
+        WriteNetworkLog("[Network] Pending C_TORCH_INTERACT skipped");
     }
 
     m_bInRoomTransition = false;
@@ -3700,6 +3701,114 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
     
     // 서버 몬스터는 로컬 Room에 속하지 않는 전역 오브젝트로 생성
     CRoom* pPrevRoom = pScene->GetCurrentRoom();
+
+    // DarkLord는 단순 MeshLoader로 만들면 안 된다.
+    // EnemySpawner("DarkLord") 프리셋 안에 전용 텍스처/애니/페이즈/패턴 구성이 들어있다.
+    if (monsterType == 11 && isBoss)
+    {
+        if (pPrevRoom && pPrevRoom->GetState() == RoomState::Inactive)
+        {
+            pPrevRoom->SetState(RoomState::Active);
+
+            for (const auto& pGO : pPrevRoom->GetGameObjects())
+            {
+                if (pGO)
+                    pGO->Update(0.0f);
+            }
+
+            WriteNetworkLog("[Network] Current room activated by DarkLord spawn");
+        }
+
+        GameObject* pMonster = nullptr;
+
+        if (EnemySpawner* pSpawner = pScene->GetEnemySpawner())
+        {
+            XMFLOAT3 spawnPos(x, y, z);
+            pMonster = pSpawner->SpawnEnemy(
+                pPrevRoom,
+                "DarkLord",
+                spawnPos,
+                pScene->GetPlayer()
+            );
+        }
+
+        if (!pMonster)
+        {
+            WriteNetworkLog("[Network] DarkLord SpawnEnemy failed");
+            return;
+        }
+
+        sprintf_s(pMonster->m_pstrFrameName, "NetMonster_%llu", monsterId);
+
+        if (auto* pT = pMonster->GetTransform())
+        {
+            pT->SetPosition(x, y, z);
+            pT->SetRotation(0.0f, yaw, 0.0f);
+            pT->SetScale(1.0f, 1.0f, 1.0f);
+        }
+
+        if (auto* pAnim = pMonster->GetComponent<AnimationComponent>())
+        {
+            pAnim->SetCullEnabled(false);
+            pAnim->CrossFade("fightidle", 0.15f, true);
+            m_mapServerMonsterCurrentAnimClip[monsterId] = "fightidle";
+        }
+
+        // 서버 권위 보스이므로 클라 로컬 AI는 정지
+        if (auto* pEC = pMonster->GetComponent<EnemyComponent>())
+        {
+            pEC->SetAIPaused(true);
+            pEC->SetInvincible(true);
+        }
+
+        m_mapServerMonsters[monsterId] = pMonster;
+
+        ServerMonsterClips clips;
+        clips.idle = "fightidle";
+        clips.walk = "run";
+        clips.attack = "attack3";
+        clips.death = "death1";
+        clips.monsterType = monsterType;
+        clips.attackType = attackType;
+        clips.visualType = visualType;
+        clips.isBoss = isBoss;
+        clips.isMiniBoss = false;
+        m_mapServerMonsterClips[monsterId] = clips;
+
+        ServerMonsterTarget initTgt;
+        initTgt.px = x;
+        initTgt.py = y;
+        initTgt.pz = z;
+        initTgt.yaw = yaw;
+        initTgt.hasTarget = true;
+        m_mapServerMonsterTarget[monsterId] = initTgt;
+
+        ServerBossSpawnPos sp{ x, y, z };
+        m_mapServerBossSpawnPos[monsterId] = sp;
+
+        if (EnemySpawner* pSpawner = pScene->GetEnemySpawner())
+        {
+            auto set = pSpawner->CreateNetBossIndicators();
+
+            ServerMonsterIndicators ind;
+            ind.circleBorder = set.circleBorder;
+            ind.circleFill = set.circleFill;
+            ind.boxBorder = set.boxBorder;
+            ind.boxFill = set.boxFill;
+
+            HideMonsterIndicators(ind);
+            m_mapServerMonsterIndicators[monsterId] = ind;
+        }
+
+        char buf[256];
+        sprintf_s(buf,
+            "[Network] Spawned Network DarkLord monsterId=%llu hp=%.1f pos=(%.2f, %.2f, %.2f)",
+            monsterId, hp, x, y, z);
+        WriteNetworkLog(buf);
+
+        return;
+    }
+
     pScene->SetCurrentRoom(nullptr);
 
 	// 첫 몬스터 스폰 시 현재 방을 강제로 Active로 전환한다.
@@ -4080,11 +4189,12 @@ void NetworkManager::ProcessMonsterMove(uint64 monsterId, float x, float y, floa
     }
 
     Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
-    if (pScene && pScene->IsNetworkKrakenCutsceneTarget(monsterId))
+    if (pScene &&
+        (pScene->IsNetworkKrakenCutsceneTarget(monsterId) ||
+            pScene->IsNetworkDarkLordCutsceneTarget(monsterId)))
     {
-        // Kraken 2페이즈 컷신 중에는 Scene 컷신 상태머신이 위치를 직접 제어한다.
-        // 서버 S_MONSTER_MOVE가 컷신 위치를 덮어쓰면 Kraken이 안 보이거나
-        // 컷신 종료 후 텔레포트처럼 보이므로 MOVE는 무시한다.
+        // 컷신 중에는 Scene 컷신 상태머신이 위치를 직접 제어한다.
+        // 서버 MOVE가 컷신 위치/스케일을 덮어쓰면 연출이 깨지므로 무시한다.
         return;
     }
 
@@ -6153,6 +6263,26 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
     auto clipIt = m_mapServerMonsterClips.find(monsterId);
     uint32 mt = (clipIt != m_mapServerMonsterClips.end()) ? clipIt->second.monsterType : 0;
     const char* roarClip = GetBossRoarClip(mt);
+
+    // DarkLord 인트로는 Scene에 구현된 전용 컷신을 사용한다.
+    // RedDragon 공통 BossIntroState를 타면 안 된다.
+    if (mt == 11 && eventType == 1)
+    {
+        if (pBoss)
+        {
+            SetCutscenePlaying(true);
+            WriteNetworkLog("[Network] Cutscene lock ON - DarkLord intro");
+
+            pScene->StartNetworkDarkLordIntro(pBoss, monsterId);
+            WriteNetworkLog("[Network] DarkLord network intro requested");
+        }
+        else
+        {
+            WriteNetworkLog("[Network] DarkLord intro failed: boss not found");
+        }
+
+        return;
+    }
 
     // Red Dragon phase transition MegaBreath.
     // 서버는 Dragon phase 2 / phase 3 진입 시 MegaBreath를 시작한다.

@@ -5220,7 +5220,7 @@ void Scene::TransitionToGrassBossRoom()
 // 최종 보스방 (DarkLord / DarkKnight) — 오프라인 전용, 단일 보스 직행
 // 정리/맵 로드 흐름은 TransitionToGrassBossRoom 의 단순화 버전.
 // ────────────────────────────────────────────────────────────────────────────
-void Scene::TransitionToDarkLordRoom()
+void Scene::TransitionToDarkLordRoom(bool bStartIntro)
 {
     OutputDebugString(L"[Scene] ========== DARK LORD ROOM (FINAL BOSS) ==========\n");
     if (!IsReadyForTransition()) return;
@@ -5320,6 +5320,15 @@ void Scene::TransitionToDarkLordRoom()
     {
         auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>();
         if (pPC) pPC->ResetGroundY();
+    }
+
+    // 네트워크 모드에서는 방만 먼저 로드한다.
+    // 실제 컷신 시작은 서버 S_BOSS_EVENT_INTRO 수신 후 StartNetworkDarkLordIntro()에서 한다.
+    if (!bStartIntro)
+    {
+        m_bInBossRoom = true;
+        OutputDebugString(L"[Scene] DarkLord room ready — waiting server BossEvent intro\n");
+        return;
     }
 
     // ── 입장 컷씬 시작 ───────────────────────────────────────────────────────
@@ -5675,6 +5684,8 @@ void Scene::CancelTransientStateBeforeTransition()
     m_bIntroBossSpawned           = false;
     m_nIntroAbsorbCount           = 0;
     m_pDarkLordCutsceneObject     = nullptr;
+    m_bDarkLordIntroNetworkMode   = false;
+    m_nNetworkDarkLordIntroMonsterId = 0;
     m_pIntroSlashOverlay          = nullptr;
     m_pIntroSlashMesh             = nullptr;
     CleanupElementalSanctum();   // sigil / aura / pillar decal+VFX 정리
@@ -5705,6 +5716,110 @@ void Scene::CancelTransientStateBeforeTransition()
 
     // ── flight 모드 보스 추적 — 보스가 사라지면 raw pointer 끊기 ───────
     m_pFlightBossDummy          = nullptr;
+}
+
+void Scene::StartNetworkDarkLordIntro(GameObject* pDarkLordObj, uint64 monsterId)
+{
+    if (!m_pCurrentRoom || !pDarkLordObj)
+    {
+        OutputDebugString(L"[Scene] StartNetworkDarkLordIntro failed: room or boss is null\n");
+        return;
+    }
+
+    const BoundingBox& bb = m_pCurrentRoom->GetBoundingBox();
+
+    // 네트워크 컷신 상태 기록
+    m_bDarkLordIntroNetworkMode = true;
+    m_nNetworkDarkLordIntroMonsterId = monsterId;
+
+    // 기존 DarkLord 인트로 상태머신을 그대로 사용한다.
+    SetupElementalSanctum(bb);
+
+    m_eDarkLordIntroStage = DarkLordIntroStage::Sanctum;
+    m_fDarkLordIntroTimer = 0.0f;
+    m_fSanctumBlend = 0.0f;
+    m_bIntroSeverShakeTriggered = false;
+    m_bIntroBossSpawned = true; // 서버가 이미 스폰한 보스를 사용하므로 로컬 SpawnEnemy 금지
+    m_nIntroAbsorbCount = 0;
+    m_bScreenSplitTriggered = false;
+
+    m_pDarkLordCutsceneObject = pDarkLordObj;
+
+    // 서버 스폰 보스를 컷신 시작 상태로 맞춘다.
+    if (auto* pT = pDarkLordObj->GetTransform())
+    {
+        XMFLOAT3 spawnPos(bb.Center.x, -6.0f, bb.Center.z);
+        pT->SetPosition(spawnPos);
+        pT->SetRotation(0.0f, 180.0f, 0.0f);
+        pT->SetScale(1.0f, 1.0f, 1.0f);
+    }
+
+    if (auto* pAnim = pDarkLordObj->GetComponent<AnimationComponent>())
+    {
+        pAnim->SetCullEnabled(false);
+        pAnim->CrossFade("fightidle", 0.15f, true);
+    }
+
+    // 네트워크 보스는 서버가 AI/판정을 담당하므로 클라 로컬 AI는 계속 정지시킨다.
+    if (auto* pEC = pDarkLordObj->GetComponent<EnemyComponent>())
+    {
+        pEC->SetAIPaused(true);
+        pEC->SetInvincible(true);
+    }
+
+    // 컷신 동안 플레이어 숨김
+    if (m_pPlayerGameObject)
+    {
+        if (auto* pRC = m_pPlayerGameObject->GetComponent<RenderComponent>())
+            pRC->SetVisible(false);
+
+        std::function<void(GameObject*)> hideTree = [&](GameObject* pGO)
+            {
+                if (!pGO) return;
+
+                if (auto* pRC = pGO->GetComponent<RenderComponent>())
+                    pRC->SetVisible(false);
+
+                hideTree(pGO->m_pChild);
+                hideTree(pGO->m_pSibling);
+            };
+
+        hideTree(m_pPlayerGameObject->m_pChild);
+
+        XMFLOAT3 origPos = m_pPlayerGameObject->GetTransform()->GetPosition();
+        m_xmf3PlayerIntroStashPos = origPos;
+        m_bPlayerIntroStashed = true;
+        m_pPlayerGameObject->GetTransform()->SetPosition(origPos.x, -3000.0f, origPos.z);
+    }
+
+    if (m_pInteractionCube)
+    {
+        if (auto* pRC = m_pInteractionCube->GetComponent<RenderComponent>())
+            pRC->SetVisible(false);
+
+        std::function<void(GameObject*)> hideTree = [&](GameObject* pGO)
+            {
+                if (!pGO) return;
+
+                if (auto* pRC = pGO->GetComponent<RenderComponent>())
+                    pRC->SetVisible(false);
+
+                hideTree(pGO->m_pChild);
+                hideTree(pGO->m_pSibling);
+            };
+
+        hideTree(m_pInteractionCube->m_pChild);
+    }
+
+    if (m_pCamera)
+    {
+        XMFLOAT3 camFocus = bb.Center;
+        camFocus.y = 3.0f;
+        m_pCamera->StartCinematic(camFocus, 70.0f, 28.0f, 0.0f);
+    }
+
+    m_bInBossRoom = true;
+    OutputDebugString(L"[Scene] Network DarkLord intro started\n");
 }
 
 // ── DarkLord 입장 컷씬 driver — Kraken 패턴의 cumulative-timer state machine.
@@ -5827,35 +5942,48 @@ void Scene::UpdateDarkLordIntro(float dt)
             CleanupElementalSanctum();
             m_nIntroAbsorbCount = 4;   // Devour 안에서 absorb tick 추가 처리 차단.
 
-            // ★ DarkLord spawn — 방 중앙, scale 1.0 (작게 시작), Y=-6 (지하 깊이 잠복).
-            //   프리셋 기본 scale = 10.0 (EnemySpawner.cpp:989). Devour 동안 1.0 → 10.0 으로 lerp.
-            if (m_pCurrentRoom && m_pEnemySpawner && !m_bIntroBossSpawned)
+            // ★ DarkLord spawn/reveal
+// 오프라인은 여기서 SpawnEnemy("DarkLord")를 생성하고,
+// 네트워크는 StartNetworkDarkLordIntro()에서 받은 서버 보스 오브젝트를 그대로 사용한다.
+            if (m_pCurrentRoom)
             {
                 const BoundingBox& bb = m_pCurrentRoom->GetBoundingBox();
-                XMFLOAT3 spawnPos(bb.Center.x, -6.0f, bb.Center.z);
-                GameObject* pDarkLord = m_pEnemySpawner->SpawnEnemy(
-                    m_pCurrentRoom, "DarkLord", spawnPos, m_pPlayerGameObject);
-                if (pDarkLord)
+
+                if (m_pEnemySpawner && !m_bIntroBossSpawned)
                 {
-                    if (auto* pA = pDarkLord->GetComponent<AnimationComponent>())
+                    XMFLOAT3 spawnPos(bb.Center.x, -6.0f, bb.Center.z);
+                    GameObject* pDarkLord = m_pEnemySpawner->SpawnEnemy(
+                        m_pCurrentRoom, "DarkLord", spawnPos, m_pPlayerGameObject);
+
+                    if (pDarkLord)
+                    {
+                        m_pDarkLordCutsceneObject = pDarkLord;
+                        m_bIntroBossSpawned = true;
+                    }
+                }
+
+                if (m_pDarkLordCutsceneObject)
+                {
+                    if (auto* pA = m_pDarkLordCutsceneObject->GetComponent<AnimationComponent>())
                         pA->SetCullEnabled(false);
-                    pDarkLord->GetTransform()->SetRotation(0.0f, 180.0f, 0.0f);
-                    pDarkLord->GetTransform()->SetScale(1.0f, 1.0f, 1.0f);
-                    // ★ AI 일시정지 + 무적 — 컷씬 동안 보스가 공격 하거나 피격 안 됨.
-                    //   Dominion 종료 시점에 풀어 정상 전투 시작.
-                    if (auto* pEC = pDarkLord->GetComponent<EnemyComponent>())
+
+                    m_pDarkLordCutsceneObject->GetTransform()->SetRotation(0.0f, 180.0f, 0.0f);
+                    m_pDarkLordCutsceneObject->GetTransform()->SetScale(1.0f, 1.0f, 1.0f);
+
+                    // 네트워크 보스는 서버가 AI/판정을 담당하므로 로컬 AI는 계속 정지.
+                    if (auto* pEC = m_pDarkLordCutsceneObject->GetComponent<EnemyComponent>())
                     {
                         pEC->SetAIPaused(true);
                         pEC->SetInvincible(true);
                     }
-                    m_pDarkLordCutsceneObject = pDarkLord;
-                    m_bIntroBossSpawned = true;
                 }
 
-                // 카메라 — 보스 등장 ¾ 각도 reveal. 프리셋 scale 10 보스는 전체 높이 ~25 단위 추정.
-                //   focus y=14 (보스 chest 중앙), distance 140, pitch 18° (낮춰서 위압감 ↑), yaw 180 정면.
-                XMFLOAT3 camFocus = bb.Center; camFocus.y = 14.0f;
-                if (m_pCamera) m_pCamera->StartCinematic(camFocus, 140.0f, 18.0f, 180.0f);
+                // 카메라 — 보스 등장 ¾ 각도 reveal.
+                XMFLOAT3 camFocus = bb.Center;
+                camFocus.y = 14.0f;
+
+                if (m_pCamera)
+                    m_pCamera->StartCinematic(camFocus, 140.0f, 18.0f, 180.0f);
             }
 
             OutputDebugString(L"[Scene] DarkLord intro: DEVOUR\n");
@@ -6036,10 +6164,44 @@ void Scene::UpdateDarkLordIntro(float dt)
                 //   m_fBossGracePeriodRemain 으로 추가 3초 동안 정지·무적 유지. 입력은 복구된 상태라
                 //   플레이어가 위치 잡고 전투 준비 가능. Scene::Update 가 매 프레임 카운트다운하다
                 //   0 도달 시 SetAIPaused(false) + SetInvincible(false) 호출.
-                m_fBossGracePeriodRemain = DLI_T_BOSS_GRACE_AFTER_CUTSCENE;
+                if (m_bDarkLordIntroNetworkMode)
+                {
+                    // 네트워크 모드에서는 서버가 AI/패턴을 담당한다.
+                    // 클라 로컬 EnemyComponent는 끝까지 정지 상태로 둔다.
+                    if (auto* pEC = pBoss->GetComponent<EnemyComponent>())
+                    {
+                        pEC->SetAIPaused(true);
+                        pEC->SetInvincible(true);
+                    }
+
+                    m_fBossGracePeriodRemain = 0.0f;
+                }
+                else
+                {
+                    // 오프라인 모드에서만 로컬 AI grace period 사용
+                    m_fBossGracePeriodRemain = DLI_T_BOSS_GRACE_AFTER_CUTSCENE;
+                }
             }
             // 흡수 못한 sigil/pillar 가 남아있을 경우 안전 정리 (정상 흐름이면 no-op).
             CleanupElementalSanctum();
+
+            // 네트워크 DarkLord 컷신 종료를 서버에 알린다.
+            // 서버는 이 패킷을 받으면 introLockTimer를 풀고 전투를 시작한다.
+            if (m_bDarkLordIntroNetworkMode && m_nNetworkDarkLordIntroMonsterId != 0)
+            {
+                NetworkManager::GetInstance()->SendBossCutsceneEnd(
+                    m_nNetworkDarkLordIntroMonsterId,
+                    static_cast<uint32>(Protocol::BOSS_EVENT_INTRO),
+                    0
+                );
+
+                NetworkManager::GetInstance()->SetCutscenePlaying(false);
+                WriteNetworkLog("[Network] DarkLord intro cutscene end sent");
+
+                m_bDarkLordIntroNetworkMode = false;
+                m_nNetworkDarkLordIntroMonsterId = 0;
+            }
+
             OutputDebugString(L"[Scene] DarkLord intro: COMPLETE — gameplay starts\n");
         }
         return;

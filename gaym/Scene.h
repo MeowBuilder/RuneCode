@@ -205,7 +205,14 @@ public:
     void TransitionToEarthBossRoom();   // 땅 보스전 (Golem)
     void TransitionToGrassStage(int roomIndex = 0);      // 풀 스테이지 (N: 땅→풀)
     void TransitionToGrassBossRoom();   // 풀 보스전 (Demon)
-    void TransitionToDarkLordRoom();    // 최종 보스전 (DarkKnight, 오프라인)
+    void TransitionToDarkLordRoom(bool bStartIntro = true);    // 최종 보스전
+    void StartNetworkDarkLordIntro(GameObject* pDarkLordObj, uint64 monsterId);
+    bool IsNetworkDarkLordCutsceneTarget(uint64 monsterId) const
+    {
+        return m_bDarkLordIntroNetworkMode &&
+            m_nNetworkDarkLordIntroMonsterId == monsterId &&
+            IsDarkLordIntroPlaying();
+    }
     int  GetCycleCount() const { return m_nCycleCount; }
     bool IsGameClear() const { return m_bGameClear; }
 
@@ -546,6 +553,11 @@ private:
     };
     DarkLordIntroStage m_eDarkLordIntroStage = DarkLordIntroStage::None;
     float    m_fDarkLordIntroTimer = 0.0f;
+
+    // 네트워크 DarkLord 인트로 컷신 상태
+    bool   m_bDarkLordIntroNetworkMode = false;
+    uint64 m_nNetworkDarkLordIntroMonsterId = 0;
+
     // 입장 컷씬 동안 플레이어 위치 stash — 컷씬 끝나면 복귀.
     DirectX::XMFLOAT3 m_xmf3PlayerIntroStashPos = { 0.0f, 0.0f, 0.0f };
     bool              m_bPlayerIntroStashed     = false;
