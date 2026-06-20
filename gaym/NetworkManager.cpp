@@ -1231,6 +1231,25 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     }
     m_vNetworkNormalMonsterBehaviors.clear();
 
+    // Golem / Demon 전용 entry 는 raw EnemyComponent* owner 를 들고 있어,
+    // 다음 m_mapServerMonsters 정리 + 보스 GameObject 파기 후 UpdateNetworkGolemBehaviors/
+    // UpdateNetworkDemonBehaviors 가 dangling owner 의 GetAnimationComponent()->CrossFade 를
+    // 호출하면 std::map<string,...> UAF (예: "Golem_battle_stand_ge" lookup) 가 난다.
+    // ProcessRoomTransition 시점에 한 번에 Reset + clear 해 dangling 접근을 차단한다.
+    for (auto& entry : m_vNetworkGolemBehaviors)
+    {
+        if (entry.behavior)
+            entry.behavior->Reset();
+    }
+    m_vNetworkGolemBehaviors.clear();
+
+    for (auto& entry : m_vNetworkDemonBehaviors)
+    {
+        if (entry.behavior)
+            entry.behavior->Reset();
+    }
+    m_vNetworkDemonBehaviors.clear();
+
     wchar_t buf[512];
     swprintf_s(buf, L"[Network] ProcessRoomTransition stage=%u room=%u boss=%d mapId=%S\n",
         stageIndex, roomIndex, isBossRoom ? 1 : 0, mapId.c_str());
@@ -1958,6 +1977,77 @@ void NetworkManager::ProcessDespawnPlayer(Scene* pScene, uint64 playerId)
     // Scene에 삭제 요청
     GameObject* pRemotePlayer = it->second;
     pScene->MarkForDeletion(pRemotePlayer);
+
+    // pending orbital 발사 큐 정리 — owner 가 곧 파기될 원격 플레이어이면
+    // 지연 발사 시 dangling owner 로 SpawnProjectile 호출 → UAF.
+    if (!m_vPendingOrbitals.empty())
+    {
+        FluidSkillVFXManager* pVFX = pScene ? pScene->GetFluidVFXManager() : nullptr;
+        m_vPendingOrbitals.erase(
+            std::remove_if(
+                m_vPendingOrbitals.begin(),
+                m_vPendingOrbitals.end(),
+                [pRemotePlayer, pVFX](const PendingOrbitalProjectile& p)
+                {
+                    if (p.owner == pRemotePlayer)
+                    {
+                        if (pVFX && p.orbVfxId >= 0)
+                            pVFX->StopEffect(p.orbVfxId);
+                        return true;
+                    }
+                    return false;
+                }),
+            m_vPendingOrbitals.end()
+        );
+    }
+
+    // 원격 플레이어 지속형 스킬 VFX 정리 — UpdateRemoteActivationRuneVFX 가 매 프레임
+    // m_mapRemotePlayers find 로 자체 청소하지만, 그 사이 한 프레임은 stale entry 로
+    // playerIt->second->GetTransform() 호출 가능. despawn 시점에 즉시 끊는다.
+    if (pScene)
+    {
+        FluidSkillVFXManager* pVFX = pScene->GetFluidVFXManager();
+        if (pVFX)
+        {
+            auto chargeIt = m_mapRemoteChargeVFXId.find(playerId);
+            if (chargeIt != m_mapRemoteChargeVFXId.end())
+            {
+                if (chargeIt->second >= 0) pVFX->StopEffect(chargeIt->second);
+                m_mapRemoteChargeVFXId.erase(chargeIt);
+            }
+
+            auto enhanceIt = m_mapRemoteEnhanceVFXId.find(playerId);
+            if (enhanceIt != m_mapRemoteEnhanceVFXId.end())
+            {
+                if (enhanceIt->second >= 0) pVFX->StopEffect(enhanceIt->second);
+                m_mapRemoteEnhanceVFXId.erase(enhanceIt);
+            }
+
+            auto vfxIt = m_mapRemotePlayerVFX.find(playerId);
+            if (vfxIt != m_mapRemotePlayerVFX.end())
+            {
+                if (vfxIt->second.vfxId >= 0) pVFX->StopEffect(vfxIt->second.vfxId);
+                m_mapRemotePlayerVFX.erase(vfxIt);
+            }
+        }
+
+        DecalManager* pDecals = pScene->GetDecalManager();
+        if (pDecals)
+        {
+            auto decalIt = m_mapRemotePlaceDecalIds.find(playerId);
+            if (decalIt != m_mapRemotePlaceDecalIds.end())
+            {
+                for (int decalId : decalIt->second)
+                {
+                    if (decalId >= 0) pDecals->Stop(decalId);
+                }
+                m_mapRemotePlaceDecalIds.erase(decalIt);
+            }
+        }
+    }
+
+    m_setRemoteChannelingPlayers.erase(playerId);
+    m_mapRemoteChannelLastSpawnTime.erase(playerId);
 
     // 맵에서 제거
     m_mapRemotePlayers.erase(it);
@@ -3260,14 +3350,20 @@ void NetworkManager::UpdatePendingOrbitals(Scene* pScene, float deltaTime)
             // 공전 visual 정리 (첫 발에만 orbVfxId 가 붙어있음)
             if (pVFX && it->orbVfxId >= 0)
                 pVFX->StopEffect(it->orbVfxId);
-            pPM->SpawnProjectile(
-                it->origin, it->target, 0.0f,
-                it->speed, it->radius, it->explosionRadius,
-                it->element, it->owner,
-                /*isPlayerProjectile*/true, it->scale,
-                RuneCombo{}, 0.0f,
-                /*maxDistance*/100.0f,
-                /*isPiercing*/it->isPiercing);
+
+            // owner 가 곧 파기될 원격 플레이어이면 ProcessDespawnPlayer 가 entry 를 erase 하지만,
+            // 같은 프레임 내 명령 순서에 따라 여기까지 살아남을 수 있다. 방어적으로 null 체크.
+            if (it->owner != nullptr)
+            {
+                pPM->SpawnProjectile(
+                    it->origin, it->target, 0.0f,
+                    it->speed, it->radius, it->explosionRadius,
+                    it->element, it->owner,
+                    /*isPlayerProjectile*/true, it->scale,
+                    RuneCombo{}, 0.0f,
+                    /*maxDistance*/100.0f,
+                    /*isPiercing*/it->isPiercing);
+            }
             it = m_vPendingOrbitals.erase(it);
         }
         else
@@ -9158,6 +9254,45 @@ void NetworkManager::ProcessMonsterDespawn(Scene* pScene, uint64 monsterId)
             }),
         m_vNetworkNormalMonsterBehaviors.end()
     );
+
+    // Golem / Demon 전용 entry 는 raw EnemyComponent* owner 를 들고 있어,
+    // pMonster 가 MarkForDeletion 으로 곧 파기되면 다음 프레임 Update*Behaviors 에서
+    // dangling owner -> AnimationComponent UAF (예: Golem 의 "Golem_battle_stand_ge" CrossFade) 발생.
+    // 같은 EnemyComponent 를 가진 entry 를 즉시 Reset + 제거한다.
+    if (EnemyComponent* pEnemy = pMonster->GetComponent<EnemyComponent>())
+    {
+        m_vNetworkGolemBehaviors.erase(
+            std::remove_if(
+                m_vNetworkGolemBehaviors.begin(),
+                m_vNetworkGolemBehaviors.end(),
+                [pEnemy](NetworkGolemBehaviorEntry& e)
+                {
+                    if (e.owner == pEnemy)
+                    {
+                        if (e.behavior) e.behavior->Reset();
+                        return true;
+                    }
+                    return false;
+                }),
+            m_vNetworkGolemBehaviors.end()
+        );
+
+        m_vNetworkDemonBehaviors.erase(
+            std::remove_if(
+                m_vNetworkDemonBehaviors.begin(),
+                m_vNetworkDemonBehaviors.end(),
+                [pEnemy](NetworkDemonBehaviorEntry& e)
+                {
+                    if (e.owner == pEnemy)
+                    {
+                        if (e.behavior) e.behavior->Reset();
+                        return true;
+                    }
+                    return false;
+                }),
+            m_vNetworkDemonBehaviors.end()
+        );
+    }
 
     pScene->MarkForDeletion(pMonster);
     m_mapServerMonsters.erase(it);

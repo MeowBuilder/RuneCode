@@ -5691,10 +5691,19 @@ void Scene::CancelTransientStateBeforeTransition()
     CleanupElementalSanctum();   // sigil / aura / pillar decal+VFX 정리
 
     // ── Kraken (Water boss) 컷씬 ───────────────────────────────────────────
+    //   m_pPreloadedKraken / m_pNetworkKrakenCutsceneObject 는 raw 포인터.
+    //   m_eKrakenStage 만 None 으로 끊으면 UpdateKrakenCutscene 라인 1167 가드는 통과하지만,
+    //   라인 1110 (m_bPendingKrakenSpawn && m_pPreloadedKraken) 는 별도 가드라 stale 포인터로 진입 가능.
+    //   m_vRooms.clear() 직후 raw 포인터를 끊지 않으면 다음 보스방 진입 시 UAF 위험.
     m_eKrakenStage              = KrakenCutsceneStage::None;
     m_fKrakenEmergeTimer        = 0.0f;
     m_bSlamShakeTriggered       = false;
     m_bKrakenRoarFadedToIdle    = false;
+    m_pPreloadedKraken          = nullptr;
+    m_pNetworkKrakenCutsceneObject = nullptr;
+    m_bPendingKrakenSpawn       = false;
+    m_xmf3PendingKrakenPos      = {};
+    m_nNetworkKrakenCutsceneMonsterId = 0;
 
     // ── 보스 grace period — 보스가 사라지면 카운트도 의미 없음 ────────────
     m_fBossGracePeriodRemain    = 0.0f;
