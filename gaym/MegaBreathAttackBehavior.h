@@ -8,6 +8,7 @@ using namespace DirectX;
 
 class GameObject;
 class CRoom;
+class FluidSkillVFXManager;
 
 // 메가 브레스 공격: 보스가 벽으로 이동 후 맵 전체를 덮는 브레스 공격
 // 플레이어는 엄폐물 뒤에 숨어서 회피해야 함
@@ -30,6 +31,28 @@ public:
     virtual void Update(float dt, EnemyComponent* pEnemy) override;
     virtual bool IsFinished() const override;
     virtual void Reset() override;
+
+    // 메가브레스 SPH 화염 홍수 VFX 스폰 — 오프라인(SpawnFireWave)·네트워크 컷씬 공용.
+    //   SPH_Gravity 제트 홍수 + 원기둥 충돌(포텐셜 흐름)을 한 곳에서 생성해 양 경로가 동일 비주얼.
+    //   mouthOrigin: 비주얼 입 위치, dir: 수평 진행 단위벡터, floorY: 지면,
+    //   roomCenter/roomExtents: 방 AABB, obstacles(xy=중심XZ, z=반경)/count: 엄폐 기둥,
+    //   breathDuration: 분사 지속, jetSpeedOut: 데미지 front 계산용(오프라인만, null 허용).
+    //   반환: VFX 슬롯 id (-1 실패).
+    static int SpawnMegaBreathFloodVFX(
+        FluidSkillVFXManager* pMgr,
+        const XMFLOAT3& mouthOrigin, const XMFLOAT3& dir, float floorY,
+        const XMFLOAT3& roomCenter, const XMFLOAT3& roomExtents,
+        const XMFLOAT4* obstacles, int obstacleCount,
+        float breathDuration, float* jetSpeedOut = nullptr);
+
+    // 메가브레스 차지(수렴) VFX 스폰 — 오프라인(SpawnChargeVFX)·네트워크 Windup 공용.
+    //   맵 전역의 작은 불씨가 입(mouthOrigin)으로 빨려드는 "곧 터진다" 예고 (Fire Wave 역재생).
+    //   반환: VFX 슬롯 id (-1 실패).
+    static int SpawnMegaBreathChargeVFX(
+        FluidSkillVFXManager* pMgr,
+        const XMFLOAT3& mouthOrigin, const XMFLOAT3& dir, float floorY,
+        const XMFLOAT3& roomCenter, const XMFLOAT3& roomExtents,
+        float windupTime);
 
 private:
     enum class Phase

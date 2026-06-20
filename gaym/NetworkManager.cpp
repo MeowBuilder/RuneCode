@@ -9,6 +9,7 @@
 #include "MeshLoader.h"
 #include "AnimationComponent.h"
 #include "FluidSkillVFXManager.h"
+#include "MegaBreathAttackBehavior.h"
 #include "EffectRegistry.h"
 #include "SkillTypes.h"
 #include "SkillComponent.h"
@@ -6327,10 +6328,10 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
                 XMFLOAT3 wallPos{ -30.0f, 0.0f, 6.71f };
                 switch (wallDir)
                 {
-                case 0: wallPos.x =  69.95f; wallPos.z =   6.71f; break; // +X (84.95-15)
-                case 1: wallPos.x = -129.95f; wallPos.z =   6.71f; break; // -X (-144.95+15)
-                case 2: wallPos.x = -30.0f;  wallPos.z = 113.40f; break; // +Z (128.40-15)
-                default: wallPos.x = -30.0f; wallPos.z = -99.95f; break; // -Z (-114.95+15)
+                case 0: wallPos.x =  75.95f; wallPos.z =   6.71f; break; // +X (84.95-9, 벽 쪽으로 당김)
+                case 1: wallPos.x = -135.95f; wallPos.z =   6.71f; break; // -X (-144.95+9)
+                case 2: wallPos.x = -30.0f;  wallPos.z = 119.40f; break; // +Z (128.40-9)
+                default: wallPos.x = -30.0f; wallPos.z = -105.95f; break; // -Z (-114.95+9)
                 }
                 cs.wallPos = wallPos;
                 cs.bossSpawnPos = XMFLOAT3{ -30.0f, 0.0f, 6.71f }; // 룸 중심 game world = cover/카메라 기준
@@ -10143,87 +10144,73 @@ void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaT
             float yaw = atan2f(ddx, ddz) * (180.f / 3.14159265f);
             BlendCamera(XMFLOAT3{ playerPos.x, playerPos.y + 1.0f, playerPos.z }, 62.f, 55.f, yaw, 2.0f);
 
+            // Windup 진입 시 1회 수렴 차지 VFX (오프라인 SpawnChargeVFX 와 동일 공용 헬퍼)
+            if (cs.chargeVFXId < 0)
+            {
+                if (auto* pFluidVFX = pScene ? pScene->GetFluidVFXManager() : nullptr)
+                {
+                    XMFLOAT3 cFwd{ roomCenter.x - dragonPos.x, 0.0f, roomCenter.z - dragonPos.z };
+                    float cLen = sqrtf(cFwd.x * cFwd.x + cFwd.z * cFwd.z);
+                    if (cLen < 0.001f) cFwd = XMFLOAT3{ 0.0f, 0.0f, 1.0f };
+                    else { cFwd.x /= cLen; cFwd.z /= cLen; }
+                    // 입은 드래곤 바로 앞(+5u) — 분사 시작과 동일하게 당겨 빈 공간 방지
+                    XMFLOAT3 cMouth{
+                        dragonPos.x + cFwd.x * 5.0f,
+                        dragonPos.y + 7.0f,
+                        dragonPos.z + cFwd.z * 5.0f
+                    };
+                    const XMFLOAT3 roomExtents{ 114.95f, 0.0f, 121.675f };
+                    cs.chargeVFXId = MegaBreathAttackBehavior::SpawnMegaBreathChargeVFX(
+                        pFluidVFX, cMouth, cFwd, dragonPos.y,
+                        roomCenter, roomExtents, WINDUP_TIME);
+                }
+            }
+
             if (cs.phaseTimer >= WINDUP_TIME)
             {
                 cs.phase = MegaBreathPhase::Breath;
                 cs.phaseTimer = 0.f;
                 if (pAnim) pAnim->CrossFade("Flame Attack", 0.2f, true);
                 if (pCam) pCam->StartShake(2.5f, BREATH_TIME);
-                WriteNetworkLog("[Network] MegaBreath phase -> Breath (5-fan SPH spawn)");
+                WriteNetworkLog("[Network] MegaBreath phase -> Breath (SPH flood spawn)");
 
-                // 5-fan SPH beam spawn (오프라인 SpawnFireWave 1:1)
+                // SPH 화염 홍수 — 오프라인 SpawnFireWave 와 동일한 공용 헬퍼 사용 (원기둥 포텐셜 흐름까지 일치).
                 if (auto* pFluidVFX = pScene ? pScene->GetFluidVFXManager() : nullptr)
                 {
-                    // 오프라인 SpawnFireWave: 보스 yaw 기준 입 위치 (전방 17u, 머리 7u 위)
-                   // MegaBreath 실제 빔 방향은 보스 시각 yaw가 아니라 wall → roomCenter 기준.
-// 모델 yaw에 +180 보정을 넣어도 빔 방향이 틀어지지 않게 분리한다.
-                    XMFLOAT3 forward{
-                        roomCenter.x - dragonPos.x,
-                        0.0f,
-                        roomCenter.z - dragonPos.z
-                    };
+                    // 차지 VFX 정지 (분사 시작)
+                    if (cs.chargeVFXId >= 0) { pFluidVFX->StopEffect(cs.chargeVFXId); cs.chargeVFXId = -1; }
 
+                    // 빔 방향 = wall(보스) → roomCenter (모델 yaw 보정과 무관하게 분리)
+                    XMFLOAT3 forward{ roomCenter.x - dragonPos.x, 0.0f, roomCenter.z - dragonPos.z };
                     float fLen = sqrtf(forward.x * forward.x + forward.z * forward.z);
-                    if (fLen < 0.001f)
-                    {
-                        forward = XMFLOAT3{ 0.0f, 0.0f, 1.0f };
-                    }
-                    else
-                    {
-                        forward.x /= fLen;
-                        forward.z /= fLen;
-                    }
+                    if (fLen < 0.001f) forward = XMFLOAT3{ 0.0f, 0.0f, 1.0f };
+                    else { forward.x /= fLen; forward.z /= fLen; }
+
+                    // 입 위치 — 드래곤 바로 앞(+5u)으로 당겨 분사가 드래곤에서 시작 (이전 +17은 앞이 비어 보였음)
                     XMFLOAT3 mouth{
-                        dragonPos.x + forward.x * 17.0f,
+                        dragonPos.x + forward.x * 5.0f,
                         dragonPos.y + 7.0f,
-                        dragonPos.z + forward.z * 17.0f
+                        dragonPos.z + forward.z * 5.0f
                     };
 
-                    const float beamAngles[5]      = { -12.f, -6.f, 0.f, 6.f, 12.f };
-                    const int   beamParticles[5]   = { 2800, 3600, 4400, 3600, 2800 };
-                    const float beamSpreadMults[5] = { 0.85f, 0.95f, 1.0f, 0.95f, 0.85f };
-                    for (int i = 0; i < 5; ++i)
+                    // 엄폐 기둥 4개 → 수직 원기둥 장애물 (클라가 스폰한 cs.covers 좌표)
+                    XMFLOAT4 obstacles[4];
+                    int oc = 0;
+                    for (GameObject* pCover : cs.covers)
                     {
-                        float a = beamAngles[i] * (3.14159265f / 180.f);
-                        float c = cosf(a), s = sinf(a);
-                        XMFLOAT3 dir{ forward.x * c - forward.z * s, 0.f, forward.x * s + forward.z * c };
-
-                        EffectDef def;
-                        def.name = "Net_MegaBreath";
-                        def.element = ElementType::Fire;
-                        EffectLayer layer;
-                        layer.type = EmitterType::SPH_Beam;
-                        layer.element = ElementType::Fire;
-                        layer.coreColor = { 1.0f, 0.45f, 0.10f, 1.0f };
-                        layer.edgeColor = { 0.95f, 0.35f, 0.08f, 0.95f };
-                        layer.useSSF = true;
-                        SPHEmitterParams& sph = layer.sph;
-                        sph.particleCount = beamParticles[i];
-                        sph.spawnRadius   = (i == 2) ? 3.0f : 2.5f;
-                        sph.particleSize  = 1.8f;
-                        VFXPhase ph;
-                        ph.startTime = 0.f;
-                        ph.duration = BREATH_TIME + 0.5f;
-                        ph.motionMode = ParticleMotionMode::Beam;
-                        // 오프라인 game world: sqrt((2*114.95)² + (2*121.675)²) * 0.9 ≈ 301u
-                        ph.beamDesc.beamLength    = 301.0f;
-                        // 오프라인 perpExtent * 1.4 = max(114.95, 121.675) * 1.4 ≈ 170u
-                        ph.beamDesc.spreadRadius  = 170.0f * beamSpreadMults[i];
-                        ph.beamDesc.speedMin      = 301.0f / (BREATH_TIME * 0.7f);
-                        ph.beamDesc.speedMax      = ph.beamDesc.speedMin * 1.4f;
-                        ph.beamDesc.swirlExpand   = true;
-                        ph.beamDesc.swirlSpeed    = 0.6f;
-                        ph.beamDesc.swirlFadeEnd  = 0.f;
-                        ph.beamDesc.enableFlow    = true;
-                        ph.beamDesc.verticalScale = 0.18f;
-                        sph.phases.push_back(ph);
-                        sph.maxParticleSpeed = ph.beamDesc.speedMax * 1.2f;
-                        def.layers.push_back(std::move(layer));
-
-                        // isPlayerEffect=true 필수 — SSF 파이프라인 (RenderDepth→Blur→Composite) 거쳐야 매끈한 빔
-                        // false 면 RenderEnemyEffects 빌보드만 호출돼 안 보이거나 구슬처럼 됨 (오프라인 동일)
-                        cs.beamVFXIds[i] = pFluidVFX->SpawnEffectDef(mouth, dir, def, true);
+                        if (oc >= 4) break;
+                        if (!pCover || !pCover->GetTransform()) continue;
+                        XMFLOAT3 cp = pCover->GetTransform()->GetPosition();
+                        obstacles[oc] = { cp.x, cp.z, 3.0f, 0.0f };
+                        ++oc;
                     }
+
+                    // 보스룸 game-world AABB 반폭 (SpawnCover 주석 기준 X[-145,85] Z[-115,128.4])
+                    const XMFLOAT3 roomExtents{ 114.95f, 0.0f, 121.675f };
+                    cs.beamVFXIds[0] = MegaBreathAttackBehavior::SpawnMegaBreathFloodVFX(
+                        pFluidVFX, mouth, forward, dragonPos.y,
+                        roomCenter, roomExtents, obstacles, oc, BREATH_TIME, nullptr);
+                    for (int i = 1; i < 5; ++i) cs.beamVFXIds[i] = -1;
                 }
             }
             break;
