@@ -22,6 +22,9 @@ public:
                            float fAnimPlaybackSpeed    = 0.0f);   // 0 이하 = 기본값 유지
     virtual ~JumpSlamAttackBehavior() = default;
 
+    // 네트워크 모드: 데미지는 서버 권위, 클라는 점프 아크/슬램 VFX/인디케이터만.
+    void SetNetworkVisualOnly(bool b) { m_bNetworkVisualOnly = b; }
+
     virtual void Execute(EnemyComponent* pEnemy) override;
     virtual void Update(float dt, EnemyComponent* pEnemy) override;
     virtual bool IsFinished() const override;
@@ -65,6 +68,7 @@ private:
     XMFLOAT3 m_xmf3TargetPosition = { 0.0f, 0.0f, 0.0f };
     bool m_bSlamDealt = false;
     bool m_bFinished = false;
+    bool m_bNetworkVisualOnly = false;
 
     // 땅 파편 — slam 임팩트 시 바위 조각 비산 (간단 VFX)
     struct DebrisPiece

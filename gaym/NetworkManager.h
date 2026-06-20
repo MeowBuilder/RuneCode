@@ -429,7 +429,7 @@ private:
     void ProcessMonsterDespawn(Scene* pScene, uint64 monsterId);
 
     // 전투 처리 (메인 스레드)
-    void ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint32 attackType, float windupSec, uint64 targetPlayerId, float atkX, float atkY, float atkZ, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption);
+    void ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint32 attackType, float windupSec, uint64 targetPlayerId, float atkX, float atkY, float atkZ, float monsterYaw, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption);
     void ProcessPlayerDamage(Scene* pScene, uint64 playerId, float damage, float currentHp, bool isDead, uint64 attackerMonsterId);
     void ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float damage, float currentHp, bool isDead, uint64 attackerPlayerId, int skillType);
     void ProcessRoomCleared(Scene* pScene, uint32 stageIndex, uint32 roomIndex);
@@ -507,6 +507,9 @@ private:
         float px = 0.0f, py = 0.0f, pz = 0.0f;
         float yaw = 0.0f;
         bool  hasTarget = false;
+        // 발 끌림 픽스용 — 패킷 간 실제 dt 와 EMA 스무딩 속도 (u/s).
+        double lastPacketTime = 0.0;   // GetTickCount64() / 1000.0
+        float  smoothedSpeed  = 0.0f;
     };
     std::unordered_map<uint64, ServerMonsterTarget> m_mapServerMonsterTarget;
 
@@ -654,6 +657,7 @@ private:
         float anchorY = 0.0f;
         float anchorZ = 0.0f;
         float yawDeg  = 0.0f;          // ForwardBox 회전
+        bool  yawLocked = false;       // true 면 매 프레임 보스 yaw 추적 안 함 (서버 패킷 yaw 고정)
     };
     std::unordered_map<uint64, ServerMonsterIndicators> m_mapServerMonsterIndicators;
 

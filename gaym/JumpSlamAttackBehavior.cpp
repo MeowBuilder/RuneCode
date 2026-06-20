@@ -204,6 +204,8 @@ void JumpSlamAttackBehavior::Reset()
 void JumpSlamAttackBehavior::DealSlamDamage(EnemyComponent* pEnemy)
 {
     if (!pEnemy) return;
+    // 네트워크 모드: 서버 권위 데미지. 클라는 VFX/인디케이터/카메라 쉐이크만.
+    if (m_bNetworkVisualOnly) return;
 
     GameObject* pTarget = pEnemy->GetTarget();
     if (!pTarget) return;

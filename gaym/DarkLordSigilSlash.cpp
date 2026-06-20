@@ -99,7 +99,14 @@ void DarkLordSigilSlash::Execute(EnemyComponent* pEnemy)
     }
 
     XMFLOAT3 tip, dir;
-    if (TransformComponent* pBone = GetSwordBone())
+    // 네트워크 모드: ProcessMonsterAttack 의 클립 CrossFade 와 Execute 의 두 번째
+    //   CrossFade 사이에 보스 본 매트릭스가 fightidle 포즈에 묶여있어,
+    //   bone-derived tip 이 보스 발치 근처에서 시작 → windup 따라 위로 끌려간다.
+    //   서버 권위 yaw 가 이미 transform 에 스냅되어 있으므로, 보스 정면 + 가슴 높이
+    //   fallback 으로 고정해 charge VFX 가 처음부터 올바른 위치에 뜨게 한다.
+    if (m_bNetworkVisualOnly)
+        GetSwordTipFallback(pEnemy, tip, dir);
+    else if (TransformComponent* pBone = GetSwordBone())
         GetSwordTipFromBone(pBone, tip, dir);
     else
         GetSwordTipFallback(pEnemy, tip, dir);
@@ -127,8 +134,13 @@ void DarkLordSigilSlash::Update(float dt, EnemyComponent* pEnemy)
     bool bNewHitStarted    = (curHit != m_nPrevHit && curPhase == HitPhase::Windup);
 
     // 검 본 → 끝 좌표/방향 계산 (매 프레임 — 검이 움직이므로)
+    //   네트워크 모드는 charge VFX tracking 도 fallback (보스 정면 가슴 높이) 으로
+    //   고정 — bone 따라가게 두면 windup 애니메이션이 검 끝을 위/아래로 흔들면서
+    //   VFX 가 출렁인다.
     XMFLOAT3 tip, dir;
-    if (TransformComponent* pBone = GetSwordBone())
+    if (m_bNetworkVisualOnly)
+        GetSwordTipFallback(pEnemy, tip, dir);
+    else if (TransformComponent* pBone = GetSwordBone())
         GetSwordTipFromBone(pBone, tip, dir);
     else
         GetSwordTipFallback(pEnemy, tip, dir);
@@ -254,7 +266,7 @@ void DarkLordSigilSlash::Update(float dt, EnemyComponent* pEnemy)
                                                     if (dx * fX + dz * fZ >= cosHalfCone)
                                                     { bHit = true; break; }
                                                 }
-                                                if (bHit)
+                                                if (bHit && !m_bNetworkVisualOnly)
                                                 {
                                                     if (PlayerComponent* pPC = pTarget->GetComponent<PlayerComponent>())
                                                         pPC->TakeDamage(pHit->fDamage);
@@ -360,10 +372,11 @@ void DarkLordSigilSlash::Update(float dt, EnemyComponent* pEnemy)
                                         XMFLOAT3 fireTarget = { fireStart.x + spawnDir.x * 60.0f,
                                                                 fireY,
                                                                 fireStart.z + spawnDir.z * 60.0f };
+                                        const float fireDmg = m_bNetworkVisualOnly ? 0.0f : pHit->fDamage;
                                         pProj->SpawnProjectile(
                                             fireStart,
                                             fireTarget,
-                                            pHit->fDamage,           // damage
+                                            fireDmg,                 // damage (network: 0)
                                             34.0f,                   // speed
                                             5.5f,                    // hit radius — 검기 폭 + 안정 마진
                                             0.0f,                    // no explosion AoE
@@ -382,7 +395,7 @@ void DarkLordSigilSlash::Update(float dt, EnemyComponent* pEnemy)
                                             m_fBurstTimer       = m_desc.projectileBurstInterval;
                                             m_xmf3BurstStartPos = fireStart;
                                             m_xmf3BurstBaseDir  = spawnDir;
-                                            m_fBurstDamage      = pHit->fDamage;
+                                            m_fBurstDamage      = fireDmg;
                                         }
                                     }
                                 }

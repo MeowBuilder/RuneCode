@@ -171,6 +171,10 @@ namespace
         SetDragonVisualYaw(pT, logicalYaw);
     }
 
+    // effectOption packing (서버 EncodeDarkLordEffectOption 와 동기):
+    //   ones        : element (1~4)
+    //   tens/hundred: style   (0~99)
+    //   thousands   : phase   (0~4)  [선택, 기본 0]
     static ElementType DecodeDarkLordElement(uint32 effectOption)
     {
         uint32 elemCode = effectOption % 10;
@@ -187,7 +191,13 @@ namespace
 
     static uint32 DecodeDarkLordStyle(uint32 effectOption)
     {
-        return effectOption / 10;
+        // phase 비트 (천 단위) 마스킹.
+        return (effectOption / 10) % 100;
+    }
+
+    static uint32 DecodeDarkLordPhase(uint32 effectOption)
+    {
+        return effectOption / 1000;
     }
 
     enum : uint32
@@ -235,6 +245,10 @@ namespace
         h.fVFXYOffset = 11.0f;
         h.fVFXScale = 6.5f;
         h.strVFXImpact = "";
+        // 네트워크 모드 — 보스 방향은 ProcessMonsterAttack 에서 서버 yaw 로 스냅됨.
+        //   Execute/Recovery 의 FaceTarget 이 로컬 m_pTarget(=로컬 플레이어) 방향으로
+        //   덮어쓰면 서버 의도와 다른 방향으로 검기/투사체가 발사된다.
+        h.bTrackTarget = false;
         return h;
     }
 
@@ -415,13 +429,18 @@ namespace
 
         if (style == DL_SLASH_TWIN_CLEAVE)
         {
-            desc.twinSeparationDeg = 30.0f;
+            // 오프라인: P2 Wind = 35°, P4 Final = 30°. 서버가 phase 안 보내면 30° fallback.
+            uint32 phase = DecodeDarkLordPhase(effectOption);
+            desc.twinSeparationDeg = (phase == 2) ? 35.0f : 30.0f;
         }
 
-        return std::make_unique<DarkLordSigilSlash>(
+        auto pSlash = std::make_unique<DarkLordSigilSlash>(
             desc,
             std::vector<ComboAttackBehavior::ComboHit>{ hit }
         );
+        // 데미지 권위는 서버. 클라 측 cone/projectile/TwinCleave 데미지 모두 0.
+        pSlash->SetNetworkVisualOnly(true);
+        return pSlash;
     }
 
     static std::unique_ptr<IAttackBehavior> MakeNetworkDarkLordSigilField(
@@ -983,7 +1002,7 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             break;
 
         case NetworkCommand::MonsterAttack:
-            ProcessMonsterAttack(pScene, cmd.monsterId, cmd.attackType, cmd.windupSec,cmd.targetPlayerId, cmd.x, cmd.y, cmd.z, cmd.effectPositions, cmd.effectOption);
+            ProcessMonsterAttack(pScene, cmd.monsterId, cmd.attackType, cmd.windupSec,cmd.targetPlayerId, cmd.x, cmd.y, cmd.z, cmd.monsterYaw, cmd.effectPositions, cmd.effectOption);
             break;
 
         case NetworkCommand::PlayerDamage:
@@ -4676,6 +4695,14 @@ void NetworkManager::ProcessMonsterMove(uint64 monsterId, float x, float y, floa
         return;
     }
 
+    // DarkLord 사망 연출 진행 중에는 잔여 MOVE 패킷이 walk CrossFade 를 발동시켜
+    //   Death 클립을 덮어쓴다 → "사망 후 다시 일어나 움직이는" 현상.
+    //   packet reorder 로 MOVE 가 isDead 보다 먼저 도착해도 이 가드로 차단.
+    if (pScene && pScene->IsNetworkDarkLordDeathTarget(monsterId))
+    {
+        return;
+    }
+
     auto it = m_mapServerMonsters.find(monsterId);
     if (it == m_mapServerMonsters.end())
         return;
@@ -4698,9 +4725,11 @@ void NetworkManager::ProcessMonsterMove(uint64 monsterId, float x, float y, floa
     float moveDz = z - prevZ;
     float moveDistSq = moveDx * moveDx + moveDz * moveDz;
 
-    // 서버 좌표가 실제로 변했는지 판단.
-    // 너무 작으면 정지 상태로 본다.
-    bool bActuallyMoved = (!hadPrevTarget || moveDistSq > 0.0004f);
+    // 서버 좌표가 실제로 변했는지 판단. 너무 작으면 정지 상태로 본다.
+    //   0.0004 (0.02m) 는 jitter 와 walk-per-tick 거리(보통 0.13m) 사이에 있어
+    //   서버 시뮬 미세 진동에도 walk↔idle 가 ping-pong → 워크 사이클이 재시작되어
+    //   끊겨 보임. 0.005 (0.07m) 로 올려 jitter 는 거르고 실제 walk 는 유지.
+    bool bActuallyMoved = (!hadPrevTarget || moveDistSq > 0.005f);
 
     // 타겟 좌표 갱신
     ServerMonsterTarget& tgt = m_mapServerMonsterTarget[monsterId];
@@ -4753,6 +4782,7 @@ void NetworkManager::ProcessMonsterMove(uint64 monsterId, float x, float y, floa
     std::string walkClip = (clipIt != m_mapServerMonsterClips.end())
         ? clipIt->second.walk
         : "Walk";
+    uint32 mtMove = (clipIt != m_mapServerMonsterClips.end()) ? clipIt->second.monsterType : 0;
 
     // 실제로 좌표가 변했을 때만 walk로 전환한다.
     // 정지 MOVE 패킷은 walk로 보지 않는다.
@@ -4768,8 +4798,42 @@ void NetworkManager::ProcessMonsterMove(uint64 monsterId, float x, float y, floa
 
             if (needChange)
             {
-                pAnim->CrossFade(walkClip, 0.1f, true);
+                // 보스 (Demon/DarkLord) 는 0.1 → 0.2 로 부드러운 전환
+                float walkBlend = ((mtMove == 9) || (mtMove == 11)) ? 0.2f : 0.1f;
+                pAnim->CrossFade(walkClip, walkBlend, true);
                 m_mapServerMonsterCurrentAnimClip[monsterId] = walkClip;
+            }
+
+            // 발 끌림 픽스: 실제 이동 속도(서버 위치 변화) 기반으로 walk 클립 playback 속도 조정.
+            //   패킷 간 실측 dt 로 instantaneous speed 계산 → EMA 스무딩 → refSpeed 로 정규화.
+            //   서버 boss 가 SetPlaybackSpeed=1.0 고정이라 다리 사이클이 위치 이동과 어긋나 발 끌림 발생.
+            if (mtMove == 9 || mtMove == 11)
+            {
+                double nowSec = static_cast<double>(GetTickCount64()) / 1000.0;
+                double dt = (tgt.lastPacketTime > 0.0) ? (nowSec - tgt.lastPacketTime) : 0.033;
+                tgt.lastPacketTime = nowSec;
+                if (dt < 0.010) dt = 0.010;   // 너무 짧으면 분모 폭발 방지
+                if (dt > 0.300) dt = 0.300;   // 너무 길어도 평균으로 클램프
+
+                float instSpeed = sqrtf(moveDistSq) / static_cast<float>(dt);
+
+                // EMA — 패킷 jitter 흡수해 playback 진동 방지.
+                if (tgt.smoothedSpeed <= 0.001f)
+                    tgt.smoothedSpeed = instSpeed;
+                else
+                    tgt.smoothedSpeed = tgt.smoothedSpeed * 0.6f + instSpeed * 0.4f;
+
+                // 기준 walk 속도 = "이 anim 클립이 자연스러워 보이는 이동 속도".
+                //   Demon: 빠른 이동(20~31 u/s) + 짧은 stride 클립 → refSpeed 작게(9) 해서
+                //          playSpeed 올림 → 발 끌림 방지.
+                //   DarkLord: 느린 이동(8 u/s) + 빠른 run 클립 → refSpeed 크게(16) +
+                //             clamp min 0.5 까지 허용 → playSpeed 내림 → 발동동(treadmill) 방지.
+                float refSpeed = (mtMove == 9) ? 9.0f : 16.0f;
+                float minClamp = (mtMove == 9) ? 0.9f : 0.5f;
+                float playSpeed = tgt.smoothedSpeed / refSpeed;
+                if (playSpeed < minClamp) playSpeed = minClamp;
+                if (playSpeed > 3.0f) playSpeed = 3.0f;
+                pAnim->SetPlaybackSpeed(playSpeed);
             }
         }
 
@@ -4972,8 +5036,11 @@ void NetworkManager::CheckServerMonsterIdle(float deltaTime)
 
             auto mIt = m_mapServerMonsters.find(monsterId);
             bool bDead = (m_setDeadServerMonsters.find(monsterId) != m_setDeadServerMonsters.end());
+            bool bDLDeath = false;
+            if (Scene* pScn = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr)
+                bDLDeath = pScn->IsNetworkDarkLordDeathTarget(monsterId);
 
-            if (mIt != m_mapServerMonsters.end() && mIt->second && !bDead)
+            if (mIt != m_mapServerMonsters.end() && mIt->second && !bDead && !bDLDeath)
             {
                 GameObject* pMonster = mIt->second;
 
@@ -5006,8 +5073,11 @@ void NetworkManager::CheckServerMonsterIdle(float deltaTime)
 
         auto mIt = m_mapServerMonsters.find(monsterId);
         bool bDead = (m_setDeadServerMonsters.find(monsterId) != m_setDeadServerMonsters.end());
+        bool bDLDeath = false;
+        if (Scene* pScn = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr)
+            bDLDeath = pScn->IsNetworkDarkLordDeathTarget(monsterId);
 
-        if (mIt == m_mapServerMonsters.end() || !mIt->second || bDead)
+        if (mIt == m_mapServerMonsters.end() || !mIt->second || bDead || bDLDeath)
         {
             it = m_mapServerMonsterMoveTime.erase(it);
             continue;
@@ -5557,7 +5627,7 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                 XMFLOAT3 pos = pT->GetPosition();
                 ind.anchorX = pos.x; ind.anchorZ = pos.z;
                 ind.anchorY = pos.y;
-                if (ind.activeType == NetIndicatorType::ForwardBox)
+                if (ind.activeType == NetIndicatorType::ForwardBox && !ind.yawLocked)
                     ind.yawDeg = pT->GetRotation().y;
             }
         }
@@ -5820,7 +5890,7 @@ static const char* GetMonsterHitReactClip(uint32 monsterType)
     }
 }
 
-void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint32 attackType, float windupSec, uint64 targetPlayerId, float atkX, float atkY, float atkZ, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption)
+void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint32 attackType, float windupSec, uint64 targetPlayerId, float atkX, float atkY, float atkZ, float monsterYaw, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption)
 {
     auto it = m_mapServerMonsters.find(monsterId);
     if (it == m_mapServerMonsters.end())
@@ -5835,9 +5905,38 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
     if (m_setDeadServerMonsters.find(monsterId) != m_setDeadServerMonsters.end())
         return;
 
+    // DarkLord 사망 연출 중에는 잔여 attack 패킷이 들어와도 무시 (공격 클립이
+    //   Death 클립을 덮어쓰면 보스가 다시 일어나서 공격하는 것처럼 보임).
+    {
+        Scene* pScn = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
+        if (pScn && pScn->IsNetworkDarkLordDeathTarget(monsterId))
+            return;
+    }
+
     GameObject* pMonster = it->second;
     auto* pAnim = pMonster->GetComponent<AnimationComponent>();
     if (!pAnim) return;
+
+    // DarkLord 검기/투사체/cone 방향은 보스 transform yaw 기반으로 spawn 된다.
+    //   S_MONSTER_MOVE 의 보간 yaw 가 attack 시점 server yaw 와 어긋나면
+    //   TwinCleave/CrossSigil/Projectile 방향이 잘못 튄다. 서버가 보낸
+    //   monsterYaw 로 attack 직전 스냅해서 동기화. 아울러 보간 타겟 yaw 도
+    //   같이 갱신해서 InterpolateServerMonsters 가 스냅된 yaw 를 되돌리지 않게 한다.
+    {
+        auto clipIt2 = m_mapServerMonsterClips.find(monsterId);
+        uint32 mtSnap = (clipIt2 != m_mapServerMonsterClips.end()) ? clipIt2->second.monsterType : 0;
+        if (mtSnap == 11)
+        {
+            if (auto* pT = pMonster->GetTransform())
+            {
+                DirectX::XMFLOAT3 r = pT->GetRotation();
+                pT->SetRotation(r.x, monsterYaw, r.z);
+            }
+            auto tgtIt = m_mapServerMonsterTarget.find(monsterId);
+            if (tgtIt != m_mapServerMonsterTarget.end())
+                tgtIt->second.yaw = monsterYaw;
+        }
+    }
 
     // (monsterType, attackType) 별 클립 우선 사용. 매핑 없으면 preset 의 기본 attack 클립으로 폴백.
     auto clipIt = m_mapServerMonsterClips.find(monsterId);
@@ -5848,7 +5947,18 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
         : ((clipIt != m_mapServerMonsterClips.end() && !clipIt->second.attack.empty())
             ? clipIt->second.attack.c_str() : "Attack");
 
-    pAnim->CrossFade(attackClip, 0.08f, false, true);
+    // Demon 돌진 패턴은 dash 지속시간(0.7~1.9s)이 단일 클립 길이보다 길어서
+    //   loop=false 로 재생하면 1사이클 후 마지막 프레임에 멈춰 보임 → 슬라이딩.
+    //   Run 계열(28/29/30) + SpinDash(27 attack3) 는 dash 동안 루프해야 한다.
+    bool bLoopAttack = false;
+    if (mt == 9 && (attackType == 27 || attackType == 28 || attackType == 29 || attackType == 30))
+    {
+        bLoopAttack = true;
+    }
+    // 보스 (Demon=9, DarkLord=11) 는 블렌드 시간 0.08 → 0.15 로 늘려 모션 끊김 완화.
+    //   너무 짧은 블렌드는 직전 포즈에서 신규 공격 포즈로 "딱" 전환되어 급해 보임.
+    float blendDur = ((mt == 9) || (mt == 11)) ? 0.15f : 0.08f;
+    pAnim->CrossFade(attackClip, blendDur, bLoopAttack, true);
     m_mapServerMonsterCurrentAnimClip[monsterId] = attackClip;
 
     // 오프라인 EnemySpawner 의 JumpSlamAttackBehavior 가 SetPlaybackSpeed 로
@@ -5988,7 +6098,10 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             ind.tint        = params.tint;
             ind.attackType  = attackType;
             ind.anchorX = atkX; ind.anchorY = atkY; ind.anchorZ = atkZ;
-            // ForwardBox: 보스의 현재 yaw 사용 (transform 에서 직접 읽기)
+            ind.yawLocked = false;
+            // ForwardBox: 보스의 현재 yaw 사용 (transform 에서 직접 읽기).
+            //   windup 동안 보스가 타겟 추적하며 회전하면 인디케이터도 같이 돌아야 한다.
+            //   UpdateServerMonsterIndicators 가 매 프레임 보스 yaw 추적.
             if (ind.activeType == NetIndicatorType::ForwardBox)
             {
                 if (auto* pT = pMonster->GetTransform())
@@ -6866,7 +6979,7 @@ static const char* GetBossRoarClip(uint32 monsterType)
     case 6:  return "Scream";        // Dragon
     case 10: return "Roar";          // BlueDragon (있으면 — 없으면 idle 로 폴백)
     case 7:  return "Unreal Take";   // Kraken
-    case 9:  return "Idle1";         // Demon — 별도 포효 클립 없음
+    case 9:  return "Rage";          // Demon — P2 진입 시 분노 변신 클립 (오프라인 m_strTransitionAnimation)
     case 8:  return "Golem_battle_stand_ge"; // Golem — 정지자세로 컷씬 대체
     default: return nullptr;
     }
@@ -7059,6 +7172,14 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
             // 무적 페이즈 flash는 Kraken에도 적용 가능
             pBoss->SetHitFlashAll(1.0f);
             m_mapServerMonsterHitFlashTimer[monsterId] = 0.4f;
+
+            // Demon Rage 전환: 2.4s "Rage" 클립 동안 walk/idle CrossFade 가 덮지 않도록
+            //   attack timer 잠금 (오프라인 m_fTransitionDuration 와 동일).
+            if (mt == 9)
+            {
+                m_mapServerMonsterAttackTimer[monsterId] = 2.4f;
+                m_mapServerMonsterCurrentAnimClip[monsterId] = "Rage";
+            }
         }
 
         if (isKrakenPhase2)
@@ -10581,25 +10702,54 @@ void NetworkManager::PlayNetworkDemonAttackBehavior(Scene* pScene, GameObject* p
         );
         break;
 
-    //case 28: // DemonShortRush
-    //    behavior = std::make_unique<RushFrontAttackBehavior>(
-    //        55.0f,
-    //        28.0f, 0.85f,
-    //        0.25f, 0.15f, 1.0f,
-    //        8.5f, 75.0f
-    //    );
-    //    break;
+    case 28: // DemonShortRush
+    {
+        // 오프라인 EnemySpawner P1 수치 (damage 55, speed 28, dur 0.85, cone 75°).
+        // 데미지는 서버 권위 → SetNetworkVisualOnly 로 클라 측 위치 이동 + 데미지 차단.
+        auto rush = std::make_unique<RushFrontAttackBehavior>(
+            55.0f,
+            28.0f, 0.85f,
+            0.25f, 0.15f, 1.0f,
+            8.5f, 75.0f
+        );
+        rush->SetNetworkVisualOnly(true);
+        behavior = std::move(rush);
+        break;
+    }
 
-    //case 29: // DemonLongRush
-    //    behavior = std::make_unique<RushFrontAttackBehavior>(
-    //        70.0f,
-    //        34.0f, 1.2f,
-    //        0.30f, 0.20f, 1.2f,
-    //        10.5f, 95.0f
-    //    );
-    //    break;
+    case 29: // DemonLongRush
+    {
+        // 오프라인 EnemySpawner P1 수치 (damage 70, speed 34, dur 1.2, cone 95°).
+        auto rush = std::make_unique<RushFrontAttackBehavior>(
+            70.0f,
+            34.0f, 1.2f,
+            0.30f, 0.20f, 1.2f,
+            10.5f, 95.0f
+        );
+        rush->SetNetworkVisualOnly(true);
+        behavior = std::move(rush);
+        break;
+    }
 
-    case 30: // DemonFixatedCharge 
+    case 34: // DemonJumpSlam
+    {
+        // 오프라인 EnemySpawner P2 수치 (damage 130, jumpH 18, dur 1.1, slamR 16).
+        // 데미지는 서버. 클라는 점프 아크 + 슬램 인디케이터만.
+        auto slam = std::make_unique<JumpSlamAttackBehavior>(
+            130.0f,
+            18.0f, 1.1f,
+            16.0f,
+            0.35f, 1.0f,
+            true,
+            3.0f, 0.5f,
+            "attack4", 0.0f
+        );
+        slam->SetNetworkVisualOnly(true);
+        behavior = std::move(slam);
+        break;
+    }
+
+    case 30: // DemonFixatedCharge
         behavior = std::make_unique<FixatedChargeAttackBehavior>(
             85.0f,
             3.0f, 0.2f,
@@ -10708,6 +10858,9 @@ void NetworkManager::InterpolateServerMonsters(float deltaTime)
     // 렌더 프레임은 그보다 촘촘하게 돈다.
     // 따라서 일반적인 이동은 절대 스냅하지 않고 항상 보간한다.
     // 큰 거리 차이는 방 전환 / 컷신 / 비정상 위치 보정으로 보고 즉시 스냅한다.
+    // 너무 높이면 패킷 간 보간이 끝까지 따라잡고 다음 패킷까지 정지 → 보스가
+    //   "달리다 멈춤" 을 반복해 덜덜 떨림. 10 으로 맞추면 패킷 간 lerp 가 항상
+    //   진행 중이라 부드러움. 너무 낮으면 lag 처럼 느려져 trade-off.
     constexpr float POS_SMOOTH_RATE = 10.0f;
     constexpr float YAW_SMOOTH_RATE = 10.0f;
     constexpr float BOSS_JUMP_POS_SMOOTH_RATE = 3.0f;
@@ -10731,6 +10884,16 @@ void NetworkManager::InterpolateServerMonsters(float deltaTime)
 
         Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
         if (pScene && pScene->IsNetworkKrakenCutsceneTarget(monsterId))
+            continue;
+
+        // DarkLord 사망 연출 중에는 위치 보간 X — 보스 transform 이 서버 target 으로
+        //   계속 lerp 되면 사망 포즈가 옆으로 미끄러지듯 이동해 "다시 살아나 움직이는"
+        //   인상을 준다. 사망 시점 위치 그대로 고정.
+        if (pScene && pScene->IsNetworkDarkLordDeathTarget(monsterId))
+            continue;
+
+        // 죽은 일반 몬스터도 위치 보간 skip
+        if (m_setDeadServerMonsters.find(monsterId) != m_setDeadServerMonsters.end())
             continue;
 
         // 스폰 포탈 / 낙하 연출 중에는 UpdateServerMonsterSpawnEffects가 위치를 직접 제어한다.

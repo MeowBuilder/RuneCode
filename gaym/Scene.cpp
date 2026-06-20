@@ -2214,23 +2214,10 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     // 룬/상태이상 2D 월드 스프라이트 VFX 갱신
     VFXSpriteManager::Get().Update(deltaTime);
 
-    // 디버그 wind VFX 영구 재스폰 — 90s 마다 자동 재시작 (sub_wind 페이즈 99s 직전)
-    //   m_bInBossRoom 일 때만 동작. 보스방 벗어나면 정리.
-    if (m_bInBossRoom && m_pVFXManager && m_nDebugWindVFXId >= 0)
-    {
-        m_fDebugWindVFXTimer += deltaTime;
-        // 위치 추적(이동 X 지만 매 프레임 Track 호출하면 슬롯이 살아있는 동안 정상)
-        m_pVFXManager->Track(m_nDebugWindVFXId, m_xmf3DebugWindPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
-        if (m_fDebugWindVFXTimer >= 90.0f)
-        {
-            m_pVFXManager->Stop(m_nDebugWindVFXId);
-            m_nDebugWindVFXId = m_pVFXManager->Spawn(
-                "Demon_Tornado", m_xmf3DebugWindPos, XMFLOAT3(0.0f, 1.0f, 0.0f),
-                0u, false);
-            m_fDebugWindVFXTimer = 0.0f;
-        }
-    }
-    else if (!m_bInBossRoom && m_nDebugWindVFXId >= 0 && m_pVFXManager)
+    // 디버그 wind VFX — 보스맵에서 디버깅용으로 spawn 되던 정적 회오리.
+    //   더 이상 필요 없어서 spawn 자체를 끊었지만 (TransitionToGrassBossRoom)
+    //   안전망으로 살아있는 슬롯이 있으면 항상 정리한다.
+    if (m_nDebugWindVFXId >= 0 && m_pVFXManager)
     {
         m_pVFXManager->Stop(m_nDebugWindVFXId);
         m_nDebugWindVFXId = -1;
@@ -5210,20 +5197,7 @@ void Scene::TransitionToGrassBossRoom()
                 pE->SetEnvironmentObstacles(vPillars);
         }
 
-        // ── 디버그용 영구 tornado VFX ──
-        m_xmf3DebugWindPos = XMFLOAT3(demonPos.x + 22.0f, 0.5f, demonPos.z);
-        m_fDebugWindVFXTimer = 0.0f;
-
-        if (m_pVFXManager)
-        {
-            m_nDebugWindVFXId = m_pVFXManager->Spawn(
-                "Demon_Tornado",
-                m_xmf3DebugWindPos,
-                XMFLOAT3(0.0f, 1.0f, 0.0f),
-                0u,
-                false
-            );
-        }
+        // ── 디버그용 영구 tornado VFX 제거됨 — 보스맵에 불필요한 회오리 ──
 
         // ── 4스테이지 바람 ambient: 배경 토네이도 + 잎 + 풀 ──
         CleanupWindAmbient();
@@ -5903,6 +5877,13 @@ void Scene::StartNetworkDarkLordDeath(GameObject* pDarkLordObj, uint64 monsterId
             pEC->SetAIPaused(true);
             pEC->SetInvincible(true);
             pEC->HideNetworkAttackIndicator();
+
+            // EnemyComponent 를 Dead 상태로 강제 전환 — AIPaused 가 Attack 상태에선
+            //   안 막혀서 잔여 attack behavior 가 walk/idle CrossFade 를 발동시킬 수
+            //   있었다. Dead 상태로 잠그면 ChangeState 가 더 이상 호출되지 않고
+            //   Update 도 line 167 가드로 차단된다.
+            //   네트워크 보스는 m_OnDeathCallback 미설정 → Die() 부수효과 없음.
+            pEC->ChangeState(EnemyState::Dead);
         }
 
         if (auto* pAnim = m_pDarkLordDeathObject->GetComponent<AnimationComponent>())

@@ -36,6 +36,11 @@ public:
     //   ShowIndicators 가 None 을 보면 즉시 return → 빨간 박스 안 뜸.
     int GetIndicatorTypeOverride() const override { return 0; /* IndicatorType::None */ }
 
+    // 네트워크 모드: 비주얼만 재생. cone 데미지 + projectile 데미지 모두 0 으로 만들고
+    //   실제 피격은 서버 S_PLAYER_DAMAGE 권위에 맡긴다. 안 하면 클라+서버 이중 적용.
+    void SetNetworkVisualOnly(bool bOn) { m_bNetworkVisualOnly = bOn; if (bOn) SetSuppressConeDamage(true); }
+    bool IsNetworkVisualOnly() const { return m_bNetworkVisualOnly; }
+
 private:
     SlashVFXDesc m_desc;
     SlashCue     m_cue;
@@ -59,4 +64,7 @@ private:
     DirectX::XMFLOAT3 m_xmf3BurstStartPos = { 0,0,0 };
     DirectX::XMFLOAT3 m_xmf3BurstBaseDir  = { 0,0,1 };
     float             m_fBurstDamage      = 0.0f;
+
+    // 네트워크 모드 — 데미지 권위가 서버이므로 클라 측 cone/projectile 데미지 stripping.
+    bool              m_bNetworkVisualOnly = false;
 };
