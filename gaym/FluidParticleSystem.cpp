@@ -2252,33 +2252,47 @@ R"_SPH_C_(
                 float dEdge = length(toC) - gObstacles[ob].z;
                 if (dEdge < nearObs) { nearObs = dEdge; nearCtr = float2(gObstacles[ob].x, gObstacles[ob].y); nearR = gObstacles[ob].z; }
             }
-            bool slipping = (nearObs < 9.0f);   // 기둥 영향권 (뒤쪽 재합류 구간 포함)
+            {  // 스코프 격리 — 지역 변수가 뒤쪽 재순환 코드의 동명 변수와 충돌하지 않게
+            // ── 원기둥 주위 포텐셜 흐름(potential flow) 속도장 ──────────────────────────
+            //   이상유체가 원기둥을 지날 때의 해석적 속도장으로 입자를 부드럽게 유도한다.
+            //   앞에서 정체점→옆으로 가속하며 자연스럽게 갈라지고, 뒤에서 스스로 대칭 재합류한다.
+            //   보정항이 R²/r² 로 거리와 함께 사라져 멀리 커튼은 안 건드림 → 쐐기/빈 밴드 없음.
+            float2 fxz      = normalize(float2(gJetDir.x, gJetDir.z) + 1e-6f);
+            float2 perpAxis = float2(-fxz.y, fxz.x);            // 진행축에 수직 (XZ)
+            float  U = max(length(gParticles[i].vel.xz), gJetSpeed * 0.9f);
 
-            if (slipping) {
-                // 기둥 통과: 앞/옆에서는 바깥으로 비키고, 기둥을 지난 뒤(하류)엔 살짝 안쪽으로
-                //   당겨 그림자가 "조금 뒤에서" 다시 닫히게 한다 (완전 빈 그림자 → 살짝 재합류).
-                float2 fxz  = normalize(float2(gJetDir.x, gJetDir.z) + 1e-6f);
-                float2 rel  = float2(gParticles[i].pos.x - nearCtr.x,
-                                     gParticles[i].pos.z - nearCtr.y);
-                float  along = dot(rel, fxz);            // 기둥 기준 진행축 위치 (<0 앞, >0 뒤)
-                float2 perp  = rel - fxz * along;        // 측면 성분 (흐름축에서 벗어난 정도)
-                float  pLen  = length(perp);
-                float2 perpDir = (pLen > 1e-3f) ? perp / pLen : float2(-fxz.y, fxz.x); // 정면이면 한쪽
-                float  aR = along / max(nearR, 0.001f);  // 반경 단위 진행축 위치
-                float  outward = saturate(1.3f - aR) * 1.6f;          // 앞/옆: 바깥 비킴
-                float  inward  = saturate((aR - 1.6f) * 0.7f) * 0.7f; // 뒤: 안쪽 당김 (살짝 재합류)
-                float  lat = outward - inward;
-                float2 dir = normalize(fxz + perpDir * lat);
-                float  spd = max(length(gParticles[i].vel.xz), gJetSpeed * 0.95f); // 감속 금지
-                gParticles[i].vel.x = dir.x * spd;
-                gParticles[i].vel.z = dir.y * spd;
-            } else {
-                // 평지: 방향성 댐핑 — 진행축 속도 유지, 측면 성분 감쇠로 좌우 튕김 제거.
-                float vFwd   = dot(gParticles[i].vel, gJetDir);
-                float3 vPerp = gParticles[i].vel - gJetDir * vFwd;
-                if (vFwd < 0.0f) vFwd *= 0.25f;  // 역방향 성분 죽임 ("반대로 날아가는" 제거)
-                gParticles[i].vel = gJetDir * vFwd + vPerp * 0.86f;
+            float2 rel = float2(gParticles[i].pos.x - nearCtr.x,
+                                gParticles[i].pos.z - nearCtr.y);
+            float  px = dot(rel, fxz);          // 진행축 좌표 (<0 앞, >0 뒤)
+            float  py = dot(rel, perpAxis);     // 측면 좌표 (부호 있음)
+            float  r2 = px*px + py*py;
+
+            if (nearR > 0.0f && r2 > nearR*nearR) {
+                float R2 = nearR * nearR;
+                float r4 = r2 * r2;
+                // 균일류 U(진행축) 기준 원기둥 포텐셜 흐름 (직교좌표):
+                //   u_along = U[1 - R²(x²-y²)/r⁴],  u_perp = U[-R²·2xy/r⁴]
+                //   뒤쪽(px>0)에서 u_perp 가 축 방향(-py)으로 작용 → 갈라진 흐름이 다시 모인다.
+                float uAlong = U * (1.0f - R2 * (px*px - py*py) / r4);
+                float uPerp  = U * (-R2 * 2.0f * px * py / r4);
+                // 비대칭 조정: 기둥 뒤(px>0)는 재합류(안쪽 수렴) 더 약화 → 그림자 포켓 크게.
+                //   기둥 앞/옆(px<=0)은 바깥 비킴 강화 → 부딪힌 입자가 더 멀리 갈라짐.
+                if (px > 0.0f) uPerp *= 1.2f;   // 뒤: 재합류 확실하게
+                else           uPerp *= 3.0f;   // 앞/옆: 더 강하게 밀려 안전 포켓 넓게
+                float2 potVel = fxz * uAlong + perpAxis * uPerp;
+                // 근처일수록 강하게 따르고 멀면 0 (R²/r² 자체가 감쇠하지만 명시 게이트로 깔끔히)
+                float infl = saturate((nearR * 7.5f - sqrt(r2)) / (nearR * 6.5f));
+                float2 newV = lerp(gParticles[i].vel.xz, potVel, 0.65f * infl);
+                gParticles[i].vel.x = newV.x;
+                gParticles[i].vel.z = newV.y;
             }
+
+            // 진행축 최소 속도 유지 — 전역 댐핑/정체로 느려져 벽·바닥에 쌓이는 것 방지.
+            //   계속 앞으로 흐르게 해 맵 끝 뭉침을 줄인다. (역방향 "반대로 날아가는" 입자도 함께 전진 보정)
+            float vAlongNow = dot(gParticles[i].vel, gJetDir);
+            float vMin = gJetSpeed * 0.6f;
+            if (vAlongNow < vMin) gParticles[i].vel += gJetDir * (vMin - vAlongNow);
+            }  // 스코프 격리 끝
 
             // 바닥 충돌: 바닥 아래로 못 내려감, 하향 속도 약하게 반사 + 수평 마찰
             float floorY = gJetRoomMin.y;
@@ -2309,7 +2323,7 @@ R"_SPH_C_(
             }
 
             // 방 경계 클램프 (벽 밖으로 새지 않게) + 화염 홍수 높이 상한 (너무 높이 안 솟게)
-            gParticles[i].pos.y = min(gParticles[i].pos.y, gJetRoomMin.y + 7.0f);
+            gParticles[i].pos.y = min(gParticles[i].pos.y, gJetRoomMin.y + 5.0f);
 )_SPH_C_"
 R"_SPH_D_(
             gParticles[i].pos.x = clamp(gParticles[i].pos.x, gJetRoomMin.x, gJetRoomMax.x);
@@ -2319,7 +2333,15 @@ R"_SPH_D_(
             //   수명은 파티클별로 흩뜨려(0.55~1.45배) 동시 재순환(맥동) 방지
             float lifeJitter = 0.55f + 0.9f * frac(sin((float)i * 12.9898f) * 43758.5453f);
             float along = dot(gParticles[i].pos - gJetMouth, gJetDir);
-            if (gParticles[i].pad.x > gJetLifetime * lifeJitter || along > gJetLength) {
+            // 하류 벽 도달 시 즉시(투명) 재순환 — 벽에 핀처럼 박혀 쌓이는 "맵 끝 뭉침" 방지.
+            //   진행 방향 성분으로만 벽 거리 측정 → 측면 벽(커튼 가장자리)은 안 건드림.
+            float remX = (gJetDir.x > 0.0f) ? (gJetRoomMax.x - gParticles[i].pos.x)
+                                            : (gParticles[i].pos.x - gJetRoomMin.x);
+            float remZ = (gJetDir.z > 0.0f) ? (gJetRoomMax.z - gParticles[i].pos.z)
+                                            : (gParticles[i].pos.z - gJetRoomMin.z);
+            float wallAhead = remX * abs(gJetDir.x) + remZ * abs(gJetDir.z);
+            bool atFarWall = (wallAhead < 4.0f) && (along > 30.0f);
+            if (gParticles[i].pad.x > gJetLifetime * lifeJitter || along > gJetLength || atFarWall) {
                 uint js = (uint)i * 2654435761u ^ gJetFrameSeed;
                 js = js * 1664525u + 1013904223u; float ra = (float)(js >> 1) / 1073741823.0f;
                 js = js * 1664525u + 1013904223u; float rb = (float)(js >> 1) / 1073741823.0f;

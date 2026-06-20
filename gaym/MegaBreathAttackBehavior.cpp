@@ -916,8 +916,10 @@ bool MegaBreathAttackBehavior::IsPlayerBehindCover(const XMFLOAT3& breathOrigin,
     if (flen < 0.001f) return false;
     fx /= flen; fz /= flen;
 
-    // 유체 원기둥(SpawnFireWave)과 동일 반경 — 살짝 여유(+0.5)
-    const float kCoverRadius = 4.0f + 0.5f;
+    // VFX 매칭: 안전지대는 기둥 바로 뒤 "포켓"으로 제한. 불길이 포켓 뒤에서 다시 합쳐지므로
+    //   하류로 갈수록 안전 폭이 줄어드는 쐐기형이고, 포켓 길이 너머는 더 이상 안전이 아니다.
+    const float kPocketLength = 16.0f;   // 포켓 길이 — 이 거리 뒤는 불길 재합류 → 노출
+    const float kStartRadius  = 6.0f;    // 기둥 바로 뒤 안전 반폭 (강한 갈라짐 반영, 넓게)
 
     for (GameObject* pCover : m_vCoverObjects)
     {
@@ -929,13 +931,16 @@ bool MegaBreathAttackBehavior::IsPlayerBehindCover(const XMFLOAT3& breathOrigin,
         // 기둥 → 플레이어 벡터를 진행축으로 분해
         float vx = playerPos.x - c.x;
         float vz = playerPos.z - c.z;
-        float alongFlow = vx * fx + vz * fz;          // >0: 플레이어가 기둥 하류(그림자 쪽)
-        if (alongFlow <= 0.0f) continue;              // 기둥이 상류가 아님 → 그림자 없음
+        float alongFlow = vx * fx + vz * fz;          // >0: 플레이어가 기둥 하류(포켓 쪽)
+        if (alongFlow <= 0.0f || alongFlow > kPocketLength) continue; // 기둥 앞 / 포켓 너머 → 안전 아님
 
         float perpX = vx - fx * alongFlow;
         float perpZ = vz - fz * alongFlow;
         float perp = sqrtf(perpX * perpX + perpZ * perpZ);
-        if (perp < kCoverRadius) return true;         // 기둥 진행방향 그림자 안 → 안전
+
+        // 하류로 갈수록 좁아지는 안전 폭 (불길 재합류) — 포켓 끝에서 0
+        float safeR = kStartRadius * (1.0f - alongFlow / kPocketLength);
+        if (perp < safeR) return true;                // 포켓 안 → 안전
     }
 
     return false;  // 노출됨
@@ -1162,7 +1167,7 @@ void MegaBreathAttackBehavior::SpawnFireWave(EnemyComponent* pEnemy)
     p.startTime              = 0.f;
     p.duration               = m_fBreathDuration + 0.5f;
     p.motionMode             = ParticleMotionMode::Gravity;
-    p.gravityDesc.gravity    = { 0.f, -14.0f, 0.f };  // 중력 ↑ → 공중에 흩어지지 않고 바닥에 깔린 조밀한 홍수
+    p.gravityDesc.gravity    = { 0.f, -16.0f, 0.f };  // 중력 ↑ → 공중에 흩어지지 않고 바닥에 깔린 조밀한 홍수
     p.gravityDesc.initialSpeedMin = 0.f;              // 초기 방사 폭발 비활성 (제트가 속도 부여)
     p.gravityDesc.initialSpeedMax = 0.f;
     p.globalGravityStrength  = 0.f;                   // 중복 중력 방지 (gravityDesc만 사용)
@@ -1179,7 +1184,7 @@ void MegaBreathAttackBehavior::SpawnFireWave(EnemyComponent* pEnemy)
     // spawnRadius 인자 = 높이 산포(jetVertJit), spread 인자 = 커튼 반폭(curtainHalfW)
     //   분사 높이는 입(비주얼)보다 낮은 바닥+4u에서 → 공중에 안 뜨고 바닥에 깔린 홍수.
     XMFLOAT3 jetOrigin = m_xmf3BeamOrigin;
-    jetOrigin.y = floorY + 4.0f;
+    jetOrigin.y = floorY + 3.0f;   // 분사 높이 ↓ → 플레이어 높이로 깔림
     m_pFluidVFXManager->SetEffectJet(
         id, jetOrigin, m_xmf3BeamDirection,
         jetSpeed, jetLength, jetVertJit, curtainHalfW, jetLifetime,
