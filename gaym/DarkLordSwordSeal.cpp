@@ -164,9 +164,11 @@ void DarkLordSwordSeal::SpawnSwords(EnemyComponent* pEnemy)
     }
 
     // 보스에 orbit 파라미터 전달 — lifetime 동안 EnemyComponent 가 회전/충돌 처리.
+    float clientDamage = m_bNetworkVisualOnly ? 0.0f : m_fDamage;
+
     pEnemy->SetOrbitingSwordParams(
         m_fOrbitRadius, m_fOrbitSpeedDegPerSec, 39.0f,
-        m_fDamage, m_fSwordHitRadius, m_fDuration,
+        clientDamage, m_fSwordHitRadius, m_fDuration,
         m_eElement);
 
     // 우리는 검 관리 책임 없음 — 검 ownership 은 보스가 가짐. m_vSwords 클리어.
@@ -224,6 +226,10 @@ void DarkLordSwordSeal::UpdateOrbit(float dt, EnemyComponent* pEnemy)
 
 void DarkLordSwordSeal::DealCollisionDamage(EnemyComponent* pEnemy)
 {
+    // 네트워크 모드에서는 데미지는 서버가 처리한다.
+    if (m_bNetworkVisualOnly)
+        return;
+
     if (!m_pScene) return;
     if (m_fDmgCooldown > 0.0f) return;   // 데미지 간격 (피해 누적 폭주 방지)
 

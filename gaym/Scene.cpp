@@ -56,6 +56,17 @@
 // ServerPacketHandler.cpp에 정의된 파일 로그 함수 (network_log.txt append)
 extern void WriteNetworkLog(const std::string& msg);
 
+static void SetRenderTreeVisible(GameObject* pGO, bool visible)
+{
+    if (!pGO) return;
+
+    if (auto* pRC = pGO->GetComponent<RenderComponent>())
+        pRC->SetVisible(visible);
+
+    SetRenderTreeVisible(pGO->m_pChild, visible);
+    SetRenderTreeVisible(pGO->m_pSibling, visible);
+}
+
 Scene::Scene()
 {
     m_pCamera = std::make_unique<CCamera>();
@@ -2020,17 +2031,26 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
             OutputDebugString(L"[Scene] Grass boss cleared → two portals offered (farm loop / final boss)\n");
         }
 
-        // 최종 보스(DarkLord) 클리어 → 게임 클리어 처리
-        //   포탈은 자동 spawn 되므로 즉시 숨겨 추가 전환 방지.
-        //   본격적인 엔딩 UI 는 Dx12App 측에서 m_bGameClear 플래그를 보고 처리.
+        // 최종 보스(DarkLord) 클리어.
+        // 기존처럼 m_bGameClear를 즉시 켜지 않는다.
+        // 사망 연출을 먼저 보여주고, UpdateDarkLordDeath()가 몇 초 뒤 m_bGameClear를 켠다.
         if (m_bInBossRoom
             && m_eCurrentTheme == StageTheme::Dark
             && !m_bGameClear
             && m_pCurrentRoom->HasPortalCube())
         {
-            m_bGameClear = true;
             m_pCurrentRoom->ClearPortalCube();
-            OutputDebugString(L"[Scene] ========== GAME CLEAR — DarkLord defeated! ==========\n");
+
+            // BossEvent Death를 못 받았거나 순서가 꼬였을 때를 위한 fallback.
+            if (!IsDarkLordDeathSequencePlaying())
+            {
+                StartNetworkDarkLordDeath(
+                    m_pDarkLordCutsceneObject,
+                    m_nNetworkDarkLordIntroMonsterId
+                );
+            }
+
+            OutputDebugString(L"[Scene] DarkLord room cleared — waiting for death sequence before Ending UI\n");
         }
     }
 
@@ -2084,6 +2104,10 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     //   m_eDarkLordIntroStage 가 None 이면 즉시 return. cutscene 동안 입력/네트워크 차단.
     UpdateDarkLordIntro(deltaTime);
 
+    // ── DarkLord 사망 연출 driver ─────────────────────────────────────────────
+    //   사망 후 바로 Ending UI로 넘기지 않고, 보스 사망 장면을 몇 초 보여준 뒤 m_bGameClear를 켠다.
+    UpdateDarkLordDeath(deltaTime);
+
     // ── 컷씬 종료 후 보스 공격 grace period 카운트다운 ───────────────────────
     //   Dominion 종료 시점에 m_fBossGracePeriodRemain 이 3초로 세팅됨. 이 시간 동안 보스는 정지·무적.
     //   0 도달 시점에 한 번만 AI/무적 풀어 전투 시작.
@@ -2113,7 +2137,10 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     bool bKrakenBlocking =
         (m_eKrakenStage != KrakenCutsceneStage::None) &&
         (m_eKrakenStage != KrakenCutsceneStage::WaterRise);
+    
     bool bDarkLordIntroBlocking = IsDarkLordIntroPlaying();
+    
+    bool bDarkLordDeathBlocking = IsDarkLordDeathSequencePlaying();
 
     // Dragon intro는 m_pDragonIntroEnemy가 살아있는 동안 전체 입력 차단.
     // m_eLastDragonPhase는 시작 직후 None일 수 있으므로 조건에 넣지 않는다.
@@ -2135,7 +2162,8 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         bDragonIntroBlocking ||
         bNetworkDragonIntroBlocking ||
         bMegaBreathWallBlocking ||
-        bDarkLordIntroBlocking;
+        bDarkLordIntroBlocking ||
+        bDarkLordDeathBlocking;
 
     // 네트워크 패킷 전송도 같이 차단.
     // SendMove / SendSkill / SendPlayerAttack 내부에서 m_bCutscenePlaying을 검사한다.
@@ -3740,6 +3768,10 @@ void Scene::ClearTransientCombatEffects()
         m_pVFXManager->ClearAll();
     }
 
+    // 4. 룬/스프라이트 계열 VFX 정리
+    // VFXManager와 별도 풀이라 방 전환 시 같이 꺼줘야 흰색 잔상/스프라이트 잔여가 안 남는다.
+    VFXSpriteManager::Get().ClearAll();
+
     WriteNetworkLog("[Scene] ClearTransientCombatEffects done");
 }
 
@@ -3754,16 +3786,23 @@ std::vector<GameObject*> Scene::GetAllPlayers() const
         players.push_back(m_pPlayerGameObject);
     }
 
-    // 원격 플레이어 추가 (NetworkManager에서 가져옴)
-    // TODO: 멀티플레이어 구현 시 NetworkManager::GetRemotePlayers() 연동
-    // NetworkManager* pNetMgr = NetworkManager::GetInstance();
-    // if (pNetMgr)
-    // {
-    //     for (const auto& pair : pNetMgr->GetRemotePlayers())
-    //     {
-    //         if (pair.second) players.push_back(pair.second);
-    //     }
-    // }
+    // 원격 플레이어 추가
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr)
+    {
+        for (const auto& pair : pNetMgr->GetRemotePlayers())
+        {
+            GameObject* pRemotePlayer = pair.second;
+            if (!pRemotePlayer)
+                continue;
+
+            // 혹시 같은 포인터가 들어오는 상황 방지
+            if (pRemotePlayer == m_pPlayerGameObject)
+                continue;
+
+            players.push_back(pRemotePlayer);
+        }
+    }
 
     return players;
 }
@@ -5767,6 +5806,13 @@ void Scene::StartNetworkDarkLordIntro(GameObject* pDarkLordObj, uint64 monsterId
         pEC->SetInvincible(true);
     }
 
+    // 네트워크 DarkLord 컷신 동안 모든 플레이어 렌더 숨김.
+    // 기존 코드는 로컬 플레이어만 숨겨서 원격 캐릭터가 컷신에 보였다.
+    for (GameObject* pPlayerObj : GetAllPlayers())
+    {
+        SetRenderTreeVisible(pPlayerObj, false);
+    }
+
     // 컷신 동안 플레이어 숨김
     if (m_pPlayerGameObject)
     {
@@ -5820,6 +5866,94 @@ void Scene::StartNetworkDarkLordIntro(GameObject* pDarkLordObj, uint64 monsterId
 
     m_bInBossRoom = true;
     OutputDebugString(L"[Scene] Network DarkLord intro started\n");
+}
+
+void Scene::StartNetworkDarkLordDeath(GameObject* pDarkLordObj, uint64 monsterId)
+{
+    if (m_bGameClear)
+        return;
+
+    // 이미 사망 연출 중이면 중복 시작 방지
+    if (m_eDarkLordDeathStage != DarkLordDeathStage::None)
+        return;
+
+    m_eDarkLordDeathStage = DarkLordDeathStage::DeathAnim;
+    m_fDarkLordDeathTimer = 0.0f;
+    m_nNetworkDarkLordDeathMonsterId = monsterId;
+    m_pDarkLordDeathObject = pDarkLordObj ? pDarkLordObj : m_pDarkLordCutsceneObject;
+
+    // 남아 있는 공격/VFX 정리
+    ClearTransientCombatEffects();
+
+    if (m_pDarkLordDeathObject)
+    {
+        m_pDarkLordCutsceneObject = m_pDarkLordDeathObject;
+
+        if (auto* pEC = m_pDarkLordDeathObject->GetComponent<EnemyComponent>())
+        {
+            pEC->SetAIPaused(true);
+            pEC->SetInvincible(true);
+            pEC->HideNetworkAttackIndicator();
+        }
+
+        if (auto* pAnim = m_pDarkLordDeathObject->GetComponent<AnimationComponent>())
+        {
+            pAnim->SetCullEnabled(false);
+
+            // 실제 클립명이 다르면 여기만 "death", "Die" 등으로 바꾸면 됨.
+            pAnim->CrossFade("Death", 0.15f, false);
+        }
+        if (m_pCamera)
+        {
+            m_pCamera->StartShake(0.35f, 0.8f);
+        }
+    }
+
+    OutputDebugString(L"[Scene] DarkLord death sequence START\n");
+}
+
+void Scene::UpdateDarkLordDeath(float dt)
+{
+    if (m_eDarkLordDeathStage == DarkLordDeathStage::None)
+        return;
+
+    m_fDarkLordDeathTimer += dt;
+
+    if (m_eDarkLordDeathStage == DarkLordDeathStage::DeathAnim)
+    {
+        // 사망 애니메이션/연출 감상 시간
+        if (m_fDarkLordDeathTimer >= 3.0f)
+        {
+            m_eDarkLordDeathStage = DarkLordDeathStage::EndDelay;
+            m_fDarkLordDeathTimer = 0.0f;
+
+            if (m_pCamera)
+                m_pCamera->StartShake(0.15f, 0.5f);
+
+            OutputDebugString(L"[Scene] DarkLord death sequence END_DELAY\n");
+        }
+
+        return;
+    }
+
+    if (m_eDarkLordDeathStage == DarkLordDeathStage::EndDelay)
+    {
+        // 짧은 여운 후 Ending UI로 넘김
+        if (m_fDarkLordDeathTimer >= 0.8f)
+        {
+            m_eDarkLordDeathStage = DarkLordDeathStage::None;
+            m_fDarkLordDeathTimer = 0.0f;
+
+            if (m_pCurrentRoom && m_pCurrentRoom->HasPortalCube())
+                m_pCurrentRoom->ClearPortalCube();
+
+            m_bGameClear = true;
+
+            OutputDebugString(L"[Scene] ========== GAME CLEAR — DarkLord death sequence finished ==========\n");
+        }
+
+        return;
+    }
 }
 
 // ── DarkLord 입장 컷씬 driver — Kraken 패턴의 cumulative-timer state machine.
@@ -5998,12 +6132,13 @@ void Scene::UpdateDarkLordIntro(float dt)
         t = std::clamp(t, 0.0f, 1.0f);
         float e = easeOutCubic(t);
 
-        // 보스 — scale 1.0 → 10.0 (프리셋 기본값) / Y -6 → 0 으로 lerp. 솟구침 dramatic.
+        // 보스 — scale 1.0 → 14.0 (최신 DarkLord 프리셋 scale) / Y -6 → 0 으로 lerp.
         if (pBoss)
         {
-            float s = lerp(1.0f, 10.0f, e);
+            float s = lerp(1.0f, 14.0f, e);
             float y = lerp(-6.0f, 0.0f, e);
             pBoss->GetTransform()->SetScale(s, s, s);
+
             const BoundingBox& bb = m_pCurrentRoom ? m_pCurrentRoom->GetBoundingBox() : BoundingBox{};
             XMFLOAT3 pos(bb.Center.x, y, bb.Center.z);
             pBoss->GetTransform()->SetPosition(pos);
@@ -6130,6 +6265,13 @@ void Scene::UpdateDarkLordIntro(float dt)
             // 컷씬 종료 — 카메라 해제, 룸 Active, 보스 Idle 전환, 입력 복구.
             m_eDarkLordIntroStage = DarkLordIntroStage::None;
             m_fDarkLordIntroTimer = 0.0f;
+
+            // DarkLord 컷신 종료 — 숨겨둔 모든 플레이어 렌더 복구.
+            // 원격 플레이어는 Transform을 건드리지 않고 렌더만 다시 켠다.
+            for (GameObject* pPlayerObj : GetAllPlayers())
+            {
+                SetRenderTreeVisible(pPlayerObj, true);
+            }
 
             // 플레이어 mesh 복원 — RenderComponent flag + hierarchy 자식 + Transform 복귀.
             //   발판/포탈은 최종 보스에서 불필요 → hidden 유지.

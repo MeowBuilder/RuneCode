@@ -46,6 +46,12 @@
 #include "CharacterData.h"
 #include "ColliderComponent.h"
 #include "CollisionLayer.h"
+#include "ComboAttackBehavior.h"
+#include "DarkLordSigilSlash.h"
+#include "DarkLordSigilField.h"
+#include "DarkLordSwordRain.h"
+#include "DarkLordSwordSeal.h"
+#include "SlashVFXDesc.h"
 #include <cmath>
 #include <random>
 #include <cstring>
@@ -93,6 +99,17 @@ namespace
 
         ApplyNetworkPlayerMaterial(go->m_pChild, playerColor);
         ApplyNetworkPlayerMaterial(go->m_pSibling, playerColor);
+    }
+
+    static void SetRenderTreeVisibleNet(GameObject* pGO, bool visible)
+    {
+        if (!pGO) return;
+
+        if (auto* pRC = pGO->GetComponent<RenderComponent>())
+            pRC->SetVisible(visible);
+
+        SetRenderTreeVisibleNet(pGO->m_pChild, visible);
+        SetRenderTreeVisibleNet(pGO->m_pSibling, visible);
     }
 
     static float NormalizeYaw(float yaw)
@@ -152,6 +169,361 @@ namespace
 
         float logicalYaw = YawToTargetXZ(from, to);
         SetDragonVisualYaw(pT, logicalYaw);
+    }
+
+    static ElementType DecodeDarkLordElement(uint32 effectOption)
+    {
+        uint32 elemCode = effectOption % 10;
+
+        switch (elemCode)
+        {
+        case 1: return ElementType::Fire;
+        case 2: return ElementType::Water;
+        case 3: return ElementType::Wind;
+        case 4: return ElementType::Earth;
+        default: return ElementType::Fire;
+        }
+    }
+
+    static uint32 DecodeDarkLordStyle(uint32 effectOption)
+    {
+        return effectOption / 10;
+    }
+
+    enum : uint32
+    {
+        DL_SLASH_SIDE_STANDARD = 0,
+        DL_SLASH_QUICK_JAB = 1,
+        DL_SLASH_LONG_PROJECTILE = 2,
+        DL_SLASH_HEAVY_MASSIVE = 3,
+        DL_SLASH_SPIN_MASSIVE = 4,
+        DL_SLASH_WHIP_LIGHT = 5,
+        DL_SLASH_BARRAGE = 6,
+        DL_SLASH_TWIN_CLEAVE = 7,
+        DL_SLASH_CROSS_SIGIL = 8,
+        DL_SLASH_FINAL_JUDGMENT = 9,
+        DL_SLASH_ULT_MASSIVE = 10
+    };
+
+    static const char* NetDarkLordSigilName(ElementType e, bool heavy)
+    {
+        switch (e)
+        {
+        case ElementType::Fire:
+            return heavy ? "Boss_CrescentSigil_Fire_Heavy" : "Boss_CrescentSigil_Fire";
+        case ElementType::Water:
+            return heavy ? "Boss_CrescentSigil_Water_Heavy" : "Boss_CrescentSigil_Water";
+        case ElementType::Wind:
+            return heavy ? "Boss_CrescentSigil_Wind_Heavy" : "Boss_CrescentSigil_Wind";
+        case ElementType::Earth:
+            return heavy ? "Boss_CrescentSigil_Earth_Heavy" : "Boss_CrescentSigil_Earth";
+        default:
+            return "Boss_CrescentSigil_Fire";
+        }
+    }
+
+    static ComboAttackBehavior::ComboHit MakeNetDarkLordBaseHit()
+    {
+        ComboAttackBehavior::ComboHit h;
+        h.fDamage = 0.0f; // 실제 데미지는 서버가 처리
+        h.fWindupTime = 0.55f;
+        h.fHitTime = 0.22f;
+        h.fRecoveryTime = 0.35f;
+        h.fHitRange = 15.0f;
+        h.fConeAngle = 115.0f;
+        h.fVFXForwardOffset = 4.0f;
+        h.fVFXYOffset = 11.0f;
+        h.fVFXScale = 6.5f;
+        h.strVFXImpact = "";
+        return h;
+    }
+
+    static ComboAttackBehavior::ComboHit MakeNetQuickJab(ElementType e)
+    {
+        auto h = MakeNetDarkLordBaseHit();
+        h.fWindupTime = 0.40f;
+        h.fHitTime = 0.18f;
+        h.fRecoveryTime = 0.28f;
+        h.fHitRange = 14.0f;
+        h.fConeAngle = 95.0f;
+        h.strAnimation = "attack1";
+        h.strVFXOnHit = NetDarkLordSigilName(e, false);
+        h.eShape = ComboAttackBehavior::SwordEnergyShape::Slim;
+        return h;
+    }
+
+    static ComboAttackBehavior::ComboHit MakeNetSideCleave(ElementType e)
+    {
+        auto h = MakeNetDarkLordBaseHit();
+        h.fWindupTime = 0.50f;
+        h.fHitTime = 0.20f;
+        h.fHitRange = 15.0f;
+        h.fConeAngle = 125.0f;
+        h.strAnimation = "attack2";
+        h.strVFXOnHit = NetDarkLordSigilName(e, false);
+        h.fVFXScale = 7.5f;
+        h.eShape = ComboAttackBehavior::SwordEnergyShape::Wide;
+        return h;
+    }
+
+    static ComboAttackBehavior::ComboHit MakeNetLongReach(ElementType e)
+    {
+        auto h = MakeNetDarkLordBaseHit();
+        h.fWindupTime = 0.45f;
+        h.fHitTime = 0.20f;
+        h.fHitRange = 17.0f;
+        h.fConeAngle = 85.0f;
+        h.strAnimation = "attack4";
+        h.strVFXOnHit = NetDarkLordSigilName(e, false);
+        h.fVFXForwardOffset = 4.5f;
+        h.eShape = ComboAttackBehavior::SwordEnergyShape::Long;
+        return h;
+    }
+
+    static ComboAttackBehavior::ComboHit MakeNetHeavySlam(ElementType e)
+    {
+        auto h = MakeNetDarkLordBaseHit();
+        h.fWindupTime = 0.75f;
+        h.fHitTime = 0.30f;
+        h.fRecoveryTime = 0.50f;
+        h.fHitRange = 17.0f;
+        h.fConeAngle = 130.0f;
+        h.strAnimation = "Attack6";
+        h.strVFXOnHit = NetDarkLordSigilName(e, true);
+        h.fVFXScale = 10.0f;
+        h.eShape = ComboAttackBehavior::SwordEnergyShape::Wide;
+        return h;
+    }
+
+    static ComboAttackBehavior::ComboHit MakeNetSpinCleave(ElementType e)
+    {
+        auto h = MakeNetDarkLordBaseHit();
+        h.fWindupTime = 0.55f;
+        h.fHitTime = 0.28f;
+        h.fHitRange = 16.5f;
+        h.fConeAngle = 250.0f;
+        h.strAnimation = "attack9";
+        h.strVFXOnHit = NetDarkLordSigilName(e, true);
+        h.fVFXScale = 9.0f;
+        h.eShape = ComboAttackBehavior::SwordEnergyShape::Double;
+        return h;
+    }
+
+    static ComboAttackBehavior::ComboHit MakeNetWhipTrail(ElementType e)
+    {
+        auto h = MakeNetDarkLordBaseHit();
+        h.fWindupTime = 0.40f;
+        h.fHitTime = 0.30f;
+        h.fRecoveryTime = 0.55f;
+        h.fHitRange = 17.0f;
+        h.fConeAngle = 100.0f;
+        h.strAnimation = "attack2";
+        h.strVFXOnHit = NetDarkLordSigilName(e, false);
+        h.fVFXScale = 11.0f;
+        h.eShape = ComboAttackBehavior::SwordEnergyShape::Long;
+        return h;
+    }
+
+    static std::unique_ptr<IAttackBehavior> MakeNetworkDarkLordSigilSlash(uint32 effectOption)
+    {
+        ElementType elem = DecodeDarkLordElement(effectOption);
+        uint32 style = DecodeDarkLordStyle(effectOption);
+
+        ComboAttackBehavior::ComboHit hit;
+        SlashPresentation presentation = SlashPresentation::Standard;
+        SlashPowerLevel power = SlashPowerLevel::Signature;
+
+        switch (style)
+        {
+        case DL_SLASH_QUICK_JAB:
+            hit = MakeNetQuickJab(elem);
+            presentation = SlashPresentation::Standard;
+            power = SlashPowerLevel::Medium;
+            break;
+
+        case DL_SLASH_LONG_PROJECTILE:
+            hit = MakeNetLongReach(elem);
+            presentation = SlashPresentation::Projectile;
+            power = SlashPowerLevel::Medium;
+            break;
+
+        case DL_SLASH_HEAVY_MASSIVE:
+            hit = MakeNetHeavySlam(elem);
+            presentation = SlashPresentation::Massive;
+            power = SlashPowerLevel::Signature;
+            break;
+
+        case DL_SLASH_SPIN_MASSIVE:
+            hit = MakeNetSpinCleave(elem);
+            presentation = SlashPresentation::Massive;
+            power = SlashPowerLevel::Signature;
+            break;
+
+        case DL_SLASH_WHIP_LIGHT:
+            hit = MakeNetWhipTrail(elem);
+            presentation = SlashPresentation::Light;
+            power = SlashPowerLevel::Small;
+            break;
+
+        case DL_SLASH_BARRAGE:
+            hit = MakeNetLongReach(elem);
+            presentation = SlashPresentation::Projectile;
+            power = SlashPowerLevel::Signature;
+            break;
+
+        case DL_SLASH_TWIN_CLEAVE:
+            hit = MakeNetSideCleave(elem);
+            presentation = SlashPresentation::TwinCleave;
+            power = SlashPowerLevel::Signature;
+            break;
+
+        case DL_SLASH_CROSS_SIGIL:
+            hit = MakeNetHeavySlam(elem);
+            presentation = SlashPresentation::CrossSigil;
+            power = SlashPowerLevel::Ultimate;
+            break;
+
+        case DL_SLASH_FINAL_JUDGMENT:
+            hit = MakeNetHeavySlam(elem);
+            presentation = SlashPresentation::FinalJudgment;
+            power = SlashPowerLevel::Ultimate;
+            break;
+
+        case DL_SLASH_ULT_MASSIVE:
+            hit = MakeNetHeavySlam(elem);
+            presentation = SlashPresentation::Massive;
+            power = SlashPowerLevel::Ultimate;
+            break;
+
+        case DL_SLASH_SIDE_STANDARD:
+        default:
+            hit = MakeNetSideCleave(elem);
+            presentation = SlashPresentation::Standard;
+            power = SlashPowerLevel::Medium;
+            break;
+        }
+
+        SlashVFXDesc desc = SlashVFXDesc::Preset(elem, power);
+        desc.ApplyPresentation(presentation);
+
+        if (style == DL_SLASH_BARRAGE)
+        {
+            desc.projectileBurstCount = 6;
+            desc.projectileBurstInterval = 0.13f;
+            desc.projectileBurstSpreadDeg = 14.0f;
+        }
+
+        if (style == DL_SLASH_TWIN_CLEAVE)
+        {
+            desc.twinSeparationDeg = 30.0f;
+        }
+
+        return std::make_unique<DarkLordSigilSlash>(
+            desc,
+            std::vector<ComboAttackBehavior::ComboHit>{ hit }
+        );
+    }
+
+    static std::unique_ptr<IAttackBehavior> MakeNetworkDarkLordSigilField(
+        uint32 effectOption,
+        const std::vector<DirectX::XMFLOAT3>& effectPositions)
+    {
+        ElementType elem = DecodeDarkLordElement(effectOption);
+
+        const bool isFinalStyle = (effectPositions.size() >= 4);
+
+        float radius = isFinalStyle ? 9.5f : 9.0f;
+        float delay = isFinalStyle ? 1.20f : 1.30f;
+        int count = effectPositions.empty()
+            ? (isFinalStyle ? 4 : 3)
+            : static_cast<int>(effectPositions.size());
+        float spread = isFinalStyle ? 23.0f : 18.0f;
+
+        auto pField = std::make_unique<DarkLordSigilField>(
+            elem,
+            0.0f,      // 실제 데미지는 서버가 처리
+            radius,
+            delay,
+            count,
+            spread,
+            0.8f
+        );
+
+        pField->SetNetworkVisualOnly(true);
+        pField->SetNetworkEffectPositions(effectPositions);
+
+        return pField;
+    }
+
+    static std::unique_ptr<IAttackBehavior> MakeNetworkDarkLordSwordRain(
+        uint32 effectOption,
+        const std::vector<DirectX::XMFLOAT3>& effectPositions)
+    {
+        ElementType elem = DecodeDarkLordElement(effectOption);
+
+        const bool isFinalStyle = (effectPositions.size() >= 10);
+
+        int swordCount = effectPositions.empty()
+            ? (isFinalStyle ? 10 : 7)
+            : static_cast<int>(effectPositions.size());
+
+        float damage = 0.0f; // 실제 데미지는 서버가 처리
+        float radius = isFinalStyle ? 9.0f : 8.5f;
+        float minRadius = isFinalStyle ? 8.0f : 9.0f;
+        float maxRadius = isFinalStyle ? 48.0f : 42.0f;
+        float windup = isFinalStyle ? 1.5f : 1.7f;
+        float recovery = isFinalStyle ? 1.4f : 1.5f;
+
+        auto pRain = std::make_unique<DarkLordSwordRain>(
+            elem,
+            swordCount,
+            damage,
+            radius,
+            minRadius,
+            maxRadius,
+            windup,
+            recovery
+        );
+
+        pRain->SetNetworkVisualOnly(true);
+        pRain->SetNetworkEffectPositions(effectPositions);
+
+        return pRain;
+    }
+
+    static std::unique_ptr<IAttackBehavior> MakeNetworkDarkLordSwordSeal(uint32 effectOption)
+    {
+        ElementType elem = DecodeDarkLordElement(effectOption);
+        uint32 style = DecodeDarkLordStyle(effectOption);
+
+        const bool isFinalStyle = (style >= 1);
+
+        // 클라 로컬 DarkLordSwordSeal 수치 그대로.
+        // P3:
+        //   Fire, damage=45, duration=7, orbitR=26, orbitSpeed=65, hitR=4, scale=21, count=4
+        // Final:
+        //   random element, damage=50, duration=6, orbitR=26, orbitSpeed=80, hitR=4, scale=21, count=4
+        float damage = isFinalStyle ? 50.0f : 45.0f;
+        float duration = isFinalStyle ? 6.0f : 7.0f;
+        float orbitRadius = 26.0f;
+        float orbitSpeed = isFinalStyle ? 80.0f : 65.0f;
+        float hitRadius = 4.0f;
+        float swordVisualScale = 21.0f;
+        int swordCount = 4;
+
+        auto pSeal = std::make_unique<DarkLordSwordSeal>(
+            elem,
+            damage,
+            duration,
+            orbitRadius,
+            orbitSpeed,
+            hitRadius,
+            swordVisualScale,
+            swordCount
+        );
+
+        pSeal->SetNetworkVisualOnly(true);
+        return pSeal;
     }
 }
 
@@ -1459,9 +1831,13 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
         {
             XMFLOAT3 groundPos = pLocalT->GetPosition();
 
-            // 1스테이지 보스방은 시작 단상이 없으므로 착지 기준 Y를 평지로 고정한다.
-            if (isBossRoom && stageIndex == 1)
+            // 보스방은 일반방처럼 착지 발판이 없으므로,
+            // 포탈 인트로의 착지 기준 Y를 항상 0으로 고정한다.
+            // 낙하 연출 높이를 없애는 게 아니라, 최종 착지 기준점만 평지로 맞춘다.
+            if (isBossRoom)
+            {
                 groundPos.y = 0.0f;
+            }
 
             // 원격 플레이어 좌표 리셋
             // 이전 방 좌표가 그대로 남으면 새 맵에서 맵 밖/이상한 위치로 보일 수 있으므로
@@ -1927,6 +2303,12 @@ void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
     // 맵에 등록
     m_mapRemotePlayers[playerId] = pRemotePlayer;
     m_mapRemotePlayerElement[playerId] = remoteElement;
+
+    // DarkLord 컷신 중 늦게 들어온 원격 플레이어도 즉시 숨긴다.
+    if (pScene && pScene->IsDarkLordIntroPlaying())
+    {
+        SetRenderTreeVisibleNet(pRemotePlayer, false);
+    }
 
     // 원격 플레이어가 방금 점유한 descriptor slot 들을 "영구" 범위로 편입.
     // 이 후 방 전환 시 m_nNextDescriptorIndex 가 m_nPersistentDescriptorEnd 로 리셋되지만,
@@ -5230,7 +5612,7 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
 //   매핑 누락 시 nullptr → preset 기본 attack 클립으로 폴백.
 static const char* GetMonsterAttackClipForType(uint32 monsterType, uint32 attackType)
 {
-    // monsterType: 6 Dragon, 7 Kraken, 8 Golem, 9 Demon, 10 BlueDragon
+    // monsterType: 6 Dragon, 7 Kraken, 8 Golem, 9 Demon, 10 BlueDragon, 11 DarkLord
     switch (monsterType)
     {
     case 6:  // Dragon (Red) — 보유 클립 한정 (Flame Attack / Tail Attack / Walk / Idle01 / Get Hit / Die / Scream)
@@ -5301,6 +5683,20 @@ static const char* GetMonsterAttackClipForType(uint32 monsterType, uint32 attack
         case 7:  return "Tail Attack";    // JumpSlam 대체
         case 15: return "Tail Attack";    // HeavyCombo
         default: return "Fireball Shoot";
+        }
+    case 11: // DarkLord
+        switch (attackType)
+        {
+        case 40:
+            return "attack2"; // DarkLordSigilSlash
+        case 41:
+            return "attack9"; // DarkLordSigilField
+        case 42:
+            return "attack9"; // DarkLordSwordRain
+        case 43:
+            return "attack9"; // DarkLordSwordSeal
+        default:
+            return "attack2";
         }
     default:
         return nullptr;  // 일반 몹 → preset 기본
@@ -5596,6 +5992,101 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             p.shakeDuration  = duration;
             m_vPendingMonsterVFX.push_back(p);
         };
+
+        // DarkLord 최종보스 패턴 라우팅.
+ // 서버는 attackType/effectOption/effectPositions만 보내고,
+ // 클라는 기존 DarkLord Behavior 연출만 재생한다.
+ // 실제 데미지는 서버 권위.
+        if (mt == 11)
+        {
+            EnemyComponent* pEC = pMonster->GetComponent<EnemyComponent>();
+
+            if (!pEC)
+            {
+                WriteNetworkLog("[Network] DarkLord attack failed: EnemyComponent missing");
+                return;
+            }
+
+            std::unique_ptr<IAttackBehavior> pBehavior;
+
+            if (attackType == 40) // DarkLordSigilSlash
+            {
+                pBehavior = MakeNetworkDarkLordSigilSlash(effectOption);
+
+                char buf[256];
+                uint32 style = DecodeDarkLordStyle(effectOption);
+                uint32 elemCode = effectOption % 10;
+
+                sprintf_s(buf,
+                    "[Network] DarkLordSigilSlash received monsterId=%llu effectOption=%u elem=%u style=%u",
+                    monsterId,
+                    effectOption,
+                    elemCode,
+                    style);
+                WriteNetworkLog(buf);
+            }
+            else if (attackType == 41) // DarkLordSigilField
+            {
+                pBehavior = MakeNetworkDarkLordSigilField(effectOption, effectPositions);
+
+                char buf[256];
+                sprintf_s(buf,
+                    "[Network] DarkLordSigilField received monsterId=%llu effectOption=%u count=%zu",
+                    monsterId,
+                    effectOption,
+                    effectPositions.size());
+                WriteNetworkLog(buf);
+            }
+            else if (attackType == 42) // DarkLordSwordRain
+            {
+                pBehavior = MakeNetworkDarkLordSwordRain(effectOption, effectPositions);
+
+                char buf[256];
+                sprintf_s(buf,
+                    "[Network] DarkLordSwordRain received monsterId=%llu effectOption=%u count=%zu",
+                    monsterId,
+                    effectOption,
+                    effectPositions.size());
+                WriteNetworkLog(buf);
+            }
+            else if (attackType == 43) // DarkLordSwordSeal
+            {
+                pBehavior = MakeNetworkDarkLordSwordSeal(effectOption);
+
+                uint32 style = DecodeDarkLordStyle(effectOption);
+                uint32 elemCode = effectOption % 10;
+                bool isFinalStyle = (style >= 1);
+
+                char buf[256];
+                sprintf_s(buf,
+                    "[Network] DarkLordSwordSeal received monsterId=%llu effectOption=%u elem=%u style=%u final=%d",
+                    monsterId,
+                    effectOption,
+                    elemCode,
+                    style,
+                    isFinalStyle ? 1 : 0);
+                WriteNetworkLog(buf);
+            }
+            else
+            {
+                char buf[256];
+                sprintf_s(buf,
+                    "[Network] DarkLord unknown attackType=%u monsterId=%llu",
+                    attackType,
+                    monsterId);
+                WriteNetworkLog(buf);
+                return;
+            }
+
+            if (!pBehavior)
+                return;
+
+            // DarkLord는 EnemyComponent::UpdateAttack()이 직접 업데이트한다.
+            // m_bAIPaused 상태여도 Attack 상태일 때는 Update가 허용되도록 EnemyComponent.cpp에서 처리.
+            pEC->DebugForceSpecialAttack(std::move(pBehavior));
+
+            return;
+        }
 
         // 일반 몬스터 공격 라우팅
         // 서버 권위 일반 몬스터는 attackType 기준으로 클라 Behavior 연출만 실행한다.
@@ -6295,6 +6786,20 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
     auto clipIt = m_mapServerMonsterClips.find(monsterId);
     uint32 mt = (clipIt != m_mapServerMonsterClips.end()) ? clipIt->second.monsterType : 0;
     const char* roarClip = GetBossRoarClip(mt);
+
+    // DarkLord 사망은 바로 Ending UI로 넘기지 않고 Scene 사망 연출을 먼저 실행한다.
+    if (mt == 11 && eventType == 3)
+    {
+        pScene->StartNetworkDarkLordDeath(pBoss, monsterId);
+
+        char buf[160];
+        sprintf_s(buf,
+            "[Network] DarkLord death event received - death sequence start monsterId=%llu",
+            monsterId);
+        WriteNetworkLog(buf);
+
+        return;
+    }
 
     // DarkLord 인트로는 Scene에 구현된 전용 컷신을 사용한다.
     // RedDragon 공통 BossIntroState를 타면 안 된다.
@@ -7103,6 +7608,17 @@ void NetworkManager::ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float
     GameObject* pMonster = it->second;
     if (!pMonster) return;
 
+    auto clipIt = m_mapServerMonsterClips.find(monsterId);
+    uint32 mt = (clipIt != m_mapServerMonsterClips.end())
+        ? clipIt->second.monsterType
+        : 0;
+
+    // 혹시 BossEvent Death보다 S_MONSTER_DAMAGE isDead가 먼저 온 경우도 처리
+    if (mt == 11 && isDead)
+    {
+        pScene->StartNetworkDarkLordDeath(pMonster, monsterId);
+    }
+
     // 데미지 넘버 — 몬스터 머리 위
     if (damage > 0.0f && pMonster->GetTransform())
     {
@@ -7117,9 +7633,6 @@ void NetworkManager::ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float
 
     // ── 몬스터 피격 / 수비 / 사망 애니메이션 동기화 ──
     // 서버 S_MONSTER_DAMAGE 기준으로 모든 클라에서 같은 반응을 재생한다.
-    auto clipIt = m_mapServerMonsterClips.find(monsterId);
-    uint32 mt = (clipIt != m_mapServerMonsterClips.end()) ? clipIt->second.monsterType : 0;
-
     AnimationComponent* pAnim = pMonster->GetComponent<AnimationComponent>();
 
     if (isDead)
@@ -7240,22 +7753,6 @@ void NetworkManager::ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float
         {
             pProj->SpawnExplosionParticles(pMonster->GetTransform()->GetPosition(), attackerElement);
         }
-    }
-
-    if (isDead)
-    {
-        // 사망 애니 재생 (preset deathClip) — 이후 MonsterMove/Attack 전환 skip
-        auto* pAnim = pMonster->GetComponent<AnimationComponent>();
-        auto clipIt = m_mapServerMonsterClips.find(monsterId);
-        if (pAnim && clipIt != m_mapServerMonsterClips.end() && !clipIt->second.death.empty())
-        {
-            pAnim->CrossFade(clipIt->second.death.c_str(), 0.15f, false, true);
-            m_mapServerMonsterCurrentAnimClip[monsterId] = clipIt->second.death;
-        }
-
-        m_setDeadServerMonsters.insert(monsterId);
-        m_mapServerMonsterMoveTime.erase(monsterId);
-        m_mapServerMonsterAttackTimer.erase(monsterId);
     }
 
     char buf[192];
@@ -9127,6 +9624,18 @@ void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType
 
 void NetworkManager::ProcessMonsterDespawn(Scene* pScene, uint64 monsterId)
 {
+    // DarkLord 사망 연출 중에는 서버 despawn 패킷이 와도 바로 지우지 않는다.
+    // 바로 지우면 사망 애니메이션을 보여줄 오브젝트가 사라진다.
+    if (pScene && pScene->IsNetworkDarkLordDeathTarget(monsterId))
+    {
+        char buf[160];
+        sprintf_s(buf,
+            "[Network] DarkLord despawn deferred during death sequence monsterId=%llu",
+            monsterId);
+        WriteNetworkLog(buf);
+        return;
+    }
+
     auto it = m_mapServerMonsters.find(monsterId);
     if (it == m_mapServerMonsters.end())
         return;

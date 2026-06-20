@@ -45,6 +45,8 @@ public:
     // 조기 종료
     void Stop(int slot);
 
+    void ClearAll();
+
     void Update(float dt);
     void Render(DirectX::SpriteBatch* pBatch,
                 const DirectX::XMFLOAT4X4& viewProj,

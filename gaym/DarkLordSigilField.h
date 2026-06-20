@@ -42,6 +42,16 @@ public:
     virtual bool  ShouldLoopAnim() const override { return false; }
     virtual int   GetIndicatorTypeOverride() const override { return 0; /* None */ }
 
+    // 네트워크 연출 전용 모드:
+    // 서버가 데미지를 처리하므로 클라 로컬 TakeDamage를 막는다.
+    void SetNetworkVisualOnly(bool bEnable) { m_bNetworkVisualOnly = bEnable; }
+
+    // 서버가 정한 인장 위치를 그대로 사용한다.
+    void SetNetworkEffectPositions(const std::vector<DirectX::XMFLOAT3>& positions)
+    {
+        m_vNetworkEffectPositions = positions;
+    }
+
 private:
     struct SigilInstance
     {
@@ -71,4 +81,7 @@ private:
     std::vector<SigilInstance> m_vSigils;
     class Scene* m_pScene = nullptr;
     class CRoom* m_pRoom  = nullptr;
+
+    bool m_bNetworkVisualOnly = false;
+    std::vector<DirectX::XMFLOAT3> m_vNetworkEffectPositions;
 };

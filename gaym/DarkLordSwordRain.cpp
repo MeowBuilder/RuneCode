@@ -68,12 +68,37 @@ DarkLordSwordRain::DarkLordSwordRain(ElementType element,
 
 void DarkLordSwordRain::Execute(EnemyComponent* pEnemy)
 {
+    OutputDebugStringA("[CLIENT][SwordRain::Execute] ENTER\n");
+
     Reset();
-    if (!pEnemy) return;
+
+    if (!pEnemy)
+    {
+        OutputDebugStringA("[CLIENT][SwordRain::Execute] FAIL pEnemy null\n");
+        return;
+    }
+
     m_pRoom = pEnemy->GetRoom();
-    if (!m_pRoom) return;
+    if (!m_pRoom)
+    {
+        OutputDebugStringA("[CLIENT][SwordRain::Execute] FAIL room null\n");
+        return;
+    }
+
     m_pScene = m_pRoom->GetScene();
-    if (!m_pScene) return;
+    if (!m_pScene)
+    {
+        OutputDebugStringA("[CLIENT][SwordRain::Execute] FAIL scene null\n");
+        return;
+    }
+
+    char buf[256];
+    sprintf_s(buf,
+        "[CLIENT][SwordRain::Execute] netPos=%zu swordCount=%d visualOnly=%d\n",
+        m_vNetworkEffectPositions.size(),
+        m_nSwordCount,
+        m_bNetworkVisualOnly ? 1 : 0);
+    OutputDebugStringA(buf);
 
     GameObject* pOwner = pEnemy->GetOwner();
     if (!pOwner) return;
@@ -85,21 +110,39 @@ void DarkLordSwordRain::Execute(EnemyComponent* pEnemy)
             anchorPos = pTT->GetPosition();
 
     m_vDrops.clear();
-    m_vDrops.reserve(m_nSwordCount);
 
-    float radiusRange = m_fSpawnMaxRadius - m_fSpawnMinRadius;
-    for (int i = 0; i < m_nSwordCount; ++i)
+    // 네트워크 모드에서는 서버가 보낸 낙하 위치를 그대로 사용한다.
+    if (!m_vNetworkEffectPositions.empty())
     {
-        float angle = ((float)rand() / RAND_MAX) * XM_2PI;
-        float t = (float)rand() / RAND_MAX;
-        float r = m_fSpawnMinRadius + sqrtf(t) * radiusRange;
+        m_vDrops.reserve(m_vNetworkEffectPositions.size());
 
-        Drop d;
-        // Anchor 가 플레이어이므로 비가 플레이어 주변에 더 집중됨.
-        d.center.x = anchorPos.x + cosf(angle) * r;
-        d.center.y = 0.0f;
-        d.center.z = anchorPos.z + sinf(angle) * r;
-        m_vDrops.push_back(d);
+        for (const XMFLOAT3& p : m_vNetworkEffectPositions)
+        {
+            Drop d{};
+            d.center.x = p.x;
+            d.center.y = 0.0f;
+            d.center.z = p.z;
+            m_vDrops.push_back(d);
+        }
+    }
+    else
+    {
+        // 오프라인 기존 로직 유지
+        m_vDrops.reserve(m_nSwordCount);
+
+        float radiusRange = m_fSpawnMaxRadius - m_fSpawnMinRadius;
+        for (int i = 0; i < m_nSwordCount; ++i)
+        {
+            float angle = ((float)rand() / RAND_MAX) * XM_2PI;
+            float t = (float)rand() / RAND_MAX;
+            float r = m_fSpawnMinRadius + sqrtf(t) * radiusRange;
+
+            Drop d{};
+            d.center.x = anchorPos.x + cosf(angle) * r;
+            d.center.y = 0.0f;
+            d.center.z = anchorPos.z + sinf(angle) * r;
+            m_vDrops.push_back(d);
+        }
     }
 
     SpawnIndicators();
@@ -109,14 +152,38 @@ void DarkLordSwordRain::Execute(EnemyComponent* pEnemy)
 
 void DarkLordSwordRain::SpawnIndicators()
 {
-    if (!m_pScene || !m_pRoom) return;
+    OutputDebugStringA("[CLIENT][SwordRain::SpawnIndicators] ENTER\n");
+
+    if (!m_pScene || !m_pRoom)
+    {
+        OutputDebugStringA("[CLIENT][SwordRain::SpawnIndicators] FAIL scene/room null\n");
+        return;
+    }
 
     Dx12App* pApp = Dx12App::GetInstance();
-    if (!pApp) return;
+    if (!pApp)
+    {
+        OutputDebugStringA("[CLIENT][SwordRain::SpawnIndicators] FAIL app null\n");
+        return;
+    }
+
     ID3D12Device* pDevice = pApp->GetDevice();
     ID3D12GraphicsCommandList* pCmd = pApp->GetCommandList();
     Shader* pShader = m_pScene->GetDefaultShader();
-    if (!pDevice || !pCmd || !pShader) return;
+
+    if (!pDevice || !pCmd || !pShader)
+    {
+        OutputDebugStringA("[CLIENT][SwordRain::SpawnIndicators] FAIL device/cmd/shader null\n");
+        return;
+    }
+
+    char buf[256];
+    sprintf_s(buf,
+        "[CLIENT][SwordRain::SpawnIndicators] drops=%zu radius=%.2f windup=%.2f\n",
+        m_vDrops.size(),
+        m_fAoeRadius,
+        m_fWindup);
+    OutputDebugStringA(buf);
 
     RingMesh* pRing = GetOrCreateRainRing(pDevice, pCmd);
     RingMesh* pDisc = GetOrCreateRainDisc(pDevice, pCmd);
@@ -184,6 +251,22 @@ void DarkLordSwordRain::SpawnIndicators()
 
 void DarkLordSwordRain::Update(float dt, EnemyComponent* pEnemy)
 {
+    static float s_logAccum = 0.0f;
+    s_logAccum += dt;
+    if (s_logAccum >= 0.5f)
+    {
+        s_logAccum = 0.0f;
+
+        char buf[256];
+        sprintf_s(buf,
+            "[CLIENT][SwordRain::Update] phase=%d timer=%.2f drops=%zu finished=%d\n",
+            static_cast<int>(m_ePhase),
+            m_fTimer,
+            m_vDrops.size(),
+            m_bFinished ? 1 : 0);
+        OutputDebugStringA(buf);
+    }
+
     if (m_bFinished || !pEnemy) return;
     m_fTimer += dt;
 
@@ -221,6 +304,13 @@ void DarkLordSwordRain::Update(float dt, EnemyComponent* pEnemy)
 
 void DarkLordSwordRain::DetonateAll()
 {
+    char buf[256];
+    sprintf_s(buf,
+        "[CLIENT][SwordRain::DetonateAll] drops=%zu visualOnly=%d\n",
+        m_vDrops.size(),
+        m_bNetworkVisualOnly ? 1 : 0);
+    OutputDebugStringA(buf);
+
     if (!m_pScene) return;
 
     // ── 임팩트 강화 (Day 6 +) ─────────────────────────────────────────
@@ -264,6 +354,11 @@ void DarkLordSwordRain::DetonateAll()
         if (d.pRing) { m_pScene->MarkForDeletion(d.pRing); d.pRing = nullptr; }
         if (d.pFill) { m_pScene->MarkForDeletion(d.pFill); d.pFill = nullptr; }
     }
+
+    // 네트워크 모드에서는 데미지는 서버가 처리한다.
+    // 클라는 경고 원/검 낙하/폭발 VFX만 재생한다.
+    if (m_bNetworkVisualOnly)
+        return;
 
     auto vPlayers = m_pScene->GetAllPlayers();
     for (GameObject* pPO : vPlayers)

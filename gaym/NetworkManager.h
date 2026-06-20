@@ -362,6 +362,7 @@ public:
 
     // 원격 플레이어 조회
     GameObject* GetRemotePlayer(uint64 playerId);
+    const std::unordered_map<uint64, GameObject*>& GetRemotePlayers() const { return m_mapRemotePlayers; }
 
 private:
     static NetworkManager* s_pInstance;

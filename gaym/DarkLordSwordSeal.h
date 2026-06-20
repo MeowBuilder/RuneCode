@@ -31,6 +31,7 @@ public:
     virtual void Execute(EnemyComponent* pEnemy) override;
     virtual void Update(float dt, EnemyComponent* pEnemy) override;
     virtual bool IsFinished() const override { return m_bFinished; }
+    virtual void SetNetworkVisualOnly(bool bEnable) { m_bNetworkVisualOnly = bEnable; }
     virtual void Reset() override;
 
     virtual const char* GetAnimClipName() const override { return "attack9"; }
@@ -74,6 +75,7 @@ private:
 
     bool m_bFinished       = false;
     bool m_bInvincibleSet  = false;   // SetInvincible(true) 호출 여부 추적
+    bool m_bNetworkVisualOnly = false;
 
     std::vector<SealSword> m_vSwords;
 

@@ -54,13 +54,28 @@ void BloomPostProcess::OnResize(ID3D12Device* pDevice, UINT width, UINT height)
 void BloomPostProcess::CreateRootSignature(ID3D12Device* pDevice)
 {
     CD3DX12_DESCRIPTOR_RANGE1 srvRange;
-    srvRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0,
-                  D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+    srvRange.Init(
+        D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+        1,
+        0,
+        0,
+        D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE |
+        D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE
+    );
 
     CD3DX12_ROOT_PARAMETER1 params[2];
-    params[0].InitAsConstantBufferView(0, 0, D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE,
-                                       D3D12_SHADER_VISIBILITY_PIXEL);
-    params[1].InitAsDescriptorTable(1, &srvRange, D3D12_SHADER_VISIBILITY_PIXEL);
+    params[0].InitAsConstantBufferView(
+        0,
+        0,
+        D3D12_ROOT_DESCRIPTOR_FLAG_DATA_VOLATILE,
+        D3D12_SHADER_VISIBILITY_PIXEL
+    );
+
+    params[1].InitAsDescriptorTable(
+        1,
+        &srvRange,
+        D3D12_SHADER_VISIBILITY_PIXEL
+    );
 
     CD3DX12_STATIC_SAMPLER_DESC sampler(
         0,

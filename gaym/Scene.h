@@ -207,6 +207,19 @@ public:
     void TransitionToGrassBossRoom();   // 풀 보스전 (Demon)
     void TransitionToDarkLordRoom(bool bStartIntro = true);    // 최종 보스전
     void StartNetworkDarkLordIntro(GameObject* pDarkLordObj, uint64 monsterId);
+    void StartNetworkDarkLordDeath(GameObject* pDarkLordObj, uint64 monsterId);
+    void UpdateDarkLordDeath(float dt);
+
+    bool IsDarkLordDeathSequencePlaying() const
+    {
+        return m_eDarkLordDeathStage != DarkLordDeathStage::None;
+    }
+
+    bool IsNetworkDarkLordDeathTarget(uint64 monsterId) const
+    {
+        return m_eDarkLordDeathStage != DarkLordDeathStage::None &&
+            m_nNetworkDarkLordDeathMonsterId == monsterId;
+    }
     bool IsNetworkDarkLordCutsceneTarget(uint64 monsterId) const
     {
         return m_bDarkLordIntroNetworkMode &&
@@ -554,6 +567,21 @@ private:
     };
     DarkLordIntroStage m_eDarkLordIntroStage = DarkLordIntroStage::None;
     float    m_fDarkLordIntroTimer = 0.0f;
+
+    // ── DarkLord 사망 연출 ────────────────────────────────────────────────────
+    // DeathAnim: 보스 사망 애니메이션/카메라 홀드
+    // EndDelay : 엔딩 UI로 넘어가기 직전 짧은 대기
+    enum class DarkLordDeathStage
+    {
+        None,
+        DeathAnim,
+        EndDelay
+    };
+
+    DarkLordDeathStage m_eDarkLordDeathStage = DarkLordDeathStage::None;
+    float m_fDarkLordDeathTimer = 0.0f;
+    uint64 m_nNetworkDarkLordDeathMonsterId = 0;
+    GameObject* m_pDarkLordDeathObject = nullptr;
 
     // 네트워크 DarkLord 인트로 컷신 상태
     bool   m_bDarkLordIntroNetworkMode = false;

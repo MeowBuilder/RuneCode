@@ -52,6 +52,15 @@ void VFXSpriteManager::Stop(int slot)
     m_pool[slot].active = false;
 }
 
+void VFXSpriteManager::ClearAll()
+{
+    for (auto& e : m_pool)
+    {
+        e.active = false;
+        e.lifeRemain = 0.0f;
+    }
+}
+
 void VFXSpriteManager::Update(float dt)
 {
     for (auto& e : m_pool)

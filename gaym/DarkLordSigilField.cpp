@@ -81,31 +81,48 @@ void DarkLordSigilField::Execute(EnemyComponent* pEnemy)
 
     XMFLOAT3 bossPos = pOwner->GetTransform()->GetPosition();
 
-    // 첫 인장은 항상 target 발치 (count==1 이면 이게 끝).
-    XMFLOAT3 targetPos = bossPos;
-    if (GameObject* pTarget = pEnemy->GetTarget())
-        if (auto* pTT = pTarget->GetTransform())
-            targetPos = pTT->GetPosition();
-
     m_vSigils.clear();
-    m_vSigils.reserve(m_nSigilCount);
 
+    // 네트워크 모드에서는 서버가 보낸 인장 위치를 그대로 사용한다.
+    if (!m_vNetworkEffectPositions.empty())
     {
-        SigilInstance s;
-        s.center = { targetPos.x, 0.0f, targetPos.z };
-        m_vSigils.push_back(s);
+        m_vSigils.reserve(m_vNetworkEffectPositions.size());
+
+        for (const XMFLOAT3& p : m_vNetworkEffectPositions)
+        {
+            SigilInstance s;
+            s.center = { p.x, 0.0f, p.z };
+            m_vSigils.push_back(s);
+        }
     }
-
-    // 추가 인장은 보스 주변 spreadRadius 반경 균등 배치.
-    for (int i = 1; i < m_nSigilCount; ++i)
+    else
     {
-        float t = static_cast<float>(i - 1) / static_cast<float>(m_nSigilCount - 1);
-        float angle = t * XM_2PI;
-        SigilInstance s;
-        s.center = { bossPos.x + cosf(angle) * m_fSpreadRadius,
-                     0.0f,
-                     bossPos.z + sinf(angle) * m_fSpreadRadius };
-        m_vSigils.push_back(s);
+        // 오프라인 기존 로직 유지:
+        // 첫 인장은 항상 target 발치, 추가 인장은 보스 주변 spreadRadius 반경 균등 배치.
+        XMFLOAT3 targetPos = bossPos;
+        if (GameObject* pTarget = pEnemy->GetTarget())
+            if (auto* pTT = pTarget->GetTransform())
+                targetPos = pTT->GetPosition();
+
+        m_vSigils.reserve(m_nSigilCount);
+
+        {
+            SigilInstance s;
+            s.center = { targetPos.x, 0.0f, targetPos.z };
+            m_vSigils.push_back(s);
+        }
+
+        for (int i = 1; i < m_nSigilCount; ++i)
+        {
+            float t = static_cast<float>(i - 1) / static_cast<float>(m_nSigilCount - 1);
+            float angle = t * XM_2PI;
+
+            SigilInstance s;
+            s.center = { bossPos.x + cosf(angle) * m_fSpreadRadius,
+                         0.0f,
+                         bossPos.z + sinf(angle) * m_fSpreadRadius };
+            m_vSigils.push_back(s);
+        }
     }
 
     SpawnSigilVisuals(pEnemy);
@@ -280,6 +297,11 @@ void DarkLordSigilField::DetonateAll(EnemyComponent* /*pEnemy*/)
         if (sig.pRing) { m_pScene->MarkForDeletion(sig.pRing); sig.pRing = nullptr; }
         if (sig.pFill) { m_pScene->MarkForDeletion(sig.pFill); sig.pFill = nullptr; }
     }
+
+    // 네트워크 모드에서는 데미지는 서버가 처리한다.
+    // 클라는 인장/폭발 VFX만 재생한다.
+    if (m_bNetworkVisualOnly)
+        return;
 
     // AoE 데미지 — 모든 플레이어에 대해 거리 체크 (중복 hit 방지).
     auto vPlayers = m_pScene->GetAllPlayers();

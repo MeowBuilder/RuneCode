@@ -2284,9 +2284,11 @@ void Dx12App::RenderText()
 
     m_spriteBatch->Begin(m_pd3dCommandList.Get());
 
-    // 입장 컷씬 중에는 HUD / HP / 스킬 / 디버그 일체 숨김 — 화면 베기 연출에 집중.
-    //   슬래시 오버레이와 pause 메뉴는 컷씬 중에도 그려야 하므로 마지막 단계에서 별도 처리.
-    bool bCinematic = m_pScene && m_pScene->IsDarkLordIntroPlaying();
+    // DarkLord 입장/사망 연출 중에는 HUD / HP / 스킬 / 디버그 일체 숨김.
+    bool bCinematic =
+        m_pScene &&
+        (m_pScene->IsDarkLordIntroPlaying() ||
+            m_pScene->IsDarkLordDeathSequencePlaying());
 
     // ========== Player Health Bar ==========
     if (!bCinematic && m_pScene && m_pHealthBarUI)
