@@ -1209,6 +1209,9 @@ void NetworkManager::SendSkill(int skillType, float x, float y, float z, float d
 
     auto sendBuffer = ServerPacketHandler::MakeSendBuffer(skillPkt);
     m_pSession->Send(sendBuffer);
+
+    // 결산: 로컬 플레이어 스킬 사용 카운트
+    StatOnSkillUse(m_nLocalPlayerId.load(), skillType);
 }
 
 void NetworkManager::SendPlayerAction(uint32 actionType,
@@ -2885,6 +2888,10 @@ void NetworkManager::CheckRemotePlayerVFXTimeout(Scene* pScene, float deltaTime)
 void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ,
                                   int32 serverSkillSlot, float serverRadiusMult, float serverDamageMult)
 {
+    // 결산: 원격 플레이어 스킬 사용 카운트 (로컬은 SendSkill 측에서 처리)
+    if (playerId != m_nLocalPlayerId.load())
+        StatOnSkillUse(playerId, skillType);
+
     // 로컬 플레이어라면 무시 (로컬은 자체 처리)
     if (playerId == m_nLocalPlayerId.load())
         return;
@@ -6681,6 +6688,10 @@ void NetworkManager::ProcessPlayerDamage(Scene* pScene, uint64 playerId, float d
 {
     if (!pScene) return;
 
+    // 결산: 받은 데미지 + 사망 카운트 (몬스터 데미지만, 환경 데미지 attackerMonsterId==0 제외)
+    if (attackerMonsterId != 0)
+        StatOnPlayerDamage(playerId, damage, isDead);
+
     uint64 localId = GetLocalPlayerId();
     bool bIsLocal = (playerId == localId);
 
@@ -7813,6 +7824,10 @@ void NetworkManager::ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float
                                           uint64 attackerPlayerId, int skillType)
 {
     if (!pScene) return;
+
+    // 결산: 가한 데미지 + 막타 (attackerPlayerId 가 있을 때만)
+    if (attackerPlayerId != 0)
+        StatOnMonsterDamage(attackerPlayerId, damage, isDead);
 
     auto it = m_mapServerMonsters.find(monsterId);
     if (it == m_mapServerMonsters.end())
@@ -9730,6 +9745,11 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
     }
 }
 
+ElementType NetworkManager::GetPlayerElementPublic(uint64 playerId) const
+{
+    return GetPlayerElement(playerId);
+}
+
 ElementType NetworkManager::GetPlayerElement(uint64 playerId) const
 {
     if (playerId == m_nLocalPlayerId.load())
@@ -10969,4 +10989,96 @@ void NetworkManager::InterpolateServerMonsters(float deltaTime)
     }
 }
 
+// ─── 결산 통계 누적 헬퍼 ─────────────────────────────────────────────
+//   ProcessPlayerDamage / ProcessMonsterDamage / ProcessSkill 에서 호출.
+//   DarkLord 처치 후 SummaryStatsScreen 이 GetGameClearStats() 로 조회.
+
+static double s_NowSec()
+{
+    return static_cast<double>(GetTickCount64()) / 1000.0;
+}
+
+static NetworkManager::GameClearStat& EnsureStat(
+    std::unordered_map<uint64, NetworkManager::GameClearStat>& m, uint64 playerId)
+{
+    auto it = m.find(playerId);
+    if (it == m.end())
+    {
+        NetworkManager::GameClearStat fresh;
+        fresh.playerId     = playerId;
+        fresh.runStartTime = s_NowSec();
+        it = m.emplace(playerId, fresh).first;
+    }
+    return it->second;
+}
+
+void NetworkManager::StatOnPlayerDamage(uint64 victimPlayerId, float damage, bool isDead)
+{
+    if (m_bGameClearStatsFrozen) return;
+    if (victimPlayerId == 0) return;
+
+    GameClearStat& s = EnsureStat(m_mapGameClearStats, victimPlayerId);
+    if (damage > 0.0f)
+        s.totalDamageTaken += damage;
+    if (isDead)
+    {
+        s.deathCount++;
+        s.survivalTime = static_cast<float>(s_NowSec() - s.runStartTime);
+    }
+}
+
+void NetworkManager::StatOnMonsterDamage(uint64 attackerPlayerId, float damage, bool isDead)
+{
+    if (m_bGameClearStatsFrozen) return;
+    if (attackerPlayerId == 0) return;
+
+    GameClearStat& s = EnsureStat(m_mapGameClearStats, attackerPlayerId);
+    if (damage > 0.0f)
+    {
+        s.totalDamageDealt += damage;
+        s.hitsLanded++;
+        if (damage > s.maxSingleHit)
+            s.maxSingleHit = damage;
+    }
+    if (isDead)
+        s.monstersKilled++;
+}
+
+void NetworkManager::StatOnSkillUse(uint64 casterPlayerId, int32 skillType)
+{
+    if (m_bGameClearStatsFrozen) return;
+    if (casterPlayerId == 0) return;
+
+    int slot = -1;
+    switch (skillType)
+    {
+    case 1: slot = 0; break; // Q
+    case 2: slot = 1; break; // E
+    case 3: slot = 2; break; // R
+    case 4: slot = 3; break; // MOUSE_RIGHT
+    default: return;
+    }
+
+    GameClearStat& s = EnsureStat(m_mapGameClearStats, casterPlayerId);
+    s.skillUseCounts[slot]++;
+}
+
+void NetworkManager::StatOnGameClear()
+{
+    if (m_bGameClearStatsFrozen) return;
+    double now = s_NowSec();
+    for (auto& kv : m_mapGameClearStats)
+    {
+        auto& s = kv.second;
+        if (s.deathCount == 0)
+            s.survivalTime = static_cast<float>(now - s.runStartTime);
+    }
+    m_bGameClearStatsFrozen = true;
+}
+
+void NetworkManager::StatReset()
+{
+    m_mapGameClearStats.clear();
+    m_bGameClearStatsFrozen = false;
+}
 

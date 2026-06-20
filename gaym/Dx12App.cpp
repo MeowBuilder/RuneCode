@@ -228,6 +228,10 @@ void Dx12App::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
             m_hUI[(UINT)UISlot::EndingTitle], texSize(UISlot::EndingTitle),
             m_hUI[(UINT)UISlot::BtnNormal],   texSize(UISlot::BtnNormal),
             m_hUI[(UINT)UISlot::BtnHover],    texSize(UISlot::BtnHover));
+
+        m_pSummaryStatsScreen = std::make_unique<SummaryStatsScreen>();
+        m_pSummaryStatsScreen->Initialize(
+            m_hUI[(UINT)UISlot::EndingBg],   texSize(UISlot::EndingBg));
     }
 
     m_eAppState = AppState::Title;
@@ -798,13 +802,16 @@ void Dx12App::FrameAdvance()
         return;
     }
 
-    // ── 게임 오버 / 엔딩 ────────────────────────────────────────────────────
-    if (m_eAppState == AppState::GameOver || m_eAppState == AppState::Ending)
+    // ── 게임 오버 / 엔딩 / 결산 ─────────────────────────────────────────────
+    if (m_eAppState == AppState::GameOver || m_eAppState == AppState::Ending || m_eAppState == AppState::SummaryStats)
     {
         if (m_eAppState == AppState::GameOver && m_pGameOverScreen)
             m_pGameOverScreen->Update(m_inputSystem, (float)m_nWndClientWidth, (float)m_nWndClientHeight, deltaTime);
         if (m_eAppState == AppState::Ending && m_pEndingScreen)
             m_pEndingScreen->Update(m_inputSystem, (float)m_nWndClientWidth, (float)m_nWndClientHeight, deltaTime);
+        if (m_eAppState == AppState::SummaryStats && m_pSummaryStatsScreen)
+            m_pSummaryStatsScreen->Update(m_inputSystem, m_pScene.get(),
+                                          (float)m_nWndClientWidth, (float)m_nWndClientHeight, deltaTime);
 
         WaitForGpuComplete();
         CHECK_HR(m_pd3dCommandAllocator->Reset());
@@ -845,16 +852,36 @@ void Dx12App::FrameAdvance()
             if (r == EndingScreen::Result::ToTitle)
             {
                 m_pEndingScreen->Reset();
-                if (m_pTitleScreen) m_pTitleScreen->Reset();
-                m_eAppState = AppState::Title;
+                // EndingScreen → SummaryStatsScreen 진입.
+                //   결산용 stat 을 freeze 하고 캐릭터 데이터 모음.
+                if (NetworkManager* pNet = NetworkManager::GetInstance())
+                    pNet->StatOnGameClear();
+                if (m_pSummaryStatsScreen)
+                {
+                    m_pSummaryStatsScreen->Reset();
+                    m_pSummaryStatsScreen->RebuildFromNetworkManager();
+                }
+                m_eAppState = AppState::SummaryStats;
             }
             else if (r == EndingScreen::Result::Quit)
             {
-                // DestroyWindow 는 동기 호출 — WndProc::WM_DESTROY → OnDestroy → m_pScene.reset()
-                //   이 그 자리에서 즉시 실행됨. 그 후 FrameAdvance 가 계속 흐르면 후속 Update/Render
-                //   에서 null Scene 디레퍼런스 → UAF 크래시. return 으로 즉시 빠져나가야 함.
-                //   PostQuitMessage 직접 호출이 아니라 DestroyWindow 인 이유: OnDestroy 안에서
-                //   NetworkManager 스레드 / GPU 커맨드큐 / fullscreen / 오디오 리소스 정상 종료.
+                ::DestroyWindow(m_hWnd);
+                return;
+            }
+        }
+        else if (m_eAppState == AppState::SummaryStats && m_pSummaryStatsScreen)
+        {
+            auto r = m_pSummaryStatsScreen->GetResult();
+            if (r == SummaryStatsScreen::Result::ToTitle)
+            {
+                m_pSummaryStatsScreen->Reset();
+                if (NetworkManager* pNet = NetworkManager::GetInstance())
+                    pNet->StatReset();
+                if (m_pTitleScreen) m_pTitleScreen->Reset();
+                m_eAppState = AppState::Title;
+            }
+            else if (r == SummaryStatsScreen::Result::Quit)
+            {
                 ::DestroyWindow(m_hWnd);
                 return;
             }
@@ -880,6 +907,13 @@ void Dx12App::FrameAdvance()
         D3D12_RECT sc = { 0, 0, (LONG)m_nWndClientWidth, (LONG)m_nWndClientHeight };
         m_pd3dCommandList->RSSetScissorRects(1, &sc);
 
+        // SummaryStats 화면은 룬 아이콘 PSO 패스를 먼저 실행 (SpriteBatch 전).
+        if (renderAs == AppState::SummaryStats && m_pSummaryStatsScreen && m_pSkillIconRenderer)
+        {
+            m_pSummaryStatsScreen->RenderIcons(m_pd3dCommandList.Get(), m_pSkillIconRenderer.get(),
+                m_pScene.get(), (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+        }
+
         if (m_spriteBatch && m_spriteFont)
         {
             ID3D12DescriptorHeap* heaps[] = { m_fontDescriptorHeap->Heap() };
@@ -891,6 +925,15 @@ void Dx12App::FrameAdvance()
             else if (renderAs == AppState::Ending && m_pEndingScreen)
                 m_pEndingScreen->Render(m_spriteBatch.get(), m_spriteFont.get(),
                     (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+            else if (renderAs == AppState::SummaryStats && m_pSummaryStatsScreen)
+            {
+                // 카드/버튼 배경은 RenderIcons 패스에서 SkillIconRenderer 가 1x1 화이트로 그림.
+                //   여기선 텍스트만 SpriteBatch 로 얹는다.
+                D3D12_GPU_DESCRIPTOR_HANDLE noH{}; DirectX::XMUINT2 noSize{ 0, 0 };
+                m_pSummaryStatsScreen->Render(m_spriteBatch.get(), m_spriteFont.get(),
+                    noH, noSize, m_pScene.get(),
+                    (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+            }
             m_spriteBatch->End();
         }
 
@@ -2797,6 +2840,10 @@ void Dx12App::InitSceneWithElement(ElementType e)
         if (slot < 0) slot = 0;
         m_pNetworkManager->SendEnterGame(slot);
     }
+
+    // 새 게임 시작 — 결산 통계 초기화 (이전 게임 잔재 제거).
+    if (NetworkManager* pNet = NetworkManager::GetInstance())
+        pNet->StatReset();
 
     m_eAppState = AppState::Playing;
 }

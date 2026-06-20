@@ -364,8 +364,40 @@ public:
     GameObject* GetRemotePlayer(uint64 playerId);
     const std::unordered_map<uint64, GameObject*>& GetRemotePlayers() const { return m_mapRemotePlayers; }
 
+    // playerId 기준 원소 조회 (결산 UI 등 외부 접근용 — 원본 선언은 아래 private 섹션에도 있음)
+    ElementType GetPlayerElementPublic(uint64 playerId) const;
+
+    // ─── 결산 통계 (SummaryStatsScreen 용) ─────────────────────────
+    //   기존 패킷 (S_PLAYER_DAMAGE / S_MONSTER_DAMAGE / S_SKILL) 관찰해서
+    //   playerId 별 누적. DarkLord 처치 시 freeze.
+    struct GameClearStat
+    {
+        uint64 playerId        = 0;
+        float  totalDamageDealt = 0.0f;
+        float  totalDamageTaken = 0.0f;
+        float  maxSingleHit     = 0.0f;
+        uint32 hitsLanded       = 0;
+        uint32 deathCount       = 0;
+        uint32 monstersKilled   = 0;
+        bool   bossLastHit      = false;
+        double runStartTime     = 0.0;        // GetTickCount64()/1000
+        float  survivalTime     = 0.0f;       // 사망 시 누적 또는 클리어까지
+        uint32 skillUseCounts[4] = { 0, 0, 0, 0 }; // Q/E/R/RC
+    };
+    void StatOnPlayerDamage(uint64 victimPlayerId, float damage, bool isDead);
+    void StatOnMonsterDamage(uint64 attackerPlayerId, float damage, bool isDead);
+    void StatOnSkillUse(uint64 casterPlayerId, int32 skillType);
+    void StatOnGameClear();                   // freeze + survival time 마무리
+    void StatReset();                          // 새 게임 시작
+    const std::unordered_map<uint64, GameClearStat>& GetGameClearStats() const { return m_mapGameClearStats; }
+    bool IsGameClearStatsFrozen() const { return m_bGameClearStatsFrozen; }
+
 private:
     static NetworkManager* s_pInstance;
+
+    // 결산 통계 누적 (메인 스레드 접근)
+    std::unordered_map<uint64, GameClearStat> m_mapGameClearStats;
+    bool m_bGameClearStatsFrozen = false;
 
     // 서버 연결 상태
     std::atomic<bool> m_bConnected = false;

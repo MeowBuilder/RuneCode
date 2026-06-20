@@ -302,6 +302,7 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClInclude Include="CharacterSelectScreen.h" />
     <ClInclude Include="TitleScreen.h" />
     <ClInclude Include="EndingScreen.h" />
+    <ClInclude Include="SummaryStatsScreen.h" />
     <ClInclude Include="GameOverScreen.h" />
     <ClInclude Include="LoadingScreen.h" />
     <ClInclude Include="CharacterData.h" />
@@ -470,6 +471,7 @@ xcopy /Y "$(ProjectDir)Libraries\Libs\libprotobuf.dll" "$(OutDir)"</Command>
     <ClCompile Include="CharacterSelectScreen.cpp" />
     <ClCompile Include="TitleScreen.cpp" />
     <ClCompile Include="EndingScreen.cpp" />
+    <ClCompile Include="SummaryStatsScreen.cpp" />
     <ClCompile Include="GameOverScreen.cpp" />
     <ClCompile Include="LoadingScreen.cpp" />
     <ClCompile Include="DebugRenderer.cpp" />

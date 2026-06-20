@@ -9,6 +9,7 @@
 #include "CharacterSelectScreen.h"
 #include "TitleScreen.h"
 #include "EndingScreen.h"
+#include "SummaryStatsScreen.h"
 #include "GameOverScreen.h"
 #include "LoadingScreen.h"
 #include "AudioManager.h"
@@ -23,7 +24,7 @@
 #include <GraphicsMemory.h>
 #include <DescriptorHeap.h>
 
-enum class AppState { Title, CharacterSelect, Loading, Playing, GameOver, Ending };
+enum class AppState { Title, CharacterSelect, Loading, Playing, GameOver, Ending, SummaryStats };
 
 // UI 텍스처 슬롯 — m_fontDescriptorHeap 의 [kUIHeapBase + (UINT)UISlot::*]
 enum class UISlot : UINT {
@@ -205,6 +206,7 @@ private:
     std::unique_ptr<LoadingScreen>         m_pLoadingScreen;
     std::unique_ptr<GameOverScreen>        m_pGameOverScreen;
     std::unique_ptr<EndingScreen>          m_pEndingScreen;
+    std::unique_ptr<class SummaryStatsScreen> m_pSummaryStatsScreen;
 
     ElementType m_ePendingElement = ElementType::None;  // Loading 대기 중 선택 원소
     float       m_fLoadingMin     = 0.7f;                // 최소 로딩 노출 시간(초)
