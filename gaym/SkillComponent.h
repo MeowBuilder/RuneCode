@@ -57,8 +57,9 @@ public:
 
     // 오프라인: 무한 룬(ABY_INF) RNG 롤 → 성공 시 ResetCooldown + VFX
     void TryTriggerInfiniteRune(SkillSlot slot, const DirectX::XMFLOAT3& hitPos);
-    // 시간 역행 룬: 쿨다운 seconds 초 감소
-    void ReduceCooldown(SkillSlot slot, float seconds);
+    // 시간 역행 룬: 쿨다운 seconds 초 감소.
+    //   playClockVFX=false 면 시계 VFX 를 띄우지 않음 (멀티에서 NetworkManager 가 직접 스폰).
+    void ReduceCooldown(SkillSlot slot, float seconds, bool playClockVFX = true);
 
     // 비투사체(AoE/빔/채널) 스킬의 적중 룬 일괄 처리: onHit 훅(시간역행 등) + 흡혈(ABY_VMP).
     // skillSlot 을 ctx 에 채워 슬롯 의존 훅이 동작하도록 한다. 투사체는 ProjectileManager 가

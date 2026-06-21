@@ -8641,38 +8641,25 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
     // ─── ABY_TIM: 시간 역행 — 적중 시 해당 skillSlot 쿨다운 value1 만큼 감소 ────
     if (runeId == "ABY_TIM")
     {
+        // 실제 쿨타임 감소는 본인 클라에만 적용 (서버 권위 멀티에선 예측 보정).
         if (bLocalCaster && pCaster)
         {
             if (skillSlot >= 0 && skillSlot < static_cast<int32>(SkillSlot::Count))
             {
                 if (SkillComponent* pSkill = pCaster->GetComponent<SkillComponent>())
-                {
-                    // 실제 쿨타임 감소는 본인 클라에만 적용한다.
-                    // ReduceCooldown 내부에서 로컬 시계 VFX도 재생된다.
-                    pSkill->ReduceCooldown(static_cast<SkillSlot>(skillSlot), value1);
-                }
+                    pSkill->ReduceCooldown(static_cast<SkillSlot>(skillSlot), value1, false); // 시계는 아래서 직접 스폰
             }
         }
-        else if (pCaster && pCaster->GetTransform())
+
+        // 시계 VFX — PlayerComponent 추적 슬롯으로 띄운다(시전자 구분 없이).
+        //   ReduceCooldown 내부 시계는 applied(쿨다운 실제 감소)에 게이팅돼 멀티 로컬에선 안 떴고,
+        //   매번 새 스프라이트를 직접 스폰하면 다중 적중 시 시계가 겹쳤다. TriggerTimeRewindVFX 는
+        //   Stop+교체 추적이라 항상 하나만 플레이어를 따라다님 → 오프라인과 동일한 깔끔한 시계.
+        if (pCaster)
         {
-            // 원격 플레이어는 쿨타임 값을 건드리지 않고 시계 VFX만 재생한다.
-            DirectX::XMFLOAT3 clockPos = pCaster->GetTransform()->GetPosition();
-            clockPos.y += 2.2f;
-
-            VFXSpriteManager::Get().Spawn(
-                "clock",
-                clockPos,
-                150.f,
-                0.85f,
-                DirectX::XMFLOAT4(0.45f, 0.95f, 1.0f, 1.0f),
-                -4.5f,
-                VFXSpriteAnim::FadeOut);
+            if (PlayerComponent* pPlayer = pCaster->GetComponent<PlayerComponent>())
+                pPlayer->TriggerTimeRewindVFX();
         }
-
-        wchar_t buf[32];
-        swprintf_s(buf, L"-%.1fs CD", value1);
-        DamageNumberManager::Get().AddText(GetDisplayPos(pCaster), buf,
-            DirectX::XMFLOAT4(0.7f, 0.9f, 1.0f, 1.0f));
         return;
     }
 
@@ -8731,41 +8718,24 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
                 if (bLocalCaster)
                     pPlayer->SetCurrentHP(value2);
 
-                // 기존 플레이어 컴포넌트 흡혈 펄스
+                // 흡혈 송곳니(fang) 펄스 — 오프라인과 동일. proc 시 항상 표시(풀피여도).
                 pPlayer->TriggerLifestealVFX(value1);
             }
         }
 
-        DirectX::XMFLOAT3 casterPos = GetCasterPos();
-        casterPos.y += 1.7f;
+        // (오프라인 클라는 송곳니만 띄운다 → 멀티도 일치시키기 위해 symbol_01/trace_05 잉여 연출 제거)
 
-        // 흡혈 아이콘
-        VFXSpriteManager::Get().Spawn(
-            "symbol_01",
-            casterPos,
-            115.f,
-            0.85f,
-            DirectX::XMFLOAT4(0.55f, 1.0f, 0.55f, 1.0f),
-            0.0f,
-            VFXSpriteAnim::FadeOut);
+        // 실제 회복이 있을 때만 +HP 숫자 표시 (풀피 proc 은 송곳니만 → "+0 HP" 방지)
+        if (value1 > 0.0f)
+        {
+            wchar_t buf[32];
+            swprintf_s(buf, L"+%.0f HP", value1);
 
-        // 흡수선 느낌
-        VFXSpriteManager::Get().Spawn(
-            "trace_05",
-            casterPos,
-            150.f,
-            0.55f,
-            DirectX::XMFLOAT4(0.45f, 1.0f, 0.55f, 0.9f),
-            2.0f,
-            VFXSpriteAnim::FadeOut);
-
-        wchar_t buf[32];
-        swprintf_s(buf, L"+%.0f HP", value1);
-
-        DamageNumberManager::Get().AddText(
-            GetDisplayPos(pCaster),
-            buf,
-            DirectX::XMFLOAT4(0.4f, 1.0f, 0.4f, 1.0f));
+            DamageNumberManager::Get().AddText(
+                GetDisplayPos(pCaster),
+                buf,
+                DirectX::XMFLOAT4(0.4f, 1.0f, 0.4f, 1.0f));
+        }
 
         return;
     }

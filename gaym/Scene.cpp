@@ -603,13 +603,10 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
     RegisterRuneSpriteTexture("symbol_01", L"Assets/Textures/VFX/symbol_01.png");
     RegisterRuneSpriteTexture("symbol_02", L"Assets/Textures/VFX/symbol_02.png");
 
-    // ABY_TIM에서 "clock"을 쓰고 있으므로 우선 star_03에 alias 연결.
-    // 나중에 전용 시계 PNG가 생기면 path만 바꾸면 됨.
-    RegisterRuneSpriteTexture("clock", L"Assets/Textures/VFX/star_03.png");
-
-    // ABY_VMP에서 "fang"을 쓰고 있으므로 우선 slash_03에 alias 연결.
-    // 송곳니 느낌이 더 필요하면 별도 fang.png 추가 후 path 교체.
-    RegisterRuneSpriteTexture("fang", L"Assets/Textures/VFX/slash_03.png");
+    // "clock"(시간역행)/"fang"(흡혈)은 Dx12App::InitializeText 에서 프로시저럴 텍스처
+    //   (BuildClockTexture/BuildFangTexture, 힙 슬롯 30/31)로 등록한다.
+    //   여기서 PNG 별칭(star_03/slash_03)으로 다시 등록하면 RegisterTex 가 덮어써(last-wins)
+    //   프로시저럴 시계/송곳니가 흐릿한 PNG 로 바뀐다 → 별칭 등록하지 않는다.
 
     OutputDebugString(L"[Scene] VFXSpriteManager rune textures registered\n");
 

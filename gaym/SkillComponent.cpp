@@ -963,7 +963,7 @@ void SkillComponent::TryTriggerInfiniteRune(SkillSlot slot, const DirectX::XMFLO
     }
 }
 
-void SkillComponent::ReduceCooldown(SkillSlot slot, float seconds)
+void SkillComponent::ReduceCooldown(SkillSlot slot, float seconds, bool playClockVFX)
 {
     size_t index = static_cast<size_t>(slot);
     if (index >= m_CooldownTimers.size() || seconds <= 0.f) return;
@@ -988,7 +988,7 @@ void SkillComponent::ReduceCooldown(SkillSlot slot, float seconds)
 
     // 시간 역행 룬 VFX — 감소가 등록된 경우(live 적용 또는 시전 중 누적) 표시.
     // 이전 시계가 남아 있으면 Stop 후 교체 → 항상 하나만 플레이어를 따라다님.
-    if (applied && m_pOwner && m_pOwner->GetTransform())
+    if (applied && playClockVFX && m_pOwner && m_pOwner->GetTransform())
     {
         constexpr float kClockLife = 0.85f;
         if (m_timeRewindVFXSlot >= 0) VFXSpriteManager::Get().Stop(m_timeRewindVFXSlot);

@@ -761,13 +761,13 @@ void PlayerComponent::TakeDamage(float fDamage)
 void PlayerComponent::AddShield(float amount)
 {
     if (amount <= 0.f) return;
-    m_fShield = min(m_fShield + amount, MAX_SHIELD);
+    m_fShield = min(m_fShield + amount, m_fMaxHP);
 }
 
 void PlayerComponent::SetShield(float amount)
 {
     if (amount < 0.f) amount = 0.f;
-    if (amount > MAX_SHIELD) amount = MAX_SHIELD;
+    if (amount > m_fMaxHP) amount = m_fMaxHP;
     m_fShield = amount;
 }
 
@@ -837,7 +837,8 @@ void PlayerComponent::TriggerLifestealVFX(float healAmount)
     // 흡혈 회복 — 플레이어 머리 위 초록 펄스 + 회복량 텍스트.
     // 오프라인 ProjectileManager 및 멀티 NetworkManager 양쪽에서 호출되므로
     // 텍스트는 호출자가 별도로 추가하고 여기서는 시각 펄스만.
-    if (!m_pOwner || !m_pOwner->GetTransform() || healAmount <= 0.f) return;
+    //   healAmount<=0(풀피 흡혈) 이어도 룬 발동 자체는 표시한다 — 오프라인과 동일하게 proc 시 항상 송곳니.
+    if (!m_pOwner || !m_pOwner->GetTransform()) return;
     DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
     pos.y += 2.4f;
     // fang — 진홍 송곳니(흡혈귀 바이트). 회전 없이 팝업 후 페이드.
@@ -847,6 +848,19 @@ void PlayerComponent::TriggerLifestealVFX(float healAmount)
     m_lifestealVFXSlot  = VFXSpriteManager::Get().Spawn("fang", pos, 95.f, kFangLife,
         DirectX::XMFLOAT4(0.85f, 0.10f, 0.18f, 1.0f), 0.f, VFXSpriteAnim::SkullPop);
     m_lifestealVFXTimer = kFangLife;
+}
+
+void PlayerComponent::TriggerTimeRewindVFX()
+{
+    // 시간역행 시계 — 청록, 역회전. 추적 슬롯으로 Stop+교체해 멀티 다중 적중 시에도 항상 하나만.
+    if (!m_pOwner || !m_pOwner->GetTransform()) return;
+    DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
+    pos.y += 2.2f;
+    constexpr float kClockLife = 0.85f;
+    if (m_timeRewindVFXSlot >= 0) VFXSpriteManager::Get().Stop(m_timeRewindVFXSlot);
+    m_timeRewindVFXSlot  = VFXSpriteManager::Get().Spawn("clock", pos, 150.f, kClockLife,
+        DirectX::XMFLOAT4(0.45f, 0.95f, 1.0f, 1.0f), -4.5f, VFXSpriteAnim::FadeOut);
+    m_timeRewindVFXTimer = kClockLife;
 }
 
 void PlayerComponent::TriggerShieldBreakVFX()
@@ -945,6 +959,19 @@ void PlayerComponent::UpdateAbyssAuraVFX(float deltaTime)
         {
             DirectX::XMFLOAT3 pos = base; pos.y += 2.4f;
             VFXSpriteManager::Get().SetPosition(m_lifestealVFXSlot, pos);
+        }
+    }
+
+    // ─ 시간역행 시계 (일회성, lifetime 동안만 플레이어 추적) ──────────────────────
+    if (m_timeRewindVFXSlot >= 0)
+    {
+        m_timeRewindVFXTimer -= deltaTime;
+        if (m_timeRewindVFXTimer <= 0.f)
+            m_timeRewindVFXSlot = -1;
+        else
+        {
+            DirectX::XMFLOAT3 pos = base; pos.y += 2.2f;
+            VFXSpriteManager::Get().SetPosition(m_timeRewindVFXSlot, pos);
         }
     }
 }

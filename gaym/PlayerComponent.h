@@ -37,9 +37,9 @@ public:
 
     // 보호막 시스템 (보호막 룬 L07)
     void  AddShield(float amount);
-    void  SetShield(float amount); // 네트워크 권위 — clamp [0, MAX_SHIELD]
+    void  SetShield(float amount); // 네트워크 권위 — clamp [0, m_fMaxHP]
     float GetShield() const { return m_fShield; }
-    float GetShieldRatio() const { return m_fShield / MAX_SHIELD; }
+    float GetShieldRatio() const { return m_fMaxHP > 0.f ? m_fShield / m_fMaxHP : 0.f; }
 
     // 보복 룬 (ABY_RVG): 피격 시 활성화, 다음 스킬 시전 시 소모
     void  TriggerVengeance(float duration = 10.f);
@@ -67,6 +67,8 @@ public:
     // 심연 룬 단발 VFX 트리거 (오프라인 ProjectileManager 와 멀티 NetworkManager 양쪽에서 호출)
     //   흡혈 회복 펄스 — 플레이어 머리 위 초록 파티클
     void TriggerLifestealVFX(float healAmount);
+    //   시간역행(ABY_TIM) 시계 — 플레이어 머리 위, 추적(새 발동 시 교체)하여 멀티에서 겹침 방지
+    void TriggerTimeRewindVFX();
     //   보호막 흡수 펄스 — 플레이어 주변 청백 충격파 (피격 흡수 순간)
     void TriggerShieldBreakVFX();
 
@@ -126,7 +128,7 @@ private:
     float m_fMaxHP = 100.0f;
     float m_fCurrentHP = 100.0f;
     float m_fShield    = 0.0f;
-    static constexpr float MAX_SHIELD = 500.f;
+    // 최대 보호막 = 최대 생명력(m_fMaxHP)
 
     float m_fDamageReductionRatio = 0.f;
     float m_fDamageReductionTimer = 0.f;
@@ -146,6 +148,10 @@ private:
     // 흡혈 룬(ABY_VMP) 송곳니 VFX 추적 (플레이어 따라 이동, 새 발동 시 교체)
     int   m_lifestealVFXSlot      = -1;
     float m_lifestealVFXTimer     = 0.f;
+
+    // 시간역행 룬(ABY_TIM) 시계 VFX 추적 (위와 동일 패턴)
+    int   m_timeRewindVFXSlot     = -1;
+    float m_timeRewindVFXTimer    = 0.f;
 
     // 보호막/보복 오라 추적 — PlayerUpdate 에서 매 프레임 호출
     void UpdateAbyssAuraVFX(float deltaTime);
