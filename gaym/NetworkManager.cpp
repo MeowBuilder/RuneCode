@@ -5769,6 +5769,11 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
         }
 
         const bool isGolemIndicator = (indicatorMonsterType == 8);
+        const bool isDragonIndicator = (indicatorMonsterType == 6);
+
+        // Red Dragon / Golem은 클라 오프라인 EnemyComponent 기본 인디케이터 색감에 맞춘다.
+        const bool useOfflineBossIndicatorColor =
+            isDragonIndicator || isGolemIndicator;
 
         // 사망/Despawn 후엔 hide 만 해주고 패스
         if (m_setDeadServerMonsters.find(it->first) != m_setDeadServerMonsters.end())
@@ -5812,10 +5817,9 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
 
                     MATERIAL mat;
 
-                    if (isGolemIndicator)
+                    if (useOfflineBossIndicatorColor)
                     {
-                        // Golem은 오프라인 EnemyComponent 기본 Circle indicator 색감에 맞춤.
-                        // 기존 네트워크 공용 색은 emissive/alpha가 너무 강해서 원본보다 과하게 밝아 보였음.
+                        // Red Dragon / Golem은 오프라인 EnemyComponent 기본 Circle indicator 색감에 맞춤.
                         mat.m_cAmbient = XMFLOAT4(0.20f, 0.04f, 0.02f, 1.0f);
                         mat.m_cDiffuse = XMFLOAT4(1.00f, 0.20f, 0.10f, 0.60f);
                         mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -5847,9 +5851,9 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
 
                     MATERIAL mat;
 
-                    if (isGolemIndicator)
+                    if (useOfflineBossIndicatorColor)
                     {
-                        // Golem fill은 오프라인 기본 fill처럼 주황 계열로 차오르되,
+                        // Red Dragon / Golem fill은 오프라인 기본 fill처럼 주황 계열로 차오르되,
                         // 과한 노랑/발광을 줄인다.
                         float alpha = 0.40f + 0.40f * fillProgress;
                         float emit = 0.45f + 0.80f * fillProgress;
@@ -5899,12 +5903,22 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
 
                     MATERIAL mat;
 
-                    // boxBorder는 항상 공격 타입 색상 사용
-                    // 28/29는 GetIndicatorParamsForAttack()에서 tint가 빨강이므로 빨간 외곽이 된다.
-                    mat.m_cAmbient = XMFLOAT4(0.4f * ind.tint.x, 0.4f * ind.tint.y, 0.4f * ind.tint.z, 1.0f);
-                    mat.m_cDiffuse = XMFLOAT4(ind.tint.x, ind.tint.y, ind.tint.z, 1.0f);
-                    mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-                    mat.m_cEmissive = XMFLOAT4(3.0f * ind.tint.x, 3.0f * ind.tint.y, 3.0f * ind.tint.z, 1.0f);
+                    if (useOfflineBossIndicatorColor)
+                    {
+                        // Red Dragon / Golem ForwardBox도 오프라인 기본 인디케이터 색감으로 낮춤.
+                        mat.m_cAmbient = XMFLOAT4(0.20f, 0.04f, 0.02f, 1.0f);
+                        mat.m_cDiffuse = XMFLOAT4(1.00f, 0.20f, 0.10f, 0.60f);
+                        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                        mat.m_cEmissive = XMFLOAT4(0.55f, 0.11f, 0.05f, 1.0f);
+                    }
+                    else
+                    {
+                        // 기존 네트워크 공용 색 유지
+                        mat.m_cAmbient = XMFLOAT4(0.4f * ind.tint.x, 0.4f * ind.tint.y, 0.4f * ind.tint.z, 1.0f);
+                        mat.m_cDiffuse = XMFLOAT4(ind.tint.x, ind.tint.y, ind.tint.z, 1.0f);
+                        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                        mat.m_cEmissive = XMFLOAT4(3.0f * ind.tint.x, 3.0f * ind.tint.y, 3.0f * ind.tint.z, 1.0f);
+                    }
 
                     ind.boxBorder->SetMaterial(mat);
                 }
@@ -5935,9 +5949,20 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                     MATERIAL mat;
                     float emitMul = 0.8f + 1.8f * fillProgress;
 
-                    if (ind.attackType == 28 || ind.attackType == 29)
+                    if (useOfflineBossIndicatorColor)
                     {
-                        // Demon ShortRush / LongRush: 노란색 fill
+                        // Red Dragon / Golem ForwardBox fill도 오프라인 기본 fill 색감으로 맞춤.
+                        float alpha = 0.40f + 0.40f * fillProgress;
+                        float emit = 0.45f + 0.80f * fillProgress;
+
+                        mat.m_cAmbient = XMFLOAT4(0.20f, 0.06f, 0.02f, 1.0f);
+                        mat.m_cDiffuse = XMFLOAT4(1.00f, 0.30f, 0.08f, alpha);
+                        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                        mat.m_cEmissive = XMFLOAT4(emit, emit * 0.30f, emit * 0.08f, 1.0f);
+                    }
+                    else if (ind.attackType == 28 || ind.attackType == 29)
+                    {
+                        // Demon ShortRush / LongRush: 노란색 fill 기존 유지
                         mat.m_cAmbient = XMFLOAT4(0.35f, 0.28f, 0.03f, 1.0f);
                         mat.m_cDiffuse = XMFLOAT4(1.0f, 0.75f, 0.05f, 1.0f);
                         mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
