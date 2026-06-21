@@ -5451,14 +5451,17 @@ static NetIndicatorParams GetIndicatorParamsForAttack(uint32 monsterType, uint32
             p.type = NetworkManager::NetIndicatorType::ForwardBox;
             p.radius = 5.0f;
             p.length = 34.0f;
-            p.tint = XMFLOAT3(1.0f, 0.1f, 0.1f); // 빨강
+            // RushFrontAttackBehavior는 별도 tint override가 없음.
+            // 오프라인 EnemyComponent 기본 ForwardBox 색을 쓰기 위해 white sentinel 사용.
+            p.tint = XMFLOAT3(1.0f, 1.0f, 1.0f);
             break;
 
         case 29: // DemonLongRush
             p.type = NetworkManager::NetIndicatorType::ForwardBox;
             p.radius = 6.0f;
             p.length = 55.0f;
-            p.tint = XMFLOAT3(1.0f, 0.1f, 0.1f); // 빨강
+            // RushFrontAttackBehavior 기본색
+            p.tint = XMFLOAT3(1.0f, 1.0f, 1.0f);
             break;
 
         case 30: // DemonFixatedCharge
@@ -5477,6 +5480,8 @@ static NetIndicatorParams GetIndicatorParamsForAttack(uint32 monsterType, uint32
         case 34: // DemonJumpSlam
             p.type = NetworkManager::NetIndicatorType::Circle;
             p.radius = 16.0f;
+            // JumpSlam도 별도 tint override 없음 → 기본 Circle 색 사용
+            p.tint = XMFLOAT3(1.0f, 1.0f, 1.0f);
             break;
 
         case 35: // DemonRageTransition
@@ -5775,6 +5780,11 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
         const bool useOfflineBossIndicatorColor =
             isDragonIndicator || isGolemIndicator;
 
+        const bool isDemonFixatedChargeIndicator =
+            (indicatorMonsterType == 9 && ind.attackType == 30);
+
+        const bool isDemonIndicator = (indicatorMonsterType == 9);
+
         // 사망/Despawn 후엔 hide 만 해주고 패스
         if (m_setDeadServerMonsters.find(it->first) != m_setDeadServerMonsters.end())
         {
@@ -5800,6 +5810,34 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
         float fillProgress = (ind.windupTotal > 0.0f) ? (ind.windupTimer / ind.windupTotal) : 1.0f;
         if (fillProgress > 1.0f) fillProgress = 1.0f;
 
+        auto emitFor = [&](float fp, float baseLo, float baseHi, float urgencyBoost) -> float
+            {
+                float baseEmit = baseLo + (baseHi - baseLo) * fp;
+
+                float urgency = (fp - 0.60f) / 0.40f;
+                if (urgency < 0.0f) urgency = 0.0f;
+                if (urgency > 1.0f) urgency = 1.0f;
+
+                float slow = 0.5f + 0.5f * sinf(ind.windupTimer * 18.85f);
+                float fast = 0.5f + 0.5f * sinf(ind.windupTimer * 50.27f);
+                float pulse = slow + (fast - slow) * urgency;
+                float swing = 0.15f + 0.20f * urgency;
+
+                return baseEmit + urgencyBoost * urgency + swing * (pulse - 0.5f);
+            };
+
+        auto alphaFor = [](float fp, float baseLo, float baseHi) -> float
+            {
+                if (fp < 0.0f) fp = 0.0f;
+                if (fp > 1.0f) fp = 1.0f;
+                return baseLo + (baseHi - baseLo) * fp;
+            };
+
+        auto isWhiteTint = [](const XMFLOAT3& t) -> bool
+            {
+                return t.x == 1.0f && t.y == 1.0f && t.z == 1.0f;
+            };
+
         const float indY = ind.anchorY + 1.2f;
 
         if (ind.activeType == NetIndicatorType::Circle)
@@ -5817,7 +5855,22 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
 
                     MATERIAL mat;
 
-                    if (useOfflineBossIndicatorColor)
+                    if (isDemonIndicator)
+                    {
+                        XMFLOAT3 c = isWhiteTint(ind.tint)
+                            ? XMFLOAT3(1.0f, 0.20f, 0.10f)
+                            : ind.tint;
+
+                        float e = emitFor(fillProgress, 0.35f, 0.50f, 0.15f);
+                        float a = alphaFor(fillProgress, 0.50f, 0.65f);
+
+                        mat.m_cAmbient = XMFLOAT4(0.20f * c.x, 0.20f * c.y, 0.20f * c.z, 1.0f);
+                        mat.m_cDiffuse = XMFLOAT4(c.x, c.y, c.z, a);
+                        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                        mat.m_cEmissive = XMFLOAT4(e * c.x, e * c.y, e * c.z, 1.0f);
+                    }
+
+                    else if (useOfflineBossIndicatorColor)
                     {
                         // Red Dragon / Golem은 오프라인 EnemyComponent 기본 Circle indicator 색감에 맞춤.
                         mat.m_cAmbient = XMFLOAT4(0.20f, 0.04f, 0.02f, 1.0f);
@@ -5844,14 +5897,29 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                 {
                     pT->SetPosition(ind.anchorX, indY, ind.anchorZ);
 
-                    float fillR = fullR * fillProgress;
+                    float fillR = (isDemonIndicator ? fullR * 1.03f : fullR) * fillProgress;
                     if (fillR < 0.01f) fillR = 0.01f;
 
                     pT->SetScale(fillR, 1.0f, fillR);
 
                     MATERIAL mat;
 
-                    if (useOfflineBossIndicatorColor)
+                    if (isDemonIndicator)
+                    {
+                        XMFLOAT3 c = isWhiteTint(ind.tint)
+                            ? XMFLOAT3(1.0f, 0.30f, 0.08f)
+                            : ind.tint;
+
+                        float e = emitFor(fillProgress, 0.45f, 0.85f, 0.40f);
+                        float a = alphaFor(fillProgress, 0.40f, 0.80f);
+
+                        mat.m_cAmbient = XMFLOAT4(0.20f * c.x, 0.20f * c.y, 0.20f * c.z, 1.0f);
+                        mat.m_cDiffuse = XMFLOAT4(c.x, c.y, c.z, a);
+                        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                        mat.m_cEmissive = XMFLOAT4(e * c.x, e * c.y, e * c.z, 1.0f);
+                    }
+
+                    else if (useOfflineBossIndicatorColor)
                     {
                         // Red Dragon / Golem fill은 오프라인 기본 fill처럼 주황 계열로 차오르되,
                         // 과한 노랑/발광을 줄인다.
@@ -5899,13 +5967,35 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                     pT->SetRotation(0.0f, ind.yawDeg, 0.0f);
 
                     // 외곽은 항상 full 길이/너비로 표시한다.
-                    pT->SetScale(fHalfW * 2.0f * 1.12f, 1.0f, fLen * 1.12f);
+                    if (isDemonIndicator)
+                    {
+                        // 오프라인 EnemyComponent ForwardBox border scale
+                        pT->SetScale(fHalfW * 2.0f * 1.06f, 1.0f, fLen);
+                    }
+                    else
+                    {
+                        pT->SetScale(fHalfW * 2.0f * 1.12f, 1.0f, fLen * 1.12f);
+                    }
 
                     MATERIAL mat;
 
-                    if (useOfflineBossIndicatorColor)
+                    if (isDemonIndicator)
                     {
-                        // Red Dragon / Golem ForwardBox도 오프라인 기본 인디케이터 색감으로 낮춤.
+                        XMFLOAT3 c = isWhiteTint(ind.tint)
+                            ? XMFLOAT3(1.0f, 0.20f, 0.10f)
+                            : ind.tint;
+
+                        float e = emitFor(fillProgress, 0.35f, 0.50f, 0.15f);
+                        float a = alphaFor(fillProgress, 0.50f, 0.65f);
+
+                        mat.m_cAmbient = XMFLOAT4(0.20f * c.x, 0.20f * c.y, 0.20f * c.z, 1.0f);
+                        mat.m_cDiffuse = XMFLOAT4(c.x, c.y, c.z, a);
+                        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                        mat.m_cEmissive = XMFLOAT4(e * c.x, e * c.y, e * c.z, 1.0f);
+                    }
+                    else if (useOfflineBossIndicatorColor)
+                    {
+                        // Red Dragon / Golem 기존 유지
                         mat.m_cAmbient = XMFLOAT4(0.20f, 0.04f, 0.02f, 1.0f);
                         mat.m_cDiffuse = XMFLOAT4(1.00f, 0.20f, 0.10f, 0.60f);
                         mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -5931,7 +6021,13 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                 {
                     float fillLen = fLen;
 
-                    if (ind.attackType == 28 || ind.attackType == 29)
+                    const bool shouldGrowForwardFill =
+                        isDemonIndicator ||
+                        ind.attackType == 28 ||
+                        ind.attackType == 29 ||
+                        isDemonFixatedChargeIndicator;
+
+                    if (shouldGrowForwardFill)
                     {
                         fillLen = fLen * fillProgress;
                         if (fillLen < 0.01f)
@@ -5942,16 +6038,39 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                     float fillCenterZ = ind.anchorZ + cosf(yawRad) * (fillLen * 0.5f);
 
                     // fill은 border보다 살짝 낮게 해서 빨간 외곽이 덮이지 않게 한다.
-                    pT->SetPosition(fillCenterX, indY - 0.02f, fillCenterZ);
+                    pT->SetPosition(fillCenterX, isDemonIndicator ? indY : indY - 0.02f, fillCenterZ);
                     pT->SetRotation(0.0f, ind.yawDeg, 0.0f);
-                    pT->SetScale(fHalfW * 1.75f, 1.0f, fillLen);
+
+                    if (isDemonIndicator)
+                    {
+                        // 오프라인 EnemyComponent ForwardBox fill scale
+                        pT->SetScale(fHalfW * 2.0f, 1.0f, fillLen);
+                    }
+                    else
+                    {
+                        pT->SetScale(fHalfW * 1.75f, 1.0f, fillLen);
+                    }
 
                     MATERIAL mat;
                     float emitMul = 0.8f + 1.8f * fillProgress;
 
-                    if (useOfflineBossIndicatorColor)
+                    if (isDemonIndicator)
                     {
-                        // Red Dragon / Golem ForwardBox fill도 오프라인 기본 fill 색감으로 맞춤.
+                        XMFLOAT3 c = isWhiteTint(ind.tint)
+                            ? XMFLOAT3(1.0f, 0.30f, 0.08f)
+                            : ind.tint;
+
+                        float e = emitFor(fillProgress, 0.45f, 0.85f, 0.40f);
+                        float a = alphaFor(fillProgress, 0.40f, 0.80f);
+
+                        mat.m_cAmbient = XMFLOAT4(0.20f * c.x, 0.20f * c.y, 0.20f * c.z, 1.0f);
+                        mat.m_cDiffuse = XMFLOAT4(c.x, c.y, c.z, a);
+                        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                        mat.m_cEmissive = XMFLOAT4(e * c.x, e * c.y, e * c.z, 1.0f);
+                    }
+                    else if (useOfflineBossIndicatorColor)
+                    {
+                        // Red Dragon / Golem 기존 유지
                         float alpha = 0.40f + 0.40f * fillProgress;
                         float emit = 0.45f + 0.80f * fillProgress;
 
@@ -5959,14 +6078,6 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                         mat.m_cDiffuse = XMFLOAT4(1.00f, 0.30f, 0.08f, alpha);
                         mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
                         mat.m_cEmissive = XMFLOAT4(emit, emit * 0.30f, emit * 0.08f, 1.0f);
-                    }
-                    else if (ind.attackType == 28 || ind.attackType == 29)
-                    {
-                        // Demon ShortRush / LongRush: 노란색 fill 기존 유지
-                        mat.m_cAmbient = XMFLOAT4(0.35f, 0.28f, 0.03f, 1.0f);
-                        mat.m_cDiffuse = XMFLOAT4(1.0f, 0.75f, 0.05f, 1.0f);
-                        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-                        mat.m_cEmissive = XMFLOAT4(emitMul * 1.0f, emitMul * 0.75f, emitMul * 0.05f, 1.0f);
                     }
                     else
                     {
@@ -6266,7 +6377,12 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
         case 28: lockDur = 1.5f; break; // ShortRush
         case 29: lockDur = 1.8f; break; // LongRush
         case 30: lockDur = 3.8f; break; // FixatedCharge
-        case 31: lockDur = 2.8f; break; // TornadoField
+        case 31:
+            // TornadoField: 토네이도 생성까지만 보스 모션 lock
+            // P1 1.8 / P2 1.5는 서버 windupSec으로 오므로,
+            // 여기서는 packet windupSec에 약간 여유만 준다.
+            lockDur = windupSec + 0.1f;
+            break;
         case 32: lockDur = 2.3f; break; // GaleSlash
         case 33: lockDur = 2.4f; break; // ShockwaveRing
         case 34: lockDur = 2.5f; break; // JumpSlam
@@ -6304,6 +6420,20 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
     {
         ServerMonsterIndicators& ind = indIt->second;
         NetIndicatorParams params = GetIndicatorParamsForAttack(mt, attackType);
+        
+        if (mt == 9 && attackType == 27 && effectOption >= 2)
+        {
+            // DemonSpinDash P2: speed 22 * duration 1.25 = 27.5
+            params.radius = 7.5f;
+            params.length = 28.0f;
+        }
+
+        if (mt == 9 && attackType == 30)
+        {
+            // DemonFixatedCharge P1/P2 최대 돌진거리와 맞춤
+            params.length = (effectOption >= 2) ? 120.0f : 110.0f;
+        }
+
         if (params.type != NetIndicatorType::None)
         {
             HideMonsterIndicators(ind);   // 이전 인디케이터 정리
@@ -6962,7 +7092,7 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             // 데미지는 서버 권위이고, 클라는 장판/VFX/인디케이터 연출만 담당한다.
             if (mt == 9)
             {
-                PlayNetworkDemonAttackBehavior(pScene, pMonster, monsterId, attackType, effectPositions, effectOption);
+                PlayNetworkDemonAttackBehavior(pScene, pMonster, monsterId, attackType, windupSec, effectPositions, effectOption);
                 return;
             }
             break;
@@ -7490,6 +7620,9 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
             //   attack timer 잠금 (오프라인 m_fTransitionDuration 와 동일).
             if (mt == 9)
             {
+                // Demon Rage 전환 중에는 이전 MOVE 보간이 Rage 모션을 밀지 않도록 정리
+                m_mapServerMonsterMoveTime.erase(monsterId);
+
                 m_mapServerMonsterAttackTimer[monsterId] = 2.4f;
                 m_mapServerMonsterCurrentAnimClip[monsterId] = "Rage";
             }
@@ -10959,7 +11092,7 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
 }
 
 // Demon 네트워크 범위 패턴 실행
-void NetworkManager::PlayNetworkDemonAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption)
+void NetworkManager::PlayNetworkDemonAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType, float windupSec, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption)
 {
     if (!pScene || !pMonster) return;
 
@@ -10998,13 +11131,20 @@ void NetworkManager::PlayNetworkDemonAttackBehavior(Scene* pScene, GameObject* p
     switch (attackType)
     {
     case 27: // DemonSpinDash
+    {
+        const bool isPhase2Spin = (effectOption >= 2);
+
         behavior = std::make_unique<SpinDashAttackBehavior>(
-            18.0f, 0.22f,
-            18.0f, 1.1f,
-            0.25f, 0.55f,
-            7.0f
+            isPhase2Spin ? 20.0f : 18.0f,
+            0.22f,
+            isPhase2Spin ? 22.0f : 18.0f,
+            isPhase2Spin ? 1.25f : 1.1f,
+            0.25f,
+            0.55f,
+            isPhase2Spin ? 7.5f : 7.0f
         );
         break;
+    }
 
     case 28: // DemonShortRush
     {
@@ -11054,26 +11194,48 @@ void NetworkManager::PlayNetworkDemonAttackBehavior(Scene* pScene, GameObject* p
     }
 
     case 30: // DemonFixatedCharge
+    {
+        const bool isPhase2Charge = (effectOption >= 2);
+
         behavior = std::make_unique<FixatedChargeAttackBehavior>(
-            85.0f,
-            3.0f, 0.2f,
-            58.0f, 110.0f,
+            isPhase2Charge ? 100.0f : 85.0f,
+            isPhase2Charge ? 2.4f : 3.0f,
+            0.2f,
+            isPhase2Charge ? 68.0f : 58.0f,
+            isPhase2Charge ? 120.0f : 110.0f,
             6.5f, 8.0f,
             6.0f,
             4.5f, 0.9f
         );
         break;
+    }
 
     case 31: // TornadoField
     {
         // Demon 토네이도 장판
         // 서버가 보내준 effectPositions가 있으면 해당 좌표를 사용해서
         // 모든 클라가 같은 위치에 토네이도를 생성한다.
+        int tornadoCount = effectPositions.empty()
+            ? 4
+            : static_cast<int>(effectPositions.size());
+
+        const bool isPhase2Tornado = (tornadoCount >= 6);
+
+        float tornadoWindup = isPhase2Tornado ? 1.5f : 1.8f;
+        float tornadoDamage = isPhase2Tornado ? 22.0f : 18.0f;
+
         auto tornadoBehavior = std::make_unique<TornadoFieldAttackBehavior>(
-            4, 18.0f, 0.45f, 5.0f,
-            12.0f, 28.0f,
-            1.8f, 4.0f, 1.0f,
-            1.0f, 0.4f
+            tornadoCount,
+            tornadoDamage,
+            0.45f,
+            5.0f,
+            12.0f,
+            28.0f,
+            tornadoWindup,
+            4.0f,
+            1.0f,
+            1.0f,
+            0.4f
         );
 
         tornadoBehavior->SetServerPositions(effectPositions);
@@ -11084,28 +11246,57 @@ void NetworkManager::PlayNetworkDemonAttackBehavior(Scene* pScene, GameObject* p
 
     case 32: // GaleSlash
     {
-        // Demon 돌풍 베기 모양 동기화
-        // 서버가 정한 effectOption을 사용해서 모든 클라가 같은 모양으로 생성한다.
+        // Demon GaleSlash
+        // 서버 windupSec 기준으로 P1/P2 연출 수치 분기
+        const bool isPhase2Gale = (windupSec <= 1.2f);
+
         auto shape = (effectOption == 0)
             ? GaleSlashAttackBehavior::SlashShape::Cross
             : GaleSlashAttackBehavior::SlashShape::XDiag;
 
+        float galeDamage = isPhase2Gale ? 100.0f : 75.0f;
+        float galeLength = isPhase2Gale ? 36.0f : 30.0f;
+        float galeHalfWidth = isPhase2Gale ? 4.0f : 3.5f;
+        float galeWindup = isPhase2Gale ? 1.1f : 1.4f;
+
         behavior = std::make_unique<GaleSlashAttackBehavior>(
             shape,
-            75.0f, 30.0f, 3.5f,
-            1.4f, 0.4f, 1.2f,
-            1.5f, 0.35f
+            galeDamage,
+            galeLength,
+            galeHalfWidth,
+            galeWindup,
+            0.4f,
+            1.2f,
+            1.5f,
+            0.35f
         );
+
         break;
     }
 
     case 33: // ShockwaveRing
+    {
+        // Demon ShockwaveRing
+        // 서버 windupSec 기준으로 P1/P2 연출 수치 분기
+        const bool isPhase2Shockwave = (windupSec <= 1.4f);
+
+        float shockDamage = isPhase2Shockwave ? 110.0f : 85.0f;
+        float shockRadius = isPhase2Shockwave ? 42.0f : 35.0f;
+        float shockWindup = isPhase2Shockwave ? 1.3f : 1.6f;
+
         behavior = std::make_unique<ShockwaveRingAttackBehavior>(
-            85.0f, 35.0f, 4.0f,
-            1.6f, 1.0f, 1.0f,
-            2.0f, 0.5f
+            shockDamage,
+            shockRadius,
+            4.0f,
+            shockWindup,
+            1.0f,
+            1.0f,
+            2.0f,
+            0.5f
         );
+
         break;
+    }
 
     default:
         return;

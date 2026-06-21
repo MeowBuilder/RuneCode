@@ -758,7 +758,7 @@ private:
     };
     std::vector<NetworkDemonBehaviorEntry> m_vNetworkDemonBehaviors;
 
-    void PlayNetworkDemonAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption);
+    void PlayNetworkDemonAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType, float windupSec, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption);
 
 public:
     // 매 프레임 타겟을 향해 몬스터 transform 보간 (Dx12App 메인 루프에서 호출)
