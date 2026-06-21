@@ -423,9 +423,22 @@ namespace
 
         if (style == DL_SLASH_BARRAGE)
         {
-            desc.projectileBurstCount = 6;
-            desc.projectileBurstInterval = 0.13f;
-            desc.projectileBurstSpreadDeg = 14.0f;
+            uint32 phase = DecodeDarkLordPhase(effectOption);
+
+            if (phase == 1)
+            {
+                // P1 Water Barrage - 오프라인 EnemySpawner 기준
+                desc.projectileBurstCount = 5;
+                desc.projectileBurstInterval = 0.14f;
+                desc.projectileBurstSpreadDeg = 12.0f;
+            }
+            else
+            {
+                // Final Barrage
+                desc.projectileBurstCount = 6;
+                desc.projectileBurstInterval = 0.13f;
+                desc.projectileBurstSpreadDeg = 14.0f;
+            }
         }
 
         if (style == DL_SLASH_TWIN_CLEAVE)
@@ -7626,6 +7639,31 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
                 m_mapServerMonsterAttackTimer[monsterId] = 2.4f;
                 m_mapServerMonsterCurrentAnimClip[monsterId] = "Rage";
             }
+        }
+
+        // DarkLord 페이즈 전환: 오프라인 BossPhaseController의 attack9 전환 애니메이션 재현
+        if (mt == 11)
+        {
+            const float transitionTime = (phaseIndex >= 4) ? 2.0f : 1.6f;
+
+            // 이전 MOVE 보간이 전환 애니를 밀지 않도록 제거
+            m_mapServerMonsterMoveTime.erase(monsterId);
+
+            m_mapServerMonsterAttackTimer[monsterId] = transitionTime;
+            m_mapServerMonsterCurrentAnimClip[monsterId] = "attack9";
+
+            if (pBoss)
+            {
+                if (auto* pAnim = pBoss->GetComponent<AnimationComponent>())
+                {
+                    pAnim->CrossFade("attack9", 0.2f, false, true);
+                }
+
+                pBoss->SetHitFlashAll(1.0f);
+                m_mapServerMonsterHitFlashTimer[monsterId] = 0.4f;
+            }
+
+            WriteNetworkLog("[Network] DarkLord phase transition attack9 started");
         }
 
         if (isKrakenPhase2)
