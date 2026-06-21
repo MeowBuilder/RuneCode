@@ -31,10 +31,10 @@ namespace
     {
         switch (e)
         {
-        case ElementType::Fire:  return L"FIRE";
-        case ElementType::Water: return L"WATER";
-        case ElementType::Wind:  return L"WIND";
-        case ElementType::Earth: return L"EARTH";
+        case ElementType::Fire:  return L"화염";
+        case ElementType::Water: return L"물결";
+        case ElementType::Wind:  return L"바람";
+        case ElementType::Earth: return L"대지";
         default:                 return L"???";
         }
     }
@@ -105,11 +105,11 @@ namespace
     {
         switch (g)
         {
-        case RuneGrade::Normal:    return L"[NORMAL]";
-        case RuneGrade::Rare:      return L"[RARE]";
-        case RuneGrade::Epic:      return L"[EPIC]";
-        case RuneGrade::Unique:    return L"[UNIQUE]";
-        case RuneGrade::Legendary: return L"[LEGENDARY]";
+        case RuneGrade::Normal:    return L"[노멀]";
+        case RuneGrade::Rare:      return L"[레어]";
+        case RuneGrade::Epic:      return L"[에픽]";
+        case RuneGrade::Unique:    return L"[유니크]";
+        case RuneGrade::Legendary: return L"[전설]";
         default:                   return L"";
         }
     }
@@ -606,7 +606,7 @@ void SummaryStatsScreen::Render(SpriteBatch* pBatch, SpriteFont* pFont,
     };
 
     // 타이틀
-    drawShadowedText(L"GAME CLEAR - SUMMARY", screenW * 0.5f, 24.f, gold, 1.5f, true);
+    drawShadowedText(L"게임 클리어 - 결산", screenW * 0.5f, 24.f, gold, 1.5f, true);
 
     int playerSeg = (m_nPlayerPages > 0) ? (m_nPage % m_nPlayerPages) : 0;
     int viewMode  = (m_nPlayerPages > 0) ? (m_nPage / m_nPlayerPages) : 0;
@@ -614,21 +614,21 @@ void SummaryStatsScreen::Render(SpriteBatch* pBatch, SpriteFont* pFont,
     int pEnd      = (std::min)(playerSeg * kMaxCardsPerPage + kMaxCardsPerPage, (int)m_vRows.size());
 
     wchar_t pgBuf[96];
-    swprintf_s(pgBuf, L"PAGE  %d / %d    %s    PLAYERS %d-%d",
+    swprintf_s(pgBuf, L"페이지  %d / %d    %s    플레이어 %d-%d",
                m_nPage + 1, m_nMaxPage + 1,
-               (viewMode == 0 ? L"OVERVIEW" : L"DETAILS"),
+               (viewMode == 0 ? L"요약" : L"세부"),
                pStart, (std::max)(pStart, pEnd));
     drawText(pgBuf, screenW * 0.5f, 72.f, dim, 0.9f, true);
 
     if (m_vRows.empty())
     {
-        drawShadowedText(L"NO STATS COLLECTED", screenW * 0.5f, screenH * 0.5f - 20.f, dim, 1.2f, true);
-        // CONTINUE 텍스트
+        drawShadowedText(L"수집된 기록 없음", screenW * 0.5f, screenH * 0.5f - 20.f, dim, 1.2f, true);
+        // 계속 텍스트
         {
-            XMVECTOR ts = pFont->MeasureString(L"CONTINUE");
+            XMVECTOR ts = pFont->MeasureString(L"계속");
             float tw = XMVectorGetX(ts) * 1.0f, th = XMVectorGetY(ts) * 1.0f;
             XMVECTORF32 col = (m_nHoverBtn == 2) ? gold : white;
-            pFont->DrawString(pBatch, L"CONTINUE",
+            pFont->DrawString(pBatch, L"계속",
                 XMFLOAT2(m_btnContinue.x + (m_btnContinue.w - tw) * 0.5f,
                          m_btnContinue.y + (m_btnContinue.h - th) * 0.5f), col);
         }
@@ -663,7 +663,7 @@ void SummaryStatsScreen::Render(SpriteBatch* pBatch, SpriteFont* pFont,
             float badgeW = 80.f;
             float bx = cardX + cardW - badgeW - 8.f;
             float by = cardY + 8.f;
-            drawText(L"FINISHER", bx + 8.f, by + 5.f, black, 0.55f);
+            drawText(L"막타", bx + 8.f, by + 5.f, black, 0.55f);
         }
 
         // ── stat 본문 ─────────────────────────────────────
@@ -686,37 +686,37 @@ void SummaryStatsScreen::Render(SpriteBatch* pBatch, SpriteFont* pFont,
         if (viewMode == 0)
         {
             swprintf_s(buf, L"%.0f", row.totalDamageDealt);
-            drawStatLine(L"DAMAGE DEALT", buf, white);
+            drawStatLine(L"가한 피해", buf, white);
 
             swprintf_s(buf, L"%.0f", row.totalDamageTaken);
-            drawStatLine(L"DAMAGE TAKEN", buf, dim);
+            drawStatLine(L"받은 피해", buf, dim);
 
             swprintf_s(buf, L"%u", row.monstersKilled);
-            drawStatLine(L"KILLS",        buf, white);
+            drawStatLine(L"처치",     buf, white);
 
             swprintf_s(buf, L"%u", row.deathCount);
-            drawStatLine(L"DEATHS",       buf, dim);
+            drawStatLine(L"사망",     buf, dim);
         }
         else
         {
             swprintf_s(buf, L"%.0f", row.maxSingleHit);
-            drawStatLine(L"MAX SINGLE HIT", buf, white);
+            drawStatLine(L"최대 단일 피해", buf, white);
 
             swprintf_s(buf, L"%u", row.hitsLanded);
-            drawStatLine(L"HITS LANDED",    buf, white);
+            drawStatLine(L"명중 횟수",       buf, white);
 
             float dps = (row.survivalTime > 1.0f) ? (row.totalDamageDealt / row.survivalTime) : 0.0f;
             swprintf_s(buf, L"%.1f", dps);
-            drawStatLine(L"AVG DPS",        buf, white);
+            drawStatLine(L"평균 DPS",        buf, white);
 
             int totalSec = (int)row.survivalTime;
             swprintf_s(buf, L"%d:%02d", totalSec / 60, totalSec % 60);
-            drawStatLine(L"SURVIVAL TIME",  buf, white);
+            drawStatLine(L"생존 시간",        buf, white);
         }
 
         // ── 룬 영역 라벨 (그리드 바로 위에 고정) ──────────────
         float runeAreaY = cardY + cardH - kRuneAreaH;
-        drawText(L"EQUIPPED RUNES", cardX + kRuneCardPadX, runeAreaY - 24.f,
+        drawText(L"장착 룬", cardX + kRuneCardPadX, runeAreaY - 24.f,
                  elemCol, 0.72f);
 
         // ── 룬 그리드: 슬롯 라벨 + 사용 횟수 + 룬 이름 ──────
@@ -791,9 +791,9 @@ void SummaryStatsScreen::Render(SpriteBatch* pBatch, SpriteFont* pFont,
     }
     {
         XMVECTORF32 c = (m_nHoverBtn == 2) ? gold : white;
-        XMVECTOR ts = pFont->MeasureString(L"CONTINUE");
+        XMVECTOR ts = pFont->MeasureString(L"계속");
         float tw = XMVectorGetX(ts) * 1.0f, th = XMVectorGetY(ts) * 1.0f;
-        pFont->DrawString(pBatch, L"CONTINUE",
+        pFont->DrawString(pBatch, L"계속",
             XMFLOAT2(m_btnContinue.x + (m_btnContinue.w - tw) * 0.5f,
                      m_btnContinue.y + (m_btnContinue.h - th) * 0.5f), c);
     }
