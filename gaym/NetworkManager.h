@@ -247,6 +247,11 @@ public:
     // 서버가 꺼졌거나 핸드셰이크만 된 상태는 false → 호출자는 오프라인 폴백 경로로 빠짐.
     bool IsConnected() const { return m_bConnected && m_pSession != nullptr && m_nLocalPlayerId.load() != 0; }
 
+    // 서버 멀티룸 디버그 표시용.
+    // 서버가 S_CHAT으로 보내는 "[ROOM]Room #1 | Players 2/4 | Started" 메시지를 저장한다.
+    void SetRoomInfoText(const std::string& text);
+    std::string GetRoomInfoText() const;
+
     // 프레임마다 호출 (큐에 쌓인 명령 처리)
     void Update(Scene* pScene, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList, float deltaTime);
 
@@ -449,6 +454,10 @@ private:
     // 네트워크 스레드에서 메인 스레드로 전달할 명령 큐
     std::mutex m_queueMutex;
     std::vector<NetworkCommandData> m_vCommandQueue;
+
+    // 우상단 Room Debug HUD 표시 문자열
+    mutable std::mutex m_roomInfoMutex;
+    std::string m_roomInfoText;
 
     // LocalPlayerId가 설정되기 전에 도착한 Spawn 명령을 보류
     std::vector<NetworkCommandData> m_vPendingSpawns;

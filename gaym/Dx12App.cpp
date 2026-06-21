@@ -18,6 +18,7 @@
 #include "TransformComponent.h"
 #include "Room.h"
 #include "EnemyComponent.h"
+#include "NetworkManager.h"
 #include "AnimationComponent.h"   // ClearAnimationCache (종료 시 호출)
 #include "VFXSpriteManager.h"
 #include <DescriptorHeap.h>  // DirectXTK12
@@ -2400,6 +2401,47 @@ void Dx12App::RenderText()
                         sc, DirectX::Colors::DeepSkyBlue);
                 }
             }
+        }
+    }
+
+    // ========== Network Room Info HUD (우상단) ==========
+    {
+        NetworkManager* pNet = NetworkManager::GetInstance();
+        std::string roomInfo = pNet ? pNet->GetRoomInfoText() : std::string();
+
+        if (!roomInfo.empty() && m_spriteFont && m_spriteBatch)
+        {
+            std::wstring wRoomInfo(roomInfo.begin(), roomInfo.end());
+
+            const float scale = 0.45f;
+
+            DirectX::XMVECTOR textSize = m_spriteFont->MeasureString(wRoomInfo.c_str());
+            float textW = DirectX::XMVectorGetX(textSize) * scale;
+
+            float x = static_cast<float>(m_nWndClientWidth) - textW - 24.0f;
+            float y = 24.0f;
+
+            // 그림자
+            m_spriteFont->DrawString(
+                m_spriteBatch.get(),
+                wRoomInfo.c_str(),
+                DirectX::XMFLOAT2(x + 1.5f, y + 1.5f),
+                DirectX::Colors::Black,
+                0.0f,
+                DirectX::XMFLOAT2(0.0f, 0.0f),
+                scale
+            );
+
+            // 실제 텍스트
+            m_spriteFont->DrawString(
+                m_spriteBatch.get(),
+                wRoomInfo.c_str(),
+                DirectX::XMFLOAT2(x, y),
+                DirectX::Colors::LightCyan,
+                0.0f,
+                DirectX::XMFLOAT2(0.0f, 0.0f),
+                scale
+            );
         }
     }
 

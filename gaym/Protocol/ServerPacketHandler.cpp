@@ -88,15 +88,35 @@ bool Handle_S_ENTER_GAME(PacketSessionRef& session, Protocol::S_ENTER_GAME& pkt)
 // 채팅 메시지 수신
 bool Handle_S_CHAT(PacketSessionRef& session, Protocol::S_CHAT& pkt)
 {
+    const std::string& msg = pkt.msg();
+
+    // 서버 RoomManager가 별도 proto 추가 없이 S_CHAT을 이용해 보내는 Room HUD 정보.
+    // 예: [ROOM]Room #1 | Players 2/4 | Started
+    static const std::string kRoomPrefix = "[ROOM]";
+
+    if (msg.rfind(kRoomPrefix, 0) == 0)
+    {
+        std::string roomInfo = msg.substr(kRoomPrefix.size());
+
+        if (NetworkManager* pNetMgr = NetworkManager::GetInstance())
+        {
+            pNetMgr->SetRoomInfoText(roomInfo);
+        }
+
+        WriteNetworkLog("[Network] RoomInfo: " + roomInfo);
+        return true;
+    }
+
     OutputDebugStringA("[Network] Chat: ");
-    OutputDebugStringA(pkt.msg().c_str());
+    OutputDebugStringA(msg.c_str());
     OutputDebugStringA("\n");
 
-    std::string log = "[Network] Chat: " + pkt.msg();
+    std::string log = "[Network] Chat: " + msg;
     WriteNetworkLog(log);
 
     return true;
 }
+
 // 플레이어 스폰 처리
 bool Handle_S_SPAWN(PacketSessionRef& session, Protocol::S_SPAWN& pkt)
 {

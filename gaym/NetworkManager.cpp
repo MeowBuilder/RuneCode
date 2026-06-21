@@ -642,6 +642,18 @@ NetworkManager* NetworkManager::GetInstance()
     return s_pInstance;
 }
 
+void NetworkManager::SetRoomInfoText(const std::string& text)
+{
+    std::lock_guard<std::mutex> lock(m_roomInfoMutex);
+    m_roomInfoText = text;
+}
+
+std::string NetworkManager::GetRoomInfoText() const
+{
+    std::lock_guard<std::mutex> lock(m_roomInfoMutex);
+    return m_roomInfoText;
+}
+
 NetworkManager::NetworkManager()
 {
     OutputDebugString(L"[Network] NetworkManager created\n");
