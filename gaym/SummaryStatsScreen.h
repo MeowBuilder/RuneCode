@@ -59,12 +59,24 @@ private:
         uint32_t     skillUseCounts[4]= { 0,0,0,0 };
         // 슬롯[4] × 룬[3] = 12 runeId
         std::string  runeIds[4][3];
+        // 슬롯별 장착 스킬 이름 (SkillIconRenderer 키)
+        std::string  skillNames[4];
     };
 
     void DoLayout(float screenW, float screenH);
     void DrawCard(DirectX::SpriteBatch* pBatch, DirectX::SpriteFont* pFont,
                   D3D12_GPU_DESCRIPTOR_HANDLE whiteTexGPU, DirectX::XMUINT2 whiteTexSize,
                   const PlayerRow& row, int colIdx, float screenW, float screenH);
+
+    // 룬 카드 안의 룬 셀/스킬 아이콘 위치 계산 — Update/RenderIcons/Render 공용.
+    void ComputeCardRect(int cardIdx, int cardsThisPage, float screenW, float screenH,
+                         float& outX, float& outY, float& outW, float& outH) const;
+    void ComputeSkillIconRect(int cardIdx, int cardsThisPage, int slot,
+                              float screenW, float screenH,
+                              float& outX, float& outY, float& outSize) const;
+    void ComputeRuneCellRect(int cardIdx, int cardsThisPage, int slot, int runeIdx,
+                             float screenW, float screenH,
+                             float& outX, float& outY, float& outW, float& outH) const;
 
     D3D12_GPU_DESCRIPTOR_HANDLE m_hBg{};
     DirectX::XMUINT2            m_szBg{};
@@ -74,10 +86,20 @@ private:
     float  m_fInputCD  = 0.6f;
     int    m_nHoverBtn = -1;          // -1=none, 0=prev, 1=next, 2=continue
 
-    int    m_nPage     = 0;           // 0=overview, 1=detail
-    int    m_nMaxPage  = 1;
+    // 페이지 인코딩: m_nPage = viewMode * m_nPlayerPages + playerSegment
+    //   playerSegment = m_nPage % m_nPlayerPages    (어느 플레이어 묶음을 보일지)
+    //   viewMode      = m_nPage / m_nPlayerPages    (0=OVERVIEW, 1=DETAILS)
+    int    m_nPage         = 0;
+    int    m_nMaxPage      = 1;
+    int    m_nPlayerPages  = 1;
 
     BtnRect m_btnPrev{}, m_btnNext{}, m_btnContinue{};
+
+    // 룬 셀 호버 (-1 = 호버 없음)
+    int    m_nHoverCard = -1;
+    int    m_nHoverSlot = -1;
+    int    m_nHoverRune = -1;
+    DirectX::XMFLOAT2 m_mousePos{};
 
     std::vector<PlayerRow> m_vRows;
 };

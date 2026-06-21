@@ -928,10 +928,11 @@ void Dx12App::FrameAdvance()
             else if (renderAs == AppState::SummaryStats && m_pSummaryStatsScreen)
             {
                 // 카드/버튼 배경은 RenderIcons 패스에서 SkillIconRenderer 가 1x1 화이트로 그림.
-                //   여기선 텍스트만 SpriteBatch 로 얹는다.
-                D3D12_GPU_DESCRIPTOR_HANDLE noH{}; DirectX::XMUINT2 noSize{ 0, 0 };
+                //   여기선 텍스트와 룬 호버 툴팁만 SpriteBatch 로 얹는다.
+                //   폰트 힙 슬롯 3 = 1x1 흰 픽셀 (툴팁 배경 사각형용; SkillHudUI 와 동일)
+                D3D12_GPU_DESCRIPTOR_HANDLE whiteH = m_fontDescriptorHeap->GetGpuHandle(3);
                 m_pSummaryStatsScreen->Render(m_spriteBatch.get(), m_spriteFont.get(),
-                    noH, noSize, m_pScene.get(),
+                    whiteH, DirectX::XMUINT2(1, 1), m_pScene.get(),
                     (float)m_nWndClientWidth, (float)m_nWndClientHeight);
             }
             m_spriteBatch->End();

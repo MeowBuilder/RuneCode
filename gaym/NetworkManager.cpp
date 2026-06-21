@@ -7303,6 +7303,12 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
     uint32 mt = (clipIt != m_mapServerMonsterClips.end()) ? clipIt->second.monsterType : 0;
     const char* roarClip = GetBossRoarClip(mt);
 
+    // 보스 사망(eventType==3) 시 서버가 phaseIndex 에 라운드 경과초를 실어 보냄.
+    //   SummaryStatsScreen 이 survival_time/DPS 를 모든 클라가 같은 값으로 표시하도록
+    //   여기서 캡처 — DarkLord 분기의 early return 보다 먼저 처리해야 한다.
+    if (eventType == 3 && phaseIndex > 0)
+        m_nServerRoundElapsedSec = phaseIndex;
+
     // DarkLord 사망은 바로 Ending UI로 넘기지 않고 Scene 사망 연출을 먼저 실행한다.
     if (mt == 11 && eventType == 3)
     {
@@ -7509,6 +7515,9 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
 
     case 3: // BOSS_EVENT_DEATH — 사망 컷씬: 가장 강한 쉐이크 (사망 애니는 S_MONSTER_DAMAGE 가 별도 처리)
         if (pCam) pCam->StartShake(5.0f, 2.0f);
+        // 서버가 phaseIndex 에 라운드 경과초를 실어 보냄(>0). 결산용 권위값.
+        if (phaseIndex > 0)
+            m_nServerRoundElapsedSec = phaseIndex;
         break;
 
     default:
@@ -11368,5 +11377,6 @@ void NetworkManager::StatReset()
 {
     m_mapGameClearStats.clear();
     m_bGameClearStatsFrozen = false;
+    m_nServerRoundElapsedSec = 0;
 }
 

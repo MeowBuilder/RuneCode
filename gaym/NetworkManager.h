@@ -392,12 +392,19 @@ public:
     const std::unordered_map<uint64, GameClearStat>& GetGameClearStats() const { return m_mapGameClearStats; }
     bool IsGameClearStatsFrozen() const { return m_bGameClearStatsFrozen; }
 
+    // 서버가 BOSS_EVENT_DEATH 의 phaseIndex 로 보내준 라운드 경과초.
+    // 0 = 미수신/구버전 서버. >0 이면 모든 클라가 같은 값을 쓰므로 SummaryStatsScreen 이
+    //   row.survivalTime 을 이 값으로 덮어써 클라간 정합성을 맞춘다.
+    uint32 GetServerRoundElapsedSec() const { return m_nServerRoundElapsedSec; }
+    void   SetServerRoundElapsedSec(uint32 sec) { m_nServerRoundElapsedSec = sec; }
+
 private:
     static NetworkManager* s_pInstance;
 
     // 결산 통계 누적 (메인 스레드 접근)
     std::unordered_map<uint64, GameClearStat> m_mapGameClearStats;
     bool m_bGameClearStatsFrozen = false;
+    uint32 m_nServerRoundElapsedSec = 0;  // 서버 BOSS_EVENT_DEATH.phaseIndex
 
     // 서버 연결 상태
     std::atomic<bool> m_bConnected = false;
