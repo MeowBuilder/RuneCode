@@ -1,6 +1,9 @@
 #include "stdafx.h"
 #include "Dx12App.h"
 #include "DamageNumberManager.h"
+
+// 갓모드 정적 멤버 — Dx12App::IsGodMode() / ToggleGodMode() 정적 접근용
+bool Dx12App::s_bGodMode = false;
 #include "Camera.h"
 #include "d3dx12.h"
 #include "WhiteFlashOverlay.h"
@@ -826,9 +829,8 @@ void Dx12App::FrameAdvance()
             if (r == GameOverScreen::Result::Retry)
             {
                 m_pGameOverScreen->Reset();
-                if (m_pCharSelect) m_ePendingElement = m_pCharSelect->GetSelectedElement();
-                if (m_pLoadingScreen) m_pLoadingScreen->Reset();
-                m_eAppState = AppState::Loading;
+                if (m_pCharSelect) m_pCharSelect->Reset();
+                m_eAppState = AppState::CharacterSelect;
             }
             else if (r == GameOverScreen::Result::ToTitle)
             {
@@ -856,7 +858,15 @@ void Dx12App::FrameAdvance()
                 // EndingScreen → SummaryStatsScreen 진입.
                 //   결산용 stat 을 freeze 하고 캐릭터 데이터 모음.
                 if (NetworkManager* pNet = NetworkManager::GetInstance())
+                {
+                    // 결산 freeze 전에 모든 플레이어 entry 보장
+                    // (룬/스킬 데미지 경로는 attackerPlayerId=0으로 오는 경우가 있어
+                    //  stat map에 누락되는 플레이어가 생기므로 강제 등록)
+                    pNet->StatEnsurePlayer(pNet->GetLocalPlayerId());
+                    for (const auto& kv : pNet->GetRemotePlayers())
+                        pNet->StatEnsurePlayer(kv.first);
                     pNet->StatOnGameClear();
+                }
                 if (m_pSummaryStatsScreen)
                 {
                     m_pSummaryStatsScreen->Reset();
@@ -981,6 +991,60 @@ void Dx12App::FrameAdvance()
 
     // Update scene first (calculates light matrices)
     m_pScene->Update(m_GameTimer.GetTimeElapsed(), &m_inputSystem);
+
+    // ── INSERT 갓모드 토글 (Playing 상태에서만) ─────────────────────────────
+    //   네트워크 ProcessPlayerDamage / 오프라인 TakeDamage 양쪽에서 IsGodMode() 검사.
+    //   F1~F12 는 Scene 의 콜리전/디버그 키와 충돌해서 INSERT 사용.
+    //   서버에도 알려야 다른 클라가 "이 플레이어 사망"으로 잘못 보지 않음
+    //   (C_DEBUG_ROOM_ACTION actionType=2 = GODMODE_TOGGLE — proto enum 외 매직값).
+    if (m_eAppState == AppState::Playing && m_inputSystem.IsKeyPressed(VK_INSERT))
+    {
+        ToggleGodMode();
+        OutputDebugStringA(s_bGodMode ? "[GodMode] ON\n" : "[GodMode] OFF\n");
+        if (m_pNetworkManager && m_pNetworkManager->IsConnected())
+            m_pNetworkManager->SendDebugRoomAction(2);
+    }
+
+    // ── 사망 → 게임오버 전환 ───────────────────────────────────────────────
+    //   조건: 로컬 플레이어 사망 + 연결된 모든 원격 플레이어 사망.
+    //   오프라인/솔로는 원격이 없으므로 로컬 사망만으로 게임오버.
+    //   2.5초 딜레이로 데스 애니 보여주고 GameOver 화면 진입.
+    if (m_eAppState == AppState::Playing && m_pScene)
+    {
+        if (GameObject* pPlayerGO = m_pScene->GetPlayer())
+        {
+            if (PlayerComponent* pPC = pPlayerGO->GetComponent<PlayerComponent>())
+            {
+                bool bAllDead = pPC->IsDead();
+                if (bAllDead && m_pNetworkManager && m_pNetworkManager->IsConnected())
+                    bAllDead = m_pNetworkManager->AreAllRemotePlayersDead();
+
+                if (bAllDead && !s_bGodMode)
+                {
+                    if (m_fDeathTransitionTimer < 0.0f)
+                        m_fDeathTransitionTimer = kDeathToGameOverDelay;
+
+                    m_fDeathTransitionTimer -= m_GameTimer.GetTimeElapsed();
+                    if (m_fDeathTransitionTimer <= 0.0f)
+                    {
+                        if (m_pGameOverScreen) m_pGameOverScreen->Reset();
+                        m_eAppState = AppState::GameOver;
+                        m_fDeathTransitionTimer = -1.0f;
+                        CHECK_HR(m_pd3dCommandList->Close());
+                        ID3D12CommandList* lists[] = { m_pd3dCommandList.Get() };
+                        m_pd3dCommandQueue->ExecuteCommandLists(_countof(lists), lists);
+                        WaitForGpuComplete();
+                        return;
+                    }
+                }
+                else
+                {
+                    // 누구라도 살아있거나 갓모드 켜진 동안엔 타이머 리셋
+                    m_fDeathTransitionTimer = -1.0f;
+                }
+            }
+        }
+    }
 
     // DarkLord 처치 → 엔딩 화면으로 전환 (한 번만 트리거)
     if (m_pScene->IsGameClear() && m_eAppState == AppState::Playing)
@@ -2329,6 +2393,15 @@ void Dx12App::RenderText()
 
     m_spriteBatch->Begin(m_pd3dCommandList.Get());
 
+    // ========== 갓모드 상태 표시 (INSERT 토글) ==========
+    if (Dx12App::IsGodMode())
+    {
+        const wchar_t* godText = L"[INS] GOD MODE ON";
+        m_spriteFont->DrawString(m_spriteBatch.get(), godText,
+            XMFLOAT2(20.0f, (float)m_nWndClientHeight - 50.0f),
+            DirectX::Colors::Gold, 0.0f, XMFLOAT2(0,0), 1.0f);
+    }
+
     // DarkLord 입장/사망 연출 중에는 HUD / HP / 스킬 / 디버그 일체 숨김.
     bool bCinematic =
         m_pScene &&
@@ -2856,6 +2929,10 @@ void Dx12App::InitSceneWithElement(ElementType e)
     WaitForGpuComplete();
     CHECK_HR(m_pd3dCommandAllocator->Reset());
     CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
+
+    // 이전 씬의 GameObject 들을 NetworkManager 가 raw 포인터로 들고있던 게 곧 dangling.
+    // 새 Scene 만들기 전에 비워서 다음 프레임 InterpolateServerMonsters 가 stale 접근 X.
+    if (m_pNetworkManager) m_pNetworkManager->ResetForNewSession();
 
     m_pScene = std::make_unique<Scene>();
     m_pScene->SetSelectedElement(e);

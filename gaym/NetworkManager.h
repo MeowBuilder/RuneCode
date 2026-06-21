@@ -369,6 +369,24 @@ public:
     GameObject* GetRemotePlayer(uint64 playerId);
     const std::unordered_map<uint64, GameObject*>& GetRemotePlayers() const { return m_mapRemotePlayers; }
 
+    // 모든 원격 플레이어가 사망 상태인지 — 게임오버 판정용 (게임오버 = 로컬 + 원격 전부 사망)
+    //   원격이 한 명도 없으면 true 반환 (오프라인/솔로 케이스).
+    bool AreAllRemotePlayersDead() const
+    {
+        if (m_mapRemotePlayers.empty()) return true;
+        for (const auto& kv : m_mapRemotePlayers)
+        {
+            if (m_setDeadRemotePlayers.find(kv.first) == m_setDeadRemotePlayers.end())
+                return false;
+        }
+        return true;
+    }
+
+    // Retry/재접속 시 씬 재생성 직전에 호출 — m_pScene 의 GameObject* 가
+    //   곧 사라지므로 NetworkManager 가 들고있던 모든 raw 포인터/큐를 비운다.
+    //   호출 안 하면 InterpolateServerMonsters 등이 stale GameObject* → UAF 크래시.
+    void ResetForNewSession();
+
     // playerId 기준 원소 조회 (결산 UI 등 외부 접근용 — 원본 선언은 아래 private 섹션에도 있음)
     ElementType GetPlayerElementPublic(uint64 playerId) const;
 
@@ -392,6 +410,7 @@ public:
     void StatOnPlayerDamage(uint64 victimPlayerId, float damage, bool isDead);
     void StatOnMonsterDamage(uint64 attackerPlayerId, float damage, bool isDead);
     void StatOnSkillUse(uint64 casterPlayerId, int32 skillType);
+    void StatEnsurePlayer(uint64 playerId);   // 결산 전 모든 참여 플레이어 entry 보장
     void StatOnGameClear();                   // freeze + survival time 마무리
     void StatReset();                          // 새 게임 시작
     const std::unordered_map<uint64, GameClearStat>& GetGameClearStats() const { return m_mapGameClearStats; }

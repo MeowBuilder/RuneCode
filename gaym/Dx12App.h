@@ -227,4 +227,15 @@ private:
 
     void BuildDebugRuneList();
     void RenderDebugRuneUI();
+
+    // ── 갓모드 (F1) — 시연/디버그용. PlayerComponent::TakeDamage + NetworkManager::ProcessPlayerDamage 양쪽에서 검사
+    static bool s_bGodMode;
+public:
+    static bool IsGodMode() { return s_bGodMode; }
+    static void ToggleGodMode() { s_bGodMode = !s_bGodMode; }
+
+private:
+    // ── 사망 → 게임오버 전환 타이머 — 데스 애니 보여주고 진입
+    float m_fDeathTransitionTimer = -1.0f;  // -1=비활성, >=0=카운트다운
+    static constexpr float kDeathToGameOverDelay = 2.5f;
 };

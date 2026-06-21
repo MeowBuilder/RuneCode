@@ -811,6 +811,64 @@ void NetworkManager::Disconnect()
     OutputDebugString(L"[Network] Disconnected\n");
 }
 
+// Retry/씬 재생성 직전 호출. m_pScene 의 GameObject 들이 곧 파기되므로
+//   NetworkManager 가 캐싱하던 raw GameObject* / 펜딩 큐 / 사망 상태 등을 전부 비운다.
+//   호출 안 하면 InterpolateServerMonsters 등이 다음 프레임 dangling 포인터 접근으로 UAF 크래시.
+//   연결 자체는 끊지 않는다 (서버에는 살아있는 세션 — 새 EnterGame 으로 자연 동기화).
+void NetworkManager::ResetForNewSession()
+{
+    // 1) 씬에 묶인 raw GameObject* 매핑들 — 새 씬 만들면 즉시 stale.
+    m_mapServerMonsters.clear();
+    m_mapServerMonsterClips.clear();
+    m_mapServerMonsterTarget.clear();
+    m_mapServerMonsterSpawnEffects.clear();
+    m_mapServerMonsterCurrentAnimClip.clear();
+    m_mapServerMonsterMoveTime.clear();
+    m_mapServerMonsterAttackTimer.clear();
+    m_mapServerMonsterHitFlashTimer.clear();
+    m_mapServerMonsterHitAnimCooldown.clear();
+    m_mapServerMonsterIndicators.clear();
+    m_mapServerBossIntros.clear();
+    m_mapServerMegaBreathCutscenes.clear();
+    m_mapServerBossActions.clear();
+    m_setDeadServerMonsters.clear();
+
+    // 2) 원격 플레이어 raw 포인터 — 새 씬에선 모두 없어졌다고 간주, 다음 S_SPAWN 으로 재생성.
+    m_mapRemotePlayers.clear();
+    m_mapRemotePlayerMoveTargets.clear();
+    m_mapRemotePlayerMoveTime.clear();
+    m_mapRemotePlayerHitFlashTimer.clear();
+    m_mapRemotePlayerActionLockTimer.clear();
+    m_mapRemotePlayerPortalIntroFlyEffects.clear();
+    m_mapRemotePlayerElement.clear();
+    m_setDeadRemotePlayers.clear();
+    m_mapRemotePlayerVFX.clear();
+    m_mapRemoteChargeVFXId.clear();
+    m_mapRemoteEnhanceVFXId.clear();
+    m_mapRemoteChannelLastSpawnTime.clear();
+    m_mapRemotePlaceDecalIds.clear();
+    m_mapNetworkTrapVFXByObjectId.clear();
+
+    // 3) 펜딩 큐 — 이전 세션 패킷이 새 씬에서 발동되면 monsterId mismatch 로 또 stale 접근.
+    {
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        m_vCommandQueue.clear();
+    }
+    m_vPendingSpawns.clear();
+    m_vPendingMonsterVFX.clear();
+    m_vPendingMeteorShowers.clear();
+    m_vPendingOrbitals.clear();
+    m_vNetworkNormalMonsterBehaviors.clear();
+    m_vNetworkGolemBehaviors.clear();
+    m_vNetworkDemonBehaviors.clear();
+
+    // 4) 전환 플래그 — 이전 세션에서 ProcessRoomTransition 도중 리셋되면 true 고착.
+    //    다음 S_ROOM_TRANSITION 이 if(m_bInRoomTransition) return 으로 통째 스킵되는 버그 방지.
+    m_bInRoomTransition = false;
+
+    OutputDebugString(L"[Network] ResetForNewSession: scene-tied state cleared\n");
+}
+
 void NetworkManager::SyncLocalPlayerPositionToServer(Scene* pScene)
 {
     if (!pScene)
@@ -2051,7 +2109,11 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
     // 방 전환이 끝나면 서버 몬스터 스폰을 트리거해야 함.
     // 서버 Room 은 HandleTorchInteract 를 받아야만 몬스터를 스폰하도록 돼 있음 (최초 방 진입과 동일 플로우).
     // 오프라인에서는 방 Active 시 자동 스폰이지만, 네트워크 모드에서는 C_TORCH_INTERACT 가 스폰 트리거.
-    // 첫 방에선 맵에 배치된 횃불/큐브를 F 로 눌러 시작했지만, 다음 방 이후에는 자동으로 요청해준다.
+    // 첫 방(stage=1, room=0)은 플레이어가 직접 F 로 횃불/큐브와 상호작용해 시작.
+    // 리트라이/클리어 후 재시작 시에도 동일하게 수동 시작.
+    if (stageIndex == 1 && roomIndex == 0 && !isBossRoom)
+        shouldAutoStartRoom = false;
+
     if (shouldAutoStartRoom)
     {
         m_bPendingTorchInteract = true;
@@ -2326,14 +2388,41 @@ void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
         return;
     }
 
-    // 이미 존재하는 플레이어라면 무시
+    // 이미 존재하는 플레이어라면 원소가 바뀌었는지 확인
     if (m_mapRemotePlayers.find(playerId) != m_mapRemotePlayers.end())
     {
-        swprintf_s(idLog, 256, L"[Network] Remote player %llu already exists. Updating position.\n", playerId);
-        OutputDebugString(idLog);
-        // Spawn에는 방향 정보가 없으므로 기본 방향 (0, 0, 1) 사용
-        ProcessMovePlayer(pScene, playerId, x, y, z, 0.0f, 0.0f, 1.0f);
-        return;
+        ElementType newElem = (playerType >= 1 && playerType <= 4)
+            ? static_cast<ElementType>(playerType) : ElementType::Water;
+        ElementType oldElem = GetPlayerElement(playerId);
+
+        if (newElem == oldElem)
+        {
+            // 죽어있던 플레이어가 같은 원소로 리트라이 — 모델을 새로 만들어야 사망 상태가 풀린다.
+            if (m_setDeadRemotePlayers.count(playerId))
+            {
+                swprintf_s(idLog, 256, L"[Network] Remote player %llu same element but was dead. Respawning model.\n", playerId);
+                OutputDebugString(idLog);
+                ProcessDespawnPlayer(pScene, playerId);
+                // fall through to create new model
+            }
+            else
+            {
+                // 원소 동일, 살아있음 — 위치만 업데이트
+                swprintf_s(idLog, 256, L"[Network] Remote player %llu already exists. Updating position.\n", playerId);
+                OutputDebugString(idLog);
+                ProcessMovePlayer(pScene, playerId, x, y, z, 0.0f, 0.0f, 1.0f);
+                return;
+            }
+        }
+        else
+        {
+            // 원소 변경(리트라이) — 기존 모델 제거 후 새 원소로 재생성
+            swprintf_s(idLog, 256, L"[Network] Remote player %llu element changed (%d->%d). Respawning model.\n",
+                playerId, static_cast<int>(oldElem), static_cast<int>(newElem));
+            OutputDebugString(idLog);
+            ProcessDespawnPlayer(pScene, playerId);
+            // fall through to create new model
+        }
     }
 
     // 원격 플레이어를 전역 오브젝트로 생성하기 위해 CurrentRoom을 임시 해제
@@ -7660,7 +7749,19 @@ void NetworkManager::ProcessPlayerDamage(Scene* pScene, uint64 playerId, float d
         auto* pPC = pPlayerGO->GetComponent<PlayerComponent>();
         if (!pPC) return;
 
-        pPC->SetCurrentHP(currentHp);
+        // F1 갓모드 — 서버는 데미지/사망을 권위로 보내지만 클라이언트만 무시한다.
+        // 서버 입장에선 죽은 상태가 되어 후속 패킷이 안 올 수 있으나 시연/디버그 목적엔 충분.
+        const bool bGod = Dx12App::IsGodMode();
+
+        if (bGod)
+        {
+            // HP 풀로 유지 + 사망 처리 건너뜀
+            pPC->SetCurrentHP(pPC->GetMaxHP());
+        }
+        else
+        {
+            pPC->SetCurrentHP(currentHp);
+        }
         pPC->TriggerHitFlash();
 
         if (damage > 0.0f)
@@ -7673,7 +7774,7 @@ void NetworkManager::ProcessPlayerDamage(Scene* pScene, uint64 playerId, float d
         if (CCamera* pCam = pScene->GetCamera())
             pCam->StartShake(2.0f, 0.18f);
 
-        if (isDead)
+        if (isDead && !bGod)
             pPC->OnServerDeath();
 
         // ABY_RVG 보복 — 서버는 READY 패킷 미발송, 같은 조건을 클라가 자체 검사해서 오라 활성화.
@@ -12340,7 +12441,7 @@ void NetworkManager::InterpolateServerMonsters(float deltaTime)
         float dy = tgt.py - cur.y;
         float dz = tgt.pz - cur.z;
         float distSq = dx * dx + dy * dy + dz * dz;
-
+        
         bool bBossJumpAction = false;
         auto actIt = m_mapServerBossActions.find(monsterId);
         if (actIt != m_mapServerBossActions.end() &&
@@ -12472,6 +12573,13 @@ void NetworkManager::StatOnSkillUse(uint64 casterPlayerId, int32 skillType)
 
     GameClearStat& s = EnsureStat(m_mapGameClearStats, casterPlayerId);
     s.skillUseCounts[slot]++;
+}
+
+void NetworkManager::StatEnsurePlayer(uint64 playerId)
+{
+    if (playerId == 0) return;
+    if (m_bGameClearStatsFrozen) return;
+    EnsureStat(m_mapGameClearStats, playerId);
 }
 
 void NetworkManager::StatOnGameClear()

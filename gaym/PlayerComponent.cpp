@@ -696,6 +696,7 @@ void PlayerComponent::TakeDamage(float fDamage)
     if (fDamage <= 0.0f || IsDead()) return;
     if (IsDashing()) return;     // 대쉬 중 i-frame
     if (IsInvincible()) return;  // 무적 중 피격 무시
+    if (Dx12App::IsGodMode()) return;  // F1 갓모드
 
     // 보호막이 있으면 먼저 흡수
     if (m_fShield > 0.f)
