@@ -676,8 +676,8 @@ void NetworkManager::Shutdown()
     }
     m_vNetworkDemonBehaviors.clear();
 
-	m_mapServerMonsterSpawnEffects.clear(); // 몬스터 스폰 연출 상태 초기화
-	m_mapServerMonsterCurrentAnimClip.clear(); // 몬스터 애니메이션 캐시 초기화
+    m_mapServerMonsterSpawnEffects.clear(); // 몬스터 스폰 연출 상태 초기화
+    m_mapServerMonsterCurrentAnimClip.clear(); // 몬스터 애니메이션 캐시 초기화
 
     if (!m_bConnected && !m_pService)
         return;
@@ -740,13 +740,13 @@ bool NetworkManager::Connect(const std::wstring& ip, uint16 port)
 
         // 워커 스레드 시작 (IOCP 이벤트 처리)
         GThreadManager->Launch([this]()
-        {
-            while (!m_bShutdownRequested)
             {
-                // 10ms 타임아웃으로 Dispatch
-                m_pService->GetIocpCore()->Dispatch(10);
-            }
-        });
+                while (!m_bShutdownRequested)
+                {
+                    // 10ms 타임아웃으로 Dispatch
+                    m_pService->GetIocpCore()->Dispatch(10);
+                }
+            });
 
         m_bConnected = true;
         OutputDebugString(L"[Network] Connection started to server\n");
@@ -879,8 +879,8 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
         for (const auto& pending : m_vPendingSpawns)
         {
             ProcessSpawnPlayer(pScene, pDevice, pCommandList,
-                             pending.playerId, pending.name, pending.playerType,
-                             pending.x, pending.y, pending.z);
+                pending.playerId, pending.name, pending.playerType,
+                pending.x, pending.y, pending.z);
         }
         m_vPendingSpawns.clear();
     }
@@ -956,7 +956,7 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             else
             {
                 ProcessSpawnPlayer(pScene, pDevice, pCommandList,
-                                 cmd.playerId, cmd.name, cmd.playerType, cmd.x, cmd.y, cmd.z);
+                    cmd.playerId, cmd.name, cmd.playerType, cmd.x, cmd.y, cmd.z);
             }
             break;
 
@@ -970,7 +970,7 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
 
         case NetworkCommand::Skill:
             ProcessSkill(pScene, cmd.playerId, cmd.skillType, cmd.x, cmd.y, cmd.z, cmd.dirX, cmd.dirY, cmd.dirZ,
-                         cmd.skillSlot, cmd.skillRadiusMult, cmd.skillDamageMult);
+                cmd.skillSlot, cmd.skillRadiusMult, cmd.skillDamageMult);
             break;
 
         case NetworkCommand::PlayerAction:
@@ -1003,7 +1003,7 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             break;
 
         case NetworkCommand::MonsterAttack:
-            ProcessMonsterAttack(pScene, cmd.monsterId, cmd.attackType, cmd.windupSec,cmd.targetPlayerId, cmd.x, cmd.y, cmd.z, cmd.monsterYaw, cmd.effectPositions, cmd.effectOption);
+            ProcessMonsterAttack(pScene, cmd.monsterId, cmd.attackType, cmd.windupSec, cmd.targetPlayerId, cmd.x, cmd.y, cmd.z, cmd.monsterYaw, cmd.effectPositions, cmd.effectOption);
             break;
 
         case NetworkCommand::PlayerDamage:
@@ -1011,7 +1011,7 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
             break;
 
         case NetworkCommand::MonsterDamage:
-            ProcessMonsterDamage(pScene, cmd.monsterId, cmd.damage, cmd.currentHp, cmd.isDead,cmd.attackerPlayerId, cmd.skillType);
+            ProcessMonsterDamage(pScene, cmd.monsterId, cmd.damage, cmd.currentHp, cmd.isDead, cmd.attackerPlayerId, cmd.skillType);
             break;
 
         case NetworkCommand::MonsterStagger:
@@ -1055,9 +1055,9 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
 
         case NetworkCommand::RuneHomingTarget:
             ProcessRuneHomingTarget(
-                pScene,cmd.playerId,cmd.runeHomingSkillSlot,cmd.runeHomingSkillType,cmd.runeHomingTargetMonsterId,
-                DirectX::XMFLOAT3(cmd.runeHomingTargetX,cmd.runeHomingTargetY,cmd.runeHomingTargetZ),
-                DirectX::XMFLOAT3(cmd.runeHomingOriginX,cmd.runeHomingOriginY,cmd.runeHomingOriginZ)
+                pScene, cmd.playerId, cmd.runeHomingSkillSlot, cmd.runeHomingSkillType, cmd.runeHomingTargetMonsterId,
+                DirectX::XMFLOAT3(cmd.runeHomingTargetX, cmd.runeHomingTargetY, cmd.runeHomingTargetZ),
+                DirectX::XMFLOAT3(cmd.runeHomingOriginX, cmd.runeHomingOriginY, cmd.runeHomingOriginZ)
             );
             break;
 
@@ -1094,11 +1094,79 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
     // 원격 플레이어 연출 액션 타이머 처리
     UpdateRemotePlayerActionLocks(deltaTime);
 
-	// 원격 플레이어 포탈 Intro Fly 연출 처리
+    // 원격 플레이어 포탈 Intro Fly 연출 처리
     UpdateRemotePlayerPortalIntroFlyEffects(deltaTime);
 
     // 원격 플레이어 이동 보간
     UpdateRemotePlayerInterpolation(deltaTime);
+
+    // Kraken 페이즈 수면 Y 보정
+    // 크라켄 때는 바다가 올라가면서 로컬 플레이어 Y가 수면 기준으로 올라간다.
+    // 원격 플레이어는 움직일 때만 S_MOVE로 Y가 갱신되므로,
+    // 가만히 있으면 클라 로컬 지면/idle 보정 때문에 다시 ground로 떨어져 보일 수 있다.
+    // 따라서 Kraken이 살아있는 동안에는 원격 플레이어의 표시 Y를 로컬 플레이어 Y 이상으로 유지한다.
+    {
+        bool krakenActive = false;
+
+        for (const auto& kv : m_mapServerMonsterClips)
+        {
+            if (kv.second.monsterType == 7) // Kraken
+            {
+                krakenActive = true;
+                break;
+            }
+        }
+
+        if (krakenActive && pScene && pScene->GetPlayer())
+        {
+            TransformComponent* pLocalT = pScene->GetPlayer()->GetTransform();
+
+            if (pLocalT)
+            {
+                float waterPlayerY = pLocalT->GetPosition().y;
+
+                for (auto& kv : m_mapRemotePlayers)
+                {
+                    uint64 remotePlayerId = kv.first;
+                    GameObject* pRemote = kv.second;
+
+                    if (!pRemote)
+                        continue;
+
+                    // 죽은 원격 플레이어는 죽음 연출 유지
+                    if (m_setDeadRemotePlayers.find(remotePlayerId) != m_setDeadRemotePlayers.end())
+                        continue;
+
+                    // 포탈 인트로 중이면 IntroFly가 위치를 직접 제어하므로 건드리지 않음
+                    if (m_mapRemotePlayerPortalIntroFlyEffects.find(remotePlayerId) != m_mapRemotePlayerPortalIntroFlyEffects.end())
+                        continue;
+
+                    TransformComponent* pRemoteT = pRemote->GetTransform();
+                    if (!pRemoteT)
+                        continue;
+
+                    DirectX::XMFLOAT3 pos = pRemoteT->GetPosition();
+
+                    // 아래로 떨어져 보일 때만 끌어올린다.
+                    // 위에 있는 점프/연출까지 강제로 내리지는 않음.
+                    if (pos.y < waterPlayerY - 0.05f)
+                    {
+                        pos.y = waterPlayerY;
+                        pRemoteT->SetPosition(pos);
+                    }
+
+                    // 보간 target도 같이 보정해둬야 다음 프레임에 다시 아래로 끌려가지 않는다.
+                    auto targetIt = m_mapRemotePlayerMoveTargets.find(remotePlayerId);
+                    if (targetIt != m_mapRemotePlayerMoveTargets.end() &&
+                        targetIt->second.hasTarget &&
+                        targetIt->second.targetPos.y < waterPlayerY - 0.05f)
+                    {
+                        targetIt->second.targetPos.y = waterPlayerY;
+                    }
+                }
+            }
+        }
+    }
 
     // 원격 플레이어 룬 오라 갱신.
     // 원격 플레이어는 Scene::Update의 PlayerUpdate를 타지 않으므로,
@@ -1167,7 +1235,7 @@ void NetworkManager::SendMove(float x, float y, float z, float dirX, float dirY,
     if (!m_bConnected || !m_pSession)
         return;
 
-	// 컷신 중이면 이동 패킷 전송 차단 
+    // 컷신 중이면 이동 패킷 전송 차단 
     if (m_bCutscenePlaying)
     {
         WriteNetworkLog("[Network] C_SKILL blocked: cutscene playing");
@@ -1191,7 +1259,7 @@ void NetworkManager::SendSkill(int skillType, float x, float y, float z, float d
     if (!m_bConnected || !m_pSession)
         return;
 
-	// 컷신 중이면 스킬 패킷 전송 차단
+    // 컷신 중이면 스킬 패킷 전송 차단
     if (m_bCutscenePlaying)
     {
         WriteNetworkLog("[Network] C_SKILL blocked: cutscene playing");
@@ -1306,7 +1374,7 @@ void NetworkManager::SendRuneEquip(uint32 rewardOptionIndex, uint32 skillSlot, u
     pkt.set_skillslot(skillSlot);
     pkt.set_runeslotindex(runeSlotIndex);
 
-	// 서버에 룬 장착 요청 패킷 전송
+    // 서버에 룬 장착 요청 패킷 전송
     auto sendBuffer = ServerPacketHandler::MakeSendBuffer(pkt);
     m_pSession->Send(sendBuffer);
 
@@ -1398,10 +1466,10 @@ void NetworkManager::SendDebugKillAll()
 }
 
 void NetworkManager::SendPlayerAttack(int skillType,
-                                      float x, float y, float z,
-                                      float dirX, float dirY, float dirZ,
-                                      float targetX, float targetY, float targetZ,
-                                      float chargeRatio)
+    float x, float y, float z,
+    float dirX, float dirY, float dirZ,
+    float targetX, float targetY, float targetZ,
+    float chargeRatio)
 {
     if (!m_bConnected || !m_pSession)
         return;
@@ -1533,7 +1601,7 @@ void NetworkManager::QueueMonsterAttack(uint64 monsterId, uint64 targetPlayerId,
 }
 
 void NetworkManager::QueuePlayerDamage(uint64 playerId, float damage, float currentHp,
-                                        bool isDead, uint64 attackerMonsterId)
+    bool isDead, uint64 attackerMonsterId)
 {
     std::lock_guard<std::mutex> lock(m_queueMutex);
     NetworkCommandData cmd{};
@@ -1796,10 +1864,10 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
 
     if (!mapId.empty())
     {
-        if (mapId == "fire_boss")           { pScene->TransitionToBossRoom();        bHandled = true; }
-        else if (mapId == "water_boss")     { pScene->TransitionToWaterBossRoom();   bHandled = true; }
-        else if (mapId == "earth_boss")     { pScene->TransitionToEarthBossRoom();   bHandled = true; }
-        else if (mapId == "grass_boss")     { pScene->TransitionToGrassBossRoom();   bHandled = true; }
+        if (mapId == "fire_boss") { pScene->TransitionToBossRoom();        bHandled = true; }
+        else if (mapId == "water_boss") { pScene->TransitionToWaterBossRoom();   bHandled = true; }
+        else if (mapId == "earth_boss") { pScene->TransitionToEarthBossRoom();   bHandled = true; }
+        else if (mapId == "grass_boss") { pScene->TransitionToGrassBossRoom();   bHandled = true; }
         else if (mapId == "dark_lord")
         {
             // 네트워크 모드에서는 맵만 로드한다.
@@ -1909,7 +1977,7 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
                     groundPos.y,
                     XMFLOAT3(groundPos.x, groundPos.y, groundPos.z),
                     kPlayerPortalIntroStandRadius);
-            
+
                 // 포탈 낙하 연출 중에는 서버 S_MOVE 보정이 로컬 Transform을 덮어쓰지 않게 막는다.
                 m_fLocalMoveCorrectionBlockTimer = kPlayerPortalIntroDuration + 0.35f;
 
@@ -1925,7 +1993,7 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
                 0.0f, 0.0f, 1.0f);
 
             WriteNetworkLog("[Network] Local PortalIntroFly started after room transition");
-          
+
             // 방 전환 직후에도 서버가 이전 위치를 들고 있을 수 있으므로,
             // 새 방의 실제 시작 위치를 몇 프레임 동안 반복 전송한다.
             m_nInitialLocalPositionSyncFrames = 60;
@@ -2021,7 +2089,7 @@ void NetworkManager::QueueMovePlayer(uint64 playerId, float x, float y, float z,
 }
 
 void NetworkManager::QueueSkill(uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ,
-                                int32 skillSlot, float radiusMult, float damageMult)
+    int32 skillSlot, float radiusMult, float damageMult)
 {
     std::lock_guard<std::mutex> lock(m_queueMutex);
 
@@ -2035,7 +2103,7 @@ void NetworkManager::QueueSkill(uint64 playerId, int skillType, float x, float y
     cmd.dirX = dirX;
     cmd.dirY = dirY;
     cmd.dirZ = dirZ;
-    cmd.skillSlot       = skillSlot;
+    cmd.skillSlot = skillSlot;
     cmd.skillRadiusMult = (radiusMult > 0.0f) ? radiusMult : 1.0f;
     cmd.skillDamageMult = (damageMult > 0.0f) ? damageMult : 1.0f;
 
@@ -2191,15 +2259,15 @@ void NetworkManager::UpdateRemotePlayerPortalIntroFlyEffects(float deltaTime)
 }
 
 void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
-                                        ID3D12GraphicsCommandList* pCommandList,
-                                        uint64 playerId, const std::string& name,
-                                        int playerType, float x, float y, float z)
+    ID3D12GraphicsCommandList* pCommandList,
+    uint64 playerId, const std::string& name,
+    int playerType, float x, float y, float z)
 {
     wchar_t idLog[256]; // 로그용 버퍼 선언
 
     // 로컬 플레이어 ID 확인
     uint64 myId = GetLocalPlayerId();
-    
+
     swprintf_s(idLog, 256, L"[Network] Handle Spawn: PktId=%llu, MyLocalId=%llu\n", playerId, myId);
     OutputDebugString(idLog);
 
@@ -2360,7 +2428,7 @@ void NetworkManager::ProcessSpawnPlayer(Scene* pScene, ID3D12Device* pDevice,
     pScene->UpdatePersistentDescriptorEnd();
 
     swprintf_s(idLog, 256, L"[Network] SUCCESS: Spawned RemotePlayer_%llu (%hs). Total RemoteCount: %zu\n",
-              playerId, name.c_str(), m_mapRemotePlayers.size());
+        playerId, name.c_str(), m_mapRemotePlayers.size());
     OutputDebugString(idLog);
 }
 
@@ -2505,9 +2573,23 @@ void NetworkManager::ProcessMovePlayer(Scene* pScene, uint64 playerId, float x, 
 
     AnimationComponent* pAnim = pRemotePlayer->GetComponent<AnimationComponent>();
 
+    // Kraken 페이즈 여부 확인.
+    // Kraken 수면 상승 중에는 S_MOVE의 y가 높아질 수 있으므로,
+    // y > 10 이라고 무조건 포탈 IntroFly로 오판하면 안 된다.
+    bool krakenActiveForRemoteY = false;
+
+    for (const auto& monKv : m_mapServerMonsterClips)
+    {
+        if (monKv.second.monsterType == 7) // Kraken
+        {
+            krakenActiveForRemoteY = true;
+            break;
+        }
+    }
+
     // 초기 접속 또는 패킷 순서 차이로 PLAYER_ACTION_PORTAL_INTRO_FLY보다 S_MOVE가 먼저 올 수 있다.
     // 이때 y가 높으면 일반 이동이 아니라 포탈 Intro Fly 중인 공중 위치로 보고 Levitating을 먼저 잡아준다.
-    if (!bPortalIntroPlaying && pTransform && y > 10.0f)
+    if (!krakenActiveForRemoteY && !bPortalIntroPlaying && pTransform && y > 10.0f)
     {
         RemotePlayerPortalIntroFlyEffect fx{};
         fx.introTimer = kPlayerPortalIntroDuration;
@@ -2563,9 +2645,28 @@ void NetworkManager::ProcessMovePlayer(Scene* pScene, uint64 playerId, float x, 
             bPositionMoved = (dx * dx + dz * dz) > 0.000001f;
 
             // 일반 상태에서는 바로 위치를 박지 않고 목표 위치만 갱신한다.
-            // 실제 Transform 이동은 UpdateRemotePlayerInterpolation에서 부드럽게 처리한다.
+// 실제 Transform 이동은 UpdateRemotePlayerInterpolation에서 부드럽게 처리한다.
             RemotePlayerMoveTarget& moveTarget = m_mapRemotePlayerMoveTargets[playerId];
-            moveTarget.targetPos = XMFLOAT3(x, y, z);
+
+            // Kraken 페이즈에서는 서버에서 온 y가 ground 기준으로 들어올 수 있다.
+            // 이 값을 그대로 targetPos.y에 넣으면 움직일 때 원격 플레이어가 물 아래로 보간된다.
+            // 그래서 Kraken이 살아있는 동안에는 원격 플레이어 표시 y를 로컬 플레이어의 현재 수면 y 이상으로 고정한다.
+            float visualY = y;
+
+            if (krakenActiveForRemoteY && pScene && pScene->GetPlayer())
+            {
+                TransformComponent* pLocalT = pScene->GetPlayer()->GetTransform();
+
+                if (pLocalT)
+                {
+                    float surfaceY = pLocalT->GetPosition().y;
+
+                    if (visualY < surfaceY - 0.05f)
+                        visualY = surfaceY;
+                }
+            }
+
+            moveTarget.targetPos = XMFLOAT3(x, visualY, z);
             moveTarget.hasTarget = true;
         }
 
@@ -2720,13 +2821,13 @@ void NetworkManager::TickPendingMeteorShowers(FluidSkillVFXManager* pVFXManager,
     if (!pVFXManager) return;
 
     // MeteorBehavior 상수와 동일 (시각 일치).
-    constexpr int   SHOWER_COUNT       = 6;
-    constexpr float SHOWER_INTERVAL    = 0.5f;
+    constexpr int   SHOWER_COUNT = 6;
+    constexpr float SHOWER_INTERVAL = 0.5f;
     constexpr float SMALL_SPAWN_HEIGHT = 40.0f;
-    constexpr float SMALL_FALL_SPEED   = 28.0f;
+    constexpr float SMALL_FALL_SPEED = 28.0f;
     constexpr float FINAL_SPAWN_HEIGHT = 60.0f;
-    constexpr float FINAL_FALL_SPEED   = 22.0f;
-    constexpr float FINAL_DELAY        = 0.5f;
+    constexpr float FINAL_FALL_SPEED = 22.0f;
+    constexpr float FINAL_DELAY = 0.5f;
     const XMFLOAT3 upDir = XMFLOAT3(0.0f, 1.0f, 0.0f);
 
     for (auto it = m_vPendingMeteorShowers.begin(); it != m_vPendingMeteorShowers.end(); )
@@ -2748,8 +2849,8 @@ void NetworkManager::TickPendingMeteorShowers(FluidSkillVFXManager* pVFXManager,
                     sm.trailVfxId = pVFXManager->SpawnEffectLayer(
                         sm.spawnPos, upDir, trailDef.name, trailDef.layers[0], true);
                 }
-                sm.spawned      = true;
-                sm.fallElapsed  = 0.0f;
+                sm.spawned = true;
+                sm.fallElapsed = 0.0f;
                 sm.fallDuration = SMALL_SPAWN_HEIGHT / SMALL_FALL_SPEED;
             }
 
@@ -2792,9 +2893,9 @@ void NetworkManager::TickPendingMeteorShowers(FluidSkillVFXManager* pVFXManager,
                 if (!outerDef.layers.empty())
                     sh.finalOuterId = pVFXManager->SpawnEffectLayer(
                         sh.finalSpawnPos, upDir, outerDef.name, outerDef.layers[0], true);
-                sh.finalFallElapsed  = 0.0f;
+                sh.finalFallElapsed = 0.0f;
                 sh.finalFallDuration = FINAL_SPAWN_HEIGHT / FINAL_FALL_SPEED;
-                sh.finalSpawned      = true;
+                sh.finalSpawned = true;
             }
         }
 
@@ -2811,9 +2912,9 @@ void NetworkManager::TickPendingMeteorShowers(FluidSkillVFXManager* pVFXManager,
             {
                 if (sh.finalTrailId >= 0) { pVFXManager->StopEffect(sh.finalTrailId); sh.finalTrailId = -1; }
                 if (sh.finalOuterId >= 0) { pVFXManager->StopEffect(sh.finalOuterId); sh.finalOuterId = -1; }
-                EffectDef impDef  = EffectRegistry::Get().GetEffect("R_MeteorImpact",     RUNE_NONE);
+                EffectDef impDef = EffectRegistry::Get().GetEffect("R_MeteorImpact", RUNE_NONE);
                 EffectDef fireDef = EffectRegistry::Get().GetEffect("R_MeteorGroundFire", RUNE_NONE);
-                pVFXManager->SpawnEffectDef(sh.targetPos, upDir, impDef,  true);
+                pVFXManager->SpawnEffectDef(sh.targetPos, upDir, impDef, true);
                 pVFXManager->SpawnEffectDef(sh.targetPos, upDir, fireDef, true);
                 sh.finalImpacted = true;
                 sh.postImpactKeepalive = 1.0f;  // impact VFX 자체 lifetime 잠시 더 보호
@@ -2863,7 +2964,7 @@ void NetworkManager::CheckRemotePlayerVFXTimeout(Scene* pScene, float deltaTime)
     {
         RemoteVFXState& state = it->second;
         state.lastUpdateTime += deltaTime;
-        state.totalElapsed   += deltaTime;
+        state.totalElapsed += deltaTime;
 
         // 종료 조건 1: maxLifetime > 0 이면 누적 시간이 그 값을 넘으면 종료 (Water Vortex 4s 등)
         // 종료 조건 2: maxLifetime == 0 인 채널 VFX 는 패킷이 maxIdleTime 동안 안 오면 종료 (FireBeam 등)
@@ -2886,7 +2987,7 @@ void NetworkManager::CheckRemotePlayerVFXTimeout(Scene* pScene, float deltaTime)
 }
 
 void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ,
-                                  int32 serverSkillSlot, float serverRadiusMult, float serverDamageMult)
+    int32 serverSkillSlot, float serverRadiusMult, float serverDamageMult)
 {
     // 결산: 원격 플레이어 스킬 사용 카운트 (로컬은 SendSkill 측에서 처리)
     if (playerId != m_nLocalPlayerId.load())
@@ -2944,26 +3045,26 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
     }
 
     // caster 위치(서버가 전달) — y 는 발 위치. 오프라인의 "캐릭터 머리 높이" 는 +5.0f.
-    const XMFLOAT3 casterPos    = XMFLOAT3(x, y, z);
-    const XMFLOAT3 casterHead   = XMFLOAT3(x, y + 5.0f, z);
+    const XMFLOAT3 casterPos = XMFLOAT3(x, y, z);
+    const XMFLOAT3 casterHead = XMFLOAT3(x, y + 5.0f, z);
 
     // wire dir 슬롯: Q/E/RC 는 lookDir(정규화), R 은 절대 target 좌표 (SkillComponent.cpp).
     // 일단 lookDir 해석부터 (R 처리에서는 별도로 target 사용).
     XMFLOAT3 lookDir = XMFLOAT3(dirX, dirY, dirZ);
     {
-        float L = sqrtf(lookDir.x*lookDir.x + lookDir.y*lookDir.y + lookDir.z*lookDir.z);
-        if (L > 0.001f) { lookDir.x/=L; lookDir.y/=L; lookDir.z/=L; }
-        else            { lookDir = XMFLOAT3(0.0f, 0.0f, 1.0f); }
+        float L = sqrtf(lookDir.x * lookDir.x + lookDir.y * lookDir.y + lookDir.z * lookDir.z);
+        if (L > 0.001f) { lookDir.x /= L; lookDir.y /= L; lookDir.z /= L; }
+        else { lookDir = XMFLOAT3(0.0f, 0.0f, 1.0f); }
     }
     XMFLOAT3 horizontalDir = XMFLOAT3(lookDir.x, 0.0f, lookDir.z);
     {
-        float L = sqrtf(horizontalDir.x*horizontalDir.x + horizontalDir.z*horizontalDir.z);
-        if (L > 0.001f) { horizontalDir.x/=L; horizontalDir.z/=L; }
-        else            { horizontalDir = XMFLOAT3(0.0f, 0.0f, 1.0f); }
+        float L = sqrtf(horizontalDir.x * horizontalDir.x + horizontalDir.z * horizontalDir.z);
+        if (L > 0.001f) { horizontalDir.x /= L; horizontalDir.z /= L; }
+        else { horizontalDir = XMFLOAT3(0.0f, 0.0f, 1.0f); }
     }
 
     FluidSkillVFXManager* pVFXManager = pScene ? pScene->GetFluidVFXManager() : nullptr;
-    ProjectileManager*    pProjManager = pScene ? pScene->GetProjectileManager() : nullptr;
+    ProjectileManager* pProjManager = pScene ? pScene->GetProjectileManager() : nullptr;
 
     // 원격 플레이어 element
     ElementType remoteElement = ElementType::Water;
@@ -3035,26 +3136,26 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
     // 1.0 (=무지정/기본) 이면 추가 스케일 없음.
     const float vfxRadiusScale = (serverRadiusMult > 0.0f) ? serverRadiusMult : 1.0f;
     auto spawnOneShot = [&](const char* effectName, const XMFLOAT3& origin, const XMFLOAT3& dir) -> int
-    {
-        if (!pVFXManager) return -1;
-        EffectDef def = EffectRegistry::Get().GetEffect(effectName, remoteRuneFlags);
-        if (visualElementOverride != ElementType::None)
-            ApplyElementToEffectDef(def, visualElementOverride);
-        if (vfxRadiusScale != 1.0f)
         {
-            for (auto& l : def.layers)
-                l.sizeScale *= vfxRadiusScale;
-        }
-        return pVFXManager->SpawnEffectDef(origin, dir, def, true);
-    };
+            if (!pVFXManager) return -1;
+            EffectDef def = EffectRegistry::Get().GetEffect(effectName, remoteRuneFlags);
+            if (visualElementOverride != ElementType::None)
+                ApplyElementToEffectDef(def, visualElementOverride);
+            if (vfxRadiusScale != 1.0f)
+            {
+                for (auto& l : def.layers)
+                    l.sizeScale *= vfxRadiusScale;
+            }
+            return pVFXManager->SpawnEffectDef(origin, dir, def, true);
+        };
 
     // Q/E 의 target 기반 스킬 (StoneSpike Q 등) 은 wire 에 lookDir 만 와서
     // lookDir 방향 ~8m 앞을 proxy target 으로 사용 (Earth Q 만 해당).
     // Water Q/E (WaterPuddle/Vortex) 는 송신 측이 target 을 dir 슬롯에 실어 보냄.
     auto proxyTargetAhead = [&](float dist) -> XMFLOAT3
-    {
-        return XMFLOAT3(casterPos.x + horizontalDir.x * dist, casterPos.y, casterPos.z + horizontalDir.z * dist);
-    };
+        {
+            return XMFLOAT3(casterPos.x + horizontalDir.x * dist, casterPos.y, casterPos.z + horizontalDir.z * dist);
+        };
 
     // Water Q/E 와 R 류는 dir 슬롯이 정규화 방향이 아니라 absolute target 좌표.
     bool dirSlotIsTarget =
@@ -3074,11 +3175,11 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
         case ElementType::Water: // WaterPuddle: target 기준 낙하 + 웅덩이 (송신 측이 dir 슬롯에 target 실어 보냄)
         {
             XMFLOAT3 tgt = wireTarget;
-            XMFLOAT3 fallPos   = XMFLOAT3(tgt.x, tgt.y + 5.5f, tgt.z);
+            XMFLOAT3 fallPos = XMFLOAT3(tgt.x, tgt.y + 5.5f, tgt.z);
             XMFLOAT3 puddlePos = XMFLOAT3(tgt.x, tgt.y + 2.5f, tgt.z);
             // 두 effect 모두 EffectDef.duration = -1 (offline 에선 behavior 가 수동 종료). 원격은 동일 시각에 자동 종료 필요.
             // FALL_DURATION=1.5s, DURATION=6.0s (WaterPuddleBehavior.h).
-            int fallId = spawnOneShot("Q_WaterFall",   fallPos,   XMFLOAT3(0.0f, -1.0f, 0.0f));
+            int fallId = spawnOneShot("Q_WaterFall", fallPos, XMFLOAT3(0.0f, -1.0f, 0.0f));
             int puddId = spawnOneShot("Q_WaterPuddle", puddlePos, XMFLOAT3(0.0f, -1.0f, 0.0f));
             if (fallId >= 0) m_vTimedVFXKills.push_back({ fallId, 1.5f });
             if (puddId >= 0) m_vTimedVFXKills.push_back({ puddId, 6.0f });
@@ -3089,7 +3190,7 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
             break;
         case ElementType::Earth: // StoneSpike: caster→앞쪽으로 SPIKE_COUNT 개 일정 간격 (오프라인은 시간차)
         {
-            const int   SPIKE_COUNT   = 4;
+            const int   SPIKE_COUNT = 4;
             const float SPIKE_SPACING = 2.5f;
             for (int i = 0; i < SPIKE_COUNT; ++i)
             {
@@ -3121,9 +3222,9 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
             if (remoteElement == ElementType::Fire)
             {
                 chanOrigin = XMFLOAT3(casterHead.x + lookDir.x * 1.3f,
-                                      casterHead.y + lookDir.y * 1.3f,
-                                      casterHead.z + lookDir.z * 1.3f);
-                chanDir    = lookDir;
+                    casterHead.y + lookDir.y * 1.3f,
+                    casterHead.z + lookDir.z * 1.3f);
+                chanDir = lookDir;
                 effectName = "E_FireBeam_Core";
             }
             else // Water
@@ -3131,7 +3232,7 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
                 // 송신 측이 dir 슬롯에 target 실어 보냄.
                 XMFLOAT3 tgt = wireTarget;
                 chanOrigin = XMFLOAT3(tgt.x, tgt.y + 3.0f, tgt.z);
-                chanDir    = XMFLOAT3(0.0f, 1.0f, 0.0f);
+                chanDir = XMFLOAT3(0.0f, 1.0f, 0.0f);
                 effectName = "E_WaterVortex";
             }
 
@@ -3173,17 +3274,17 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
         {
             // GaleRush: 출발 burst(caster + y2.0), ring(caster 지면, y=0), trail(caster + y2.0, -forward)
             XMFLOAT3 burstPos = XMFLOAT3(casterPos.x, casterPos.y + 2.0f, casterPos.z);
-            XMFLOAT3 ringPos  = XMFLOAT3(casterPos.x, casterPos.y,        casterPos.z);
-            XMFLOAT3 backDir  = XMFLOAT3(-horizontalDir.x, 0.0f, -horizontalDir.z);
+            XMFLOAT3 ringPos = XMFLOAT3(casterPos.x, casterPos.y, casterPos.z);
+            XMFLOAT3 backDir = XMFLOAT3(-horizontalDir.x, 0.0f, -horizontalDir.z);
             spawnOneShot("E_GaleRush_Burst", burstPos, horizontalDir);
-            spawnOneShot("E_GaleRush_Ring",  ringPos,  horizontalDir);
+            spawnOneShot("E_GaleRush_Ring", ringPos, horizontalDir);
             spawnOneShot("E_GaleRush_Trail", burstPos, backDir);
         }
         else // Earth EarthArmor
         {
             // caster 위치(지면), up
             spawnOneShot("E_EarthArmor_Burst", casterPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
-            spawnOneShot("E_EarthArmor_Aura",  casterPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
+            spawnOneShot("E_EarthArmor_Aura", casterPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
         }
         break;
     }
@@ -3195,9 +3296,9 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
         // caster → target 평면 방향
         XMFLOAT3 toTarget = XMFLOAT3(targetPos.x - casterPos.x, 0.0f, targetPos.z - casterPos.z);
         {
-            float L = sqrtf(toTarget.x*toTarget.x + toTarget.z*toTarget.z);
-            if (L > 0.001f) { toTarget.x/=L; toTarget.z/=L; }
-            else            { toTarget = XMFLOAT3(0.0f, 0.0f, 1.0f); }
+            float L = sqrtf(toTarget.x * toTarget.x + toTarget.z * toTarget.z);
+            if (L > 0.001f) { toTarget.x /= L; toTarget.z /= L; }
+            else { toTarget = XMFLOAT3(0.0f, 0.0f, 1.0f); }
         }
 
         switch (remoteElement)
@@ -3206,8 +3307,8 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
         {
             // Meteor 샤워 — 즉시 spawn 이 아니라 시간차 시뮬레이션 큐에 등록.
             // (MeteorBehavior::Update 와 동일 흐름: 6개 소형 0.5s 간격 → 마지막 후 0.5s → 최종 대형)
-            constexpr int   SHOWER_COUNT       = 6;
-            constexpr float SHOWER_INTERVAL    = 0.5f;
+            constexpr int   SHOWER_COUNT = 6;
+            constexpr float SHOWER_INTERVAL = 0.5f;
             constexpr float SMALL_SPAWN_HEIGHT = 40.0f;
             constexpr float SMALL_SCATTER_RADIUS = 12.0f;
 
@@ -3227,7 +3328,7 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
             for (int i = 0; i < SHOWER_COUNT; ++i)
             {
                 PendingSmallMeteor sm;
-                float angle  = angleDist(rng);
+                float angle = angleDist(rng);
                 float radius = radiusDist(rng);
                 sm.scatterPos = XMFLOAT3(
                     targetPos.x + radius * cosf(angle),
@@ -3243,7 +3344,7 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
         case ElementType::Water:
         {
             // TidalWave: caster head 에서 target 방향으로 파동 진행
-            spawnOneShot("R_TidalWave",      casterHead, toTarget);
+            spawnOneShot("R_TidalWave", casterHead, toTarget);
             spawnOneShot("R_TidalWave_Foam", casterHead, toTarget);
             break;
         }
@@ -3252,7 +3353,7 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
             // Tornado 는 Instant 활성화 (TornadoBehavior::DURATION=6.0). 송신 측이 후속 패킷 안 보냄.
             // 첫 패킷에 spawn 하고 6초 lifetime 부여. 이후 같은 player 가 R 보내면 TrackEffect 로 위치 갱신.
             XMFLOAT3 tornadoPos = XMFLOAT3(targetPos.x, 0.0f, targetPos.z);
-            XMFLOAT3 upDir      = XMFLOAT3(0.0f, 1.0f, 0.0f);
+            XMFLOAT3 upDir = XMFLOAT3(0.0f, 1.0f, 0.0f);
 
             auto vfxIt = m_mapRemotePlayerVFX.find(playerId);
             bool hasExistingVFX = (vfxIt != m_mapRemotePlayerVFX.end() && vfxIt->second.vfxId >= 0);
@@ -3282,7 +3383,7 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
         {
             // Earthquake: **caster 위치(epicenter)** — target 좌표 사용하지 않음.
             spawnOneShot("R_Earthquake_Burst", casterPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
-            spawnOneShot("R_Earthquake_Ring",  casterPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
+            spawnOneShot("R_Earthquake_Ring", casterPos, XMFLOAT3(0.0f, 1.0f, 0.0f));
             break;
         }
         default: break;
@@ -3330,22 +3431,22 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
 
         // 부채꼴 N개 타겟 생성 (가운데 + 좌/우 ±15도)
         auto buildFanTargets = [&](int count) -> std::vector<XMFLOAT3>
-        {
-            std::vector<XMFLOAT3> out;
-            if (count <= 1) { out.push_back(projTarget); return out; }
-            constexpr float DEG = 15.0f;
-            for (int i = 0; i < count; ++i)
             {
-                float t = (count == 1) ? 0.f : (float(i) - float(count - 1) * 0.5f); // -..0..+
-                float angleDeg = t * DEG / std::max(1.f, float(count - 1) * 0.5f);
-                float rad = DirectX::XMConvertToRadians(angleDeg);
-                float cs = cosf(rad), sn = sinf(rad);
-                XMFLOAT3 d(horizontalDir.x * cs - horizontalDir.z * sn, 0.f,
-                            horizontalDir.x * sn + horizontalDir.z * cs);
-                out.push_back(XMFLOAT3(projOrigin.x + d.x * 50.0f, projOrigin.y, projOrigin.z + d.z * 50.0f));
-            }
-            return out;
-        };
+                std::vector<XMFLOAT3> out;
+                if (count <= 1) { out.push_back(projTarget); return out; }
+                constexpr float DEG = 15.0f;
+                for (int i = 0; i < count; ++i)
+                {
+                    float t = (count == 1) ? 0.f : (float(i) - float(count - 1) * 0.5f); // -..0..+
+                    float angleDeg = t * DEG / std::max(1.f, float(count - 1) * 0.5f);
+                    float rad = DirectX::XMConvertToRadians(angleDeg);
+                    float cs = cosf(rad), sn = sinf(rad);
+                    XMFLOAT3 d(horizontalDir.x * cs - horizontalDir.z * sn, 0.f,
+                        horizontalDir.x * sn + horizontalDir.z * cs);
+                    out.push_back(XMFLOAT3(projOrigin.x + d.x * 50.0f, projOrigin.y, projOrigin.z + d.z * 50.0f));
+                }
+                return out;
+            };
 
         // 궤도(TRF_ORB): 즉시 spawn 대신 0.5초 공전 visual 후 deferred. ORB 가 가장 강력하므로 우선 적용.
         if (bOrb)
@@ -3355,7 +3456,7 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
             {
                 EffectDef def = EffectRegistry::Get().GetEffect("sub_orbital_halo");
                 ApplyElementToEffectDef(def, projElement);
-                orbVfxId = pVFXManager->SpawnEffectDef(projOrigin, XMFLOAT3(0,1,0), def, false);
+                orbVfxId = pVFXManager->SpawnEffectDef(projOrigin, XMFLOAT3(0, 1, 0), def, false);
             }
 
             int count = bMlt ? 3 : 1;
@@ -3527,7 +3628,7 @@ void NetworkManager::ProcessPlayerAction(Scene* pScene, uint64 playerId, uint32 
         // 잘 보이도록 2x 스케일/파티클 (단계 추적 어려워 큰 단계 고정).
         for (auto& l : def.layers)
         {
-            l.sizeScale    *= 2.0f;
+            l.sizeScale *= 2.0f;
             l.particleCount = static_cast<int>(l.particleCount * 1.5f);
         }
         if (elem != ElementType::None)
@@ -3632,7 +3733,7 @@ void NetworkManager::ProcessPlayerAction(Scene* pScene, uint64 playerId, uint32 
         default: break;
         }
         int decalId = pDecals->Spawn(DecalTexture::Star08, DirectX::XMFLOAT3(x, y, z),
-                                      8.0f, 0.f, 30.0f, color, 1.2f);
+            8.0f, 0.f, 30.0f, color, 1.2f);
         slotArr[slotIdx] = decalId;
         break;
     }
@@ -3748,7 +3849,7 @@ void NetworkManager::UpdatePendingOrbitals(Scene* pScene, float deltaTime)
 {
     if (!pScene || m_vPendingOrbitals.empty()) return;
     FluidSkillVFXManager* pVFX = pScene->GetFluidVFXManager();
-    ProjectileManager*    pPM  = pScene->GetProjectileManager();
+    ProjectileManager* pPM = pScene->GetProjectileManager();
     if (!pPM) return;
 
     for (auto it = m_vPendingOrbitals.begin(); it != m_vPendingOrbitals.end(); )
@@ -3791,28 +3892,28 @@ void NetworkManager::UpdateRemoteActivationRuneVFX(Scene* pScene)
     DirectX::XMFLOAT3 up(0.f, 1.f, 0.f);
 
     auto trackOne = [&](std::unordered_map<uint64, int>& vfxMap)
-    {
-        for (auto it = vfxMap.begin(); it != vfxMap.end(); )
         {
-            uint64 pid = it->first;
-            int vfxId = it->second;
+            for (auto it = vfxMap.begin(); it != vfxMap.end(); )
+            {
+                uint64 pid = it->first;
+                int vfxId = it->second;
 
-            auto playerIt = m_mapRemotePlayers.find(pid);
-            if (playerIt == m_mapRemotePlayers.end() || !playerIt->second)
-            {
-                if (vfxId >= 0) pVFX->StopEffect(vfxId);
-                it = vfxMap.erase(it);
-                continue;
+                auto playerIt = m_mapRemotePlayers.find(pid);
+                if (playerIt == m_mapRemotePlayers.end() || !playerIt->second)
+                {
+                    if (vfxId >= 0) pVFX->StopEffect(vfxId);
+                    it = vfxMap.erase(it);
+                    continue;
+                }
+                if (auto* t = playerIt->second->GetTransform())
+                {
+                    DirectX::XMFLOAT3 pos = t->GetPosition();
+                    pos.y += 1.5f; // PLAYER_ACTION_CHARGE_BEGIN/ENHANCE_BEGIN 의 spawn pos 와 동일하게
+                    pVFX->TrackEffect(vfxId, pos, up);
+                }
+                ++it;
             }
-            if (auto* t = playerIt->second->GetTransform())
-            {
-                DirectX::XMFLOAT3 pos = t->GetPosition();
-                pos.y += 1.5f; // PLAYER_ACTION_CHARGE_BEGIN/ENHANCE_BEGIN 의 spawn pos 와 동일하게
-                pVFX->TrackEffect(vfxId, pos, up);
-            }
-            ++it;
-        }
-    };
+        };
 
     trackOne(m_mapRemoteChargeVFXId);
     trackOne(m_mapRemoteEnhanceVFXId);
@@ -3850,8 +3951,8 @@ static MonsterPreset GetMonsterPresetByType(uint32 monsterType)
     //   Demon: idle="Idle1", chase="Run"
     switch (monsterType)
     {
-    // attackClip/deathClip 는 EnemySpawner.cpp 의 m_AnimConfig.m_strAttackClip / m_strDeathClip 과 일치해야 함
-    // 네트워크 monsterType → 오프라인 JSON Fire stage preset 과 동일한 Rd (red) 메쉬로 통일
+        // attackClip/deathClip 는 EnemySpawner.cpp 의 m_AnimConfig.m_strAttackClip / m_strDeathClip 과 일치해야 함
+        // 네트워크 monsterType → 오프라인 JSON Fire stage preset 과 동일한 Rd (red) 메쉬로 통일
     case 2: // Melee → FireGolem_Rd  | 카테고리: 근접 (주황)
         return { "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd.bin",
                  "Assets/Enemies/Elementals/FireGolem_Rd/FireGolem_Rd_Anim.bin",
@@ -4133,8 +4234,8 @@ static void ApplyWhiteMaterialAndTextureToHierarchy(
     if (pGO->GetMesh())
     {
         MATERIAL mat;
-        mat.m_cAmbient  = XMFLOAT4(tintR * 0.3f, tintG * 0.3f, tintB * 0.3f, 1.0f);
-        mat.m_cDiffuse  = XMFLOAT4(tintR, tintG, tintB, 1.0f);
+        mat.m_cAmbient = XMFLOAT4(tintR * 0.3f, tintG * 0.3f, tintB * 0.3f, 1.0f);
+        mat.m_cDiffuse = XMFLOAT4(tintR, tintG, tintB, 1.0f);
         mat.m_cSpecular = XMFLOAT4(0.3f, 0.3f, 0.3f, 32.0f);
         mat.m_cEmissive = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
         pGO->SetMaterial(mat);
@@ -4203,7 +4304,7 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
 
     // attackType은 현재 스폰 외형 선택에는 직접 사용하지 않지만,
     MonsterPreset preset = GetMonsterPresetByVisualType(visualType, monsterType);
-    
+
     // 서버 몬스터는 로컬 Room에 속하지 않는 전역 오브젝트로 생성
     CRoom* pPrevRoom = pScene->GetCurrentRoom();
 
@@ -4316,7 +4417,7 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
 
     pScene->SetCurrentRoom(nullptr);
 
-	// 첫 몬스터 스폰 시 현재 방을 강제로 Active로 전환한다.
+    // 첫 몬스터 스폰 시 현재 방을 강제로 Active로 전환한다.
     if (pPrevRoom && pPrevRoom->GetState() == RoomState::Inactive)
     {
         pPrevRoom->SetState(RoomState::Active);
@@ -4646,9 +4747,9 @@ void NetworkManager::ProcessMonsterSpawn(Scene* pScene, ID3D12Device* pDevice,
     }
 
     // 디버그: 실제 배치된 transform과 preset 클립 확인 (VS Output + file 둘 다)
-    XMFLOAT3 finalPos = pT ? pT->GetPosition() : XMFLOAT3{0,0,0};
-    XMFLOAT3 finalRot = pT ? pT->GetRotation() : XMFLOAT3{0,0,0};
-    XMFLOAT3 finalSca = pT ? pT->GetScale()    : XMFLOAT3{1,1,1};
+    XMFLOAT3 finalPos = pT ? pT->GetPosition() : XMFLOAT3{ 0,0,0 };
+    XMFLOAT3 finalRot = pT ? pT->GetRotation() : XMFLOAT3{ 0,0,0 };
+    XMFLOAT3 finalSca = pT ? pT->GetScale() : XMFLOAT3{ 1,1,1 };
     char abuf[1024];
     sprintf_s(abuf, sizeof(abuf),
         "[Network] Spawned NetMonster_%llu type=%u attack=%u visual=%u boss=%d hp=%.1f | pos=(%.2f,%.2f,%.2f) rot=(0.0,%.1f,0.0) scale=(%.2f,%.2f,%.2f) | idleClip=%s walkClip=%s mesh=%s",
@@ -5139,6 +5240,8 @@ static float GetVfxStartDelay(uint32 monsterType, uint32 attackType, float serve
     case 7: // JumpSlam — 점프 후 착지 임팩트. 서버 windup 1.5s
         // Golem Primary: 클라 m_fWindupTime 3.35 + m_fJumpDuration 0.25 = 3.6s 임팩트
         if (monsterType == 8) return 3.6f;
+        // BlueDragon은 서버가 effectPositions 착지 좌표 + delayed world circle hit로 맞춘다.
+        if (monsterType == 10) return fmaxf(serverWindupSec, 0.1f);
         return 1.0f;
     case 21: // GolemJumpShock — 클라 windup 1.3 + jumpDur 1.8 = 3.1s
         if (monsterType == 8) return 3.1f;
@@ -5146,7 +5249,9 @@ static float GetVfxStartDelay(uint32 monsterType, uint32 attackType, float serve
     case 22: // GolemWideSlam — 클라 windup 3.3 + jumpDur 0.3 = 3.6s
         if (monsterType == 8) return 3.6f;
         return fmaxf(serverWindupSec, 0.1f);
-    case 8: // TailSweep — 빠른 휩쓸기 (서버 windup 0)
+    case 8: // TailSweep
+        if (monsterType == 7 || monsterType == 10)
+            return fmaxf(serverWindupSec, 0.1f); // Kraken / BlueDragon = 0.8초
         return 0.3f;
     case 9: // GroundRupture — 콤보 첫 hit
         return 0.5f;
@@ -5157,7 +5262,15 @@ static float GetVfxStartDelay(uint32 monsterType, uint32 attackType, float serve
     case 2: // Ranged
         return 0.3f;
 
-    // Red Dragon 추가 패턴 (서버 enum 14~20)
+        // Kraken 전용 패턴 — 서버 delayed hit와 동일한 release timing
+    case 11: // KrakenCombo 첫 타
+        return (monsterType == 7) ? 0.7f : fmaxf(serverWindupSec, 0.1f);
+    case 12: // SideSmash
+        return (monsterType == 7) ? 1.2f : fmaxf(serverWindupSec, 0.1f);
+    case 13: // WaterBurst
+        return (monsterType == 7) ? 0.9f : fmaxf(serverWindupSec, 0.1f);
+
+        // Red Dragon 추가 패턴 (서버 enum 14~20)
     case 14: // LightCombo — 첫 hit 텔레그래프
         return 0.25f;
     case 15: // HeavyCombo — 긴 텔레그래프
@@ -5205,7 +5318,7 @@ static NetIndicatorParams GetIndicatorParamsForAttack(uint32 monsterType, uint32
         case 8:  p.radius = 12.0f; break;       // TailSweep (Circle 폴백)
         case 10: p.type = NetworkManager::NetIndicatorType::None; break;  // FlyingBarrage 억제
 
-        // Red Dragon 추가 패턴
+            // Red Dragon 추가 패턴
         case 14: // LightCombo — 90° 콘 5~6m
             p.type = NetworkManager::NetIndicatorType::ForwardBox;
             p.radius = 5.5f; p.length = 6.0f; break;
@@ -5224,19 +5337,41 @@ static NetIndicatorParams GetIndicatorParamsForAttack(uint32 monsterType, uint32
         }
         break;
 
-    case 7: // Kraken — preset ForwardBox 14×30
+    case 7: // Kraken — 서버 attackType 5/8/11/12/13과 동기화
         switch (attackType)
         {
-        case 5:  // Breath (잉크) — 좁은 spread 면 표시, 넓으면 억제. 서버는 spread 안 보내므로 표시.
-            p.type = NetworkManager::NetIndicatorType::ForwardBox;
-            p.radius = 14.0f; p.length = 30.0f; break;
+        case 5:  // Breath
         case 8:  // TailSweep
+        case 11: // KrakenCombo
             p.type = NetworkManager::NetIndicatorType::ForwardBox;
             p.radius = 14.0f; p.length = 30.0f; break;
-        case 9:  // GroundRupture (3연타 콤보)
+        case 12: // SideSmash
             p.type = NetworkManager::NetIndicatorType::ForwardBox;
-            p.radius = 14.0f; p.length = 30.0f; break;
+            p.radius = 12.0f; p.length = 28.0f; break;
+        case 13: // WaterBurst — 서버 원형 판정 radius 35
+            p.type = NetworkManager::NetIndicatorType::Circle;
+            p.radius = 35.0f; break;
         default: p.type = NetworkManager::NetIndicatorType::None; break;
+        }
+        break;
+
+    case 10: // BlueDragon — Water Boss Phase1
+        switch (attackType)
+        {
+        case 5: // Breath
+            p.type = NetworkManager::NetIndicatorType::ForwardBox;
+            p.radius = 18.0f; p.length = 70.0f; break;
+        case 7: // JumpSlam
+            p.type = NetworkManager::NetIndicatorType::Circle;
+            p.radius = 9.0f; break;
+        case 8: // TailSweep
+            p.type = NetworkManager::NetIndicatorType::Circle;
+            p.radius = 12.0f; break;
+        case 15: // HeavyCombo
+            p.type = NetworkManager::NetIndicatorType::ForwardBox;
+            p.radius = 7.0f; p.length = 7.5f; break;
+        default:
+            p.type = NetworkManager::NetIndicatorType::None; break;
         }
         break;
 
@@ -5339,16 +5474,6 @@ static NetIndicatorParams GetIndicatorParamsForAttack(uint32 monsterType, uint32
         }
         break;
 
-    case 10: // BlueDragon — preset Circle r=14
-        switch (attackType)
-        {
-        case 5:  p.type = NetworkManager::NetIndicatorType::Circle; p.radius = 14.0f; break;
-        case 7:  p.type = NetworkManager::NetIndicatorType::Circle; p.radius = 9.0f;  break;
-        case 8:  p.type = NetworkManager::NetIndicatorType::Circle; p.radius = 14.0f; break;
-        case 4:  p.type = NetworkManager::NetIndicatorType::None;   break;
-        default: p.type = NetworkManager::NetIndicatorType::Circle; p.radius = 14.0f; break;
-        }
-        break;
 
     default:
         p.type = NetworkManager::NetIndicatorType::None;
@@ -5366,7 +5491,7 @@ void NetworkManager::HideMonsterIndicators(ServerMonsterIndicators& ind)
             pT->SetPosition(0.0f, -1000.0f, 0.0f);
             pT->SetScale(0.0f, 0.0f, 0.0f);
         }
-    };
+        };
     hide(ind.circleBorder);
     hide(ind.circleFill);
     hide(ind.boxBorder);
@@ -5406,9 +5531,9 @@ void NetworkManager::UpdatePendingMonsterVFX(Scene* pScene, float deltaTime)
                                 // 현재 위치에서 캐시된 타겟까지 forward 재계산 + fanAngle 적용
                                 float dx = it->targetPos.x - spawnPos.x;
                                 float dz = it->targetPos.z - spawnPos.z;
-                                float len = sqrtf(dx*dx + dz*dz);
+                                float len = sqrtf(dx * dx + dz * dz);
                                 if (len < 0.001f) { dx = 0.f; dz = 1.f; }
-                                else              { dx /= len; dz /= len; }
+                                else { dx /= len; dz /= len; }
                                 float ang = it->fanAngleDeg * (3.14159265f / 180.0f);
                                 float c = cosf(ang), s = sinf(ang);
                                 float rdx = dx * c - dz * s;
@@ -5463,42 +5588,42 @@ void NetworkManager::UpdatePendingMonsterVFX(Scene* pScene, float deltaTime)
                     // 빔 방향: origin → targetPos에 fanAngle 적용
                     float dx = it->targetPos.x - origin.x;
                     float dz = it->targetPos.z - origin.z;
-                    float len = sqrtf(dx*dx + dz*dz);
+                    float len = sqrtf(dx * dx + dz * dz);
                     if (len < 0.001f) { dx = 0.f; dz = 1.f; }
-                    else              { dx /= len; dz /= len; }
+                    else { dx /= len; dz /= len; }
                     float ang = it->fanAngleDeg * (3.14159265f / 180.0f);
                     float c = cosf(ang), s = sinf(ang);
                     DirectX::XMFLOAT3 dir{ dx * c - dz * s, 0.f, dx * s + dz * c };
 
                     // EffectDef — 오프라인 MegaBreathAttackBehavior::SpawnFireWave 와 동일
                     EffectDef def;
-                    def.name    = "Net_MegaBreath";
+                    def.name = "Net_MegaBreath";
                     def.element = ElementType::Fire;
 
                     EffectLayer layer;
-                    layer.type      = EmitterType::SPH_Beam;
-                    layer.element   = ElementType::Fire;
+                    layer.type = EmitterType::SPH_Beam;
+                    layer.element = ElementType::Fire;
                     layer.coreColor = { 1.0f, 0.45f, 0.10f, 1.0f };
                     layer.edgeColor = { 0.95f, 0.35f, 0.08f, 0.95f };
-                    layer.useSSF    = true;
+                    layer.useSSF = true;
 
                     SPHEmitterParams& sph = layer.sph;
                     sph.particleCount = it->beamParticleCount;
-                    sph.spawnRadius   = (it->fanAngleDeg == 0.0f) ? 3.0f : 2.5f;
-                    sph.particleSize  = 1.8f;
+                    sph.spawnRadius = (it->fanAngleDeg == 0.0f) ? 3.0f : 2.5f;
+                    sph.particleSize = 1.8f;
 
                     VFXPhase phase;
                     phase.startTime = 0.f;
-                    phase.duration  = it->beamDuration + 0.5f;
+                    phase.duration = it->beamDuration + 0.5f;
                     phase.motionMode = ParticleMotionMode::Beam;
-                    phase.beamDesc.beamLength    = it->beamLength;
-                    phase.beamDesc.spreadRadius  = 6.0f * it->beamSpreadMult;
-                    phase.beamDesc.speedMin      = it->beamLength / (it->beamDuration * 0.7f);
-                    phase.beamDesc.speedMax      = phase.beamDesc.speedMin * 1.4f;
-                    phase.beamDesc.swirlExpand   = true;
-                    phase.beamDesc.swirlSpeed    = 0.6f;
-                    phase.beamDesc.swirlFadeEnd  = 0.f;
-                    phase.beamDesc.enableFlow    = true;
+                    phase.beamDesc.beamLength = it->beamLength;
+                    phase.beamDesc.spreadRadius = 6.0f * it->beamSpreadMult;
+                    phase.beamDesc.speedMin = it->beamLength / (it->beamDuration * 0.7f);
+                    phase.beamDesc.speedMax = phase.beamDesc.speedMin * 1.4f;
+                    phase.beamDesc.swirlExpand = true;
+                    phase.beamDesc.swirlSpeed = 0.6f;
+                    phase.beamDesc.swirlFadeEnd = 0.f;
+                    phase.beamDesc.enableFlow = true;
                     phase.beamDesc.verticalScale = 0.18f;
                     sph.phases.push_back(phase);
                     sph.maxParticleSpeed = phase.beamDesc.speedMax * 1.2f;
@@ -5659,9 +5784,9 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                     float borderR = fullR;
                     pT->SetScale(borderR, 1.0f, borderR);
                     MATERIAL mat;
-                    mat.m_cAmbient  = XMFLOAT4(0.6f, 0.02f, 0.02f, 1.0f);
-                    mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.15f, 0.1f,  1.0f);
-                    mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f,  0.0f,  1.0f);
+                    mat.m_cAmbient = XMFLOAT4(0.6f, 0.02f, 0.02f, 1.0f);
+                    mat.m_cDiffuse = XMFLOAT4(1.0f, 0.15f, 0.1f, 1.0f);
+                    mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
                     mat.m_cEmissive = XMFLOAT4(3.5f, 0.4f, 0.15f, 1.0f);   // 2.0→3.5 더 밝게
                     ind.circleBorder->SetMaterial(mat);
                 }
@@ -5680,8 +5805,8 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                     pT->SetScale(fillR, 1.0f, fillR);
 
                     MATERIAL mat;
-                    mat.m_cAmbient  = XMFLOAT4(0.3f, 0.02f, 0.0f, 1.0f);
-                    mat.m_cDiffuse  = XMFLOAT4(1.0f, 0.2f + 0.6f * fillProgress, 0.05f, 1.0f);
+                    mat.m_cAmbient = XMFLOAT4(0.3f, 0.02f, 0.0f, 1.0f);
+                    mat.m_cDiffuse = XMFLOAT4(1.0f, 0.2f + 0.6f * fillProgress, 0.05f, 1.0f);
                     mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
                     // 처음 0.5 → 끝 2.5 (붉음 → 노란 가열)
                     mat.m_cEmissive = XMFLOAT4(
@@ -5696,7 +5821,7 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
         {
             // 작은 박스도 잘 보이게 최소 반폭/길이 보장
             float fHalfW = (ind.hitRadius < 5.0f) ? 5.0f : ind.hitRadius;
-            float fLen   = (ind.hitLength < 10.0f) ? 10.0f : ind.hitLength;
+            float fLen = (ind.hitLength < 10.0f) ? 10.0f : ind.hitLength;
             float yawRad = ind.yawDeg * (3.14159265f / 180.0f);
             float fwdX = sinf(yawRad);
             float fwdZ = cosf(yawRad);
@@ -5798,7 +5923,7 @@ static const char* GetMonsterAttackClipForType(uint32 monsterType, uint32 attack
         case 8:  return "Tail Attack";        // TailSweep
         case 10: return "Flame Attack";       // FlyingBarrage
 
-        // Red Dragon 추가 패턴 — Tail Attack 으로 시각 차별화 (휘두름 모션이 콤보/돌진과 어울림)
+            // Red Dragon 추가 패턴 — Tail Attack 으로 시각 차별화 (휘두름 모션이 콤보/돌진과 어울림)
         case 14: return "Tail Attack";        // LightCombo (3-hit 휘두름)
         case 15: return "Tail Attack";        // HeavyCombo (2-hit 강한 휘두름)
         case 16: return "Tail Attack";        // FuryCombo (5-hit 폭주 휘두름)
@@ -5933,7 +6058,7 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
     {
         auto clipIt2 = m_mapServerMonsterClips.find(monsterId);
         uint32 mtSnap = (clipIt2 != m_mapServerMonsterClips.end()) ? clipIt2->second.monsterType : 0;
-        if (mtSnap == 11)
+        if (mtSnap == 7 || mtSnap == 10 || mtSnap == 11)
         {
             if (auto* pT = pMonster->GetTransform())
             {
@@ -6098,13 +6223,13 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
         if (params.type != NetIndicatorType::None)
         {
             HideMonsterIndicators(ind);   // 이전 인디케이터 정리
-            ind.activeType  = params.type;
+            ind.activeType = params.type;
             ind.windupTotal = windupSec;
             ind.windupTimer = 0.0f;
-            ind.hitRadius   = params.radius;
-            ind.hitLength   = params.length;
-            ind.tint        = params.tint;
-            ind.attackType  = attackType;
+            ind.hitRadius = params.radius;
+            ind.hitLength = params.length;
+            ind.tint = params.tint;
+            ind.attackType = attackType;
             ind.anchorX = atkX; ind.anchorY = atkY; ind.anchorZ = atkZ;
             ind.yawLocked = false;
             // ForwardBox: 보스의 현재 yaw 사용 (transform 에서 직접 읽기).
@@ -6137,14 +6262,18 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
         {
             if (GameObject* pLocal = pScene ? pScene->GetPlayer() : nullptr)
                 if (auto* pT = pLocal->GetTransform())
-                { targetPos = pT->GetPosition(); targetPos.y += 1.5f; bHasTarget = true; }
+                {
+                    targetPos = pT->GetPosition(); targetPos.y += 1.5f; bHasTarget = true;
+                }
         }
         else
         {
             auto rIt = m_mapRemotePlayers.find(targetPlayerId);
             if (rIt != m_mapRemotePlayers.end() && rIt->second)
                 if (auto* pT = rIt->second->GetTransform())
-                { targetPos = pT->GetPosition(); targetPos.y += 1.5f; bHasTarget = true; }
+                {
+                    targetPos = pT->GetPosition(); targetPos.y += 1.5f; bHasTarget = true;
+                }
         }
         if (!bHasTarget)
         {
@@ -6161,54 +6290,54 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
         //   각 발사 항목에 monsterId + fanAngleDeg 저장 → 실제 스폰 시점에 보스 현재 위치/yaw 로 재계산.
         //   결과: 보스가 windup/breath 동안 움직여도 VFX 가 보스 입에서 정확히 발사됨.
         auto QueueFan = [&](int count, float spreadDeg, float speed,
-                            float radius, float scale, float maxDist,
-                            float startDelay, float dur)
-        {
-            float halfSpread   = (count > 1) ? (spreadDeg * 0.5f) : 0.0f;
-            float fireInterval = (count > 0) ? (dur / (float)count) : 0.0f;
-
-            for (int i = 0; i < count; ++i)
+            float radius, float scale, float maxDist,
+            float startDelay, float dur)
             {
-                float t = (count > 1) ? ((float)i / (count - 1)) : 0.5f;
-                float angDeg = -halfSpread + spreadDeg * t;
+                float halfSpread = (count > 1) ? (spreadDeg * 0.5f) : 0.0f;
+                float fireInterval = (count > 0) ? (dur / (float)count) : 0.0f;
 
-                PendingMonsterVFX p;
-                p.kind        = PendingVFXKind::Projectile;
-                p.delay       = startDelay + i * fireInterval;
-                p.monsterId   = monsterId;          // 실시간 위치 추적
-                p.startPos    = startPos;           // fallback (보스 사라지면 사용)
-                p.targetPos   = targetPos;          // 패킷 시점 타겟 위치
-                p.yOffset     = 2.0f;
-                p.fanAngleDeg = angDeg;
-                p.fireRange   = 60.0f;
-                p.speed     = speed;
-                p.radius    = radius;
-                p.scale     = scale;
-                p.maxDist   = maxDist;
-                p.element   = elem;
-                m_vPendingMonsterVFX.push_back(p);
-            }
-        };
+                for (int i = 0; i < count; ++i)
+                {
+                    float t = (count > 1) ? ((float)i / (count - 1)) : 0.5f;
+                    float angDeg = -halfSpread + spreadDeg * t;
+
+                    PendingMonsterVFX p;
+                    p.kind = PendingVFXKind::Projectile;
+                    p.delay = startDelay + i * fireInterval;
+                    p.monsterId = monsterId;          // 실시간 위치 추적
+                    p.startPos = startPos;           // fallback (보스 사라지면 사용)
+                    p.targetPos = targetPos;          // 패킷 시점 타겟 위치
+                    p.yOffset = 2.0f;
+                    p.fanAngleDeg = angDeg;
+                    p.fireRange = 60.0f;
+                    p.speed = speed;
+                    p.radius = radius;
+                    p.scale = scale;
+                    p.maxDist = maxDist;
+                    p.element = elem;
+                    m_vPendingMonsterVFX.push_back(p);
+                }
+            };
 
         auto QueueExplosion = [&](const XMFLOAT3& pos, float delaySec)
-        {
-            PendingMonsterVFX p;
-            p.kind     = PendingVFXKind::Explosion;
-            p.delay    = delaySec;
-            p.startPos = pos;
-            p.element  = elem;
-            m_vPendingMonsterVFX.push_back(p);
-        };
+            {
+                PendingMonsterVFX p;
+                p.kind = PendingVFXKind::Explosion;
+                p.delay = delaySec;
+                p.startPos = pos;
+                p.element = elem;
+                m_vPendingMonsterVFX.push_back(p);
+            };
 
         auto QueueShake = [&](float delaySec, float intensity, float duration)
-        {
-            PendingMonsterVFX p;
-            p.kind     = PendingVFXKind::CameraShake;
-            p.delay    = delaySec;
-            p.shakeIntensity = intensity;
-            p.shakeDuration  = duration;
-            m_vPendingMonsterVFX.push_back(p);
-        };
+            {
+                PendingMonsterVFX p;
+                p.kind = PendingVFXKind::CameraShake;
+                p.delay = delaySec;
+                p.shakeIntensity = intensity;
+                p.shakeDuration = duration;
+                m_vPendingMonsterVFX.push_back(p);
+            };
 
         // DarkLord 최종보스 패턴 라우팅.
  // 서버는 attackType/effectOption/effectPositions만 보내고,
@@ -6417,9 +6546,9 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             // Red Dragon (6): 5발 50° 큰 화염 — 전투 중 잘 보이게 scale 3.0
             // Kraken  (7):   10발 55° 잉크 다발 — 다발이라 개별 scale 1.5
             // BlueDragon(10): 5발 50° scale 2.5
-            if (mt == 6)      QueueFan(5,  50.0f, 35.0f, 1.2f, 3.0f, 70.0f, startDelay, 0.8f);
+            if (mt == 6)      QueueFan(5, 50.0f, 35.0f, 1.2f, 3.0f, 70.0f, startDelay, 0.8f);
             else if (mt == 7) QueueFan(10, 55.0f, 32.0f, 0.8f, 1.5f, 60.0f, startDelay, 1.1f);
-            else              QueueFan(5,  50.0f, 35.0f, 1.0f, 2.5f, 70.0f, startDelay, 0.8f);
+            else              QueueFan(5, 50.0f, 35.0f, 1.0f, 2.5f, 70.0f, startDelay, 0.8f);
             break;
 
         case 6:   // MegaBreath — 옵션A: 클라 단독 9-phase 시퀀스 (오프라인 MegaBreathAttackBehavior 1:1)
@@ -6448,8 +6577,8 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
                 XMFLOAT3 wallPos{ -30.0f, 0.0f, 6.71f };
                 switch (wallDir)
                 {
-                case 0: wallPos.x =  75.95f; wallPos.z =   6.71f; break; // +X (84.95-9, 벽 쪽으로 당김)
-                case 1: wallPos.x = -135.95f; wallPos.z =   6.71f; break; // -X (-144.95+9)
+                case 0: wallPos.x = 75.95f; wallPos.z = 6.71f; break; // +X (84.95-9, 벽 쪽으로 당김)
+                case 1: wallPos.x = -135.95f; wallPos.z = 6.71f; break; // -X (-144.95+9)
                 case 2: wallPos.x = -30.0f;  wallPos.z = 119.40f; break; // +Z (128.40-9)
                 default: wallPos.x = -30.0f; wallPos.z = -105.95f; break; // -Z (-114.95+9)
                 }
@@ -6488,9 +6617,23 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             break;
 
         case 7:   // JumpSlam — 보스 점프 + 착지 폭발
-            QueueExplosion(XMFLOAT3{ atkX, atkY + 0.2f, atkZ }, startDelay);
+        {
+            XMFLOAT3 impactPos{ atkX, atkY + 0.2f, atkZ };
+            if (!effectPositions.empty())
+            {
+                impactPos = effectPositions.front();
+                impactPos.y = atkY + 0.2f;
+            }
+            else if (mt == 10)
+            {
+                // 구버전 서버 패킷 fallback: BlueDragon은 타겟 발치가 실제 착지점에 가장 가깝다.
+                impactPos = targetPos;
+                impactPos.y = atkY + 0.2f;
+            }
+
+            QueueExplosion(impactPos, startDelay);
             QueueShake(startDelay, 2.5f, 0.5f);
-            // 보스 점프 액션 — 포물선 yOffset (서버는 XZ 이미 텔레포트됨)
+            // 보스 점프 액션 — 포물선 yOffset (서버는 XZ MOVE 패킷으로 착지점 보간)
             {
                 ServerBossAction act;
                 act.kind = BossActionKind::Jump;
@@ -6500,28 +6643,41 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
                 m_mapServerBossActions[monsterId] = act;
             }
             break;
+        }
 
         case 8:   // TailSweep
-            if (mt == 6)
+            if (mt == 6 || mt == 10)
             {
-                // Red Dragon — windupSec=0 (서버 default) 라 즉시 임팩트.
-                //   보스 발 밑 폭발 + 좌우로 호 그리며 여러 폭발 (꼬리가 휩쓰는 호)
+                // Dragon / BlueDragon — 보스 발 밑 폭발 + 좌우 호 폭발
                 QueueExplosion(XMFLOAT3{ atkX, atkY + 0.2f, atkZ }, startDelay);
-                // 보스 yaw 기준 정면 ±90° 호로 4개 폭발 (꼬리 sweep 시뮬레이션)
                 if (auto* pT = pMonster->GetTransform())
                 {
                     float yawRad = pT->GetRotation().y * (3.14159265f / 180.0f);
                     for (int i = 0; i < 4; ++i)
                     {
                         float angle = yawRad + (-1.5708f + (i / 3.0f) * 3.1416f);
-                        float r = 8.0f;
+                        float r = (mt == 10) ? 6.0f : 8.0f;
                         DirectX::XMFLOAT3 ep{ atkX + sinf(angle) * r, atkY + 0.2f, atkZ + cosf(angle) * r };
                         QueueExplosion(ep, startDelay + 0.05f * i);
                     }
                 }
                 QueueShake(startDelay, 2.0f, 0.4f);
             }
-            // 다른 보스는 애니메이션만 (인디케이터로 대체)
+            else if (mt == 7)
+            {
+                // Kraken TailSweep — 전방으로 촉수 충격이 지나가는 느낌의 물 폭발 3개
+                if (auto* pT = pMonster->GetTransform())
+                {
+                    float yawRad = pT->GetRotation().y * (3.14159265f / 180.0f);
+                    for (int i = 1; i <= 3; ++i)
+                    {
+                        float d = 8.0f * static_cast<float>(i);
+                        DirectX::XMFLOAT3 ep{ atkX + sinf(yawRad) * d, atkY + 0.2f, atkZ + cosf(yawRad) * d };
+                        QueueExplosion(ep, startDelay + 0.08f * static_cast<float>(i - 1));
+                    }
+                }
+                QueueShake(startDelay, 2.0f, 0.35f);
+            }
             break;
 
         case 9:   // GroundRupture — windup 끝에 타겟 지점 폭발
@@ -6539,7 +6695,47 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             }
             break;
 
-        // Red Dragon 추가 패턴 — 클라 오프라인 VFX 미러
+        case 11: // KrakenCombo — 3연타 전방 충격
+            if (mt == 7)
+            {
+                if (auto* pT = pMonster->GetTransform())
+                {
+                    float yawRad = pT->GetRotation().y * (3.14159265f / 180.0f);
+                    const float delays[3] = { 0.0f, 0.35f, 0.70f };
+                    const float dists[3] = { 10.0f, 16.0f, 22.0f };
+                    for (int i = 0; i < 3; ++i)
+                    {
+                        DirectX::XMFLOAT3 ep{ atkX + sinf(yawRad) * dists[i], atkY + 0.2f, atkZ + cosf(yawRad) * dists[i] };
+                        QueueExplosion(ep, startDelay + delays[i]);
+                        QueueShake(startDelay + delays[i], 1.4f + 0.4f * i, 0.20f);
+                    }
+                }
+            }
+            break;
+
+        case 12: // Kraken SideSmash
+            if (mt == 7)
+            {
+                if (auto* pT = pMonster->GetTransform())
+                {
+                    float yawRad = pT->GetRotation().y * (3.14159265f / 180.0f);
+                    DirectX::XMFLOAT3 ep{ atkX + sinf(yawRad) * 14.0f, atkY + 0.2f, atkZ + cosf(yawRad) * 14.0f };
+                    QueueExplosion(ep, startDelay);
+                }
+                QueueShake(startDelay, 2.4f, 0.35f);
+            }
+            break;
+
+        case 13: // Kraken WaterBurst — 360도 물 탄막
+            if (mt == 7)
+            {
+                QueueFan(16, 360.0f, 28.0f, 0.8f, 1.1f, 60.0f, startDelay, 1.6f);
+                QueueExplosion(XMFLOAT3{ atkX, atkY + 0.2f, atkZ }, startDelay);
+                QueueShake(startDelay, 1.2f, 0.25f);
+            }
+            break;
+
+            // Red Dragon 추가 패턴 — 클라 오프라인 VFX 미러
         case 14:  // LightCombo — 3-hit (8/8/12), 콘 90°, 1.8s 윈도우
             // 보스 발치 + 정면 ±70° 폭발 3회 (휘두르는 발톱 느낌)
             for (int i = 0; i < 3; ++i)
@@ -6657,7 +6853,7 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
                 return;
             }
             break;
-        
+
         case 27:
         case 30:
         case 31:
@@ -6679,12 +6875,12 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
 
     char buf[128];
     sprintf_s(buf, "[Network] MonsterAttack applied: monsterId=%llu clip=%s lock=%.2fs atkType=%u",
-              monsterId, attackClip, lockDur, attackType);
+        monsterId, attackClip, lockDur, attackType);
     WriteNetworkLog(buf);
 }
 
 void NetworkManager::ProcessPlayerDamage(Scene* pScene, uint64 playerId, float damage,
-                                          float currentHp, bool isDead, uint64 attackerMonsterId)
+    float currentHp, bool isDead, uint64 attackerMonsterId)
 {
     if (!pScene) return;
 
@@ -6810,12 +7006,12 @@ void NetworkManager::ProcessPlayerDamage(Scene* pScene, uint64 playerId, float d
 
     char buf[192];
     sprintf_s(buf, "[Network] PlayerDamage applied: id=%llu local=%d dmg=%.1f hp=%.1f dead=%d attacker=%llu",
-              playerId, bIsLocal ? 1 : 0, damage, currentHp, isDead ? 1 : 0, attackerMonsterId);
+        playerId, bIsLocal ? 1 : 0, damage, currentHp, isDead ? 1 : 0, attackerMonsterId);
     WriteNetworkLog(buf);
 }
 
 void NetworkManager::QueueMonsterDamage(uint64 monsterId, float damage, float currentHp, bool isDead,
-                                        uint64 attackerPlayerId, int skillType)
+    uint64 attackerPlayerId, int skillType)
 {
     std::lock_guard<std::mutex> lock(m_queueMutex);
 
@@ -6973,10 +7169,10 @@ void NetworkManager::QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 p
     std::lock_guard<std::mutex> lock(m_queueMutex);
 
     NetworkCommandData cmd{};
-    cmd.type           = NetworkCommand::BossEvent;
-    cmd.monsterId      = monsterId;
-    cmd.bossEventType  = eventType;
-    cmd.phaseIndex     = phaseIndex;
+    cmd.type = NetworkCommand::BossEvent;
+    cmd.monsterId = monsterId;
+    cmd.bossEventType = eventType;
+    cmd.phaseIndex = phaseIndex;
 
     m_vCommandQueue.push_back(cmd);
 }
@@ -7093,7 +7289,7 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
                 }
 
                 m_mapServerBossIntros[monsterId] = st;
-                
+
 
                 if (auto* pAnim = pBoss->GetComponent<AnimationComponent>())
                     pAnim->CrossFade("Fly Glide", 0.15f, true, true);
@@ -7109,17 +7305,17 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
         if (pBoss)
         {
             ServerBossIntroState st;
-            st.phase       = BossIntroPhase::FlyingIn;
-            st.phaseTimer  = 0.0f;
+            st.phase = BossIntroPhase::FlyingIn;
+            st.phaseTimer = 0.0f;
             st.startHeight = 25.0f;  // 오프라인 Scene.cpp 와 동일 (Red Dragon 25u)
 
             if (auto* pT = pBoss->GetTransform())
             {
                 XMFLOAT3 p = pT->GetPosition();
-                st.bossX   = p.x;
-                st.bossZ   = p.z;
+                st.bossX = p.x;
+                st.bossZ = p.z;
                 st.groundY = p.y;            // 스폰 좌표 = 지면 y
-                st.curY    = p.y + st.startHeight; // 시작은 25u 위
+                st.curY = p.y + st.startHeight; // 시작은 25u 위
                 pT->SetPosition(p.x, st.curY, p.z);
 
                 // Red Dragon intro 시작 시 정면이 보이도록 고정
@@ -7152,7 +7348,7 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
 
             char introBuf[160];
             sprintf_s(introBuf, "[Network] BossIntro (offline-port) started monsterId=%llu startHeight=%.1f",
-                      monsterId, st.startHeight);
+                monsterId, st.startHeight);
             WriteNetworkLog(introBuf);
         }
         else
@@ -7222,7 +7418,7 @@ void NetworkManager::ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 ev
 
     char buf[192];
     sprintf_s(buf, "[Network] BossEvent processed: monsterId=%llu type=%u phase=%u clip=%s",
-              monsterId, eventType, phaseIndex, roarClip ? roarClip : "(none)");
+        monsterId, eventType, phaseIndex, roarClip ? roarClip : "(none)");
     WriteNetworkLog(buf);
 }
 
@@ -7820,8 +8016,8 @@ void NetworkManager::PlayNetworkNormalMonsterAttackBehavior(
 }
 
 void NetworkManager::ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float damage,
-                                          float currentHp, bool isDead,
-                                          uint64 attackerPlayerId, int skillType)
+    float currentHp, bool isDead,
+    uint64 attackerPlayerId, int skillType)
 {
     if (!pScene) return;
 
@@ -7990,7 +8186,7 @@ void NetworkManager::ProcessMonsterDamage(Scene* pScene, uint64 monsterId, float
 
     char buf[192];
     sprintf_s(buf, "[Network] MonsterDamage applied: id=%llu dmg=%.1f hp=%.1f dead=%d attacker=%llu skill=%d",
-              monsterId, damage, currentHp, isDead ? 1 : 0, attackerPlayerId, skillType);
+        monsterId, damage, currentHp, isDead ? 1 : 0, attackerPlayerId, skillType);
     WriteNetworkLog(buf);
 }
 
@@ -8132,7 +8328,7 @@ void NetworkManager::ProcessRuneEquip(Scene* pScene, uint64 playerId, uint32 ski
             pTargetPlayer = it->second;
     }
 
-	// 해당 플레이어의 SkillComponent에 룬 장착 정보 적용
+    // 해당 플레이어의 SkillComponent에 룬 장착 정보 적용
     SkillComponent* pSkill = pTargetPlayer ? pTargetPlayer->GetComponent<SkillComponent>() : nullptr;
     if (pSkill)
     {
@@ -8278,36 +8474,36 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
 
     // 대상 플레이어 GameObject 조회 (룬 효과는 playerId 또는 targetPlayerId 기준)
     auto FindPlayer = [&](uint64 id) -> GameObject*
-    {
-        if (id == 0) return nullptr;
-        if (id == GetLocalPlayerId())
-            return pScene->GetPlayer();
-        auto it = m_mapRemotePlayers.find(id);
-        if (it != m_mapRemotePlayers.end())
-            return it->second;
-        return nullptr;
-    };
+        {
+            if (id == 0) return nullptr;
+            if (id == GetLocalPlayerId())
+                return pScene->GetPlayer();
+            auto it = m_mapRemotePlayers.find(id);
+            if (it != m_mapRemotePlayers.end())
+                return it->second;
+            return nullptr;
+        };
 
     GameObject* pCaster = FindPlayer(playerId);
     GameObject* pTargetPlayer = (targetPlayerId != 0) ? FindPlayer(targetPlayerId) : nullptr;
 
     // 룬 효과 표시 기준 위치 — targetPlayer/caster 의 transform 우선, fallback 으로 packet pos
     auto GetDisplayPos = [&](GameObject* pObj) -> DirectX::XMFLOAT3
-    {
-        if (pObj)
         {
-            if (auto* t = pObj->GetComponent<TransformComponent>())
+            if (pObj)
             {
-                DirectX::XMFLOAT3 p = t->GetPosition();
-                p.y += 2.0f; // 머리 위쪽
-                return p;
+                if (auto* t = pObj->GetComponent<TransformComponent>())
+                {
+                    DirectX::XMFLOAT3 p = t->GetPosition();
+                    p.y += 2.0f; // 머리 위쪽
+                    return p;
+                }
             }
-        }
-        return DirectX::XMFLOAT3(pos.x, pos.y + 1.5f, pos.z);
-    };
+            return DirectX::XMFLOAT3(pos.x, pos.y + 1.5f, pos.z);
+        };
 
     const bool bLocalCaster = (playerId == GetLocalPlayerId());
-    
+
     // ─────────────────────────────────────────────
     // 네트워크 룬 공통 VFX 헬퍼
     // 서버 룬 패킷을 받은 모든 클라에서 같은 위치에 같은 VFX를 띄운다.
@@ -8406,13 +8602,13 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
         };
 
     auto SpawnStatusSprite = [&](const std::string& tex, const DirectX::XMFLOAT3& origin,
-                                 float size, float lifetime, DirectX::XMFLOAT4 color,
-                                 float spin = 0.f)
-    {
-        DirectX::XMFLOAT3 p = origin;
-        p.y += 1.5f;
-        VFXSpriteManager::Get().Spawn(tex, p, size, lifetime, color, spin, VFXSpriteAnim::FadeOut);
-    };
+        float size, float lifetime, DirectX::XMFLOAT4 color,
+        float spin = 0.f)
+        {
+            DirectX::XMFLOAT3 p = origin;
+            p.y += 1.5f;
+            VFXSpriteManager::Get().Spawn(tex, p, size, lifetime, color, spin, VFXSpriteAnim::FadeOut);
+        };
 
     // 서버 이벤트 코드는 float 로 오지만 정수 의미 — 안전한 라운드.
     const int eventCode = static_cast<int>(value1 + 0.5f);
@@ -8479,14 +8675,14 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
         {
         case 1: // 화상 적용/갱신 — value2 = 현재 화상 중첩 수
             SpawnStatusSprite("fire1", monsterPos, 110.f, 0.55f,
-                              {1.0f, 0.55f, 0.15f, 1.0f}, 0.8f);
+                { 1.0f, 0.55f, 0.15f, 1.0f }, 0.8f);
             break;
         case 2: // 틱 피해 — value2 = 실제 틱 피해량
         {
             wchar_t buf[24];
             swprintf_s(buf, L"%.0f", value2);
             DamageNumberManager::Get().AddText(textPos, buf,
-                {1.0f, 0.55f, 0.15f, 1.0f});
+                { 1.0f, 0.55f, 0.15f, 1.0f });
             break;
         }
         case 3: // 화상 종료 — 별도 표시 없음 (오라가 자연 페이드)
@@ -8494,11 +8690,11 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
         case 4: // 업화 폭발 — value2 = 실제 폭발 피해량
         {
             SpawnStatusSprite("flare1", monsterPos, 360.f, 0.65f,
-                              {1.0f, 0.4f, 0.1f, 1.0f}, 4.0f);
+                { 1.0f, 0.4f, 0.1f, 1.0f }, 4.0f);
             wchar_t buf[32];
             swprintf_s(buf, L"BURN! %.0f", value2);
             DamageNumberManager::Get().AddText(textPos, buf,
-                {1.0f, 0.35f, 0.1f, 1.0f});
+                { 1.0f, 0.35f, 0.1f, 1.0f });
             break;
         }
         default: break;
@@ -8516,11 +8712,11 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
         {
         case 1: // 냉기 적용/갱신 — value2 = 현재 냉기 중첩 수
             SpawnStatusSprite("twirl1", monsterPos, 120.f, 0.6f,
-                              {0.45f, 0.75f, 1.0f, 1.0f}, 2.5f);
+                { 0.45f, 0.75f, 1.0f, 1.0f }, 2.5f);
             break;
         case 2: // 빙결 발생 — value2 = 빙결 지속시간 (실제 정지/UI 는 S_MONSTER_STAGGER 가 처리)
             SpawnStatusSprite("star_08", monsterPos, 220.f, 0.5f,
-                              {0.7f, 0.9f, 1.0f, 1.0f}, 0.f);
+                { 0.7f, 0.9f, 1.0f, 1.0f }, 0.f);
             break;
         case 3: // 냉기 종료
             break;
@@ -8529,19 +8725,19 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
             wchar_t buf[32];
             swprintf_s(buf, L"FROST %.0f", value2);
             DamageNumberManager::Get().AddText(textPos, buf,
-                {0.6f, 0.85f, 1.0f, 1.0f});
+                { 0.6f, 0.85f, 1.0f, 1.0f });
             break;
         }
         case 5: // 빙폭 광역 폭발 — value2 = 빙폭 피해량 (월드 위치 기준)
         {
             DirectX::XMFLOAT3 burstPos = pos; burstPos.y += 0.5f;
             VFXSpriteManager::Get().Spawn("flare1", burstPos, 420.f, 0.65f,
-                {0.55f, 0.85f, 1.0f, 1.0f}, 3.0f, VFXSpriteAnim::FadeOut);
+                { 0.55f, 0.85f, 1.0f, 1.0f }, 3.0f, VFXSpriteAnim::FadeOut);
             wchar_t buf[32];
             swprintf_s(buf, L"FROST BURST %.0f", value2);
             DirectX::XMFLOAT3 t2 = burstPos; t2.y += 1.5f;
             DamageNumberManager::Get().AddText(t2, buf,
-                {0.6f, 0.9f, 1.0f, 1.0f});
+                { 0.6f, 0.9f, 1.0f, 1.0f });
             break;
         }
         default: break;
@@ -8559,11 +8755,11 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
         {
         case 1: // 풍압 적용/갱신 — value2 = 현재 풍압 중첩 수
             SpawnStatusSprite("twirl1", monsterPos, 130.f, 0.55f,
-                              {0.75f, 1.0f, 0.7f, 1.0f}, 4.0f);
+                { 0.75f, 1.0f, 0.7f, 1.0f }, 4.0f);
             break;
         case 2: // 공중 경직 / 회오리 — value2 = 경직 시간
             SpawnStatusSprite("twirl1", monsterPos, 240.f, 0.7f,
-                              {0.85f, 1.0f, 0.85f, 1.0f}, 6.0f);
+                { 0.85f, 1.0f, 0.85f, 1.0f }, 6.0f);
             break;
         case 3: // 풍압 종료
             break;
@@ -8572,19 +8768,19 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
             wchar_t buf[32];
             swprintf_s(buf, L"BLADE %.0f", value2);
             DamageNumberManager::Get().AddText(textPos, buf,
-                {0.8f, 1.0f, 0.75f, 1.0f});
+                { 0.8f, 1.0f, 0.75f, 1.0f });
             break;
         }
         case 5: // 폭풍 광역 폭발 — value2 = 폭풍 피해량
         {
             DirectX::XMFLOAT3 burstPos = pos; burstPos.y += 0.5f;
             VFXSpriteManager::Get().Spawn("flare1", burstPos, 440.f, 0.7f,
-                {0.7f, 1.0f, 0.7f, 1.0f}, 5.0f, VFXSpriteAnim::FadeOut);
+                { 0.7f, 1.0f, 0.7f, 1.0f }, 5.0f, VFXSpriteAnim::FadeOut);
             wchar_t buf[32];
             swprintf_s(buf, L"STORM %.0f", value2);
             DirectX::XMFLOAT3 t2 = burstPos; t2.y += 1.5f;
             DamageNumberManager::Get().AddText(t2, buf,
-                {0.75f, 1.0f, 0.75f, 1.0f});
+                { 0.75f, 1.0f, 0.75f, 1.0f });
             break;
         }
         default: break;
@@ -8602,11 +8798,11 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
         {
         case 1: // 균열 적용/갱신 — value2 = 현재 균열 스택
             SpawnStatusSprite("magic3", monsterPos, 150.f, 0.6f,
-                              {0.85f, 0.65f, 0.4f, 1.0f}, 1.2f);
+                { 0.85f, 0.65f, 0.4f, 1.0f }, 1.2f);
             break;
         case 2: // 균열 경직 — value2 = 경직 시간
             SpawnStatusSprite("flare1", monsterPos, 220.f, 0.55f,
-                              {0.85f, 0.7f, 0.4f, 1.0f}, 0.f);
+                { 0.85f, 0.7f, 0.4f, 1.0f }, 0.f);
             break;
         case 3: // 균열 종료
             break;
@@ -8615,22 +8811,22 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
             wchar_t buf[32];
             swprintf_s(buf, L"CRACK %.0f", value2);
             DamageNumberManager::Get().AddText(textPos, buf,
-                {0.9f, 0.7f, 0.35f, 1.0f});
+                { 0.9f, 0.7f, 0.35f, 1.0f });
             break;
         }
         case 5: // ERT_2 냉기 연계 — value2 = 냉기 지속시간
             SpawnStatusSprite("twirl1", monsterPos, 110.f, 0.55f,
-                              {0.5f, 0.8f, 1.0f, 1.0f}, 2.0f);
+                { 0.5f, 0.8f, 1.0f, 1.0f }, 2.0f);
             break;
         case 6: // ERT_4 붕괴 피해 — value2 = 붕괴 피해량
         {
             VFXSpriteManager::Get().Spawn("flare1",
                 DirectX::XMFLOAT3(monsterPos.x, monsterPos.y + 0.8f, monsterPos.z),
-                380.f, 0.65f, {0.95f, 0.55f, 0.25f, 1.0f}, 3.0f, VFXSpriteAnim::FadeOut);
+                380.f, 0.65f, { 0.95f, 0.55f, 0.25f, 1.0f }, 3.0f, VFXSpriteAnim::FadeOut);
             wchar_t buf[32];
             swprintf_s(buf, L"COLLAPSE %.0f", value2);
             DamageNumberManager::Get().AddText(textPos, buf,
-                {1.0f, 0.6f, 0.25f, 1.0f});
+                { 1.0f, 0.6f, 0.25f, 1.0f });
             break;
         }
         default: break;
@@ -8869,7 +9065,7 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
     if (runeId == "ABY_RVG")
     {
         const bool bConsume = (triggerType == 31 /* VENGEANCE_CONSUME */)
-                              || (triggerType == 0  /* NONE — 현재 서버 동작 */);
+            || (triggerType == 0  /* NONE — 현재 서버 동작 */);
         if (bConsume)
         {
             if (pCaster)
@@ -9749,31 +9945,31 @@ void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType
     if (!pVFXManager) return;
 
     using DirectX::XMFLOAT3;
-    XMFLOAT3 up   = XMFLOAT3(0.0f, 1.0f, 0.0f);
+    XMFLOAT3 up = XMFLOAT3(0.0f, 1.0f, 0.0f);
     XMFLOAT3 down = XMFLOAT3(0.0f, -1.0f, 0.0f);
     XMFLOAT3 head = XMFLOAT3(pos.x, pos.y + 2.0f, pos.z);
 
     auto spawnScaled = [&](const char* effectName, const XMFLOAT3& origin, const XMFLOAT3& dir)
-    {
-        EffectDef def = EffectRegistry::Get().GetEffect(effectName, runeFlags);
-        // 에코는 원본의 50% 위력 — 시각 스케일도 50% 로 축소
-        for (auto& l : def.layers)
-            l.sizeScale *= 0.5f;
-        pVFXManager->SpawnEffectDef(origin, dir, def, true);
-    };
+        {
+            EffectDef def = EffectRegistry::Get().GetEffect(effectName, runeFlags);
+            // 에코는 원본의 50% 위력 — 시각 스케일도 50% 로 축소
+            for (auto& l : def.layers)
+                l.sizeScale *= 0.5f;
+            pVFXManager->SpawnEffectDef(origin, dir, def, true);
+        };
 
     switch (skillType)
     {
     case 1: // Q
         switch (element)
         {
-        case ElementType::Fire:  spawnScaled("Q_WaveSlash",   head, up); break;
+        case ElementType::Fire:  spawnScaled("Q_WaveSlash", head, up); break;
         case ElementType::Water:
-            spawnScaled("Q_WaterFall",   XMFLOAT3(pos.x, pos.y + 5.5f, pos.z), down);
+            spawnScaled("Q_WaterFall", XMFLOAT3(pos.x, pos.y + 5.5f, pos.z), down);
             spawnScaled("Q_WaterPuddle", XMFLOAT3(pos.x, pos.y + 2.5f, pos.z), down);
             break;
-        case ElementType::Wind:  spawnScaled("Q_WindCutter",  head, up); break;
-        case ElementType::Earth: spawnScaled("Q_StoneSpike",  pos,  up); break;
+        case ElementType::Wind:  spawnScaled("Q_WindCutter", head, up); break;
+        case ElementType::Earth: spawnScaled("Q_StoneSpike", pos, up); break;
         default: break;
         }
         break;
@@ -9782,7 +9978,7 @@ void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType
         switch (element)
         {
         case ElementType::Fire:
-            spawnScaled("E_FireBeam_Core",  head, up);
+            spawnScaled("E_FireBeam_Core", head, up);
             spawnScaled("E_FireBeam_Burst", head, up);
             break;
         case ElementType::Water:
@@ -9790,11 +9986,11 @@ void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType
             break;
         case ElementType::Wind:
             spawnScaled("E_GaleRush_Burst", pos, up);
-            spawnScaled("E_GaleRush_Ring",  pos, up);
+            spawnScaled("E_GaleRush_Ring", pos, up);
             break;
         case ElementType::Earth:
             spawnScaled("E_EarthArmor_Burst", pos, up);
-            spawnScaled("E_EarthArmor_Aura",  pos, up);
+            spawnScaled("E_EarthArmor_Aura", pos, up);
             break;
         default: break;
         }
@@ -9804,11 +10000,11 @@ void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType
         switch (element)
         {
         case ElementType::Fire:
-            spawnScaled("R_MeteorImpact",     pos, up);
+            spawnScaled("R_MeteorImpact", pos, up);
             spawnScaled("R_MeteorGroundFire", pos, up);
             break;
         case ElementType::Water:
-            spawnScaled("R_TidalWave",      pos, up);
+            spawnScaled("R_TidalWave", pos, up);
             spawnScaled("R_TidalWave_Foam", pos, up);
             break;
         case ElementType::Wind:
@@ -9816,7 +10012,7 @@ void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType
             break;
         case ElementType::Earth:
             spawnScaled("R_Earthquake_Burst", pos, up);
-            spawnScaled("R_Earthquake_Ring",  pos, up);
+            spawnScaled("R_Earthquake_Ring", pos, up);
             break;
         default: break;
         }
@@ -10023,19 +10219,19 @@ void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaT
     if (m_mapServerMegaBreathCutscenes.empty()) return;
 
     // 오프라인 MegaBreathAttackBehavior phase 시간 (P2)
-    constexpr float TAKEOFF_TIME    = 0.9f;
-    constexpr float MOVE_TIME       = 3.0f;
-    constexpr float LANDING_TIME    = 0.7f;
-    constexpr float COVER_TIME      = 1.2f;
-    constexpr float WINDUP_TIME     = 5.5f;
-    constexpr float BREATH_TIME     = 6.5f;
-    constexpr float RECOVERY_TIME   = 1.2f;
+    constexpr float TAKEOFF_TIME = 0.9f;
+    constexpr float MOVE_TIME = 3.0f;
+    constexpr float LANDING_TIME = 0.7f;
+    constexpr float COVER_TIME = 1.2f;
+    constexpr float WINDUP_TIME = 5.5f;
+    constexpr float BREATH_TIME = 6.5f;
+    constexpr float RECOVERY_TIME = 1.2f;
     constexpr float RETTAKEOFF_TIME = 0.9f;
-    constexpr float RETFLY_TIME     = 3.0f;
-    constexpr float RETLAND_TIME    = 0.7f;
-    constexpr float FLY_HEIGHT      = 18.0f;
-    constexpr float COVER_DIST      = 57.5f;  // game world: 11.5(JSON) * MAP_SCALE(5) = 57.5
-    constexpr float COVER_SCALE     = 5.0f;
+    constexpr float RETFLY_TIME = 3.0f;
+    constexpr float RETLAND_TIME = 0.7f;
+    constexpr float FLY_HEIGHT = 18.0f;
+    constexpr float COVER_DIST = 57.5f;  // game world: 11.5(JSON) * MAP_SCALE(5) = 57.5
+    constexpr float COVER_SCALE = 5.0f;
     // 보스 spawn 기준 — 각 cs.bossSpawnPos 로 결정 (이전 hardcoded fire 룸 좌표 폐기)
 
     for (auto it = m_mapServerMegaBreathCutscenes.begin(); it != m_mapServerMegaBreathCutscenes.end(); )
@@ -10067,28 +10263,28 @@ void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaT
 
         // ── 매 프레임 카메라 블렌드 (오프라인 UpdateCinematicCamera 와 동일 패턴) ──
         auto BlendCamera = [&](const XMFLOAT3& tgtLookAt, float tgtDist, float tgtPitch, float tgtYaw, float kBlend)
-        {
-            if (!pCam) return;
-            if (!cs.camInit)
             {
-                cs.camLookAt = tgtLookAt; cs.camDist = tgtDist; cs.camPitch = tgtPitch; cs.camYaw = tgtYaw;
-                pCam->StartCinematic(cs.camLookAt, cs.camDist, cs.camPitch, cs.camYaw);
-                cs.camInit = true; return;
-            }
-            float rate = 1.0f - expf(-deltaTime * kBlend);
-            if (rate < 0.f) rate = 0.f; if (rate > 1.f) rate = 1.f;
-            cs.camLookAt.x += (tgtLookAt.x - cs.camLookAt.x) * rate;
-            cs.camLookAt.y += (tgtLookAt.y - cs.camLookAt.y) * rate;
-            cs.camLookAt.z += (tgtLookAt.z - cs.camLookAt.z) * rate;
-            cs.camDist  += (tgtDist  - cs.camDist) * rate;
-            cs.camPitch += (tgtPitch - cs.camPitch) * rate;
-            float yawDelta = tgtYaw - cs.camYaw;
-            while (yawDelta >  180.f) yawDelta -= 360.f;
-            while (yawDelta < -180.f) yawDelta += 360.f;
-            cs.camYaw += yawDelta * rate;
-            pCam->SetCinematicLookAt(cs.camLookAt);
-            pCam->SetCinematicOrbit(cs.camDist, cs.camPitch, cs.camYaw);
-        };
+                if (!pCam) return;
+                if (!cs.camInit)
+                {
+                    cs.camLookAt = tgtLookAt; cs.camDist = tgtDist; cs.camPitch = tgtPitch; cs.camYaw = tgtYaw;
+                    pCam->StartCinematic(cs.camLookAt, cs.camDist, cs.camPitch, cs.camYaw);
+                    cs.camInit = true; return;
+                }
+                float rate = 1.0f - expf(-deltaTime * kBlend);
+                if (rate < 0.f) rate = 0.f; if (rate > 1.f) rate = 1.f;
+                cs.camLookAt.x += (tgtLookAt.x - cs.camLookAt.x) * rate;
+                cs.camLookAt.y += (tgtLookAt.y - cs.camLookAt.y) * rate;
+                cs.camLookAt.z += (tgtLookAt.z - cs.camLookAt.z) * rate;
+                cs.camDist += (tgtDist - cs.camDist) * rate;
+                cs.camPitch += (tgtPitch - cs.camPitch) * rate;
+                float yawDelta = tgtYaw - cs.camYaw;
+                while (yawDelta > 180.f) yawDelta -= 360.f;
+                while (yawDelta < -180.f) yawDelta += 360.f;
+                cs.camYaw += yawDelta * rate;
+                pCam->SetCinematicLookAt(cs.camLookAt);
+                pCam->SetCinematicOrbit(cs.camDist, cs.camPitch, cs.camYaw);
+            };
 
         XMFLOAT3 dragonPos = pT->GetPosition();
 
@@ -10104,7 +10300,7 @@ void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaT
 
             // 카메라: 와이드 (오프라인 TakeOff/MoveToWall/Landing 공통)
             float dxc = p.x - roomCenter.x, dzc = p.z - roomCenter.z;
-            float radius = sqrtf(dxc*dxc + dzc*dzc);
+            float radius = sqrtf(dxc * dxc + dzc * dzc);
             float baseYaw = (radius > 0.5f) ? atan2f(dxc, dzc) * (180.f / 3.14159265f) : 0.f;
             float yawOffset = -15.0f * (cs.phaseTimer / (TAKEOFF_TIME + MOVE_TIME + LANDING_TIME));
             float flightYaw = baseYaw + 45.f + yawOffset;
@@ -10134,7 +10330,7 @@ void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaT
             SetDragonFaceTarget(pT, cs.wallPos, p);
 
             float dxc = p.x - roomCenter.x, dzc = p.z - roomCenter.z;
-            float radius = sqrtf(dxc*dxc + dzc*dzc);
+            float radius = sqrtf(dxc * dxc + dzc * dzc);
             float baseYaw = (radius > 0.5f) ? atan2f(dxc, dzc) * (180.f / 3.14159265f) : 0.f;
             float globalT = (TAKEOFF_TIME + cs.phaseTimer) / (TAKEOFF_TIME + MOVE_TIME + LANDING_TIME);
             float yawOffset = (globalT - 0.5f) * 30.0f;
@@ -10168,7 +10364,7 @@ void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaT
             float flightYaw = baseYaw + 45.f + (globalT - 0.5f) * 30.f;
             float landingT = t;
             float diff = playerDirYaw - flightYaw;
-            while (diff >  180.f) diff -= 360.f;
+            while (diff > 180.f) diff -= 360.f;
             while (diff < -180.f) diff += 360.f;
             float yaw = flightYaw + diff * landingT;
             BlendCamera(XMFLOAT3{ p.x, p.y + 4.0f, p.z }, 48.f, 28.f, yaw, 2.0f);
@@ -10199,14 +10395,16 @@ void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaT
                         pScene->SetCurrentRoom(pPrev);
                         if (!pCover) continue;
                         if (auto* pCT = pCover->GetTransform())
-                        { pCT->SetPosition(coverPos[i].x, coverPos[i].y, coverPos[i].z);
-                          pCT->SetScale(COVER_SCALE, COVER_SCALE, COVER_SCALE);
-                          pCT->SetRotation(0.0f, 0.0f, 0.0f); } // 명시적 회전 0 (역방향 mesh 방지)
+                        {
+                            pCT->SetPosition(coverPos[i].x, coverPos[i].y, coverPos[i].z);
+                            pCT->SetScale(COVER_SCALE, COVER_SCALE, COVER_SCALE);
+                            pCT->SetRotation(0.0f, 0.0f, 0.0f);
+                        } // 명시적 회전 0 (역방향 mesh 방지)
                         Mesh* pMesh = MapLoader::LoadMesh("Assets/MapData/meshes/ColumnBig_001.obj", pDev, pCmd);
                         if (pMesh) { pMesh->AddRef(); pCover->SetMesh(pMesh); }
                         MATERIAL mat;
-                        mat.m_cAmbient  = XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f);
-                        mat.m_cDiffuse  = XMFLOAT4(0.7f, 0.7f, 0.7f, 1.0f);
+                        mat.m_cAmbient = XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f);
+                        mat.m_cDiffuse = XMFLOAT4(0.7f, 0.7f, 0.7f, 1.0f);
                         mat.m_cSpecular = XMFLOAT4(0.2f, 0.2f, 0.2f, 8.0f);
                         mat.m_cEmissive = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
                         pCover->SetMaterial(mat);
@@ -10441,8 +10639,10 @@ void NetworkManager::UpdateServerMegaBreathCutscenes(Scene* pScene, float deltaT
             // 보간 타겟 동기화 → 정상 보간 복귀
             auto tIt = m_mapServerMonsterTarget.find(it->first);
             if (tIt != m_mapServerMonsterTarget.end())
-            { tIt->second.px = cs.originalPos.x; tIt->second.py = cs.originalPos.y; tIt->second.pz = cs.originalPos.z; }
-            
+            {
+                tIt->second.px = cs.originalPos.x; tIt->second.py = cs.originalPos.y; tIt->second.pz = cs.originalPos.z;
+            }
+
             // MegaBreath 종료 후 맵 기믹 재개
             if (pScene && pScene->GetCurrentRoom())
             {
@@ -10482,7 +10682,7 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
         if (pBoss == nullptr || pBoss->GetTransform() == nullptr) { it = m_mapServerBossIntros.erase(it); continue; }
 
         auto* pAnim = pBoss->GetComponent<AnimationComponent>();
-        auto* pCam  = pScene->GetCamera();
+        auto* pCam = pScene->GetCamera();
         constexpr float DESCEND_SPEED = 8.0f; // 오프라인 EnemyComponent::UpdateBossIntro 와 동일
 
         switch (st.phase)
@@ -10496,7 +10696,7 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
             float descendSpeed = (mtSpeed == 10) ? 8.0f : DESCEND_SPEED;
 
             st.curY -= descendSpeed * deltaTime;
-            
+
             if (st.curY <= st.groundY + 0.5f)
             {
                 st.curY = st.groundY;
@@ -10510,7 +10710,7 @@ void NetworkManager::UpdateServerBossIntros(Scene* pScene, float deltaTime)
                 // 가볍게 날아와 착지한 뒤 바로 전투 상태로 넘긴다.
                 st.phase = BossIntroPhase::Landing;
                 st.phaseTimer = 0.0f;
-         
+
                 if (pAnim && !st.landAnimFired)
                 {
                     pAnim->CrossFade("Land", 0.15f, false);
@@ -10975,7 +11175,7 @@ static NetworkManager::GameClearStat& EnsureStat(
     if (it == m.end())
     {
         NetworkManager::GameClearStat fresh;
-        fresh.playerId     = playerId;
+        fresh.playerId = playerId;
         fresh.runStartTime = s_NowSec();
         it = m.emplace(playerId, fresh).first;
     }
