@@ -5359,19 +5359,35 @@ static NetIndicatorParams GetIndicatorParamsForAttack(uint32 monsterType, uint32
         switch (attackType)
         {
         case 5: // Breath
+            // 서버 Breath 판정은 60도 / range 80.
+            // 화면상 너무 길어 보이지 않게 기존 70 유지.
             p.type = NetworkManager::NetIndicatorType::ForwardBox;
-            p.radius = 18.0f; p.length = 70.0f; break;
+            p.radius = 18.0f;
+            p.length = 70.0f;
+            break;
+
         case 7: // JumpSlam
+            // BlueDragon phase1 기준 서버 jumpRadius = 7.0f
             p.type = NetworkManager::NetIndicatorType::Circle;
-            p.radius = 9.0f; break;
+            p.radius = 7.0f;
+            break;
+
         case 8: // TailSweep
-            p.type = NetworkManager::NetIndicatorType::Circle;
-            p.radius = 12.0f; break;
+            // 기존 Circle은 꼬리 휘두르기와 안 맞아서 전방 박스로 변경
+            p.type = NetworkManager::NetIndicatorType::ForwardBox;
+            p.radius = 12.0f;
+            p.length = 24.0f;
+            break;
+
         case 15: // HeavyCombo
             p.type = NetworkManager::NetIndicatorType::ForwardBox;
-            p.radius = 7.0f; p.length = 7.5f; break;
+            p.radius = 7.0f;
+            p.length = 7.5f;
+            break;
+
         default:
-            p.type = NetworkManager::NetIndicatorType::None; break;
+            p.type = NetworkManager::NetIndicatorType::None;
+            break;
         }
         break;
 
@@ -5744,6 +5760,16 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
         ServerMonsterIndicators& ind = it->second;
         if (ind.activeType == NetIndicatorType::None) continue;
 
+        uint32 indicatorMonsterType = 0;
+
+        auto clipIt = m_mapServerMonsterClips.find(it->first);
+        if (clipIt != m_mapServerMonsterClips.end())
+        {
+            indicatorMonsterType = clipIt->second.monsterType;
+        }
+
+        const bool isGolemIndicator = (indicatorMonsterType == 8);
+
         // 사망/Despawn 후엔 hide 만 해주고 패스
         if (m_setDeadServerMonsters.find(it->first) != m_setDeadServerMonsters.end())
         {
@@ -5783,11 +5809,26 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                     pT->SetPosition(ind.anchorX, indY + 0.05f, ind.anchorZ);
                     float borderR = fullR;
                     pT->SetScale(borderR, 1.0f, borderR);
+
                     MATERIAL mat;
-                    mat.m_cAmbient = XMFLOAT4(0.6f, 0.02f, 0.02f, 1.0f);
-                    mat.m_cDiffuse = XMFLOAT4(1.0f, 0.15f, 0.1f, 1.0f);
-                    mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-                    mat.m_cEmissive = XMFLOAT4(3.5f, 0.4f, 0.15f, 1.0f);   // 2.0→3.5 더 밝게
+
+                    if (isGolemIndicator)
+                    {
+                        // Golem은 오프라인 EnemyComponent 기본 Circle indicator 색감에 맞춤.
+                        // 기존 네트워크 공용 색은 emissive/alpha가 너무 강해서 원본보다 과하게 밝아 보였음.
+                        mat.m_cAmbient = XMFLOAT4(0.20f, 0.04f, 0.02f, 1.0f);
+                        mat.m_cDiffuse = XMFLOAT4(1.00f, 0.20f, 0.10f, 0.60f);
+                        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                        mat.m_cEmissive = XMFLOAT4(0.55f, 0.11f, 0.05f, 1.0f);
+                    }
+                    else
+                    {
+                        mat.m_cAmbient = XMFLOAT4(0.6f, 0.02f, 0.02f, 1.0f);
+                        mat.m_cDiffuse = XMFLOAT4(1.0f, 0.15f, 0.1f, 1.0f);
+                        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                        mat.m_cEmissive = XMFLOAT4(3.5f, 0.4f, 0.15f, 1.0f);
+                    }
+
                     ind.circleBorder->SetMaterial(mat);
                 }
             }
@@ -5805,14 +5846,32 @@ void NetworkManager::UpdateServerMonsterIndicators(float deltaTime)
                     pT->SetScale(fillR, 1.0f, fillR);
 
                     MATERIAL mat;
-                    mat.m_cAmbient = XMFLOAT4(0.3f, 0.02f, 0.0f, 1.0f);
-                    mat.m_cDiffuse = XMFLOAT4(1.0f, 0.2f + 0.6f * fillProgress, 0.05f, 1.0f);
-                    mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-                    // 처음 0.5 → 끝 2.5 (붉음 → 노란 가열)
-                    mat.m_cEmissive = XMFLOAT4(
-                        0.5f + 2.0f * fillProgress,
-                        0.1f + 1.4f * fillProgress,
-                        0.05f, 1.0f);
+
+                    if (isGolemIndicator)
+                    {
+                        // Golem fill은 오프라인 기본 fill처럼 주황 계열로 차오르되,
+                        // 과한 노랑/발광을 줄인다.
+                        float alpha = 0.40f + 0.40f * fillProgress;
+                        float emit = 0.45f + 0.80f * fillProgress;
+
+                        mat.m_cAmbient = XMFLOAT4(0.20f, 0.06f, 0.02f, 1.0f);
+                        mat.m_cDiffuse = XMFLOAT4(1.00f, 0.30f, 0.08f, alpha);
+                        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                        mat.m_cEmissive = XMFLOAT4(emit, emit * 0.30f, emit * 0.08f, 1.0f);
+                    }
+                    else
+                    {
+                        mat.m_cAmbient = XMFLOAT4(0.3f, 0.02f, 0.0f, 1.0f);
+                        mat.m_cDiffuse = XMFLOAT4(1.0f, 0.2f + 0.6f * fillProgress, 0.05f, 1.0f);
+                        mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+                        mat.m_cEmissive = XMFLOAT4(
+                            0.5f + 2.0f * fillProgress,
+                            0.1f + 1.4f * fillProgress,
+                            0.05f,
+                            1.0f
+                        );
+                    }
+
                     ind.circleFill->SetMaterial(mat);
                 }
             }
@@ -6618,7 +6677,22 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
 
         case 7:   // JumpSlam — 보스 점프 + 착지 폭발
         {
+            if (mt == 8)
+            {
+                PlayNetworkGolemAttackBehavior(
+                    pScene,
+                    pMonster,
+                    monsterId,
+                    attackType,
+                    targetPlayerId,
+                    effectPositions,
+                    effectOption
+                );
+                return;
+            }
+
             XMFLOAT3 impactPos{ atkX, atkY + 0.2f, atkZ };
+
             if (!effectPositions.empty())
             {
                 impactPos = effectPositions.front();
@@ -6626,22 +6700,22 @@ void NetworkManager::ProcessMonsterAttack(Scene* pScene, uint64 monsterId, uint3
             }
             else if (mt == 10)
             {
-                // 구버전 서버 패킷 fallback: BlueDragon은 타겟 발치가 실제 착지점에 가장 가깝다.
                 impactPos = targetPos;
                 impactPos.y = atkY + 0.2f;
             }
 
             QueueExplosion(impactPos, startDelay);
             QueueShake(startDelay, 2.5f, 0.5f);
-            // 보스 점프 액션 — 포물선 yOffset (서버는 XZ MOVE 패킷으로 착지점 보간)
+
             {
                 ServerBossAction act;
                 act.kind = BossActionKind::Jump;
                 act.timer = 0.0f;
-                act.duration = startDelay > 0.f ? startDelay : 1.0f; // windup 만큼 점프
-                act.peakHeight = 8.0f; // 점프 정점 높이
+                act.duration = startDelay > 0.f ? startDelay : 1.0f;
+                act.peakHeight = 8.0f;
                 m_mapServerBossActions[monsterId] = act;
             }
+
             break;
         }
 
@@ -7516,10 +7590,29 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
 
     switch (attackType)
     {
+    case 7:
+        // Golem Primary Slam - 기본 제자리 내려찍기
+        // 서버 attackType 7 = JumpSlam 이지만, Golem은 이동 점프가 아니라 제자리 대형 슬램으로 연출한다.
+        // 데미지는 서버 권위이므로 0.0f.
+        behavior = std::make_unique<JumpSlamAttackBehavior>(
+            0.0f,
+            0.0f,
+            0.25f,
+            70.0f,
+            3.35f,
+            1.3f,
+            false,
+            3.4f,
+            0.7f,
+            "Golem_battle_attack01_ge",
+            0.7f
+        );
+        break;
+
     case 21:
         // GolemJumpShock - 작은 원형 충격파
         behavior = std::make_unique<JumpSlamAttackBehavior>(
-            140.0f,
+            0.0f,
             6.5f,
             1.8f,
             55.0f, // 원형 데미지 반경
@@ -7536,7 +7629,7 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
     case 22:
         // GolemWideSlam - 큰 원형 광역 내려찍기
         behavior = std::make_unique<JumpSlamAttackBehavior>(
-            150.0f,
+            0.0f,
             0.0f,
             0.3f,
             75.0f, // 원형 데미지 반경
@@ -7554,7 +7647,7 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
         // GolemRockBarrage
         auto rockBarrage = std::make_unique<RockBarrageAttackBehavior>(
             16,
-            90.0f,
+            0.0f,
             4.0f,
             44.0f,
             22.0f,
@@ -7598,7 +7691,7 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
         // GolemRockFall
         auto rockFall = std::make_unique<RockFallAttackBehavior>(
             10,
-            90.0f,
+            0.0f,
             14.0f,
             20.0f,
             75.0f,
@@ -7628,7 +7721,7 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
 
         auto groundRupture = std::make_unique<GroundRuptureAttackBehavior>(
             shape,
-            100.0f,
+            0.0f,
             80.0f,
             6.0f,
             2.2f,
@@ -7649,7 +7742,7 @@ void NetworkManager::PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* p
     {
         // GolemSequentialCross
         auto sequentialCross = std::make_unique<SequentialCrossAttackBehavior>(
-            55.0f,
+            0.0f,
             80.0f,
             12.0f,
             2.5f,
