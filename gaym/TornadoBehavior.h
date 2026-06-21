@@ -3,6 +3,7 @@
 #include "SkillData.h"
 #include <vector>
 #include <random>
+#include <cstdint>
 
 class FluidSkillVFXManager;
 class Scene;
@@ -63,4 +64,7 @@ private:
     static constexpr float MOVE_SPEED         = 2.5f;
     static constexpr float DIR_INTERVAL       = 1.8f;
     static constexpr float CHANNEL_LERP_SPEED = 12.f;  // 채널 중 커서 추적 속도 (수명 0.7s 기준 꼬리 8.4u → 형태 유지)
+
+    bool m_bNetworkDeterministic = false;
+    uint32_t m_netMoveSeed = 1;
 };

@@ -8,6 +8,19 @@
 #include "Scene.h"
 #include "Room.h"
 #include "EnemyComponent.h"
+#include "NetworkManager.h"
+#include <cstring>
+
+static float TornadoNetRand01(uint32_t& seed)
+{
+    seed = seed * 1664525u + 1013904223u;
+    return static_cast<float>((seed >> 8) & 0x00FFFFFF) / 16777216.0f;
+}
+
+static float TornadoNetRandRange(uint32_t& seed, float minV, float maxV)
+{
+    return minV + (maxV - minV) * TornadoNetRand01(seed);
+}
 
 TornadoBehavior::TornadoBehavior()
     : m_SkillData(WindSkillPresets::Tornado())
@@ -93,9 +106,34 @@ void TornadoBehavior::Execute(GameObject* caster, const DirectX::XMFLOAT3& targe
         m_dirTimer   = 0.f;
 
         // 초기 이동 방향: 랜덤
-        std::uniform_real_distribution<float> angleDist(0.f, XM_2PI);
-        float a = angleDist(m_rng);
-        m_moveDir = { cosf(a), 0.f, sinf(a) };
+        m_bNetworkDeterministic = false;
+        m_netMoveSeed = 1;
+
+        NetworkManager* pNet = NetworkManager::GetInstance();
+
+        if (pNet && pNet->IsConnected())
+        {
+            uint64 pid = pNet->GetLocalPlayerId();
+
+            uint32_t tx, tz;
+            std::memcpy(&tx, &targetPosition.x, sizeof(uint32_t));
+            std::memcpy(&tz, &targetPosition.z, sizeof(uint32_t));
+
+            m_netMoveSeed = static_cast<uint32_t>(pid) ^ tx ^ (tz * 131u);
+            if (m_netMoveSeed == 0)
+                m_netMoveSeed = 1;
+
+            float a = TornadoNetRandRange(m_netMoveSeed, 0.0f, XM_2PI);
+            m_moveDir = { cosf(a), 0.f, sinf(a) };
+
+            m_bNetworkDeterministic = true;
+        }
+        else
+        {
+            std::uniform_real_distribution<float> angleDist(0.f, XM_2PI);
+            float a = angleDist(m_rng);
+            m_moveDir = { cosf(a), 0.f, sinf(a) };
+        }
     }
 }
 
@@ -146,8 +184,17 @@ void TornadoBehavior::UpdateMovement(float dt)
     if (m_dirTimer >= DIR_INTERVAL)
     {
         m_dirTimer = 0.f;
-        std::uniform_real_distribution<float> a(-0.8f, 0.8f);
-        float angle = a(m_rng);
+        float angle = 0.0f;
+
+        if (m_bNetworkDeterministic)
+        {
+            angle = TornadoNetRandRange(m_netMoveSeed, -0.8f, 0.8f);
+        }
+        else
+        {
+            std::uniform_real_distribution<float> a(-0.8f, 0.8f);
+            angle = a(m_rng);
+        }
         float cs = cosf(angle), sn = sinf(angle);
         float nx = m_moveDir.x * cs - m_moveDir.z * sn;
         float nz = m_moveDir.x * sn + m_moveDir.z * cs;
@@ -227,6 +274,8 @@ void TornadoBehavior::Reset()
     }
     m_bActive       = false;
     m_bChannelMode  = false;
+    m_bNetworkDeterministic = false;
+    m_netMoveSeed   = 1;
     m_vfxId         = -1;
     m_chargeVFXId   = -1;
     m_enhanceAuraId = -1;

@@ -169,17 +169,20 @@ void EffectRegistry::Initialize()
         layer.edgeColor = { 1.0f, 0.55f, 0.08f, 0.9f };
 
         SPHEmitterParams& s = layer.sph;
-        s.particleCount     = 900;
-        s.spawnRadius       = 0.12f;
+        s.particleCount = 300;
+        s.spawnRadius = 0.1f;
+        s.particleSize = 0.35f;
 
         VFXPhase p0;
-        p0.startTime  = 0.f;
-        p0.duration   = 99.f;
+        p0.startTime = 0.f;
+        p0.duration = 99.f;
         p0.motionMode = ParticleMotionMode::Beam;
-        p0.beamDesc.speedMin     = 30.f;
-        p0.beamDesc.speedMax     = 52.f;
-        p0.beamDesc.spreadRadius = 0.14f;
-        p0.beamDesc.enableFlow   = true;
+        p0.beamDesc.speedMin = 10.f;
+        p0.beamDesc.speedMax = 16.f;
+        p0.beamDesc.spreadRadius = 0.15f;
+        p0.beamDesc.swirlSpeed = 0.f;
+        p0.beamDesc.swirlExpand = false;
+        p0.beamDesc.enableFlow = true;
         s.phases.push_back(p0);
 
         FinalizeSPHLayer(layer);
@@ -199,6 +202,79 @@ void EffectRegistry::Initialize()
         enhMod.particleCountMult = 1.4f;
         enhMod.speedMult         = 1.3f;
         RegisterRuneMod("E_FireBeam_Core", RUNE_ENHANCE, enhMod);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+// E_FireBeam_Swirl — 로컬 FireBeamBehavior::BuildSwirlDef 기준
+// ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectLayer layer = MakeSPHLayer(ElementType::Fire);
+        layer.overrideColors = true;
+        layer.coreColor = { 0.95f, 0.10f, 0.02f, 0.85f };
+        layer.edgeColor = { 0.55f, 0.04f, 0.00f, 0.50f };
+
+        SPHEmitterParams& s = layer.sph;
+        s.particleCount = 80;
+        s.spawnRadius = 0.1f;
+        s.particleSize = 0.18f;
+
+        VFXPhase p;
+        p.startTime = 0.f;
+        p.duration = 99.f;
+        p.motionMode = ParticleMotionMode::Beam;
+        p.beamDesc.speedMin = 7.f;
+        p.beamDesc.speedMax = 12.f;
+        p.beamDesc.spreadRadius = 2.0f;
+        p.beamDesc.swirlSpeed = 10.f;
+        p.beamDesc.swirlExpand = true;
+        p.beamDesc.swirlFadeEnd = 10.f;
+        p.beamDesc.swirlFadeInOut = true;
+        p.beamDesc.enableFlow = true;
+        s.phases.push_back(p);
+
+        FinalizeSPHLayer(layer);
+
+        EffectDef def;
+        def.name = "E_FireBeam_Swirl";
+        def.element = ElementType::Fire;
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // E_FireBeam_Burst — 로컬 FireBeamBehavior::BuildBurstDef 기준
+    // ──────────────────────────────────────────────────────────────────────────
+    {
+        EffectLayer layer = MakeSPHLayer(ElementType::Fire);
+        layer.overrideColors = true;
+        layer.coreColor = { 1.00f, 0.32f, 0.02f, 1.00f };
+        layer.edgeColor = { 0.80f, 0.10f, 0.01f, 0.80f };
+
+        SPHEmitterParams& s = layer.sph;
+        s.particleCount = 120;
+        s.spawnRadius = 0.1f;
+        s.particleSize = 0.12f;
+
+        VFXPhase p;
+        p.startTime = 0.f;
+        p.duration = 99.f;
+        p.motionMode = ParticleMotionMode::Beam;
+        p.beamDesc.speedMin = 14.f;
+        p.beamDesc.speedMax = 20.f;
+        p.beamDesc.spreadRadius = 3.5f;
+        p.beamDesc.swirlSpeed = 0.f;
+        p.beamDesc.swirlExpand = true;
+        p.beamDesc.swirlFadeEnd = 1.5f;
+        p.beamDesc.enableFlow = true;
+        s.phases.push_back(p);
+
+        FinalizeSPHLayer(layer);
+
+        EffectDef def;
+        def.name = "E_FireBeam_Burst";
+        def.element = ElementType::Fire;
+        def.layers.push_back(std::move(layer));
+        Register(std::move(def));
     }
 
     // R_Meteor는 제거 — 낙하 중에는 큐브 메쉬 + Trail만 사용

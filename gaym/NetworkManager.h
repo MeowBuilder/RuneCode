@@ -875,12 +875,22 @@ private:
     // 원격 플레이어 VFX 상태 (채널링 스킬 방향 추적용)
     struct RemoteVFXState
     {
-        int   vfxId          = -1;
-        int   skillType      = 0;
+        int   vfxId = -1;
+        int   skillType = 0;
         float lastUpdateTime = 0.0f;     // 마지막 패킷 이후 경과 시간
-        float maxIdleTime    = 0.2f;     // 이 시간 동안 패킷 없으면 종료 (채널 종료 감지용)
-        float totalElapsed   = 0.0f;     // spawn 이후 누적 시간
-        float maxLifetime    = 0.0f;     // 0=무제한(idle 기반). >0 이면 강제 종료 시각 (스킬 로컬 DURATION 과 일치)
+        float maxIdleTime = 0.2f;     // 이 시간 동안 패킷 없으면 종료
+        float totalElapsed = 0.0f;     // spawn 이후 누적 시간
+        float maxLifetime = 0.0f;     // 0=무제한(idle 기반). >0이면 강제 종료
+
+        // FireBeam처럼 Core 외에 Swirl/Burst 같은 보조 VFX가 같이 붙는 경우
+        std::vector<int> extraVfxIds;
+
+        // Wind R Tornado 원격 이동 재현용
+        bool useTornadoMotion = false;
+        DirectX::XMFLOAT3 tornadoPos = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
+        DirectX::XMFLOAT3 tornadoMoveDir = DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f);
+        float tornadoDirTimer = 0.0f;
+        uint32_t tornadoSeed = 1;
     };
     std::unordered_map<uint64, RemoteVFXState> m_mapRemotePlayerVFX;
 
@@ -893,6 +903,71 @@ private:
         float remaining = 0.0f;
     };
     std::vector<TimedVFXKill> m_vTimedVFXKills;
+
+    // 원격 스킬 VFX 지연 생성 큐.
+// Earth Q StoneSpikes, Earth R Earthquake ring처럼
+// 로컬 Behavior가 시간차로 VFX를 생성하는 스킬을 원격에서도 재현하기 위한 큐.
+    struct PendingDelayedSkillVFX
+    {
+        std::string effectName;
+        DirectX::XMFLOAT3 origin = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
+        DirectX::XMFLOAT3 dir = DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f);
+
+        float remaining = 0.0f;
+
+        uint32 runeFlags = 0;
+        ElementType visualElementOverride = ElementType::None;
+        float radiusScale = 1.0f;
+
+        // duration=-1 계열이면 생성 후 특정 시간 뒤 수동 Stop
+        // 음수면 자동 kill 등록 안 함
+        float autoKillAfter = -1.0f;
+    };
+
+    std::vector<PendingDelayedSkillVFX> m_vPendingDelayedSkillVFX;
+
+    // Fire Q WaveSlash 잔불 Trail 지연 생성.
+// 로컬 WaveSlashBehavior::DropFireTrail() 재현용.
+    struct PendingFireTrailVFX
+    {
+        DirectX::XMFLOAT3 pos = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
+        DirectX::XMFLOAT3 waveRight = DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f);
+
+        float remaining = 0.0f;
+        float halfWidth = 5.0f;
+        float lifetime = 3.0f;
+    };
+
+    std::vector<PendingFireTrailVFX> m_vPendingFireTrailVFX;
+
+    void TickPendingFireTrailVFX(FluidSkillVFXManager* pVFXManager, float deltaTime);
+
+
+    // Water R TidalWave Foam 반복 생성.
+    // 로컬 TidalWaveBehavior::DropFoam() 재현용.
+    struct PendingTidalFoamVFX
+    {
+        DirectX::XMFLOAT3 origin = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
+        DirectX::XMFLOAT3 dir = DirectX::XMFLOAT3(0.0f, 0.0f, 1.0f);
+
+        float elapsed = 0.0f;
+        float duration = 4.4f;
+
+        float foamTimer = 0.0f;
+        float nextFoamAt = 0.1f;
+
+        uint32_t seed = 1;
+
+        uint32 runeFlags = 0;
+        ElementType visualElementOverride = ElementType::None;
+        float radiusScale = 1.0f;
+    };
+
+    std::vector<PendingTidalFoamVFX> m_vPendingTidalFoamVFX;
+
+    void TickPendingTidalFoamVFX(FluidSkillVFXManager* pVFXManager, float deltaTime);
+
+    void TickPendingDelayedSkillVFX(FluidSkillVFXManager* pVFXManager, float deltaTime);
 
     // Fire R Meteor 샤워 시뮬레이션 — 원격 측 (MeteorBehavior::Update 와 같은 흐름의 경량 재현).
     struct PendingSmallMeteor
@@ -919,6 +994,13 @@ private:
         float finalFallDuration  = 0.0f;
         bool  finalImpacted   = false;
         float postImpactKeepalive = 0.0f;   // impact 후 잠시 더 살려두기 (impact VFX 자체 lifetime 위해)
+    
+        // 룬/원소 시각 보정.
+        // ProcessSkill에서 계산한 remoteRuneFlags / visualElementOverride / vfxRadiusScale을
+        // Meteor 지연 VFX에도 그대로 적용한다.
+        uint32 runeFlags = 0;
+        ElementType visualElementOverride = ElementType::None;
+        float radiusScale = 1.0f;
     };
     std::vector<PendingMeteorShower> m_vPendingMeteorShowers;
     void TickPendingMeteorShowers(FluidSkillVFXManager* pVFXManager, float deltaTime);
