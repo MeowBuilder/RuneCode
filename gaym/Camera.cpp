@@ -234,6 +234,12 @@ void CCamera::Update(float mouseDeltaX, float mouseDeltaY, float scrollDelta, fl
 
 void CCamera::StartShake(float fIntensity, float fDuration)
 {
+    // Skip if a stronger (or equal) shake is still in its first half —
+    // prevents double-triggers (local behavior + network packet same event) from
+    // repeatedly resetting the timer and keeping the camera perpetually shaking.
+    if (m_bShaking && m_fShakeTimer < m_fShakeDuration * 0.5f && fIntensity <= m_fShakeIntensity)
+        return;
+
     m_bShaking = true;
     m_fShakeIntensity = fIntensity;
     m_fShakeDuration = fDuration;

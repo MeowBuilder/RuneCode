@@ -25,13 +25,13 @@ SlashVFXDesc SlashVFXDesc::Preset(ElementType e, SlashPowerLevel lvl)
         d.residueLifetime       = 1.2f;
         d.residueParticleBudget = 25;
         d.useGroundResidue      = false;
-        d.cameraShakeIntensity  = 0.6f;
-        d.cameraShakeDuration   = 0.12f;
+        d.cameraShakeIntensity  = 0.4f;
+        d.cameraShakeDuration   = 0.10f;
         d.cameraZoomBoost       = 0.0f;
         d.usePostPulse          = false;
         d.impactHitStopSeconds  = 0.012f;
-        d.impactShakeIntensity  = 0.4f;
-        d.impactShakeDuration   = 0.07f;
+        d.impactShakeIntensity  = 0.25f;
+        d.impactShakeDuration   = 0.06f;
         d.impactFlashAlpha      = 0.08f;
         d.impactFlashFade       = 0.05f;
         break;
@@ -48,13 +48,13 @@ SlashVFXDesc SlashVFXDesc::Preset(ElementType e, SlashPowerLevel lvl)
         d.residueLifetime       = 2.0f;
         d.residueParticleBudget = 40;
         d.useGroundResidue      = true;
-        d.cameraShakeIntensity  = 1.6f;    // 1.2 → 1.6
-        d.cameraShakeDuration   = 0.18f;   // 0.20 → 0.18 (짧고 강하게)
-        d.cameraZoomBoost       = 2.5f;    // 1.5 → 2.5
+        d.cameraShakeIntensity  = 1.0f;
+        d.cameraShakeDuration   = 0.15f;
+        d.cameraZoomBoost       = 2.5f;
         d.usePostPulse          = false;
         d.impactHitStopSeconds  = 0.02f;
-        d.impactShakeIntensity  = 0.8f;
-        d.impactShakeDuration   = 0.10f;
+        d.impactShakeIntensity  = 0.5f;
+        d.impactShakeDuration   = 0.09f;
         d.impactFlashAlpha      = 0.18f;
         d.impactFlashFade       = 0.06f;
         break;
@@ -71,13 +71,13 @@ SlashVFXDesc SlashVFXDesc::Preset(ElementType e, SlashPowerLevel lvl)
         d.residueLifetime       = 3.0f;
         d.residueParticleBudget = 100;
         d.useGroundResidue      = true;
-        d.cameraShakeIntensity  = 2.0f;
-        d.cameraShakeDuration   = 0.35f;
+        d.cameraShakeIntensity  = 1.3f;
+        d.cameraShakeDuration   = 0.26f;
         d.cameraZoomBoost       = 3.5f;
         d.usePostPulse          = true;
         d.impactHitStopSeconds  = 0.035f;
-        d.impactShakeIntensity  = 1.3f;
-        d.impactShakeDuration   = 0.14f;
+        d.impactShakeIntensity  = 0.85f;
+        d.impactShakeDuration   = 0.12f;
         d.impactFlashAlpha      = 0.30f;
         d.impactFlashFade       = 0.08f;
         break;
@@ -94,13 +94,13 @@ SlashVFXDesc SlashVFXDesc::Preset(ElementType e, SlashPowerLevel lvl)
         d.residueLifetime       = 4.5f;
         d.residueParticleBudget = 160;
         d.useGroundResidue      = true;
-        d.cameraShakeIntensity  = 3.0f;
-        d.cameraShakeDuration   = 0.55f;
+        d.cameraShakeIntensity  = 2.0f;
+        d.cameraShakeDuration   = 0.42f;
         d.cameraZoomBoost       = 5.5f;
         d.usePostPulse          = true;
         d.impactHitStopSeconds  = 0.06f;
-        d.impactShakeIntensity  = 2.0f;
-        d.impactShakeDuration   = 0.22f;
+        d.impactShakeIntensity  = 1.3f;
+        d.impactShakeDuration   = 0.18f;
         d.impactFlashAlpha      = 0.50f;
         d.impactFlashFade       = 0.12f;
         break;
@@ -229,10 +229,10 @@ void SlashVFXDesc::ApplyPresentation(SlashPresentation s)
     //   카메라가 너무 멀리 뒤로 빠지는 것을 방지. 톤은 강하게 유지하되 가시성 보장.
     if (whiteFlashAlpha       > 0.85f) whiteFlashAlpha       = 0.85f;
     if (impactFlashAlpha      > 0.55f) impactFlashAlpha      = 0.55f;
-    if (cameraShakeIntensity  > 3.0f)  cameraShakeIntensity  = 3.0f;   // 5+ 폭주 차단
-    if (cameraShakeDuration   > 0.55f) cameraShakeDuration   = 0.55f;
-    if (cameraZoomBoost       > 5.0f)  cameraZoomBoost       = 5.0f;   // 9+ 폭주 차단
-    if (impactShakeIntensity  > 2.5f)  impactShakeIntensity  = 2.5f;
+    if (cameraShakeIntensity  > 2.0f)  cameraShakeIntensity  = 2.0f;
+    if (cameraShakeDuration   > 0.45f) cameraShakeDuration   = 0.45f;
+    if (cameraZoomBoost       > 5.0f)  cameraZoomBoost       = 5.0f;
+    if (impactShakeIntensity  > 1.5f)  impactShakeIntensity  = 1.5f;
     if (hitStopSeconds        > 0.13f) hitStopSeconds        = 0.13f;
     if (impactHitStopSeconds  > 0.08f) impactHitStopSeconds  = 0.08f;
 }

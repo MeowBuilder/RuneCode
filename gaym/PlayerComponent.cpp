@@ -755,7 +755,7 @@ void PlayerComponent::TakeDamage(float fDamage)
     if (Scene* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr)
     {
         if (CCamera* pCam = pScene->GetCamera())
-            pCam->StartShake(3.0f, 0.35f);  // 체감상 보이도록 세기·지속 up
+            pCam->StartShake(1.5f, 0.25f);
     }
 }
 
