@@ -24,7 +24,7 @@
 #include <GraphicsMemory.h>
 #include <DescriptorHeap.h>
 
-enum class AppState { Title, CharacterSelect, Loading, Playing, GameOver, Ending, SummaryStats };
+enum class AppState { IPInput, Title, CharacterSelect, Loading, Playing, GameOver, Ending, SummaryStats };
 
 // UI 텍스처 슬롯 — m_fontDescriptorHeap 의 [kUIHeapBase + (UINT)UISlot::*]
 enum class UISlot : UINT {
@@ -55,6 +55,7 @@ public:
     void OnActivateApp(bool active);  // 포커스 손실/복귀 시 오디오 일시정지/재개
 
     InputSystem& GetInputSystem() { return m_inputSystem; } // Added getter for InputSystem
+    void OnChar(wchar_t ch);
     ID3D12Device* GetDevice() const { return m_pd3dDevice.Get(); }
     ID3D12GraphicsCommandList* GetCommandList() const { return m_pd3dCommandList.Get(); }
     Scene* GetScene() const { return m_pScene.get(); }
@@ -187,6 +188,11 @@ private:
 
     // Wind 테마 잎새 (벚꽃/단풍/연두) — Scene 이 SetEnabled 로 토글
     std::unique_ptr<class LeafSystem> m_pLeafSystem;
+
+    // IP 입력 화면
+    std::wstring m_serverIP         = L"192.168.69.168";
+    float        m_fIPCursorBlink   = 0.0f;
+    bool         m_bIPCursorVisible = true;
 
     // Network Manager
     NetworkManager* m_pNetworkManager = nullptr;

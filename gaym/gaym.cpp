@@ -120,6 +120,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_CREATE:
         g_pDx12App->OnCreate(hInst, hWnd);
         break;
+    case WM_CHAR:
+        g_pDx12App->OnChar(static_cast<wchar_t>(wParam));
+        break;
     case WM_KEYDOWN:
         g_pDx12App->GetInputSystem().OnKeyDown(static_cast<int>(wParam));
         break;

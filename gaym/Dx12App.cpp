@@ -238,15 +238,14 @@ void Dx12App::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
             m_hUI[(UINT)UISlot::EndingBg],   texSize(UISlot::EndingBg));
     }
 
-    m_eAppState = AppState::Title;
+    m_eAppState = AppState::IPInput;
 
     // 오디오 초기화 (장치가 없으면 silent mode 로 동작, 실패해도 게임은 무음 진행)
     m_pAudio = std::make_unique<AudioManager>();
     if (!m_pAudio->Initialize())
         m_pAudio.reset();
 
-    // 네트워크 초기화
-    InitializeNetwork();
+    // 네트워크 초기화는 IP 입력 후 OnChar 에서 수행
 
     m_GameTimer.Reset();
 }
@@ -562,6 +561,7 @@ void Dx12App::UpdateBGMForState()
     if (!m_pAudio) return;
     switch (m_eAppState)
     {
+    case AppState::IPInput:
     case AppState::Title:
     case AppState::CharacterSelect:
     case AppState::Ending:
@@ -589,6 +589,86 @@ void Dx12App::FrameAdvance()
     {
         m_pAudio->Update();
         UpdateBGMForState();
+    }
+
+    // ── IP 입력 화면 ────────────────────────────────────────────────────────
+    if (m_eAppState == AppState::IPInput)
+    {
+        m_fIPCursorBlink += deltaTime;
+        if (m_fIPCursorBlink >= 0.5f)
+        {
+            m_fIPCursorBlink -= 0.5f;
+            m_bIPCursorVisible = !m_bIPCursorVisible;
+        }
+
+        WaitForGpuComplete();
+        CHECK_HR(m_pd3dCommandAllocator->Reset());
+        CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
+
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+        barrier.Transition.pResource   = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        m_pd3dCommandList->ResourceBarrier(1, &barrier);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = m_pd3dRtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        rtv.ptr += m_nSwapChainBufferIndex * m_nRtvDescriptorIncrementSize;
+        float ipClearColor[4] = { 0.05f, 0.05f, 0.08f, 1.0f };
+        m_pd3dCommandList->ClearRenderTargetView(rtv, ipClearColor, 0, nullptr);
+        m_pd3dCommandList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+
+        D3D12_VIEWPORT vp = { 0, 0, (float)m_nWndClientWidth, (float)m_nWndClientHeight, 0, 1 };
+        m_pd3dCommandList->RSSetViewports(1, &vp);
+        D3D12_RECT sc = { 0, 0, (LONG)m_nWndClientWidth, (LONG)m_nWndClientHeight };
+        m_pd3dCommandList->RSSetScissorRects(1, &sc);
+
+        if (m_spriteBatch && m_spriteFont)
+        {
+            ID3D12DescriptorHeap* heaps[] = { m_fontDescriptorHeap->Heap() };
+            m_pd3dCommandList->SetDescriptorHeaps(1, heaps);
+            m_spriteBatch->Begin(m_pd3dCommandList.Get());
+
+            float cx = (float)m_nWndClientWidth  / 2.0f;
+            float cy = (float)m_nWndClientHeight / 2.0f;
+
+            const wchar_t* title = L"서버 IP 주소 입력";
+            XMVECTOR tsz = m_spriteFont->MeasureString(title);
+            m_spriteFont->DrawString(m_spriteBatch.get(), title,
+                XMFLOAT2(cx - XMVectorGetX(tsz) / 2.0f, cy - 80.0f),
+                DirectX::Colors::White);
+
+            std::wstring display = m_serverIP + (m_bIPCursorVisible ? L"|" : L" ");
+            XMVECTOR isz = m_spriteFont->MeasureString(display.c_str());
+            m_spriteFont->DrawString(m_spriteBatch.get(), display.c_str(),
+                XMFLOAT2(cx - XMVectorGetX(isz) / 2.0f, cy - 20.0f),
+                DirectX::Colors::Yellow);
+
+            const wchar_t* hint = L"[Enter] 접속    [ESC] 기본값 사용";
+            XMVECTOR hsz = m_spriteFont->MeasureString(hint);
+            m_spriteFont->DrawString(m_spriteBatch.get(), hint,
+                XMFLOAT2(cx - XMVectorGetX(hsz) / 2.0f, cy + 40.0f),
+                DirectX::Colors::DimGray);
+
+            m_spriteBatch->End();
+        }
+
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
+        m_pd3dCommandList->ResourceBarrier(1, &barrier);
+
+        CHECK_HR(m_pd3dCommandList->Close());
+        ID3D12CommandList* lists[] = { m_pd3dCommandList.Get() };
+        m_pd3dCommandQueue->ExecuteCommandLists(_countof(lists), lists);
+        m_pdxgiSwapChain->Present(1, 0);
+        m_nSwapChainBufferIndex = m_pdxgiSwapChain->GetCurrentBackBufferIndex();
+
+        if (m_graphicsMemory) m_graphicsMemory->Commit(m_pd3dCommandQueue.Get());
+        UpdateFrameRate();
+        m_inputSystem.Reset();
+        return;
     }
 
     // ── 타이틀 화면 ─────────────────────────────────────────────────────────
@@ -2968,6 +3048,35 @@ void Dx12App::InitSceneWithElement(ElementType e)
     m_eAppState = AppState::Playing;
 }
 
+void Dx12App::OnChar(wchar_t ch)
+{
+    if (m_eAppState != AppState::IPInput) return;
+
+    if (ch == L'\r' || ch == L'\n') // Enter — 입력한 IP로 접속
+    {
+        if (m_serverIP.empty())
+            m_serverIP = L"192.168.69.168";
+        InitializeNetwork();
+        m_eAppState = AppState::Title;
+    }
+    else if (ch == 0x1B) // ESC — 기본값으로 접속
+    {
+        m_serverIP = L"192.168.69.168";
+        InitializeNetwork();
+        m_eAppState = AppState::Title;
+    }
+    else if (ch == L'\b') // Backspace
+    {
+        if (!m_serverIP.empty())
+            m_serverIP.pop_back();
+    }
+    else if ((ch >= L'0' && ch <= L'9') || ch == L'.')
+    {
+        if (m_serverIP.size() < 15)
+            m_serverIP += ch;
+    }
+}
+
 void Dx12App::InitializeNetwork()
 {
     // NetworkManager 초기화
@@ -2979,8 +3088,7 @@ void Dx12App::InitializeNetwork()
         return;
     }
 
-    // 서버에 연결 (127.0.0.1:7777)
-    if (!m_pNetworkManager->Connect(L"127.0.0.1", 7777))
+    if (!m_pNetworkManager->Connect(m_serverIP, 7777))
     {
         OutputDebugString(L"[Network] Failed to connect to server\n");
         // 연결 실패해도 게임은 계속 진행 (싱글 플레이)
