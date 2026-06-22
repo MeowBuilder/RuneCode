@@ -9,6 +9,7 @@
 #include "Room.h"
 #include "Scene.h"
 #include "PlayerComponent.h"
+#include "NetworkManager.h"
 
 LavaGeyserComponent::LavaGeyserComponent(GameObject* pOwner)
     : Component(pOwner)
@@ -188,26 +189,34 @@ void LavaGeyserComponent::DealDamage()
     GameObject* pPlayer = pScene->GetPlayer();
     if (!pPlayer) return;
 
-    // 플레이어 위치 확인
     TransformComponent* pPlayerTransform = pPlayer->GetTransform();
     if (!pPlayerTransform) return;
 
     XMFLOAT3 playerPos = pPlayerTransform->GetPosition();
 
-    // 거리 계산 (XZ 평면)
     float dx = playerPos.x - m_vTargetPosition.x;
     float dz = playerPos.z - m_vTargetPosition.z;
     float distSq = dx * dx + dz * dz;
     float radiusSq = m_fRadius * m_fRadius;
 
-    // 범위 내에 있으면 데미지
-    if (distSq <= radiusSq)
+    if (distSq > radiusSq)
+        return;
+
+    NetworkManager* pNetMgr = NetworkManager::GetInstance();
+    if (pNetMgr && pNetMgr->IsConnected())
     {
+        // 멀티: 서버에 피격 알림 → 서버가 ApplyDamageToPlayer로 권위 처리 후 S_PLAYER_DAMAGE 브로드캐스트
+        pNetMgr->SendMapGimmickDamage(1); // 1 = LavaGeyser
+        OutputDebugString(L"[LavaGeyser] Player hit! Sent to server.\n");
+    }
+    else
+    {
+        // 오프라인: 직접 데미지 적용
         PlayerComponent* pPlayerComp = pPlayer->GetComponent<PlayerComponent>();
         if (pPlayerComp)
         {
             pPlayerComp->TakeDamage(m_fDamage);
-            OutputDebugString(L"[LavaGeyser] Player hit! Dealing damage.\n");
+            OutputDebugString(L"[LavaGeyser] Player hit! Offline damage applied.\n");
         }
     }
 }

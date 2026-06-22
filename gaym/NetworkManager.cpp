@@ -1559,6 +1559,18 @@ void NetworkManager::SendDebugKillAll()
     WriteNetworkLog("[Network] C_DEBUG_KILL_ALL sent");
 }
 
+void NetworkManager::SendMapGimmickDamage(uint32 gimmickType)
+{
+    if (!m_bConnected || !m_pSession)
+        return;
+
+    Protocol::C_PLAYER_ACTION pkt;
+    pkt.set_actiontype(gimmickType);
+
+    auto sendBuffer = ServerPacketHandler::MakeMapGimmickDamageSendBuffer(pkt);
+    m_pSession->Send(sendBuffer);
+}
+
 void NetworkManager::SendPlayerAttack(int skillType,
     float x, float y, float z,
     float dirX, float dirY, float dirZ,

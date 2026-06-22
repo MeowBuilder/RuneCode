@@ -22,8 +22,6 @@
 #include "Dx12App.h"
 #include "TorchSystem.h"
 #include "MeshLoader.h"
-#include "MapCollisionExporter.h"
-
 #include <fstream>
 #include <algorithm>
 #include <random>
@@ -479,20 +477,6 @@ static std::string MapLoader_GetFileNameWithoutExt(const std::string& path)
     return path.substr(start, dot - start);
 }
 
-static std::string MapLoader_GetCollisionOutputPath(const char* jsonPath)
-{
-    if (jsonPath == nullptr)
-        return "Assets/MapData/Collision/unknown.collision.json";
-
-    std::string path = jsonPath;
-    std::string baseName = MapLoader_GetFileNameWithoutExt(path);
-
-    size_t slash = path.find_last_of("/\\");
-    std::string dir = (slash == std::string::npos) ? "" : path.substr(0, slash + 1);
-
-    return dir + "Collision/" + baseName + ".collision.json";
-}
-
 static void MapLoader_AddRotatedCenterOffset(
     float baseX,
     float baseZ,
@@ -536,9 +520,6 @@ bool MapLoader::LoadIntoScene(
     }
     const JsonVal& root = s_jsonCache[jsonPath];
 
-    MapCollisionExporter collisionExporter;
-    collisionExporter.SetMapName(MapLoader_GetFileNameWithoutExt(jsonPath ? jsonPath : "unknown"));
-    
     // ── 1. Rooms ─────────────────────────────────────────────────────────────
     if (!skipRoomAndSpawn)
     {
@@ -831,18 +812,6 @@ bool MapLoader::LoadIntoScene(
         float worldExtY = localExt.y * sy;
         float worldExtZ = localExt.z * sz;
 
-        // 바닥 타일은 서버/클라 공통 walkable 영역으로 export한다.
-        if (meshRelPath.find("LavaMaze_GridTile_01") != std::string::npos)
-        {
-            collisionExporter.AddWalkableRect(
-                colliderCenterX,
-                colliderCenterZ,
-                worldExtX,
-                worldExtZ,
-                yawRad
-            );
-        }
-
         float maxWorldExt = worldExtX;
         if (worldExtY > maxWorldExt) maxWorldExt = worldExtY;
         if (worldExtZ > maxWorldExt) maxWorldExt = worldExtZ;
@@ -864,14 +833,6 @@ bool MapLoader::LoadIntoScene(
                 pCol->SetLayer(CollisionLayer::Wall);
                 pCol->SetCollisionMask(CollisionMask::Wall);
 
-                // 클라에서 Wall collider를 붙인 오브젝트와 같은 기준으로 서버용 wall도 export한다.
-                collisionExporter.AddWallRect(
-                    colliderCenterX,
-                    colliderCenterZ,
-                    worldExtX,
-                    worldExtZ,
-                    yawRad
-                );
             } // !isHorizontal
         } // !isProp && maxWorldExt > 0.3f
     }
@@ -898,13 +859,6 @@ bool MapLoader::LoadIntoScene(
         pCol->SetLayer(CollisionLayer::Wall);
         pCol->SetCollisionMask(CollisionMask::Wall);
 
-        collisionExporter.AddWallRect(
-            center[0].f()* MAP_SCALE + positionOffset.x,
-            -center[2].f() * MAP_SCALE + positionOffset.z,
-            size[0].f()* MAP_SCALE * 0.5f,
-            size[2].f()* MAP_SCALE * 0.5f,
-            0.0f
-        );
     }
 
     // ── 5. Enemy spawns → RoomSpawnConfig ────────────────────────────────────
@@ -1228,26 +1182,6 @@ bool MapLoader::LoadIntoScene(
     sprintf_s(buf, "[MapLoader] Loaded: %zu rooms, %zu mapObjects, %zu obstacles, %zu enemySpawns\n",
         root["rooms"].size(), mapObjs.size(), obstacles.size(), enemySpawns.size());
     OutputDebugStringA(buf);
-
-    // 서버/클라 공통 충돌 데이터 export
-// Assets/MapData/Collision 폴더가 없으면 저장 실패한다.
-    {
-        std::string collisionPath = MapLoader_GetCollisionOutputPath(jsonPath);
-        bool saved = collisionExporter.SaveToFile(collisionPath);
-
-        if (saved)
-        {
-            std::string msg = "[MapCollisionExporter] saved: " + collisionPath +
-                " walkables=" + std::to_string(collisionExporter.GetWalkableCount()) +
-                " walls=" + std::to_string(collisionExporter.GetWallCount()) + "\n";
-            OutputDebugStringA(msg.c_str());
-        }
-        else
-        {
-            std::string msg = "[MapCollisionExporter] failed to save: " + collisionPath + "\n";
-            OutputDebugStringA(msg.c_str());
-        }
-    }
 
     return true;
 }

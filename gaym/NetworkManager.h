@@ -297,6 +297,10 @@ public:
     // 9999 데미지 적용 후 정상적인 S_MONSTER_DAMAGE(isDead=true) → 사망 애니 → S_ROOM_CLEARED 자연 진행
     void SendDebugKillAll();
 
+    // 맵 기믹 피격을 서버에 알림 — 서버가 ApplyDamageToPlayer로 권위 처리
+    // gimmickType: 1 = LavaGeyser
+    void SendMapGimmickDamage(uint32 gimmickType);
+
     // 로컬 플레이어 ID 설정/조회 (atomic으로 스레드 안전)
     void SetLocalPlayerId(uint64 playerId) { m_nLocalPlayerId.store(playerId); }
     uint64 GetLocalPlayerId() const { return m_nLocalPlayerId.load(); }

@@ -48,6 +48,7 @@ enum : uint16
 	PKT_S_RUNE_TRIGGER = 1037,
 	PKT_C_DEBUG_RUNE_EQUIP = 1038,
 	PKT_C_DEBUG_ROOM_ACTION = 1039,
+	PKT_C_MAP_GIMMICK_DAMAGE = 1040,
 };
 
 // Custom Handlers
@@ -133,6 +134,8 @@ public:
 	static SendBufferRef MakeSendBuffer(Protocol::C_DEBUG_ROOM_ACTION& pkt) { return MakeSendBuffer(pkt, PKT_C_DEBUG_ROOM_ACTION); }
 	// [DEBUG] 빈 본문 — C_PORTAL_INTERACT 메시지 형식만 빌려서 ID 만 다르게 보냄
 	static SendBufferRef MakeDebugKillAllSendBuffer() { Protocol::C_PORTAL_INTERACT pkt; return MakeSendBuffer(pkt, PKT_C_DEBUG_KILL_ALL); }
+	// 맵 기믹 데미지 — C_PLAYER_ACTION 형식 재활용, actiontype 에 기믹 종류 전달
+	static SendBufferRef MakeMapGimmickDamageSendBuffer(Protocol::C_PLAYER_ACTION& pkt) { return MakeSendBuffer(pkt, PKT_C_MAP_GIMMICK_DAMAGE); }
 	
 
 private:
