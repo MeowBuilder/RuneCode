@@ -360,15 +360,21 @@ void SkillHudUI::RenderIcons(ID3D12GraphicsCommandList* pCommandList,
             float rx, ry, rsz;
             ComputeRuneRect(i, r, screenWidth, screenHeight, rx, ry, rsz);
 
+            EquippedRune er = pSkill->GetRuneSlot(slot, r);
+            bool isDragSource = (m_drag.active && m_drag.fromSlot == i && m_drag.fromRune == r);
+            const RuneDef* def = (!er.IsEmpty() && !isDragSource) ? RuneRegistry::Get().Find(er.runeId) : nullptr;
+
             bool runeHovered = (m_hover.kind == HoverTarget::Kind::Rune && m_hover.slot == i && m_hover.runeIdx == r);
             float rpad = runeHovered ? 2.5f : 1.5f;
-            pIcons->DrawSolid(pCommandList, rx - rpad, ry - rpad, rsz + rpad * 2, rsz + rpad * 2,
-                              runeHovered ? hoverColor : backingColor);
 
-            EquippedRune er = pSkill->GetRuneSlot(slot, r);
-
-            // 드래그 중인 출발 칸은 비워 보이게 (집어든 상태 표현)
-            bool isDragSource = (m_drag.active && m_drag.fromSlot == i && m_drag.fromRune == r);
+            // 장착 룬 있으면 등급 색 테두리, 없으면 기본 테두리
+            XMFLOAT4 borderCol = runeHovered ? hoverColor : backingColor;
+            if (def && !runeHovered)
+            {
+                auto gc = RuneGradeColor(def->grade);
+                borderCol = XMFLOAT4(gc.f[0], gc.f[1], gc.f[2], 0.85f);
+            }
+            pIcons->DrawSolid(pCommandList, rx - rpad, ry - rpad, rsz + rpad * 2, rsz + rpad * 2, borderCol);
 
             if (er.IsEmpty() || isDragSource)
             {
@@ -376,9 +382,11 @@ void SkillHudUI::RenderIcons(ID3D12GraphicsCommandList* pCommandList,
             }
             else
             {
-                const RuneDef* def = RuneRegistry::Get().Find(er.runeId);
-                XMFLOAT4 fallback = def ? ElementColor(def->element) : ElementColor(ElementType::None);
-                pIcons->DrawIcon(pCommandList, er.runeId, rx, ry, rsz, rsz, fallback, 1.0f, 1.0f);
+                XMFLOAT4 elemCol = ElementColor(def ? def->element : ElementType::None);
+                // 원소색 반투명 배경 (흑백 룬 아이콘이 잘 보이도록)
+                pIcons->DrawSolid(pCommandList, rx, ry, rsz, rsz,
+                    XMFLOAT4(elemCol.x * 0.45f, elemCol.y * 0.45f, elemCol.z * 0.45f, 0.8f));
+                pIcons->DrawIcon(pCommandList, er.runeId, rx, ry, rsz, rsz, elemCol, 1.0f, 1.0f);
             }
         }
     }

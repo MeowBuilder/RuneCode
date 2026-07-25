@@ -120,7 +120,15 @@
       "PowerShell($msb = \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\"; $out = & $msb gaym\\\\gaym.sln -p:Configuration=Release -p:Platform=x64 -m -nologo -v:m 2>&1; $err = $out | Select-String -Pattern \": error|: warning\" -SimpleMatch; if \\($err\\) { \"ERR:\"; $err | Select-Object -Last 10 } else { $e = Get-Item gaym\\\\x64\\\\Release\\\\gaym.exe; \"OK | exe {0}\" -f $e.LastWriteTime })",
       "PowerShell($msbuild = \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\"; & $msbuild \"gaym\\\\gaym.sln\" /p:Configuration=Release /p:Platform=x64 /m /v:minimal /nologo 2>&1 | Select-String -Pattern \"error|warning|Build succeeded|FAIL|성공|실패\" | Select-Object -Last 30)",
       "PowerShell($msbuild = \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\"; $output = & $msbuild \"gaym\\\\gaym.sln\" /p:Configuration=Release /p:Platform=x64 /m /v:minimal /nologo 2>&1; $output | Select-Object -Last 15; \"EXIT_CODE: $LASTEXITCODE\")",
-      "PowerShell($msbuild = \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\"; & $msbuild \"gaym\\\\gaym.sln\" /p:Configuration=Release /p:Platform=x64 /m /v:minimal /nologo 2>&1 | Select-Object -Last 5; \"EXIT: $LASTEXITCODE\")"
+      "PowerShell($msbuild = \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\"; & $msbuild \"gaym\\\\gaym.sln\" /p:Configuration=Release /p:Platform=x64 /m /v:minimal /nologo 2>&1 | Select-Object -Last 5; \"EXIT: $LASTEXITCODE\")",
+      "Bash(mv rune_42_blackgray.png ABY_INF.png)",
+      "Bash(mv rune_43_blackgray.png ABY_SHD.png)",
+      "Bash(mv rune_44_blackgray.png ABY_RVG.png)",
+      "Bash(mv rune_45_blackgray.png ABY_OVL.png)",
+      "Bash(mv rune_46_blackgray.png ABY_RES.png)",
+      "Bash(msbuild gaym/gaym.sln /p:Configuration=Release /p:Platform=x64 /v:minimal)",
+      "PowerShell(& \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" \"C:\\\\Users\\\\khj16\\\\Downloads\\\\gaym\\\\gaym\\\\gaym.sln\" /p:Configuration=Release /p:Platform=x64 /v:minimal 2>&1 | Select-Object -Last 20)",
+      "PowerShell(& \"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\MSBuild\\\\Current\\\\Bin\\\\MSBuild.exe\" \"C:\\\\Users\\\\khj16\\\\Downloads\\\\gaym\\\\gaym\\\\gaym.sln\" /p:Configuration=Release /p:Platform=x64 /v:minimal 2>&1 | Select-Object -Last 15)"
     ]
   }
 }
