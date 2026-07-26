@@ -133,7 +133,6 @@ namespace
         if (def.homing)      ss << L"유도 ";
         if (def.doublecast)  ss << L"쌍발 ";
         if (def.echoOnCast)  ss << L"잔상 ";
-        if (def.randomElementOnCast) ss << L"원소무작위 ";
         if (def.activationOverride.has_value())
             ss << ActivationName(def.activationOverride.value()) << L"형 ";
 

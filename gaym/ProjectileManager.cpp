@@ -249,36 +249,122 @@ void ProjectileManager::SpawnProjectile(const Projectile& projectile)
         }
     }
 
-    // 궤도 동반 투사체 (궤도/중궤도 룬): SkillStats에서 orbitalCount 읽어 헬릭스 투사체 생성
-    if (!projectile.isOrbital && projectile.isPlayerProjectile
-        && projectile.skillSlot != SkillSlot::Count && projectile.owner)
+    // 궤도 동반 투사체.
+ //
+ // forcedOrbitalCount:
+ // -1이면 기존처럼 현재 장착 룬에서 ORB 개수를 계산한다.
+ //  0 이상이면 서버가 저장한 설치 당시 개수를 사용한다.
+    if (!projectile.isOrbital &&
+        projectile.isPlayerProjectile)
     {
-        SkillComponent* pSkillComp = projectile.owner->GetComponent<SkillComponent>();
-        if (pSkillComp)
+        int orbCount =
+            projectile.forcedOrbitalCount;
+
+        // 강제값이 없을 때만 기존 장착 룬을 조회한다.
+        if (orbCount < 0)
         {
-            int orbCount = pSkillComp->BuildSkillStats(projectile.skillSlot).orbitalCount;
-            if (orbCount > 0)
+            orbCount = 0;
+
+            if (projectile.skillSlot !=
+                SkillSlot::Count &&
+                projectile.owner != nullptr)
             {
-                // 재할당으로 참조 무효화 방지: 필요한 데이터를 값으로 복사
-                Projectile base = projectile;
-                constexpr float PI2 = 6.28318530f;
-                float angleStep = PI2 / orbCount;
-                for (int oi = 0; oi < orbCount && m_Projectiles.size() < MAX_PROJECTILES; ++oi)
+                SkillComponent* pSkillComp =
+                    projectile.owner
+                    ->GetComponent<
+                    SkillComponent>();
+
+                if (pSkillComp)
                 {
-                    Projectile orb   = base;
-                    orb.isOrbital    = true;
-                    orb.orbitalCenter     = base.position;
-                    orb.orbitalForwardDir = base.direction;
-                    orb.orbitalAngle      = angleStep * oi;  // 균등 위상 배분
-                    orb.orbitalRadius     = 2.0f;
-                    orb.orbitalAngularSpeed = 5.0f;
-                    orb.damage       = base.damage * 0.35f;
-                    orb.scale        = 0.55f;
-                    orb.fluidVFXId   = -1;
-                    orb.extraVFXIds.clear();
-                    orb.spawnOnHitCount = 0;  // 궤도 투사체의 반향 방지
-                    m_Projectiles.push_back(orb);
+                    orbCount =
+                        pSkillComp
+                        ->BuildSkillStats(
+                            projectile.skillSlot)
+                        .orbitalCount;
                 }
+            }
+        }
+
+        orbCount =
+            std::max(
+                0,
+                orbCount);
+
+        if (orbCount > 0)
+        {
+            // 아래에서 SpawnProjectile을 다시 호출하면
+            // m_Projectiles가 재할당될 수 있으므로
+            // 필요한 값은 먼저 복사한다.
+            Projectile base =
+                projectile;
+
+            constexpr float PI2 =
+                6.28318530f;
+
+            const float angleStep =
+                PI2 /
+                static_cast<float>(
+                    orbCount);
+
+            for (int orbitalIndex = 0;
+                orbitalIndex < orbCount &&
+                m_Projectiles.size() <
+                MAX_PROJECTILES;
+                ++orbitalIndex)
+            {
+                Projectile orbital =
+                    base;
+
+                // 이 값 때문에 재귀 호출되어도
+                // 추가 궤도탄을 또 만들지 않는다.
+                orbital.isOrbital =
+                    true;
+
+                orbital.orbitalCenter =
+                    base.position;
+
+                orbital.orbitalForwardDir =
+                    base.direction;
+
+                orbital.orbitalAngle =
+                    angleStep *
+                    static_cast<float>(
+                        orbitalIndex);
+
+                orbital.orbitalRadius =
+                    2.0f;
+
+                orbital.orbitalAngularSpeed =
+                    5.0f;
+
+                // 서버 피해는 별도로 권위 처리된다.
+                // 오프라인에서는 기존 35% 정책 유지.
+                orbital.damage =
+                    base.damage *
+                    0.35f;
+
+                orbital.scale =
+                    0.55f;
+
+                orbital.fluidVFXId =
+                    -1;
+
+                orbital.extraVFXIds.clear();
+                orbital.subVFXSlotIds.clear();
+
+                // 궤도탄이 다시 반향이나 ORB를 생성하지 않게 한다.
+                orbital.spawnOnHitCount =
+                    0;
+
+                orbital.forcedOrbitalCount =
+                    0;
+
+                // 기존 코드는 push_back만 해서
+                // 궤도탄용 유체 VFX 생성 경로를 지나지 않았다.
+                //
+                // isOrbital이 true이므로 재귀 ORB 생성은 발생하지 않는다.
+                SpawnProjectile(
+                    orbital);
             }
         }
     }
@@ -311,7 +397,8 @@ void ProjectileManager::SpawnProjectile(
     float cdResetChance,
     SkillSlot skillSlot,
     const std::vector<ElementType>& elementSet,
-    const std::vector<std::string>& subVFXDefIds)
+    const std::vector<std::string>& subVFXDefIds,
+    int forcedOrbitalCount)
 {
     Projectile proj;
     proj.position         = startPos;
@@ -336,6 +423,7 @@ void ProjectileManager::SpawnProjectile(
     proj.skillSlot        = skillSlot;
     proj.elementSet       = elementSet;
     proj.subVFXDefIds     = subVFXDefIds;
+    proj.forcedOrbitalCount = forcedOrbitalCount;
 
     // Calculate direction
     XMVECTOR start = XMLoadFloat3(&startPos);

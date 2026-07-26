@@ -262,7 +262,7 @@ public:
     void SendMove(float x, float y, float z, float dirX, float dirY, float dirZ);
 
     // 로컬 플레이어 스킬 전송
-    void SendSkill(int skillType, float x, float y, float z, float dirX, float dirY, float dirZ);
+    void SendSkill(int skillType, float x, float y, float z, float dirX, float dirY, float dirZ, bool countAsSkillUse = true);
 
     // 로컬 플레이어 연출 액션 전송
     void SendPlayerAction(uint32 actionType, float x, float y, float z, float dirX, float dirY, float dirZ);
@@ -288,7 +288,7 @@ public:
                           float x, float y, float z,
                           float dirX, float dirY, float dirZ,
                           float targetX, float targetY, float targetZ,
-                          float chargeRatio = 0.0f);
+                          float chargeRatio = 0.0f, bool countAsSkillUse = true);
 
     // 보스 컷신 종료 알림 전송
     void SendBossCutsceneEnd(uint64 monsterId, uint32 eventType, uint32 phaseIndex);
@@ -353,7 +353,7 @@ public:
     void QueueRuneHomingTarget(uint64 playerId, int32 skillSlot, int32 skillType, uint64 targetMonsterId, const DirectX::XMFLOAT3& targetPos, const DirectX::XMFLOAT3& originPos);
 
     // 룬 발동(S_RUNE_TRIGGER) 큐잉 — 서버 권위 룬 결과를 클라 시각화에 전달
-    void QueueRuneTrigger(uint64 playerId, int32 skillSlot, int32 skillType, const std::string& runeId, int32 triggerType, uint64 targetMonsterId, uint64 targetPlayerId, uint64 objectId, const DirectX::XMFLOAT3& pos, float value1, float value2);
+    void QueueRuneTrigger(uint64 playerId, int32 skillSlot, int32 skillType, const std::string& runeId, int32 triggerType, uint64 targetMonsterId, uint64 targetPlayerId, uint64 objectId, const DirectX::XMFLOAT3& pos, const DirectX::XMFLOAT3& visualData, float value1, float value2);
 
     // 보스 이벤트 (인트로/페이즈 전환/사망 컷씬)
     void QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 phaseIndex);
@@ -509,11 +509,11 @@ private:
     void ProcessRuneRewardPicked(Scene* pScene, uint64 ownerPlayerId);
     void ProcessRuneEquip(Scene* pScene, uint64 playerId, uint32 skillSlot, uint32 runeSlotIndex, const std::string& runeId, uint32 stackCount);
     void ProcessRuneHomingTarget(Scene* pScene, uint64 playerId, int32 skillSlot, int32 skillType, uint64 targetMonsterId, const DirectX::XMFLOAT3& targetPos, const DirectX::XMFLOAT3& originPos);
-    void ProcessRuneTrigger(Scene* pScene, uint64 playerId, int32 skillSlot, int32 skillType, const std::string& runeId, int32 triggerType, uint64 targetMonsterId, uint64 targetPlayerId, uint64 objectId, const DirectX::XMFLOAT3& pos, float value1, float value2);
+    void ProcessRuneTrigger(Scene* pScene, uint64 playerId, int32 skillSlot, int32 skillType, const std::string& runeId, int32 triggerType, uint64 targetMonsterId, uint64 targetPlayerId, uint64 objectId, const DirectX::XMFLOAT3& pos, const DirectX::XMFLOAT3& visualData, float value1, float value2);
 
     // 메아리(ABY_ECO) ECHO_FIRE 시 원본 스킬 시각을 echo 위치에 50% 스케일로 재생
-    void SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType element,
-                           const DirectX::XMFLOAT3& pos, uint32_t runeFlags = 0);
+    void SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType baseElement,
+                           const DirectX::XMFLOAT3& pos, uint32_t runeFlags = 0, uint32_t visualElementMask = 0, float visualScale = 0.5f, const DirectX::XMFLOAT3* pTargetPos = nullptr);
 
     // playerId 기준 원소 조회 — local 은 PlayerComponent, remote 는 m_mapRemotePlayerElement
     ElementType GetPlayerElement(uint64 playerId) const;
@@ -857,51 +857,82 @@ private:
     //   같은 슬롯 재설치 시 이전 데칼을 Stop. lifetime 30s 가 남아 화면에 잔류하는 문제 방지.
     std::unordered_map<uint64, std::array<int, 4>> m_mapRemotePlaceDecalIds;
 
+    // 설치+채널은 설치 위치에서 반복 VFX가 발생한다.
+//
+// 서버가 보내준 대표 원소, 룬 조합,
+// 원소 조합을 채널 종료까지 저장한다.
+    struct RemoteChannelPlaceVisualPolicy
+    {
+        int skillSlot = -1;
+
+        ElementType primaryElement =
+            ElementType::None;
+
+        uint32 runeFlags = 0;
+        uint32 elementMask = 0;
+    };
+
+    std::unordered_map<
+        uint64,
+        RemoteChannelPlaceVisualPolicy>
+        m_mapRemoteChannelPlaceVisualPolicy;
+
+    // 서버 ABY_ECO 예약 패킷과 발동 패킷을 연결하는 정보
+    struct NetworkEchoVisualSnapshot
+    {
+        uint64 ownerPlayerId = 0;
+
+        DirectX::XMFLOAT3 origin =
+            DirectX::XMFLOAT3(
+                0.0f,
+                0.0f,
+                0.0f);
+
+        ElementType baseElement =
+            ElementType::None;
+
+        uint32 runeFlags = 0;
+        uint32 elementMask = 0;
+    };
+
+    // key = 서버가 보낸 S_RUNE_TRIGGER.objectId, 즉 echoId
+    std::unordered_map<
+        uint64,
+        NetworkEchoVisualSnapshot>
+        m_mapNetworkEchoVisualByObjectId;
+
     // 서버 objectId 기준 설치 룬 VFX 추적.
 // TRF_DEP는 서버 trapId를 objectId로 보내므로, 같은 슬롯이 아니라 같은 함정 ID로 정확히 제거한다.
     struct NetworkRuneTrapVFX
     {
         int decalId = -1;
-        DirectX::XMFLOAT3 pos = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
+
+        DirectX::XMFLOAT3 pos =
+            DirectX::XMFLOAT3(
+                0.0f,
+                0.0f,
+                0.0f);
+
         uint64 ownerPlayerId = 0;
         int32 skillSlot = -1;
+        int32 skillType = 0;
+
+        ElementType baseElement =
+            ElementType::None;
+
+        ElementType primaryElement =
+            ElementType::None;
+
+        uint32 runeFlags = 0;
+        uint32 elementMask = 0;
     };
 
     std::unordered_map<uint64, NetworkRuneTrapVFX> m_mapNetworkTrapVFXByObjectId;
 
-    // 서버 objectId 기준 궤도 룬 VFX 추적.
-    // TRF_ORB start/fire를 같은 orbitalId로 묶기 위한 상태값이다.
-    struct NetworkOrbitalRuneVFX
-    {
-        int vfxId = -1;
-        uint64 ownerPlayerId = 0;
-    };
-
-    std::unordered_map<uint64, NetworkOrbitalRuneVFX> m_mapNetworkOrbitalVFXByObjectId;
-
-    // 궤도 룬(TRF_ORB) — 원격 플레이어 RC 발사 시 0.5초 공전 visual 후 실제 투사체 spawn.
-    //   서버는 즉시 데미지 처리하므로 visual 만 살짝 늦지만 수용 가능.
-    struct PendingOrbitalProjectile
-    {
-        DirectX::XMFLOAT3 origin{};
-        DirectX::XMFLOAT3 target{};
-        float speed = 30.f;
-        float radius = 0.5f;
-        float explosionRadius = 3.f;
-        float scale = 1.f;
-        ElementType element = ElementType::Fire;
-        GameObject* owner = nullptr;
-        bool isPiercing = false;
-        int orbVfxId = -1;
-        float delay = 0.5f;
-    };
-    std::vector<PendingOrbitalProjectile> m_vPendingOrbitals;
-
     float m_fLocalMoveCorrectionBlockTimer = 0.0f; // 포탈 낙하 중 서버 위치 보정 잠시 차단
 
 public:
-    // 매 프레임 호출 — 궤도 deferred 큐 tick
-    void UpdatePendingOrbitals(Scene* pScene, float deltaTime);
+   
 private:
 
     // 원격 플레이어 VFX 상태 (채널링 스킬 방향 추적용)
@@ -949,6 +980,7 @@ private:
 
         uint32 runeFlags = 0;
         ElementType visualElementOverride = ElementType::None;
+        uint32 visualElementMask = 0;
         float radiusScale = 1.0f;
 
         // duration=-1 계열이면 생성 후 특정 시간 뒤 수동 Stop
@@ -992,6 +1024,7 @@ private:
 
         uint32 runeFlags = 0;
         ElementType visualElementOverride = ElementType::None;
+        uint32 visualElementMask = 0;
         float radiusScale = 1.0f;
     };
 

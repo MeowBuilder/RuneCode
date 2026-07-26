@@ -32,7 +32,9 @@ void RuneDef::ApplyTo(SkillStats& stats, int stackCount) const
     stats.knockbackMult       *= scaledMult(knockbackMult);
 
     if (activationOverride.has_value())
-        stats.activationType = activationOverride.value();
+    {
+        stats.AddRuneActivation(activationOverride.value());
+    }
 
     // VFX mods accumulate multiplicatively
     stats.vfxMod.particleCountMult *= vfxMod.particleCountMult;
@@ -57,7 +59,6 @@ void RuneDef::ApplyTo(SkillStats& stats, int stackCount) const
     stats.overheatBonus    += overheatBonus    * static_cast<float>(stackCount);
     stats.orbitalCount          += orbitalCount     * stackCount;
     stats.spawnOnHitCount       += spawnOnHitCount  * stackCount;
-    if (randomElementOnCast)     stats.randomElementOnCast = true;
 
     // 서브 파티클 VFX (중복 방지)
     if (!subVFXId.empty())
@@ -345,10 +346,10 @@ RuneRegistry::RuneRegistry()
                .activationOverride=ActivationType::Channel });
 
     // TRF_DEP 설치 (Rare): RUNE_PLACE — 설치물 이펙트 지속 증가
-    Register({ .id="TRF_DEP", .name="설치", .category="발동",
-               .description="지점에 설치물 배치. 지속시간 동안 주기적으로 스킬 발동",
-               .grade=RuneGrade::Rare,
-               .activationOverride=ActivationType::Place });
+    Register({ .id = "TRF_DEP", .name = "설치", .category = "발동",
+            .description = "지점에 함정을 1개 설치합니다. 같은 스킬 슬롯의 기존 함정은 교체되며, 적이 접근하면 1회 발동 후 사라집니다.",
+            .grade = RuneGrade::Rare,
+            .activationOverride = ActivationType::Place });
 
     // TRF_EMP 증강 (Rare): RUNE_ENHANCE → 오라 이펙트 활성화
     Register({ .id="TRF_EMP", .name="증강", .category="발동",
@@ -395,19 +396,20 @@ RuneRegistry::RuneRegistry()
 
     // TRF_ORB 궤도 (Epic): 금빛 링 헤일로 → 공전 표시
     Register({ .id="TRF_ORB", .name="궤도", .category="투사체",
-               .description="투사체가 플레이어 주위를 0.5초 공전 후 발사 (공전 중 충돌 시 즉발)",
+               .description =
+    "기본 투사체와 함께 35% 피해의 궤도 동반 투사체 1개를 생성",
                .grade=RuneGrade::Epic,
                .vfxMod={.particleCountMult=1.2f},
                .orbitalCount=1,
                .subVFXId="sub_orbital_halo" });
 
     // TRF_ECH 반향 (Epic): 희미한 고스트 잔상 → 메아리 느낌
-    Register({ .id="TRF_ECH", .name="반향", .category="연쇄",
-               .description="적중 시 소형 투사체 1개 추가 생성 (50% 피해)",
-               .grade=RuneGrade::Epic,
-               .vfxMod={.particleCountMult=0.85f},
-               .spawnOnHitCount=1,
-               .subVFXId="sub_echo_ghost" });
+    Register({ .id = "TRF_ECH", .name = "반향", .category = "연쇄",
+            .description = "스킬 시전 1회당 첫 유효 적중 시 인근 적 1명에게 소형 반향 투사체를 발사해 50% 피해를 줍니다. 채널은 전체 시전에서 1회 발동합니다.",
+            .grade = RuneGrade::Epic,
+            .vfxMod = {.particleCountMult = 0.85f},
+            .spawnOnHitCount = 1,
+            .subVFXId = "sub_echo_ghost" });
 
     // ─── ⚡ 증폭 룬 ─────────────────────────────────────────────────────────────
     // 서브 VFX를 추가해 각 강화 효과를 시각적으로 나타낸다.
@@ -555,8 +557,8 @@ RuneRegistry::RuneRegistry()
                .grade=RuneGrade::Legendary });
 
     // ABY_ECO 메아리: 50% 확률로 2초 뒤 가장 가까운 적을 향해 50% 위력 재발동
-    Register({ .id="ABY_ECO", .name="메아리", .category="심연",
-               .description="스킬 시전 시 50% 확률로 2초 후 가장 가까운 적을 향해 50% 위력 재발동",
-               .grade=RuneGrade::Legendary,
-               .echoOnCast=true });
+    Register({ .id = "ABY_ECO", .name = "메아리", .category = "심연",
+            .description = "스킬 시전 시 50% 확률로 2초 후 가장 가까운 적을 향해 50% 위력으로 재발동합니다. 설치형 스킬은 함정이 실제 발동할 때 판정합니다.",
+            .grade = RuneGrade::Legendary,
+            .echoOnCast = true });
 }

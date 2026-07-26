@@ -165,19 +165,58 @@ private:
     DirectX::XMFLOAT3 m_ChargeTargetPosition;
 
     // Channel system
-    bool m_bIsChanneling = false;
+    bool  m_bIsChanneling = false;
     float m_fChannelTime = 0.0f;
     float m_fChannelDuration = 2.0f;  // Total channel duration
     float m_fChannelTickRate = 0.2f;  // Time between ticks
     float m_fChannelTickAccum = 0.0f;
-    DirectX::XMFLOAT3 m_ChannelTargetPosition;  // Stored target for channeling
-    bool m_bChannelTickFiredThisFrame = false;  // Set true on tick, consumed by network sync then reset
+
+    DirectX::XMFLOAT3 m_ChannelTargetPosition = { 0.f, 0.f, 0.f };
+
+    // 기존 채널 네트워크 처리에서 사용.
+    // 이후 ExecuteCombinedChannelTick 방식으로 전환하면 제거할 수 있다.
+    bool m_bChannelTickFiredThisFrame = false;
+
+    // ─────────────────────────────────────────────────────────────
+    // 복합 발동 룬 채널 상태
+    // ─────────────────────────────────────────────────────────────
+
+    // CHG + CHN 조합에서 차징 해제 순간의 비율을
+    // 채널 전체 틱 동안 유지한다.
+    float m_fChannelChargeRatio = 0.0f;
+
+    // 채널 틱 기본 피해 비율.
+    // 기본 채널은 30%, TRF_CHN 룬은 시작 시 35%로 변경한다.
+    float m_fChannelTickDamageRatio = 0.30f;
+
+    // 차징 배율 등 채널 전체 틱에 공통 적용되는 배율.
+    float m_fChannelBaseMultiplier = 1.0f;
+
+    // TRF_DEP + TRF_CHN 조합 여부.
+    // true이면 플레이어 위치가 아니라 설치 지점을 공격 원점으로 사용한다.
+    bool m_bChannelPlaceMode = false;
+
+    // 현재 채널 시전에 TRF_EMP가 직접 결합됐는지.
+    // true이면 모든 채널 틱에 증강 배율을 적용한다.
+    bool m_bChannelEmbeddedEnhance = false;
+
+    // 과거에 TRF_EMP 단독으로 저장해둔 증강 버프를
+    // 현재 채널의 첫 실제 공격 틱에서 소비해야 하는지.
+    bool m_bChannelConsumeStoredEnhance = false;
+
+    // 설치형 채널의 공격 원점.
+    // 일반 채널에서는 플레이어 현재 위치를 사용한다.
+    DirectX::XMFLOAT3 m_ChannelOriginPosition = { 0.f, 0.f, 0.f };
+
+    // 설치형 채널의 바닥 표시를 추적할 때 사용.
+    // 아직 구현 전이므로 기본값 -1.
+    int m_ChannelPlaceDecalSlot = -1;
 
     // Enhance system
     bool m_bIsEnhanced = false;
     float m_fEnhanceTimer = 0.0f;
     float m_fEnhanceDuration = 5.0f;  // Enhancement lasts 5 seconds
-    float m_fEnhanceMultiplier = 2.0f;  // Damage multiplier
+    float m_fEnhanceMultiplier = 1.8f;  // TRF_EMP: 서버와 동일한 피해 배율
 
     // Process rune input (1-5 keys)
     void ProcessRuneInput(InputSystem* pInputSystem);
@@ -198,10 +237,28 @@ private:
     bool        m_bCurrentEnhanceUsed  = false;
 
     // Execute skill based on current activation type
-    void ExecuteWithActivationType(SkillSlot slot, const DirectX::XMFLOAT3& targetPosition);
+    void ExecuteWithActivationType(
+        SkillSlot slot,
+        const DirectX::XMFLOAT3& targetPosition);
+
+    // 차징 해제 또는 일반 입력 후 복합 채널 상태를 시작한다.
+    // chargeRatio는 차징이 없는 경우 0.
+    void BeginCombinedChannel(
+        SkillSlot slot,
+        const DirectX::XMFLOAT3& targetPosition,
+        float chargeRatio);
+
+    // 현재 복합 채널의 실제 공격 틱을 한 번 실행한다.
+    void ExecuteCombinedChannelTick();
+
+    // 채널 종료·중단·컷신 진입 시 복합 채널 전용 상태를 초기화한다.
+    void ClearCombinedChannelState();
 
     // Execute or split into multiple projectiles if Split rune is equipped
-    void ExecuteOrSplit(size_t index, const DirectX::XMFLOAT3& target, float mult);
+    void ExecuteOrSplit(
+        size_t index,
+        const DirectX::XMFLOAT3& target,
+        float mult);
 
     // 차지 결집 VFX 스폰/업데이트 (step 0=초기, 1~3=성장 단계)
     void SpawnChargeGatherVFX(int step);
@@ -273,6 +330,20 @@ private:
     //   sendSkill:   설치+차징은 false 로 SendSkill 생략하고 PlayerAttack 만 전송
     void SendSkillNet(SkillSlot slot, const DirectX::XMFLOAT3& targetPosition,
                       float chargeRatio = 0.0f, bool sendSkill = true);
+
+    // 설치형 채널처럼 플레이어 위치가 아닌 별도 위치를
+// 공격 원점으로 서버에 전송할 때 사용한다.
+//
+// countAsSkillUse:
+// 채널 첫 틱만 true, 이후 반복 틱은 false로 전달하여
+// 스킬 사용 통계가 틱마다 증가하지 않게 한다.
+    void SendSkillNetFrom(
+        SkillSlot slot,
+        const DirectX::XMFLOAT3& originPosition,
+        const DirectX::XMFLOAT3& targetPosition,
+        float chargeRatio,
+        bool sendSkill,
+        bool countAsSkillUse);
 
     // 메아리 지연 큐 (ABY_ECO: 2초 후 가장 가까운 적을 향해 50% 재발동)
     struct DeferredEcho { size_t index; float mult; float timer; int decalSlot = -1; EnemyComponent* pTarget = nullptr; };

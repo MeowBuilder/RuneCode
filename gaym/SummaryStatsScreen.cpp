@@ -145,7 +145,6 @@ namespace
         if (def.homing)     ss << L"유도 ";
         if (def.doublecast) ss << L"쌍발 ";
         if (def.echoOnCast) ss << L"잔상 ";
-        if (def.randomElementOnCast) ss << L"원소무작위 ";
         std::wstring r = ss.str();
         if (r.empty()) r = L"효과 없음";
         return r;

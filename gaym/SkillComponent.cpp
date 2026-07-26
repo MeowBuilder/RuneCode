@@ -19,6 +19,54 @@
 #include "FluidSkillVFXManager.h"
 #include <set>
 #include <random>
+#include <algorithm>
+#include <cmath>
+
+namespace
+{
+    constexpr float kTransformChannelDamageRatio = 0.35f;
+    constexpr float kDefaultChannelDamageRatio = 0.30f;
+    constexpr float kTransformEnhanceMultiplier = 1.80f;
+
+    float ClampRuneRatio(float ratio)
+    {
+        return std::clamp(ratio, 0.0f, 1.0f);
+    }
+
+    float CalculateChargeMultiplier(float chargeRatio)
+    {
+        chargeRatio = ClampRuneRatio(chargeRatio);
+
+        if (chargeRatio >= 1.0f)
+            return 2.5f;
+
+        if (chargeRatio >= 0.5f)
+            return 1.5f;
+
+        return 1.0f + chargeRatio;
+    }
+
+    // 설치 룬의 대표 색상 정책.
+//
+// 1. 장착된 원소 룬이 있으면
+//    Fire -> Water -> Wind -> Earth 순서의 첫 번째 원소
+//
+// 2. 원소 오버라이드만 있으면 해당 원소
+//
+// 3. 둘 다 없으면 원래 스킬 원소
+    ElementType ResolvePrimaryPlaceVisualElement(
+        const SkillStats& stats,
+        ElementType fallbackElement)
+    {
+        if (!stats.elementSet.empty())
+            return stats.elementSet.front();
+
+        if (stats.elementOverride.has_value())
+            return *stats.elementOverride;
+
+        return fallbackElement;
+    }
+}
 
 SkillComponent::SkillComponent(GameObject* pOwner)
     : Component(pOwner)
@@ -45,8 +93,16 @@ SkillComponent::~SkillComponent()
 
 void SkillComponent::SpawnChargeGatherVFX(int step)
 {
-    if (!m_pVFXManager) return;
+    if (!m_pVFXManager)
+        return;
+
+    if (m_ChargingSlot == SkillSlot::Count)
+        return;
+
     size_t slotIdx = static_cast<size_t>(m_ChargingSlot);
+
+    if (slotIdx >= m_chargeGatherVFXIds.size())
+        return;
 
     if (m_chargeGatherVFXIds[slotIdx] >= 0)
     {
@@ -140,10 +196,7 @@ void SkillComponent::Update(float deltaTime)
                 if (m_SkillStates[chIdx] == SkillState::Casting)
                     m_SkillStates[chIdx] = SkillState::Cooldown;
             }
-            m_bIsChanneling = false;
-            m_fChannelTime = 0.0f;
-            m_fChannelTickAccum = 0.0f;
-            m_bChannelTickFiredThisFrame = false;
+            ClearCombinedChannelState();
             m_ActiveSkillSlot = SkillSlot::Count;
         }
 
@@ -322,28 +375,76 @@ void SkillComponent::Update(float deltaTime)
     // Update charge timer
     if (m_bIsCharging)
     {
-        m_fChargeTime += deltaTime;
-        float ratio = min(1.f, m_fChargeTime / m_fMaxChargeTime);
-
-        size_t chgIdx = static_cast<size_t>(m_ChargingSlot);
-        if (chgIdx < m_Skills.size() && m_Skills[chgIdx])
-            m_Skills[chgIdx]->OnChargeUpdate(m_pOwner, ratio);
-
-        // 차지 결집 VFX 위치 추적
-        size_t chgSlotIdx = static_cast<size_t>(m_ChargingSlot);
-        if (m_pVFXManager && m_chargeGatherVFXIds[chgSlotIdx] >= 0 && m_pOwner && m_pOwner->GetTransform())
+        // 상태 불일치 방어:
+        // charging은 true인데 슬롯이 Count이면 배열에 접근하지 않고 상태를 종료한다.
+        if (m_ChargingSlot == SkillSlot::Count)
         {
-            DirectX::XMFLOAT3 pos = m_pOwner->GetTransform()->GetPosition();
-            DirectX::XMFLOAT3 up  = { 0.f, 1.f, 0.f };
-            m_pVFXManager->TrackEffect(m_chargeGatherVFXIds[chgSlotIdx], pos, up);
+            m_bIsCharging = false;
+            m_fChargeTime = 0.0f;
         }
-
-        // 차지 비율에 따라 VFX 단계 성장 (0.33 → 1단계, 0.66 → 2단계, 1.0 → 3단계)
-        int newStep = (ratio >= 1.0f) ? 3 : (ratio >= 0.66f) ? 2 : (ratio >= 0.33f) ? 1 : 0;
-        if (newStep > m_chargeScaleSteps[chgSlotIdx])
+        else
         {
-            m_chargeScaleSteps[chgSlotIdx] = newStep;
-            SpawnChargeGatherVFX(newStep);
+            const size_t chgSlotIdx =
+                static_cast<size_t>(m_ChargingSlot);
+
+            const bool validChargeSlot =
+                chgSlotIdx < m_Skills.size() &&
+                chgSlotIdx < m_chargeGatherVFXIds.size() &&
+                chgSlotIdx < m_chargeScaleSteps.size();
+
+            if (!validChargeSlot)
+            {
+                m_bIsCharging = false;
+                m_fChargeTime = 0.0f;
+                m_ChargingSlot = SkillSlot::Count;
+            }
+            else
+            {
+                m_fChargeTime += deltaTime;
+
+                const float ratio = ClampRuneRatio(
+                    m_fChargeTime / m_fMaxChargeTime);
+
+                if (m_Skills[chgSlotIdx])
+                {
+                    m_Skills[chgSlotIdx]->OnChargeUpdate(
+                        m_pOwner,
+                        ratio);
+                }
+
+                // 차지 결집 VFX 위치 추적
+                if (m_pVFXManager &&
+                    m_chargeGatherVFXIds[chgSlotIdx] >= 0 &&
+                    m_pOwner &&
+                    m_pOwner->GetTransform())
+                {
+                    DirectX::XMFLOAT3 pos =
+                        m_pOwner->GetTransform()->GetPosition();
+
+                    DirectX::XMFLOAT3 up =
+                    { 0.f, 1.f, 0.f };
+
+                    m_pVFXManager->TrackEffect(
+                        m_chargeGatherVFXIds[chgSlotIdx],
+                        pos,
+                        up);
+                }
+
+                // 차지 비율에 따라 VFX 단계 성장
+                const int newStep =
+                    ratio >= 1.0f ? 3 :
+                    ratio >= 0.66f ? 2 :
+                    ratio >= 0.33f ? 1 : 0;
+
+                if (newStep >
+                    m_chargeScaleSteps[chgSlotIdx])
+                {
+                    m_chargeScaleSteps[chgSlotIdx] =
+                        newStep;
+
+                    SpawnChargeGatherVFX(newStep);
+                }
+            }
         }
     }
 
@@ -353,138 +454,86 @@ void SkillComponent::Update(float deltaTime)
         m_fChannelTime += deltaTime;
         m_fChannelTickAccum += deltaTime;
 
-        // Fire tick if enough time passed
-        if (m_fChannelTickAccum >= m_fChannelTickRate)
+        // 실제 틱 간격이 지난 경우에만 공격 실행 및 네트워크 전송
+        while (m_fChannelTickAccum >= m_fChannelTickRate)
         {
             m_fChannelTickAccum -= m_fChannelTickRate;
-            m_bChannelTickFiredThisFrame = true;  // 네트워크 tick 판정용 플래그
 
-            size_t index = static_cast<size_t>(m_ActiveSkillSlot);
-            if (index < m_Skills.size() && m_Skills[index])
-            {
-                // Combo-based channel tick damage
-                RuneCombo combo = GetRuneCombo(m_ActiveSkillSlot);
-                float tickMult = 0.3f;
-                if (combo.hasEnhance) tickMult *= 2.0f;
-
-                // 활성화 VFX 컨텍스트 — 채널 틱
-                m_currentChargeRatio    = 0.f;
-                m_bCurrentIsChannelTick = true;
-                m_bCurrentEnhanceUsed  = false;
-
-                SkillCategory tickCat = m_Skills[index]->GetCategory();
-                ActivationType tickDefType = m_Skills[index]->GetSkillData().activationType;
-
-                if (tickCat == SkillCategory::Projectile || tickDefType == ActivationType::Channel)
-                {
-                    // 투사체: 반복 발사 / 고유 채널(Beam 등): 기존 틱 로직
-                    // 설치 룬 + 채널: 진입 시 이미 SpawnPlaceTrap 완료 → 틱에서는 skip
-                    if (!combo.hasPlace)
-                        ExecuteOrSplit(index, m_ChannelTargetPosition, tickMult);
-                }
-                else
-                {
-                    // Wave/AoE/Summon/Dash: 커스텀 채널 틱 (Execute 재호출 대신 OnChannelTick)
-                    m_Skills[index]->OnChannelTick(m_pOwner, m_ChannelTargetPosition, tickMult);
-                }
-            }
+            ExecuteCombinedChannelTick();
         }
 
-        // 채널링 중에도 스킬 Update() 호출 (방향 추적 등)
+        // 채널링 중 스킬 자체 Update 호출
+        const size_t channelIndex =
+            static_cast<size_t>(m_ActiveSkillSlot);
+
+        if (channelIndex < m_Skills.size() &&
+            m_Skills[channelIndex])
         {
-            size_t chIndex = static_cast<size_t>(m_ActiveSkillSlot);
-            if (chIndex < m_Skills.size() && m_Skills[chIndex])
-            {
-                m_Skills[chIndex]->Update(deltaTime);
-            }
+            m_Skills[channelIndex]->Update(deltaTime);
         }
 
-        // 채널링 중 네트워크 동기화 (방향 업데이트 전송 + 채널링 tick 에 맞춰 공격 판정 요청)
-        NetworkManager* pNetMgr = NetworkManager::GetInstance();
-        if (pNetMgr && pNetMgr->IsConnected() && m_pOwner)
-        {
-            TransformComponent* pTransform = m_pOwner->GetTransform();
-            if (pTransform)
-            {
-                // 현재 채널 중인 스킬 슬롯 → skillType. 이전엔 E 로 하드코딩되어 있어
-                // Tornado(R 채널) 가 동기화되지 않았음.
-                int skillType = 0;
-                switch (m_ActiveSkillSlot)
-                {
-                case SkillSlot::Q:          skillType = 1; break;
-                case SkillSlot::E:          skillType = 2; break;
-                case SkillSlot::R:          skillType = 3; break;
-                case SkillSlot::RightClick: skillType = 4; break;
-                default:                    skillType = 0; break;
-                }
-
-                const DirectX::XMFLOAT3& pos = pTransform->GetPosition();
-                DirectX::XMVECTOR lookVec = pTransform->GetLook();
-                DirectX::XMFLOAT3 lookDir;
-                DirectX::XMStoreFloat3(&lookDir, lookVec);
-
-                // dir 슬롯에 target/lookDir 중 어느 걸 보낼지 element/slot 별로 결정.
-                // - R : 항상 target (수신 측이 case 3 에서 target 으로 해석)
-                // - Water Q (WaterPuddle), Water E (Vortex) : target (target 위치 기반 VFX)
-                // - 그 외 : lookDir
-                ElementType elem = ElementType::None;
-                if (auto* pc = m_pOwner->GetComponent<PlayerComponent>())
-                    elem = pc->GetElementType();
-                bool sendTarget =
-                    (skillType == 3) ||
-                    (elem == ElementType::Water && (skillType == 1 || skillType == 2));
-
-                if (sendTarget)
-                {
-                    pNetMgr->SendSkill(skillType, pos.x, pos.y, pos.z,
-                        m_ChannelTargetPosition.x, m_ChannelTargetPosition.y, m_ChannelTargetPosition.z);
-                }
-                else
-                {
-                    pNetMgr->SendSkill(skillType, pos.x, pos.y, pos.z,
-                        lookDir.x, lookDir.y, lookDir.z);
-                }
-
-                // 채널링 tick 이 발생한 이번 프레임이면 서버에 공격 판정 요청.
-                if (m_bChannelTickFiredThisFrame)
-                {
-                    pNetMgr->SendPlayerAttack(skillType,
-                        pos.x, pos.y, pos.z,
-                        lookDir.x, lookDir.y, lookDir.z,
-                        m_ChannelTargetPosition.x, m_ChannelTargetPosition.y, m_ChannelTargetPosition.z);
-                }
-            }
-        }
-        m_bChannelTickFiredThisFrame = false;
-
-        // Check if channel duration expired
+        // 채널 지속시간 종료
         if (m_fChannelTime >= m_fChannelDuration)
         {
-            OutputDebugString(L"[Skill] Channel complete!\n");
-            NotifyActionNet(PLAYER_ACTION_CHANNEL_END, m_ActiveSkillSlot);
-            m_bIsChanneling = false;
-            m_fChannelTime = 0.0f;
-            m_fChannelTickAccum = 0.0f;
+            const SkillSlot endedSlot =
+                m_ActiveSkillSlot;
 
-            size_t index = static_cast<size_t>(m_ActiveSkillSlot);
-            if (index < m_Skills.size() && m_Skills[index])
+            const size_t endedIndex =
+                static_cast<size_t>(endedSlot);
+
+            const bool wasPlaceChannel =
+                m_bChannelPlaceMode;
+
+            const DirectX::XMFLOAT3 placeOrigin =
+                m_ChannelOriginPosition;
+
+            NotifyActionNet(
+                PLAYER_ACTION_CHANNEL_END,
+                endedSlot);
+
+            if (wasPlaceChannel)
             {
-                m_Skills[index]->OnChannelComplete(m_pOwner, m_ChannelTargetPosition);
-                m_Skills[index]->OnChannelEnd(m_pOwner);
-                m_bChannelInterrupted[index] = false;
-                bool keepCasting = !m_Skills[index]->IsFinished() && m_Skills[index]->HasPostChannelWork();
+                NotifyActionNetAt(
+                    PLAYER_ACTION_PLACE_FIRE,
+                    endedSlot,
+                    placeOrigin);
+            }
+
+            if (endedIndex < m_Skills.size() &&
+                m_Skills[endedIndex])
+            {
+                m_Skills[endedIndex]->OnChannelComplete(
+                    m_pOwner,
+                    m_ChannelTargetPosition);
+
+                m_Skills[endedIndex]->OnChannelEnd(
+                    m_pOwner);
+
+                m_bChannelInterrupted[endedIndex] =
+                    false;
+
+                const bool keepCasting =
+                    !m_Skills[endedIndex]->IsFinished() &&
+                    m_Skills[endedIndex]->HasPostChannelWork();
+
                 if (keepCasting)
                 {
-                    // PostChannelWork 완료(IsFinished) 후에 쿨타임 세팅
-                    m_SkillStates[index] = SkillState::Casting;
+                    m_SkillStates[endedIndex] =
+                        SkillState::Casting;
                 }
                 else
                 {
-                    m_CooldownTimers[index] = GetEffectiveCooldown(index);
-                    m_SkillStates[index] = SkillState::Cooldown;
-                    m_Skills[index]->Reset();
+                    m_CooldownTimers[endedIndex] =
+                        GetEffectiveCooldown(endedIndex);
+
+                    m_SkillStates[endedIndex] =
+                        SkillState::Cooldown;
+
+                    m_Skills[endedIndex]->Reset();
                 }
             }
+
+            ClearCombinedChannelState();
             m_ActiveSkillSlot = SkillSlot::Count;
         }
     }
@@ -669,132 +718,240 @@ void SkillComponent::ProcessSkillInput(InputSystem* pInputSystem, CCamera* pCame
     // Handle charging state
     if (m_bIsCharging)
     {
-        // Check if key is still held
+        // 키를 누르고 있으면 Update()에서 차징을 계속한다.
         if (IsSkillKeyPressed(m_ChargingSlot, pInputSystem))
         {
-            // Continue charging
-            // (charge time is updated in ExecuteWithActivationType via deltaTime from Update)
+            return;
+        }
+
+        // 키가 떼어진 시점의 슬롯과 차지 비율을 먼저 보존한다.
+        const SkillSlot endedSlot = m_ChargingSlot;
+        const size_t index = static_cast<size_t>(endedSlot);
+
+        const float chargeRatio =
+            ClampRuneRatio(m_fChargeTime / m_fMaxChargeTime);
+
+        RuneCombo combo{};
+
+        const bool validSkill =
+            endedSlot != SkillSlot::Count &&
+            index < m_Skills.size() &&
+            m_Skills[index] != nullptr;
+
+        if (validSkill)
+            combo = GetRuneCombo(endedSlot);
+
+        // 차징 VFX 정리
+        if (endedSlot != SkillSlot::Count)
+        {
+            if (index < m_chargeGatherVFXIds.size())
+            {
+                if (m_pVFXManager &&
+                    m_chargeGatherVFXIds[index] >= 0)
+                {
+                    m_pVFXManager->StopEffect(
+                        m_chargeGatherVFXIds[index]);
+
+                    m_chargeGatherVFXIds[index] = -1;
+                }
+            }
+
+            if (index < m_chargeScaleSteps.size())
+                m_chargeScaleSteps[index] = 0;
+        }
+
+        // 차징 상태를 먼저 끝낸다.
+        // CHG+CHN일 경우 이후 채널 상태로 전환되므로
+        // 이전 차징 상태가 남아 있으면 안 된다.
+        m_bIsCharging = false;
+        m_fChargeTime = 0.0f;
+        m_ChargingSlot = SkillSlot::Count;
+
+        if (endedSlot != SkillSlot::Count)
+        {
+            NotifyActionNet(
+                PLAYER_ACTION_CHARGE_END,
+                endedSlot);
+        }
+
+        if (!validSkill)
+            return;
+
+        // CHG + CHN:
+        // 차징 해제와 동시에 저장된 차지 비율로 채널을 시작한다.
+        if (combo.hasChannel)
+        {
+            BeginCombinedChannel(
+                endedSlot,
+                targetPos,
+                chargeRatio);
+
+            return;
+        }
+
+        // 서버와 동일한 차징 배율
+        float damageMultiplier =
+            CalculateChargeMultiplier(chargeRatio);
+
+        // CHG + EMP:
+        // 증강 룬이 이번 시전에 결합된 경우 현재 공격에 바로 적용한다.
+        const bool embeddedEnhance = combo.hasEnhance;
+
+        if (embeddedEnhance)
+            damageMultiplier *= kTransformEnhanceMultiplier;
+
+        // 과거 EMP 단독 시전으로 저장해 둔 버프 소비
+        const bool storedEnhanceUsed = m_bIsEnhanced;
+
+        if (storedEnhanceUsed)
+        {
+            m_Skills[index]->OnEnhanceConsumed(
+                m_pOwner,
+                targetPos);
+
+            damageMultiplier *= m_fEnhanceMultiplier;
+
+            m_bIsEnhanced = false;
+            m_fEnhanceTimer = 0.0f;
+
+            NotifyActionNet(
+                PLAYER_ACTION_ENHANCE_END,
+                endedSlot);
+        }
+
+        // VFX 실행 정보
+        m_currentChargeRatio = chargeRatio;
+        m_bCurrentIsChannelTick = false;
+        m_bCurrentEnhanceUsed =
+            embeddedEnhance || storedEnhanceUsed;
+
+        NetworkManager* pNetMgr =
+            NetworkManager::GetInstance();
+
+        const bool online =
+            pNetMgr &&
+            pNetMgr->IsConnected();
+
+        if (combo.hasPlace)
+        {
+            // 오프라인에서는 클라이언트가 직접 함정을 관리한다.
+            if (!online)
+            {
+                SpawnPlaceTrap(
+                    index,
+                    targetPos,
+                    damageMultiplier,
+                    combo);
+            }
+
+            // 온라인에서는 서버가 설치 공격을 생성하므로
+            // 일반 스킬 VFX 패킷 없이 공격 요청만 보낸다.
+            if (online)
+            {
+                SendSkillNet(
+                    endedSlot,
+                    targetPos,
+                    chargeRatio,
+                    false);
+            }
         }
         else
         {
-            // Key released - fire the charged skill
-            size_t index = static_cast<size_t>(m_ChargingSlot);
-            if (index < m_Skills.size() && m_Skills[index])
-            {
-                RuneCombo combo = GetRuneCombo(m_ChargingSlot);
+            ExecuteOrSplit(
+                index,
+                targetPos,
+                damageMultiplier);
 
-                float chargeRatio = m_fChargeTime / m_fMaxChargeTime;
-                chargeRatio = min(1.0f, chargeRatio);
-
-                // Apply charge multiplier (1.0x to 3.0x based on charge)
-                float damageMultiplier = 1.0f + chargeRatio * 2.0f;
-
-                // Combo: Charge+Enhance rune
-                if (combo.hasEnhance) damageMultiplier *= 2.0f;
-
-                // Consume existing enhance buff
-                if (m_bIsEnhanced)
-                {
-                    m_Skills[index]->OnEnhanceConsumed(m_pOwner, targetPos);
-                    damageMultiplier *= m_fEnhanceMultiplier;
-                    m_bIsEnhanced = false;
-                    m_fEnhanceTimer = 0.0f;
-                    OutputDebugString(L"[Skill] Enhancement consumed with Charge!\n");
-                    NotifyActionNet(PLAYER_ACTION_ENHANCE_END, static_cast<SkillSlot>(index));
-                }
-
-                wchar_t buffer[128];
-                swprintf_s(buffer, 128, L"[Skill] Charge released! Charge: %.0f%%, Multiplier: %.1fx\n",
-                    chargeRatio * 100.0f, damageMultiplier);
-                OutputDebugString(buffer);
-
-                // 활성화 VFX 컨텍스트 세팅 (Execute 직전)
-                m_currentChargeRatio = chargeRatio;
-                m_bCurrentIsChannelTick = false;
-                m_bCurrentEnhanceUsed = (m_bIsEnhanced); // 이미 소모됨
-
-                if (combo.hasPlace)
-                {
-                    // 1. 설치 룬이면 클라에서는 함정을 생성한다.
-                    SpawnPlaceTrap(index, targetPos, damageMultiplier, combo);
-                }
-                else
-                {
-                    // 2. 일반 차징 스킬이면 클라에서 스킬을 실행한다.
-                    ExecuteOrSplit(index, targetPos, damageMultiplier);
-                }
-
-                // 3. 스킬 상태 갱신
-                m_SkillStates[index] = SkillState::Casting;
-                m_ActiveSkillSlot = m_ChargingSlot;
-
-                // 4. 차징 해제 시점에 서버 공격 판정 요청
-                //    일반 차징은 SendSkill + SendPlayerAttack 둘 다 전송
-                //    설치 + 차징은 SendSkill은 생략하고 SendPlayerAttack만 전송
-                SendSkillNet(
-                    m_ChargingSlot,
-                    targetPos,
-                    chargeRatio,
-                    !combo.hasPlace);
-
-                // 쿨타임은 IsFinished() 후 Update 루프에서 세팅한다.
-                // 여기서 바로 m_CooldownTimers[index]를 세팅하면 UI가 즉시 돌다가 다시 리셋될 수 있다.
-            }
-
-            size_t relIdx = static_cast<size_t>(m_ChargingSlot);
-            if (m_pVFXManager && m_chargeGatherVFXIds[relIdx] >= 0)
-            {
-                m_pVFXManager->StopEffect(m_chargeGatherVFXIds[relIdx]);
-                m_chargeGatherVFXIds[relIdx] = -1;
-            }
-            m_chargeScaleSteps[relIdx] = 0;
-            SkillSlot endedSlot = m_ChargingSlot;
-            m_bIsCharging = false;
-            m_fChargeTime = 0.0f;
-            m_ChargingSlot = SkillSlot::Count;
-            NotifyActionNet(PLAYER_ACTION_CHARGE_END, endedSlot);
+            SendSkillNet(
+                endedSlot,
+                targetPos,
+                chargeRatio,
+                true);
         }
-        return;  // Don't process other inputs while charging
+
+        m_SkillStates[index] = SkillState::Casting;
+        m_ActiveSkillSlot = endedSlot;
+
+        return;
     }
 
     // Handle channeling state
     if (m_bIsChanneling)
     {
-        m_ChannelTargetPosition = targetPos;  // 매 프레임 방향 업데이트
-        if (IsSkillKeyPressed(m_ActiveSkillSlot, pInputSystem))
-        {
-            // Continue channeling - handled in Update
-        }
-        else
-        {
-            // Key released - stop channeling
-            OutputDebugString(L"[Skill] Channel interrupted\n");
-            NotifyActionNet(PLAYER_ACTION_CHANNEL_END, m_ActiveSkillSlot);
-            m_bIsChanneling = false;
-            m_fChannelTime = 0.0f;
-            m_fChannelTickAccum = 0.0f;
+        m_ChannelTargetPosition =
+            targetPos;
 
-            size_t index = static_cast<size_t>(m_ActiveSkillSlot);
-            if (index < m_Skills.size() && m_Skills[index])
-            {
-                m_Skills[index]->OnChannelEnd(m_pOwner);
-                m_bChannelInterrupted[index] = true;
-                bool keepCasting = !m_Skills[index]->IsFinished() && m_Skills[index]->HasPostChannelWork();
-                if (keepCasting)
-                {
-                    // PostChannelWork 완료(IsFinished) 후에 50% 페널티 쿨타임 세팅
-                    m_SkillStates[index] = SkillState::Casting;
-                }
-                else
-                {
-                    m_CooldownTimers[index] = GetEffectiveCooldown(index) * 0.5f;
-                    m_SkillStates[index] = SkillState::Cooldown;
-                    m_Skills[index]->Reset();
-                    m_bChannelInterrupted[index] = false;
-                }
-            }
-            m_ActiveSkillSlot = SkillSlot::Count;
+        if (IsSkillKeyPressed(
+            m_ActiveSkillSlot,
+            pInputSystem))
+        {
+            return;
         }
+
+        const SkillSlot endedSlot =
+            m_ActiveSkillSlot;
+
+        const size_t index =
+            static_cast<size_t>(endedSlot);
+
+        const bool wasPlaceChannel =
+            m_bChannelPlaceMode;
+
+        const DirectX::XMFLOAT3 placeOrigin =
+            m_ChannelOriginPosition;
+
+        OutputDebugString(
+            L"[Skill] Channel interrupted\n");
+
+        NotifyActionNet(
+            PLAYER_ACTION_CHANNEL_END,
+            endedSlot);
+
+        if (wasPlaceChannel)
+        {
+            NotifyActionNetAt(
+                PLAYER_ACTION_PLACE_FIRE,
+                endedSlot,
+                placeOrigin);
+        }
+
+        if (index < m_Skills.size() &&
+            m_Skills[index])
+        {
+            m_Skills[index]->OnChannelEnd(
+                m_pOwner);
+
+            m_bChannelInterrupted[index] =
+                true;
+
+            const bool keepCasting =
+                !m_Skills[index]->IsFinished() &&
+                m_Skills[index]->HasPostChannelWork();
+
+            if (keepCasting)
+            {
+                m_SkillStates[index] =
+                    SkillState::Casting;
+            }
+            else
+            {
+                m_CooldownTimers[index] =
+                    GetEffectiveCooldown(index) *
+                    0.5f;
+
+                m_SkillStates[index] =
+                    SkillState::Cooldown;
+
+                m_Skills[index]->Reset();
+
+                m_bChannelInterrupted[index] =
+                    false;
+            }
+        }
+
+        ClearCombinedChannelState();
+        m_ActiveSkillSlot = SkillSlot::Count;
+
         return;
     }
 
@@ -1220,16 +1377,22 @@ bool SkillComponent::HasRuneEquipped(SkillSlot skill, const char* runeId) const
 SkillStats SkillComponent::BuildSkillStats(SkillSlot skill, ActivationType defaultType) const
 {
     SkillStats stats;
-    stats.activationType = defaultType;
 
     size_t skillIdx = static_cast<size_t>(skill);
+
     if (skillIdx >= static_cast<size_t>(SkillSlot::Count))
+    {
+        stats.ApplyDefaultActivation(defaultType);
+        stats.activationType = stats.ResolvePrimaryActivation();
         return stats;
+    }
 
     const RuneRegistry& reg = RuneRegistry::Get();
+
     bool hasL03 = false;
     bool hasABY_RES = false;
     std::set<ElementType> uniqueElements;
+
     for (int i = 0; i < RUNES_PER_SKILL; ++i)
     {
         const EquippedRune& er = m_SkillRunes[skillIdx][i];
@@ -1257,18 +1420,6 @@ SkillStats SkillComponent::BuildSkillStats(SkillSlot skill, ActivationType defau
     // elementSet: VFX 색상 오버라이드용 (순서 보존)
     stats.elementSet.assign(uniqueElements.begin(), uniqueElements.end());
 
-    // 원소 변환(L04): 시전마다 원소 무작위 변경
-    if (stats.randomElementOnCast)
-    {
-        static std::mt19937 rng{ std::random_device{}() };
-        static std::uniform_int_distribution<int> dist(0, 3);
-        constexpr ElementType elements[] = {
-            ElementType::Water, ElementType::Fire,
-            ElementType::Earth, ElementType::Wind
-        };
-        stats.elementOverride = elements[dist(rng)];
-    }
-
     // ── 멀티 게이트 ─────────────────────────────────────────────────────────
     //   서버 연결 시 룬 발동은 전적으로 서버 권위. 클라가 독립적으로 onCast/onHit 훅,
     //   RNG 기반 트리거(INF/ECO), 카운터 기반 트리거(OVL), 피격 응답(RVG)을 굴리면
@@ -1280,13 +1431,21 @@ SkillStats SkillComponent::BuildSkillStats(SkillSlot skill, ActivationType defau
     {
         stats.onCastHooks.clear();
         stats.onHitHooks.clear();
-        stats.cdResetChance   = 0.f;  // ABY_INF
-        stats.lifestealRatio  = 0.f;  // ABY_VMP
-        stats.execDamageBonus = 0.f;  // ABY_EXC
-        stats.revengeBonus    = 0.f;  // ABY_RVG
-        stats.overheatBonus   = 0.f;  // ABY_OVL
-        stats.echoOnCast      = false; // ABY_ECO
+
+        stats.cdResetChance = 0.f;
+        stats.lifestealRatio = 0.f;
+        stats.execDamageBonus = 0.f;
+        stats.revengeBonus = 0.f;
+        stats.overheatBonus = 0.f;
+        stats.echoOnCast = false;
     }
+
+    // 발동 룬이 하나도 없으면 스킬의 기존 발동 방식을 사용한다.
+    stats.ApplyDefaultActivation(defaultType);
+
+    // UI와 레거시 코드에서 사용하는 대표 발동 타입을 계산한다.
+    // 실제 복합 룬 실행은 activation 플래그들과 RuneCombo를 사용한다.
+    stats.activationType = stats.ResolvePrimaryActivation();
 
     return stats;
 }
@@ -1499,6 +1658,22 @@ void SkillComponent::SpawnPlaceTrap(size_t skillIndex, const XMFLOAT3& pos, floa
 {
     if (skillIndex >= m_Skills.size() || !m_Skills[skillIndex]) return;
 
+    // 온라인에서는 설치 함정과 데칼을 서버가 확정한다.
+//
+// 여기서 로컬 m_placeQueue와 데칼까지 만들면
+// 서버 S_RUNE_TRIGGER를 받을 때 같은 위치에 데칼이 한 번 더 생성된다.
+    NetworkManager* pNetworkManager =
+        NetworkManager::GetInstance();
+
+    if (pNetworkManager &&
+        pNetworkManager->IsConnected())
+    {
+        OutputDebugString(
+            L"[Skill] Online place trap waits for server confirmation.\n");
+
+        return;
+    }
+
     // 룬 데미지 배율 적용 — 설치 경로는 ExecuteOrSplit 를 거치지 않으므로
     //   원소공명(+50%)·원소증폭(L03)·기타 배율 룬이 누락된다. 여기서 직접 반영한다.
     ActivationType placeDefType = m_Skills[skillIndex]->GetSkillData().activationType;
@@ -1513,9 +1688,17 @@ void SkillComponent::SpawnPlaceTrap(size_t skillIndex, const XMFLOAT3& pos, floa
     // GaleRush (Dash 카테고리) → 바람 문 방식
     bool windGate = (m_Skills[skillIndex]->GetCategory() == SkillCategory::Dash);
 
-    // 원소 색상
-    ElementType elem = m_Skills[skillIndex]->GetSkillData().element;
-    FluidElementColor ec = FluidElementColors::Get(elem);
+    // 서버와 원격 클라이언트가 사용하는 정책과 동일하게
+ // 장착된 원소 룬 조합에서 대표 원소를 결정한다.
+    const ElementType elem =
+        ResolvePrimaryPlaceVisualElement(
+            placeStats,
+            m_Skills[skillIndex]
+            ->GetSkillData()
+            .element);
+
+    FluidElementColor ec =
+        FluidElementColors::Get(elem);
 
     auto* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
     DecalManager* pDecal = pScene ? pScene->GetDecalManager() : nullptr;
@@ -1600,6 +1783,60 @@ void SkillComponent::FirePlacedTrap(PlacedTrap& trap, const XMFLOAT3& currentTar
             m_pOwner->GetTransform()->SetPosition(savedPos);
     }
 
+    // 오프라인 설치 함정도 서버 정책과 동일하게
+// 함정이 실제로 발동한 시점에 ABY_ECO 확률을 판정한다.
+//
+// 온라인에서는 BuildSkillStats가 echoOnCast=false로 만들기 때문에
+// 서버와 이중 발동하지 않는다.
+    {
+        const SkillSlot echoSkillSlot =
+            static_cast<SkillSlot>(
+                trap.skillIndex);
+
+        const ActivationType defaultType =
+            m_Skills[trap.skillIndex]
+            ->GetSkillData()
+            .activationType;
+
+        const SkillStats echoStats =
+            BuildSkillStats(
+                echoSkillSlot,
+                defaultType);
+
+        if (echoStats.echoOnCast &&
+            (rand() % 100) < 50)
+        {
+            const ElementType echoElement =
+                echoStats
+                .elementOverride
+                .value_or(
+                    m_Skills
+                    [trap.skillIndex]
+                    ->GetSkillData()
+                    .element);
+
+            EnemyComponent* pEchoTarget =
+                nullptr;
+
+            const int echoVFXSlot =
+                SpawnEchoTriggerVFX(
+                    echoElement,
+                    trap.worldPos,
+                    &pEchoTarget);
+
+            // 설치 당시 저장된 배율을 기준으로
+            // 2초 뒤 50% 위력 메아리 발동
+            m_echoQueue.push_back(
+                {
+                    trap.skillIndex,
+                    trap.damageMultiplier * 0.5f,
+                    2.0f,
+                    echoVFXSlot,
+                    pEchoTarget
+                });
+        }
+    }
+
     if (!m_Skills[trap.skillIndex]->IsFinished())
     {
         m_placeRunningSlots.insert(trap.skillIndex);
@@ -1621,7 +1858,6 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
     SkillSlot slot = static_cast<SkillSlot>(index);
     ActivationType defType = m_Skills[index] ? m_Skills[index]->GetSkillData().activationType : ActivationType::Instant;
     SkillStats stats = BuildSkillStats(slot, defType);
-    RuneCombo combo = GetRuneCombo(slot);
 
     // 활성화 VFX mod 계산 + 저장 (행동 클래스가 GetCurrentActivationVFXMod()로 읽음)
     // echo guard 용: 리셋 전에 캡처 (채널 틱 여부를 echo 체크까지 보존)
@@ -1704,267 +1940,906 @@ void SkillComponent::ExecuteOrSplit(size_t index, const XMFLOAT3& target, float 
         }
     };
 
-    if (!combo.hasSplit)
-    {
-        m_Skills[index]->Execute(m_pOwner, target, mult);
-        invokeOnCast();
-        // 메아리(ABY_ECO): 최초 발동 시에만 체크 (채널 틱마다 중복 등록 방지)
-        if (stats.echoOnCast && !wasChannelTick && (rand() % 100) < 50)
+    // 오프라인 ABY_ECO 예약.
+//
+// 다연발로 실제 투사체가 여러 개 생성되더라도
+// 메아리는 스킬 시전 1회당 한 번만 판정한다.
+    auto ScheduleEchoOnce = [&]()
         {
-            ElementType elem = stats.elementOverride.value_or(
-                m_Skills[index] ? m_Skills[index]->GetSkillData().element : ElementType::None);
-            EnemyComponent* pTarget = nullptr;
-            int decalSlot = SpawnEchoTriggerVFX(elem, target, &pTarget);
-            m_echoQueue.push_back({ index, mult * 0.5f, 2.0f, decalSlot, pTarget });
-        }
+            if (!stats.echoOnCast)
+                return;
+
+            if (wasChannelTick)
+                return;
+
+            if ((rand() % 100) >= 50)
+                return;
+
+            const ElementType element =
+                stats.elementOverride
+                .value_or(
+                    m_Skills[index]
+                    ? m_Skills[index]
+                    ->GetSkillData()
+                    .element
+                    : ElementType::None);
+
+            EnemyComponent* targetEnemy =
+                nullptr;
+
+            const int decalSlot =
+                SpawnEchoTriggerVFX(
+                    element,
+                    target,
+                    &targetEnemy);
+
+            m_echoQueue.push_back(
+                {
+                    index,
+                    mult * 0.5f,
+                    2.0f,
+                    decalSlot,
+                    targetEnemy
+                });
+        };
+
+    // TRF_MLT는 클라이언트 정의상
+    // 투사체형 스킬에만 적용한다.
+    const bool isProjectileSkill =
+        m_Skills[index] &&
+        m_Skills[index]
+        ->GetCategory() ==
+        SkillCategory::Projectile;
+
+    // 클라이언트 RuneRegistry 정책:
+    //
+    // 기본 1발 + 스택당 추가 2발
+    const int projectileCount =
+        isProjectileSkill
+        ? std::max(
+            1,
+            1 +
+            stats.extraProjectiles)
+        : 1;
+
+    // 다연발이 아니거나 투사체 스킬이 아니면
+    // 기존 스킬을 한 번만 실행한다.
+    if (projectileCount <= 1)
+    {
+        m_Skills[index]->Execute(
+            m_pOwner,
+            target,
+            mult);
+
+        invokeOnCast();
+        ScheduleEchoOnce();
+
         return;
     }
 
-    // Split: 2개 투사체 좌우로 퍼뜨림
-    XMVECTOR originV = (m_pOwner && m_pOwner->GetTransform())
-        ? XMLoadFloat3(&m_pOwner->GetTransform()->GetPosition())
-        : XMVectorZero();
-    XMVECTOR toTarget = XMVector3Normalize(XMLoadFloat3(&target) - originV);
-    XMVECTOR worldUp  = XMVectorSet(0, 1, 0, 0);
-    float dot = XMVectorGetX(XMVector3Dot(toTarget, worldUp));
-    XMVECTOR right = (fabsf(dot) > 0.99f)
-        ? XMVectorSet(1, 0, 0, 0)
-        : XMVector3Normalize(XMVector3Cross(worldUp, toTarget));
-    constexpr float SPREAD = 1.5f;
-    XMFLOAT3 t1, t2;
-    XMStoreFloat3(&t1, XMLoadFloat3(&target) + right * SPREAD);
-    XMStoreFloat3(&t2, XMLoadFloat3(&target) - right * SPREAD);
-    m_Skills[index]->Execute(m_pOwner, t1, mult);
-    m_Skills[index]->Execute(m_pOwner, t2, mult);
-    invokeOnCast();
-    // 메아리(ABY_ECO) — Split 경우도 50% 확률, 2초 후 단일 발사 (가장 가까운 적 향)
-    if (stats.echoOnCast && (rand() % 100) < 50)
+    if (m_pOwner == nullptr ||
+        m_pOwner->GetTransform() ==
+        nullptr)
     {
-        ElementType elem = stats.elementOverride.value_or(
-            m_Skills[index] ? m_Skills[index]->GetSkillData().element : ElementType::None);
-        EnemyComponent* pTarget = nullptr;
-        int decalSlot = SpawnEchoTriggerVFX(elem, target, &pTarget);
-        m_echoQueue.push_back({ index, mult * 0.5f, 2.0f, decalSlot, pTarget });
+        m_Skills[index]->Execute(
+            m_pOwner,
+            target,
+            mult);
+
+        invokeOnCast();
+        ScheduleEchoOnce();
+
+        return;
     }
+
+    // 원래 클라이언트 구현과 동일하게
+    // 목표 지점의 좌우 방향으로 1.5m씩 벌린다.
+    const DirectX::XMFLOAT3 origin =
+        m_pOwner
+        ->GetTransform()
+        ->GetPosition();
+
+    const DirectX::XMVECTOR
+        originVector =
+        DirectX::XMLoadFloat3(
+            &origin);
+
+    const DirectX::XMVECTOR
+        targetVector =
+        DirectX::XMLoadFloat3(
+            &target);
+
+    DirectX::XMVECTOR
+        toTarget =
+        targetVector -
+        originVector;
+
+    // 부채꼴은 수평면 기준으로 계산한다.
+    toTarget =
+        DirectX::XMVectorSetY(
+            toTarget,
+            0.0f);
+
+    const float directionLengthSq =
+        DirectX::XMVectorGetX(
+            DirectX::XMVector3LengthSq(
+                toTarget));
+
+    if (directionLengthSq <=
+        0.000001f)
+    {
+        m_Skills[index]->Execute(
+            m_pOwner,
+            target,
+            mult);
+
+        invokeOnCast();
+        ScheduleEchoOnce();
+
+        return;
+    }
+
+    toTarget =
+        DirectX::XMVector3Normalize(
+            toTarget);
+
+    const DirectX::XMVECTOR worldUp =
+        DirectX::XMVectorSet(
+            0.0f,
+            1.0f,
+            0.0f,
+            0.0f);
+
+    const DirectX::XMVECTOR right =
+        DirectX::XMVector3Normalize(
+            DirectX::XMVector3Cross(
+                worldUp,
+                toTarget));
+
+    // 클라이언트 기존 분열 코드의 간격을 유지한다.
+    constexpr float FAN_SPACING =
+        1.5f;
+
+    const float center =
+        static_cast<float>(
+            projectileCount - 1) *
+        0.5f;
+
+    for (int projectileIndex = 0;
+        projectileIndex <
+        projectileCount;
+        ++projectileIndex)
+    {
+        // 예:
+        // 3발 → -1, 0, +1
+        // 5발 → -2, -1, 0, +1, +2
+        const float offsetIndex =
+            static_cast<float>(
+                projectileIndex) -
+            center;
+
+        const float lateralOffset =
+            offsetIndex *
+            FAN_SPACING;
+
+        DirectX::XMFLOAT3
+            projectileTarget;
+
+        DirectX::XMStoreFloat3(
+            &projectileTarget,
+            targetVector +
+            right *
+            lateralOffset);
+
+        m_Skills[index]->Execute(
+            m_pOwner,
+            projectileTarget,
+            mult);
+    }
+
+    // 투사체가 여러 개여도 onCast는 한 번
+    invokeOnCast();
+
+    // 메아리도 시전당 한 번
+    ScheduleEchoOnce();
 }
 
-void SkillComponent::ExecuteWithActivationType(SkillSlot slot, const DirectX::XMFLOAT3& targetPosition)
+void SkillComponent::BeginCombinedChannel(
+    SkillSlot slot,
+    const DirectX::XMFLOAT3& targetPosition,
+    float chargeRatio)
 {
-    size_t index = static_cast<size_t>(slot);
+    const size_t index = static_cast<size_t>(slot);
 
-    // Check if skill exists and is ready
-    if (index >= m_Skills.size() || !m_Skills[index])
+    if (index >= m_Skills.size() ||
+        !m_Skills[index])
     {
         return;
     }
 
-    if (m_SkillStates[index] != SkillState::Ready)
+    // 이전 채널 상태가 남아 있으면 정리
+    ClearCombinedChannelState();
+
+    const ActivationType defaultType =
+        m_Skills[index]->GetSkillData().activationType;
+
+    const SkillStats stats =
+        BuildSkillStats(slot, defaultType);
+
+    const RuneCombo combo =
+        stats.ToRuneCombo();
+
+    m_bIsChanneling = true;
+    m_fChannelTime = 0.0f;
+    m_fChannelTickAccum = 0.0f;
+
+    m_fChannelDuration =
+        2.0f * stats.channelDurationMult;
+
+    m_fChannelChargeRatio =
+        ClampRuneRatio(chargeRatio);
+
+    // 차징이 결합된 경우 그 배율을 모든 채널 틱에 유지
+    m_fChannelBaseMultiplier =
+        m_fChannelChargeRatio > 0.0f
+        ? CalculateChargeMultiplier(m_fChannelChargeRatio)
+        : 1.0f;
+
+    // TRF_CHN 룬 채널은 틱당 35%,
+    // 스킬 자체가 원래 채널인 경우는 기존 30%
+    m_fChannelTickDamageRatio =
+        HasRuneEquipped(slot, "TRF_CHN")
+        ? kTransformChannelDamageRatio
+        : kDefaultChannelDamageRatio;
+
+    m_bChannelPlaceMode =
+        combo.hasPlace;
+
+    // EMP가 구조적 발동 룬과 같이 장착되면
+    // 버프 저장이 아니라 이번 채널 전체에 직접 적용
+    m_bChannelEmbeddedEnhance =
+        combo.hasEnhance;
+
+    // 이전에 EMP 단독 시전으로 저장된 버프가 있다면
+    // 채널 첫 틱에서만 소비
+    m_bChannelConsumeStoredEnhance =
+        m_bIsEnhanced;
+
+    m_ChannelTargetPosition =
+        targetPosition;
+
+    m_ActiveSkillSlot =
+        slot;
+
+    m_SkillStates[index] =
+        SkillState::Casting;
+
+    // 일반 채널은 플레이어 위치,
+    // 설치 채널은 지정한 설치 위치를 공격 원점으로 사용
+    if (m_bChannelPlaceMode)
     {
-        return;
-    }
+        m_ChannelOriginPosition =
+            targetPosition;
 
-    // 다른 슬롯이 채널/차지 중이면 새 스킬을 시작하지 않는다.
-    //   채널/차지는 m_ActiveSkillSlot/m_ChargingSlot 등 전역 단일 변수로 관리되므로,
-    //   진행 중에 다른 스킬을 시작하면 그 상태가 오염돼(채널 무한 지속 등) 버그가 난다.
-    //   (정상 입력 경로는 ProcessSkillInput 에서 이미 차단되지만, 지연 발동 등 다른 진입에 대한 방어.)
-    if ((m_bIsChanneling && slot != m_ActiveSkillSlot) ||
-        (m_bIsCharging   && slot != m_ChargingSlot))
-    {
-        return;
-    }
+        // 설치형 채널 바닥 표식
+        Scene* pScene =
+            Dx12App::GetInstance()
+            ? Dx12App::GetInstance()->GetScene()
+            : nullptr;
 
-    // R 스킬 발동 시 마법진 연출 후 지연 발동
-    if (slot == SkillSlot::R && !m_bRSkillExecuting && m_pOwner && m_pOwner->GetTransform())
-    {
-        constexpr float kRevealDuration = 0.6f;
+        DecalManager* pDecal =
+            pScene
+            ? pScene->GetDecalManager()
+            : nullptr;
 
-        auto* pScene = Dx12App::GetInstance() ? Dx12App::GetInstance()->GetScene() : nullptr;
-        XMFLOAT3 feetPos = m_pOwner->GetTransform()->GetPosition();
+        const ElementType element =
+            ResolvePrimaryPlaceVisualElement(
+                stats,
+                m_Skills[index]
+                ->GetSkillData()
+                .element);
 
-        if (pScene && pScene->GetDecalManager())
+        const FluidElementColor color =
+            FluidElementColors::Get(element);
+
+        if (pDecal)
         {
-            ElementType elem = m_Skills[index] ? m_Skills[index]->GetSkillData().element : ElementType::None;
-            FluidElementColor ec = FluidElementColors::Get(elem);
-
-            pScene->GetDecalManager()->Spawn(
-                DecalTexture::MagicCircle,
-                feetPos,
-                12.f,
-                0.f,
-                3.5f,
-                ec.coreColor,
-                2.0f,
-                kRevealDuration);
+            m_ChannelPlaceDecalSlot =
+                pDecal->Spawn(
+                    DecalTexture::Star08,
+                    m_ChannelOriginPosition,
+                    8.0f,
+                    0.0f,
+                    m_fChannelDuration + 1.0f,
+                    color.coreColor,
+                    1.2f);
         }
 
-        // 원격 클라에도 R 스킬 발동 마법진 표시
+        NotifyActionNetAt(
+            PLAYER_ACTION_PLACE_SPAWN,
+            slot,
+            m_ChannelOriginPosition);
+    }
+    else if (m_pOwner &&
+        m_pOwner->GetTransform())
+    {
+        m_ChannelOriginPosition =
+            m_pOwner
+            ->GetTransform()
+            ->GetPosition();
+    }
+
+    m_Skills[index]->OnChannelBegin(
+        m_pOwner,
+        targetPosition);
+
+    NotifyActionNet(
+        PLAYER_ACTION_CHANNEL_BEGIN,
+        slot);
+
+    // ABY_ECO는 채널 틱마다가 아니라
+ // 채널 전체 시전 시작 시 한 번만 확률 판정한다.
+ //
+ // 설치+채널 조합도 동일하게 허용한다.
+    if (stats.echoOnCast &&
+        (rand() % 100) < 50)
+    {
+        float echoMultiplier =
+            m_fChannelTickDamageRatio *
+            m_fChannelBaseMultiplier;
+
+        if (m_bChannelEmbeddedEnhance)
+            echoMultiplier *= kTransformEnhanceMultiplier;
+
+        if (m_bChannelConsumeStoredEnhance)
+            echoMultiplier *= m_fEnhanceMultiplier;
+
+        const ElementType echoElement =
+            stats.elementOverride.value_or(
+                m_Skills[index]
+                ->GetSkillData()
+                .element);
+
+        EnemyComponent* pEchoTarget = nullptr;
+
+        const int echoSlot =
+            SpawnEchoTriggerVFX(
+                echoElement,
+                targetPosition,
+                &pEchoTarget);
+
+        m_echoQueue.push_back({
+            index,
+            echoMultiplier * 0.5f,
+            2.0f,
+            echoSlot,
+            pEchoTarget
+            });
+    }
+
+    // 첫 채널 틱은 입력 직후 즉시 실행
+    ExecuteCombinedChannelTick();
+}
+
+void SkillComponent::ExecuteCombinedChannelTick()
+{
+    if (!m_bIsChanneling ||
+        m_ActiveSkillSlot == SkillSlot::Count)
+    {
+        return;
+    }
+
+    const SkillSlot slot =
+        m_ActiveSkillSlot;
+
+    const size_t index =
+        static_cast<size_t>(slot);
+
+    if (index >= m_Skills.size() ||
+        !m_Skills[index])
+    {
+        return;
+    }
+
+    const ActivationType defaultType =
+        m_Skills[index]
+        ->GetSkillData()
+        .activationType;
+
+    const SkillStats stats =
+        BuildSkillStats(
+            slot,
+            defaultType);
+
+    float tickMultiplier =
+        m_fChannelTickDamageRatio *
+        m_fChannelBaseMultiplier;
+
+    // 장착된 EMP가 현재 복합 채널에 직접 결합된 경우
+    if (m_bChannelEmbeddedEnhance)
+        tickMultiplier *= kTransformEnhanceMultiplier;
+
+    bool storedEnhanceUsed = false;
+
+    // 과거에 저장해 둔 EMP 버프는 첫 틱에서만 소비
+    if (m_bChannelConsumeStoredEnhance)
+    {
+        m_bChannelConsumeStoredEnhance = false;
+
+        if (m_bIsEnhanced)
+        {
+            storedEnhanceUsed = true;
+
+            m_Skills[index]->OnEnhanceConsumed(
+                m_pOwner,
+                m_ChannelTargetPosition);
+
+            tickMultiplier *=
+                m_fEnhanceMultiplier;
+
+            m_bIsEnhanced = false;
+            m_fEnhanceTimer = 0.0f;
+
+            NotifyActionNet(
+                PLAYER_ACTION_ENHANCE_END,
+                slot);
+        }
+    }
+
+    // 즉시 실행된 첫 틱인지 확인
+    const bool firstTick =
+        m_fChannelTime <= 0.0001f;
+
+    m_currentChargeRatio =
+        m_fChannelChargeRatio;
+
+    m_bCurrentIsChannelTick =
+        true;
+
+    m_bCurrentEnhanceUsed =
+        m_bChannelEmbeddedEnhance ||
+        storedEnhanceUsed;
+
+    DirectX::XMFLOAT3 originPosition =
+        m_ChannelOriginPosition;
+
+    DirectX::XMFLOAT3 executionTarget =
+        m_ChannelTargetPosition;
+
+    bool movedCaster = false;
+    DirectX::XMFLOAT3 savedPosition{};
+
+    if (m_bChannelPlaceMode)
+    {
+        // 설치 위치에서 가장 가까운 적을 우선 타겟으로 사용
+        Scene* pScene =
+            Dx12App::GetInstance()
+            ? Dx12App::GetInstance()->GetScene()
+            : nullptr;
+
+        if (pScene)
+        {
+            EnemyComponent* pNearest =
+                pScene->FindNearestEnemy(
+                    m_ChannelOriginPosition);
+
+            if (pNearest &&
+                pNearest->GetOwner() &&
+                pNearest->GetOwner()->GetTransform())
+            {
+                executionTarget =
+                    pNearest
+                    ->GetOwner()
+                    ->GetTransform()
+                    ->GetPosition();
+            }
+        }
+
+        // 기존 FirePlacedTrap과 같은 방식으로
+        // 캐스터를 잠시 설치 위치로 옮겨 origin을 고정
+        if (m_pOwner &&
+            m_pOwner->GetTransform())
+        {
+            savedPosition =
+                m_pOwner
+                ->GetTransform()
+                ->GetPosition();
+
+            m_pOwner
+                ->GetTransform()
+                ->SetPosition(
+                    m_ChannelOriginPosition);
+
+            movedCaster = true;
+        }
+    }
+    else if (m_pOwner &&
+        m_pOwner->GetTransform())
+    {
+        originPosition =
+            m_pOwner
+            ->GetTransform()
+            ->GetPosition();
+    }
+
+    const SkillCategory category =
+        m_Skills[index]->GetCategory();
+
+    if (category == SkillCategory::Projectile ||
+        defaultType == ActivationType::Channel)
+    {
+        ExecuteOrSplit(
+            index,
+            executionTarget,
+            tickMultiplier);
+    }
+    else
+    {
+        // ExecuteOrSplit을 거치지 않는 커스텀 채널 틱은
+        // 룬 피해 배율을 여기서 직접 적용한다.
+        const float customTickMultiplier =
+            tickMultiplier *
+            stats.damageMult;
+
+        m_activationVFXMod =
+            BuildActivationVFXMod(
+                slot,
+                m_fChannelChargeRatio,
+                true,
+                m_bChannelEmbeddedEnhance ||
+                storedEnhanceUsed);
+
+        m_Skills[index]->OnChannelTick(
+            m_pOwner,
+            executionTarget,
+            customTickMultiplier);
+
+        m_currentChargeRatio = 0.0f;
+        m_bCurrentIsChannelTick = false;
+        m_bCurrentEnhanceUsed = false;
+    }
+
+    if (movedCaster &&
+        m_pOwner &&
+        m_pOwner->GetTransform())
+    {
+        m_pOwner
+            ->GetTransform()
+            ->SetPosition(savedPosition);
+    }
+
+    // 네트워크는 실제 채널 틱이 실행된 시점에만 전송
+    SendSkillNetFrom(
+        slot,
+        originPosition,
+        executionTarget,
+        m_fChannelChargeRatio,
+        true,
+        firstTick);
+}
+
+void SkillComponent::ClearCombinedChannelState()
+{
+    // 설치형 채널의 로컬 바닥 표식 제거
+    if (m_ChannelPlaceDecalSlot >= 0)
+    {
+        Scene* pScene =
+            Dx12App::GetInstance()
+            ? Dx12App::GetInstance()->GetScene()
+            : nullptr;
+
+        if (pScene &&
+            pScene->GetDecalManager())
+        {
+            pScene
+                ->GetDecalManager()
+                ->Stop(
+                    m_ChannelPlaceDecalSlot);
+        }
+
+        m_ChannelPlaceDecalSlot = -1;
+    }
+
+    m_bIsChanneling = false;
+
+    m_fChannelTime = 0.0f;
+    m_fChannelTickAccum = 0.0f;
+
+    m_fChannelChargeRatio = 0.0f;
+    m_fChannelTickDamageRatio =
+        kDefaultChannelDamageRatio;
+
+    m_fChannelBaseMultiplier = 1.0f;
+
+    m_bChannelPlaceMode = false;
+    m_bChannelEmbeddedEnhance = false;
+    m_bChannelConsumeStoredEnhance = false;
+
+    m_ChannelOriginPosition =
+    { 0.0f, 0.0f, 0.0f };
+
+    m_ChannelTargetPosition =
+    { 0.0f, 0.0f, 0.0f };
+
+    m_bChannelTickFiredThisFrame = false;
+}
+
+void SkillComponent::ExecuteWithActivationType(
+    SkillSlot slot,
+    const DirectX::XMFLOAT3& targetPosition)
+{
+    const size_t index =
+        static_cast<size_t>(slot);
+
+    if (index >= m_Skills.size() ||
+        !m_Skills[index])
+    {
+        return;
+    }
+
+    if (m_SkillStates[index] !=
+        SkillState::Ready)
+    {
+        return;
+    }
+
+    // 다른 슬롯이 차징·채널 중이면 실행 금지
+    if ((m_bIsChanneling &&
+        slot != m_ActiveSkillSlot) ||
+        (m_bIsCharging &&
+            slot != m_ChargingSlot))
+    {
+        return;
+    }
+
+    // R 스킬 마법진 지연 발동
+    if (slot == SkillSlot::R &&
+        !m_bRSkillExecuting &&
+        m_pOwner &&
+        m_pOwner->GetTransform())
+    {
+        constexpr float kRevealDuration =
+            0.6f;
+
+        Scene* pScene =
+            Dx12App::GetInstance()
+            ? Dx12App::GetInstance()->GetScene()
+            : nullptr;
+
+        const DirectX::XMFLOAT3 feetPos =
+            m_pOwner
+            ->GetTransform()
+            ->GetPosition();
+
+        if (pScene &&
+            pScene->GetDecalManager())
+        {
+            const ElementType element =
+                m_Skills[index]
+                ->GetSkillData()
+                .element;
+
+            const FluidElementColor color =
+                FluidElementColors::Get(element);
+
+            pScene
+                ->GetDecalManager()
+                ->Spawn(
+                    DecalTexture::MagicCircle,
+                    feetPos,
+                    12.0f,
+                    0.0f,
+                    3.5f,
+                    color.coreColor,
+                    2.0f,
+                    kRevealDuration);
+        }
+
         NotifyActionNetAt(
             PLAYER_ACTION_R_MAGIC_CIRCLE,
             slot,
             feetPos,
             kRevealDuration);
 
-        // 실제 발동은 reveal 완료 후
-        m_delayedCasts.push_back({ slot, index, targetPosition, kRevealDuration });
-        m_SkillStates[index] = SkillState::Casting;
+        m_delayedCasts.push_back({
+            slot,
+            index,
+            targetPosition,
+            kRevealDuration
+            });
+
+        m_SkillStates[index] =
+            SkillState::Casting;
+
         return;
     }
 
-    RuneCombo combo = GetRuneCombo(slot);
-    bool enhanceOnly = combo.hasEnhance && !combo.hasCharge && !combo.hasChannel && !combo.hasPlace && !combo.hasInstant;
+    const ActivationType defaultType =
+        m_Skills[index]
+        ->GetSkillData()
+        .activationType;
 
-    // 스킬의 기본 activationType을 fallback으로 사용
-    ActivationType defaultType = (m_Skills[index])
-        ? m_Skills[index]->GetSkillData().activationType
-        : ActivationType::Instant;
+    const SkillStats stats =
+        BuildSkillStats(
+            slot,
+            defaultType);
 
-    SkillCategory cat = SkillCategory::Projectile;
-    if (m_Skills[index])
-        cat = m_Skills[index]->GetCategory();
+    const RuneCombo combo =
+        stats.ToRuneCombo();
 
+    const bool enhanceOnly =
+        combo.hasEnhance &&
+        !combo.hasCharge &&
+        !combo.hasChannel &&
+        !combo.hasPlace &&
+        !combo.hasInstant;
+
+    // 1. 차징 단계
     if (combo.hasCharge)
     {
         m_bIsCharging = true;
         m_fChargeTime = 0.0f;
         m_ChargingSlot = slot;
-        m_ChargeTargetPosition = targetPosition;
-        m_SkillStates[index] = SkillState::Casting;
-        NotifyActionNet(PLAYER_ACTION_CHARGE_BEGIN, slot);
-        m_Skills[index]->OnChargeBegin(m_pOwner);
-        m_chargeScaleSteps[index] = 0;
+        m_ChargeTargetPosition =
+            targetPosition;
+
+        m_SkillStates[index] =
+            SkillState::Casting;
+
+        NotifyActionNet(
+            PLAYER_ACTION_CHARGE_BEGIN,
+            slot);
+
+        m_Skills[index]->OnChargeBegin(
+            m_pOwner);
+
+        if (index < m_chargeScaleSteps.size())
+            m_chargeScaleSteps[index] = 0;
+
         SpawnChargeGatherVFX(0);
-        OutputDebugString(L"[Skill] Charging started... Hold to charge, release to fire\n");
+
         return;
     }
-    else if (combo.hasChannel || defaultType == ActivationType::Channel)
+
+    // 2. 채널 단계
+    if (combo.hasChannel)
     {
-        SkillStats chStats = BuildSkillStats(slot, defaultType);
-        m_bIsChanneling = true;
-        m_fChannelTime = 0.0f;
-        m_fChannelTickAccum = 0.0f;
-        m_fChannelDuration = 2.0f * chStats.channelDurationMult;
-        m_ActiveSkillSlot = slot;
-        m_ChannelTargetPosition = targetPosition;
-        m_SkillStates[index] = SkillState::Casting;
-        m_Skills[index]->OnChannelBegin(m_pOwner, targetPosition);
-        OutputDebugString(L"[Skill] Channeling started... Hold to continue\n");
-        NotifyActionNet(PLAYER_ACTION_CHANNEL_BEGIN, slot);
+        BeginCombinedChannel(
+            slot,
+            targetPosition,
+            0.0f);
 
-        if (cat == SkillCategory::Projectile || defaultType == ActivationType::Channel)
-        {
-            // 투사체 / 고유 채널(Beam): 첫 틱 즉시 발사
-            float tickMult = 0.3f;
-            if (combo.hasEnhance) tickMult *= 2.0f;
-            if (m_bIsEnhanced)
-            {
-                m_Skills[index]->OnEnhanceConsumed(m_pOwner, targetPosition);
-                tickMult *= m_fEnhanceMultiplier;
-                m_bIsEnhanced = false;
-                m_fEnhanceTimer = 0.0f;
-                NotifyActionNet(PLAYER_ACTION_ENHANCE_END, static_cast<SkillSlot>(index));
-            }
-
-            // 메아리: 채널/빔 스킬은 발동 시작 시 여기서 한 번만 등록
-            // (첫 틱도 m_bCurrentIsChannelTick=true로 처리되므로 ExecuteOrSplit 내 체크로는 등록 불가)
-            if (chStats.echoOnCast && !combo.hasPlace && (rand() % 100) < 50)
-            {
-                ElementType echoElem = chStats.elementOverride.value_or(
-                    m_Skills[index] ? m_Skills[index]->GetSkillData().element : ElementType::None);
-                EnemyComponent* pEchoTarget = nullptr;
-                int echoSlot = SpawnEchoTriggerVFX(echoElem, targetPosition, &pEchoTarget);
-                m_echoQueue.push_back({ index, tickMult * 0.5f, 2.0f, echoSlot, pEchoTarget });
-            }
-
-            m_currentChargeRatio = 0.f;
-            m_bCurrentIsChannelTick = true;
-            m_bCurrentEnhanceUsed = false;
-            if (combo.hasPlace)
-                SpawnPlaceTrap(index, targetPosition, tickMult, combo);
-            else
-                ExecuteOrSplit(index, targetPosition, tickMult);
-        }
-        else
-        {
-            // Wave/AoE/Summon/Dash + 채널 룬: 진입 시 메인 스킬 1회 정상 발동
-            float damageMultiplier = 1.0f;
-            if (combo.hasEnhance) damageMultiplier *= 2.0f;
-            if (m_bIsEnhanced)
-            {
-                m_Skills[index]->OnEnhanceConsumed(m_pOwner, targetPosition);
-                damageMultiplier *= m_fEnhanceMultiplier;
-                m_bIsEnhanced = false;
-                m_fEnhanceTimer = 0.0f;
-                NotifyActionNet(PLAYER_ACTION_ENHANCE_END, static_cast<SkillSlot>(index));
-            }
-            m_currentChargeRatio = 0.f;
-            m_bCurrentIsChannelTick = false;
-            m_bCurrentEnhanceUsed = (damageMultiplier > 1.5f);
-            if (combo.hasPlace)
-                SpawnPlaceTrap(index, targetPosition, damageMultiplier, combo);
-            else
-                ExecuteOrSplit(index, targetPosition, damageMultiplier);
-        }
+        return;
     }
-    else if (enhanceOnly)
+
+    // 3. EMP 단독:
+    // 현재 스킬을 공격으로 실행하지 않고 다음 공격 버프 저장
+    if (enhanceOnly)
     {
         m_bIsEnhanced = true;
-        m_fEnhanceTimer = m_fEnhanceDuration;
-        m_SkillStates[index] = SkillState::Casting;
-        m_ActiveSkillSlot = slot;
-        NotifyActionNet(PLAYER_ACTION_ENHANCE_BEGIN, slot, m_fEnhanceDuration);
+        m_fEnhanceTimer =
+            m_fEnhanceDuration;
 
-        m_currentChargeRatio = 0.f;
+        m_SkillStates[index] =
+            SkillState::Casting;
+
+        m_ActiveSkillSlot =
+            slot;
+
+        NotifyActionNet(
+            PLAYER_ACTION_ENHANCE_BEGIN,
+            slot,
+            m_fEnhanceDuration);
+
+        m_currentChargeRatio = 0.0f;
         m_bCurrentIsChannelTick = false;
         m_bCurrentEnhanceUsed = false;
 
-        DirectX::XMFLOAT3 selfPos = m_pOwner->GetTransform()->GetPosition();
-        m_Skills[index]->OnEnhanceActivate(m_pOwner);
-        m_Skills[index]->Execute(m_pOwner, selfPos, 0.0f);
-        OutputDebugString(L"[Skill] Enhanced! Next attack deals 2x damage for 5 seconds\n");
-    }
-    else
-    {
-        float damageMultiplier = 1.0f;
-        if (combo.hasEnhance) damageMultiplier *= 2.0f;
-
-        if (m_bIsEnhanced)
+        if (m_pOwner &&
+            m_pOwner->GetTransform())
         {
-            m_Skills[index]->OnEnhanceConsumed(m_pOwner, targetPosition);
-            damageMultiplier *= m_fEnhanceMultiplier;
-            m_bIsEnhanced = false;
-            m_fEnhanceTimer = 0.0f;
-            OutputDebugString(L"[Skill] Enhancement consumed! 2x damage!\n");
-            NotifyActionNet(PLAYER_ACTION_ENHANCE_END, static_cast<SkillSlot>(index));
+            const DirectX::XMFLOAT3 selfPosition =
+                m_pOwner
+                ->GetTransform()
+                ->GetPosition();
+
+            m_Skills[index]->OnEnhanceActivate(
+                m_pOwner);
+
+            m_Skills[index]->Execute(
+                m_pOwner,
+                selfPosition,
+                0.0f);
         }
 
-        m_currentChargeRatio = 0.f;
-        m_bCurrentIsChannelTick = false;
-        m_bCurrentEnhanceUsed = (damageMultiplier > 1.5f);
+        OutputDebugString(
+            L"[Skill] Enhanced! Next attack deals 1.8x damage for 5 seconds\n");
 
-        if (combo.hasPlace)
+        return;
+    }
+
+    // 4. 즉시 또는 설치 공격
+    float damageMultiplier = 1.0f;
+
+    const bool embeddedEnhance =
+        combo.hasEnhance;
+
+    if (embeddedEnhance)
+        damageMultiplier *= kTransformEnhanceMultiplier;
+
+    const bool storedEnhanceUsed =
+        m_bIsEnhanced;
+
+    if (storedEnhanceUsed)
+    {
+        m_Skills[index]->OnEnhanceConsumed(
+            m_pOwner,
+            targetPosition);
+
+        damageMultiplier *=
+            m_fEnhanceMultiplier;
+
+        m_bIsEnhanced = false;
+        m_fEnhanceTimer = 0.0f;
+
+        NotifyActionNet(
+            PLAYER_ACTION_ENHANCE_END,
+            slot);
+    }
+
+    m_currentChargeRatio = 0.0f;
+    m_bCurrentIsChannelTick = false;
+    m_bCurrentEnhanceUsed =
+        embeddedEnhance ||
+        storedEnhanceUsed;
+
+    NetworkManager* pNetMgr =
+        NetworkManager::GetInstance();
+
+    const bool online =
+        pNetMgr &&
+        pNetMgr->IsConnected();
+
+    if (combo.hasPlace)
+    {
+        if (!online)
         {
-            SpawnPlaceTrap(index, targetPosition, damageMultiplier, combo);
-            OutputDebugString(L"[Skill] Trap placed!\n");
+            SpawnPlaceTrap(
+                index,
+                targetPosition,
+                damageMultiplier,
+                combo);
         }
         else
         {
-            ExecuteOrSplit(index, targetPosition, damageMultiplier);
-            OutputDebugString(L"[Skill] Instant cast!\n");
+            // 온라인 설치는 서버가 생성.
+            // 일반 스킬 표시 패킷 없이 공격 요청만 전송.
+            SendSkillNet(
+                slot,
+                targetPosition,
+                0.0f,
+                false);
         }
-        m_SkillStates[index] = SkillState::Casting;
-        m_ActiveSkillSlot = slot;
+    }
+    else
+    {
+        ExecuteOrSplit(
+            index,
+            targetPosition,
+            damageMultiplier);
+
+        SendSkillNet(
+            slot,
+            targetPosition,
+            0.0f,
+            true);
     }
 
-    // 네트워크로 스킬 전송
-    //   설치 룬: PLACE_SPAWN 액션을 이미 보냈으므로 SendSkill 까지 보내면 원격이 일반 투사체도 함께 spawn (이중 발사).
-    //   차지 룬: press 시점에 SendSkill 보내면 원격이 차지 buildup 없이 즉시 발사 VFX 를 그림.
-    //            차지 발사는 release 시점에 ProcessSkillInput 의 charge 종료 블록에서 SendSkillNet 가 처리.
-    if (combo.hasPlace || combo.hasCharge)
-        return;
+    m_SkillStates[index] =
+        SkillState::Casting;
 
-    // 네트워크로 스킬 전송
-    // 일반 스킬은 chargeRatio가 없으므로 0.0f를 보낸다.
-    SendSkillNet(slot, targetPosition, 0.0f, true);
+    m_ActiveSkillSlot =
+        slot;
 }
 
 void SkillComponent::SendSkillNet(
@@ -1973,79 +2848,167 @@ void SkillComponent::SendSkillNet(
     float chargeRatio,
     bool sendSkill)
 {
-    // 1. 네트워크 매니저 확인
-    NetworkManager* pNetMgr = NetworkManager::GetInstance();
-
-    if (!pNetMgr || !pNetMgr->IsConnected())
+    if (!m_pOwner ||
+        !m_pOwner->GetTransform())
+    {
         return;
+    }
 
-    if (pNetMgr->IsCutscenePlaying())
+    const DirectX::XMFLOAT3 originPosition =
+        m_pOwner
+        ->GetTransform()
+        ->GetPosition();
+
+    SendSkillNetFrom(
+        slot,
+        originPosition,
+        targetPosition,
+        chargeRatio,
+        sendSkill,
+        true);
+}
+
+void SkillComponent::SendSkillNetFrom(
+    SkillSlot slot,
+    const DirectX::XMFLOAT3& originPosition,
+    const DirectX::XMFLOAT3& targetPosition,
+    float chargeRatio,
+    bool sendSkill,
+    bool countAsSkillUse)
+{
+    NetworkManager* pNetMgr =
+        NetworkManager::GetInstance();
+
+    if (!pNetMgr ||
+        !pNetMgr->IsConnected() ||
+        pNetMgr->IsCutscenePlaying())
+    {
         return;
+    }
 
-    if (!m_pOwner)
-        return;
-
-    // 2. 스킬 슬롯을 서버 SkillType으로 변환
     int skillType = 0;
 
     switch (slot)
     {
-    case SkillSlot::Q:          skillType = 1; break; // SKILL_TYPE_Q
-    case SkillSlot::E:          skillType = 2; break; // SKILL_TYPE_E
-    case SkillSlot::R:          skillType = 3; break; // SKILL_TYPE_R
-    case SkillSlot::RightClick: skillType = 4; break; // SKILL_TYPE_MOUSE_RIGHT
-    default:                    return;
+    case SkillSlot::Q:
+        skillType = 1;
+        break;
+
+    case SkillSlot::E:
+        skillType = 2;
+        break;
+
+    case SkillSlot::R:
+        skillType = 3;
+        break;
+
+    case SkillSlot::RightClick:
+        skillType = 4;
+        break;
+
+    default:
+        return;
     }
 
-    // 3. 플레이어 위치와 방향 가져오기
-    TransformComponent* pTransform = m_pOwner->GetTransform();
+    // 명시적인 origin → target 방향 계산
+    DirectX::XMFLOAT3 direction = {
+        targetPosition.x - originPosition.x,
+        targetPosition.y - originPosition.y,
+        targetPosition.z - originPosition.z
+    };
 
-    if (!pTransform)
-        return;
+    const float lengthSq =
+        direction.x * direction.x +
+        direction.y * direction.y +
+        direction.z * direction.z;
 
-    const DirectX::XMFLOAT3& pos = pTransform->GetPosition();
+    if (lengthSq > 0.000001f)
+    {
+        const float invLength =
+            1.0f / std::sqrt(lengthSq);
 
-    DirectX::XMVECTOR lookVec = pTransform->GetLook();
-    DirectX::XMFLOAT3 lookDir;
-    DirectX::XMStoreFloat3(&lookDir, lookVec);
+        direction.x *= invLength;
+        direction.y *= invLength;
+        direction.z *= invLength;
+    }
+    else
+    {
+        // target과 origin이 같은 경우 플레이어 시선 사용
+        direction = { 0.0f, 0.0f, 1.0f };
 
-    // 4. R 스킬과 Water Q/E는 방향 대신 target 좌표를 전송한다.
-    ElementType elem = ElementType::None;
+        if (m_pOwner &&
+            m_pOwner->GetTransform())
+        {
+            const DirectX::XMVECTOR lookVector =
+                m_pOwner
+                ->GetTransform()
+                ->GetLook();
 
-    if (auto* pc = m_pOwner->GetComponent<PlayerComponent>())
-        elem = pc->GetElementType();
+            DirectX::XMStoreFloat3(
+                &direction,
+                lookVector);
+        }
+    }
 
-    bool sendTarget =
-        (slot == SkillSlot::R) ||
-        (elem == ElementType::Water && (slot == SkillSlot::Q || slot == SkillSlot::E));
+    ElementType element =
+        ElementType::None;
 
-    // 5. 원격 클라 연출용 스킬 패킷 전송
-    //    설치 + 차징 조합처럼 SendSkill을 생략해야 하는 경우 sendSkill=false로 들어온다.
+    if (m_pOwner)
+    {
+        if (PlayerComponent* player =
+            m_pOwner
+            ->GetComponent<PlayerComponent>())
+        {
+            element =
+                player->GetElementType();
+        }
+    }
+
+    const bool sendTarget =
+        slot == SkillSlot::R ||
+        (element == ElementType::Water &&
+            (slot == SkillSlot::Q ||
+                slot == SkillSlot::E));
+
     if (sendSkill)
     {
         if (sendTarget)
         {
             pNetMgr->SendSkill(
                 skillType,
-                pos.x, pos.y, pos.z,
-                targetPosition.x, targetPosition.y, targetPosition.z);
+                originPosition.x,
+                originPosition.y,
+                originPosition.z,
+                targetPosition.x,
+                targetPosition.y,
+                targetPosition.z,
+                countAsSkillUse);
         }
         else
         {
             pNetMgr->SendSkill(
                 skillType,
-                pos.x, pos.y, pos.z,
-                lookDir.x, lookDir.y, lookDir.z);
+                originPosition.x,
+                originPosition.y,
+                originPosition.z,
+                direction.x,
+                direction.y,
+                direction.z,
+                countAsSkillUse);
         }
     }
 
-    // 6. 서버 히트 판정 요청
-    //    일반 공격은 chargeRatio=0.0f,
-    //    차징 해제 공격은 실제 chargeRatio를 보낸다.
     pNetMgr->SendPlayerAttack(
         skillType,
-        pos.x, pos.y, pos.z,
-        lookDir.x, lookDir.y, lookDir.z,
-        targetPosition.x, targetPosition.y, targetPosition.z,
-        chargeRatio);
+        originPosition.x,
+        originPosition.y,
+        originPosition.z,
+        direction.x,
+        direction.y,
+        direction.z,
+        targetPosition.x,
+        targetPosition.y,
+        targetPosition.z,
+        ClampRuneRatio(chargeRatio),
+        countAsSkillUse);
 }

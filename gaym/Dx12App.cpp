@@ -109,7 +109,6 @@ static std::wstring BuildRuneDesc(const RuneDef& def)
     if (def.homing)      ss << L"유도  ";
     if (def.doublecast)  ss << L"쌍발  ";
     if (def.echoOnCast)  ss << L"잔상  ";
-    if (def.randomElementOnCast) ss << L"원소무작위  ";
     if (def.activationOverride.has_value()) {
         switch (def.activationOverride.value()) {
         case ActivationType::Charge:  ss << L"차지형  ";  break;
@@ -3112,9 +3111,6 @@ void Dx12App::UpdateNetwork(float deltaTime)
 
     // 활성화 룬(차지/증강) VFX 가 원격 플레이어 발 아래 따라가도록 위치 추적
     m_pNetworkManager->UpdateRemoteActivationRuneVFX(m_pScene.get());
-
-    // 궤도 룬(TRF_ORB) deferred 발사 큐 tick
-    m_pNetworkManager->UpdatePendingOrbitals(m_pScene.get(), deltaTime);
 
     // 서버 몬스터 idle 전환 체크
     m_pNetworkManager->CheckServerMonsterIdle(deltaTime);

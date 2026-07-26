@@ -63,9 +63,13 @@ public:
         float lifestealRatio = 0.f,
         float execDamageBonus = 0.f,
         float cdResetChance = 0.f,
+        // ProjectileManager.cpp 정의에 이미 존재하는 인자.
         SkillSlot skillSlot = SkillSlot::Count,
         const std::vector<ElementType>& elementSet = {},
-        const std::vector<std::string>& subVFXDefIds = {}
+        const std::vector<std::string>& subVFXDefIds = {},
+        // -1이면 기존 룬 장착 상태에서 계산.
+    // 0 이상이면 설치 당시 서버 스냅샷 개수를 강제로 사용.
+        int forcedOrbitalCount = -1
     );
 
     // Update all projectiles (movement + collision)

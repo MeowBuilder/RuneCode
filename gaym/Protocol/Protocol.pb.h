@@ -1871,6 +1871,7 @@ class C_SKILL final :
     kDirXFieldNumber = 5,
     kDirYFieldNumber = 6,
     kDirZFieldNumber = 7,
+    kCountAsSkillUseFieldNumber = 8,
   };
   // .Protocol.SkillType skillType = 1;
   void clear_skilltype();
@@ -1935,6 +1936,15 @@ class C_SKILL final :
   void _internal_set_dirz(float value);
   public:
 
+  // bool countAsSkillUse = 8;
+  void clear_countasskilluse();
+  bool countasskilluse() const;
+  void set_countasskilluse(bool value);
+  private:
+  bool _internal_countasskilluse() const;
+  void _internal_set_countasskilluse(bool value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.C_SKILL)
  private:
   class _Internal;
@@ -1949,6 +1959,7 @@ class C_SKILL final :
   float dirx_;
   float diry_;
   float dirz_;
+  bool countasskilluse_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -3854,6 +3865,7 @@ class C_PLAYER_ATTACK final :
     kTargetYFieldNumber = 9,
     kTargetZFieldNumber = 10,
     kChargeRatioFieldNumber = 11,
+    kCountAsSkillUseFieldNumber = 12,
   };
   // .Protocol.SkillType skillType = 1;
   void clear_skilltype();
@@ -3954,6 +3966,15 @@ class C_PLAYER_ATTACK final :
   void _internal_set_chargeratio(float value);
   public:
 
+  // bool countAsSkillUse = 12;
+  void clear_countasskilluse();
+  bool countasskilluse() const;
+  void set_countasskilluse(bool value);
+  private:
+  bool _internal_countasskilluse() const;
+  void _internal_set_countasskilluse(bool value);
+  public:
+
   // @@protoc_insertion_point(class_scope:Protocol.C_PLAYER_ATTACK)
  private:
   class _Internal;
@@ -3972,6 +3993,7 @@ class C_PLAYER_ATTACK final :
   float targety_;
   float targetz_;
   float chargeratio_;
+  bool countasskilluse_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_Protocol_2eproto;
 };
@@ -8099,6 +8121,26 @@ inline void C_SKILL::set_dirz(float value) {
   // @@protoc_insertion_point(field_set:Protocol.C_SKILL.dirZ)
 }
 
+// bool countAsSkillUse = 8;
+inline void C_SKILL::clear_countasskilluse() {
+  countasskilluse_ = false;
+}
+inline bool C_SKILL::_internal_countasskilluse() const {
+  return countasskilluse_;
+}
+inline bool C_SKILL::countasskilluse() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_SKILL.countAsSkillUse)
+  return _internal_countasskilluse();
+}
+inline void C_SKILL::_internal_set_countasskilluse(bool value) {
+  
+  countasskilluse_ = value;
+}
+inline void C_SKILL::set_countasskilluse(bool value) {
+  _internal_set_countasskilluse(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_SKILL.countAsSkillUse)
+}
+
 // -------------------------------------------------------------------
 
 // S_SKILL
@@ -9465,6 +9507,26 @@ inline void C_PLAYER_ATTACK::_internal_set_chargeratio(float value) {
 inline void C_PLAYER_ATTACK::set_chargeratio(float value) {
   _internal_set_chargeratio(value);
   // @@protoc_insertion_point(field_set:Protocol.C_PLAYER_ATTACK.chargeRatio)
+}
+
+// bool countAsSkillUse = 12;
+inline void C_PLAYER_ATTACK::clear_countasskilluse() {
+  countasskilluse_ = false;
+}
+inline bool C_PLAYER_ATTACK::_internal_countasskilluse() const {
+  return countasskilluse_;
+}
+inline bool C_PLAYER_ATTACK::countasskilluse() const {
+  // @@protoc_insertion_point(field_get:Protocol.C_PLAYER_ATTACK.countAsSkillUse)
+  return _internal_countasskilluse();
+}
+inline void C_PLAYER_ATTACK::_internal_set_countasskilluse(bool value) {
+  
+  countasskilluse_ = value;
+}
+inline void C_PLAYER_ATTACK::set_countasskilluse(bool value) {
+  _internal_set_countasskilluse(value);
+  // @@protoc_insertion_point(field_set:Protocol.C_PLAYER_ATTACK.countAsSkillUse)
 }
 
 // -------------------------------------------------------------------

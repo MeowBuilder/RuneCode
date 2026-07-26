@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include <functional>
 #include <optional>
@@ -50,60 +51,164 @@ struct SkillStats
     float statusChanceMult      = 1.f;
     float knockbackMult         = 1.f;
 
-    // Final activation type (skill default unless overridden by a rune)
-    ActivationType activationType = ActivationType::Instant;
+    // 최종 스킬 원소 오버라이드.
+    // 값이 없으면 스킬이 원래 가진 원소를 사용한다.
+    std::optional<ElementType> elementOverride = std::nullopt;
+    std::vector<ElementType> elementSet;
+    bool resonanceActive = false;
 
-    // Element override (if any rune changes the element)
-    std::optional<ElementType> elementOverride;
+    // 룬 행동 옵션 누적값
+    int   extraProjectiles = 0;
+    bool  piercing = false;
+    bool  homing = false;
+    float lifestealRatio = 0.f;
+    float execDamageBonus = 0.f;
+    bool  doublecast = false;
+    bool  echoOnCast = false;
+    float cdResetChance = 0.f;
+    float revengeBonus = 0.f;
+    float overheatBonus = 0.f;
+    int   orbitalCount = 0;
+    int   spawnOnHitCount = 0;
 
-    // VFX modification
+    // 룬에서 사용하는 VFX 정보
     VFXModifier vfxMod;
 
-    // Behavioral flags
-    int   extraProjectiles = 0;    // 연사 (I02): +1 per rune
-    bool  piercing         = false; // 관통 (I03)
-    bool  homing           = false; // 궤도 (L08)
-    float lifestealRatio   = 0.f;  // 흡수 (L05, W05)
-    float execDamageBonus  = 0.f;  // 처형자 (L06): extra mult when target < 30% HP
-    bool  doublecast       = false; // 쌍둥이별 (L01)
-    bool  echoOnCast       = false; // 잔상 (L09)
-    float cdResetChance    = 0.f;  // 무한 (L10): % chance to reset cooldown
-    float revengeBonus     = 0.f;  // 보복 (ABY_RVG): 피격 후 다음 스킬 데미지 보너스
-    float overheatBonus    = 0.f;  // 과열 (ABY_OVL): 연속 3회 후 다음 스킬 데미지 보너스
-    int   orbitalCount          = 0;    // 선회/성좌: 궤도 파티클 다단히트 수
-    int   spawnOnHitCount       = 0;    // 반향/폭발반향: 적중 시 생성할 추가 투사체 수
-    bool  randomElementOnCast   = false; // 원소 변환(L04): 시전 시 원소 무작위 변경
-    bool  resonanceActive       = false; // ABY_RES: 공명 보너스가 실제로 적용됨 (장착 + 원소 2종↑)
-
-    // Unique element types from all equipped runes on this slot (ordered; used for VFX color)
-    std::vector<ElementType> elementSet;
-
-    // Sub-particle VFX IDs (deduplicated; registered in EffectRegistry)
+    // 장착 룬들의 서브 VFX
     std::vector<std::string> subVFXIds;
 
-    // Hooks accumulated from all equipped runes
+    // 룬 훅들을 모아서 실행하는 구조라면 필요
     std::vector<std::function<void(SkillContext&)>> onCastHooks;
     std::vector<std::function<void(SkillContext&)>> onHitHooks;
 
-    // Activation type helpers
-    bool IsCharge()  const { return activationType == ActivationType::Charge; }
-    bool IsChannel() const { return activationType == ActivationType::Channel; }
-    bool IsPlace()   const { return activationType == ActivationType::Place; }
-    bool IsEnhance() const { return activationType == ActivationType::Enhance; }
-    bool IsSplit()   const { return activationType == ActivationType::Split; }
+    // 기존 코드와 UI에서 대표 발동 방식을 조회할 때만 사용한다.
+// 실제 실행은 아래 복수 플래그를 사용한다.
+    ActivationType activationType = ActivationType::Instant;
 
-    // Legacy RuneCombo interop — used by code not yet migrated to SkillStats
+    // 발동 룬이 하나라도 장착됐는지
+    bool hasActivationRune = false;
+
+    // 복수 발동 방식
+    bool activationInstant = false;
+    bool activationCharge = false;
+    bool activationChannel = false;
+    bool activationPlace = false;
+    bool activationEnhance = false;
+    bool activationSplit = false;
+
+    void EnableActivation(ActivationType type)
+    {
+        switch (type)
+        {
+        case ActivationType::Instant:
+            activationInstant = true;
+            break;
+
+        case ActivationType::Charge:
+            activationCharge = true;
+            break;
+
+        case ActivationType::Channel:
+            activationChannel = true;
+            break;
+
+        case ActivationType::Place:
+            activationPlace = true;
+            break;
+
+        case ActivationType::Enhance:
+            activationEnhance = true;
+            break;
+
+        case ActivationType::Split:
+            activationSplit = true;
+            break;
+
+        default:
+            break;
+        }
+    }
+
+    // 룬이 추가한 발동 방식
+    void AddRuneActivation(ActivationType type)
+    {
+        hasActivationRune = true;
+        EnableActivation(type);
+    }
+
+    // 발동 룬이 하나도 없을 때만 스킬 기본 발동 방식을 사용
+    void ApplyDefaultActivation(ActivationType defaultType)
+    {
+        if (hasActivationRune)
+            return;
+
+        EnableActivation(defaultType);
+    }
+
+    // 기존 코드나 UI에서 사용하는 대표 타입.
+    // 실제 조합 실행에는 이 값을 사용하지 않는다.
+    ActivationType ResolvePrimaryActivation() const
+    {
+        // 실행 파이프라인 순서에 맞춘다.
+        if (activationCharge)
+            return ActivationType::Charge;
+
+        if (activationChannel)
+            return ActivationType::Channel;
+
+        if (activationPlace)
+            return ActivationType::Place;
+
+        if (activationEnhance)
+            return ActivationType::Enhance;
+
+        if (activationSplit)
+            return ActivationType::Split;
+
+        if (activationInstant)
+            return ActivationType::Instant;
+
+        return ActivationType::Instant;
+    }
+
+    bool IsCharge() const
+    {
+        return activationCharge;
+    }
+
+    bool IsChannel() const
+    {
+        return activationChannel;
+    }
+
+    bool IsPlace() const
+    {
+        return activationPlace;
+    }
+
+    bool IsEnhance() const
+    {
+        return activationEnhance;
+    }
+
+    bool IsSplit() const
+    {
+        return activationSplit || extraProjectiles > 0;
+    }
+
     RuneCombo ToRuneCombo() const
     {
-        RuneCombo c;
-        c.hasCharge  = IsCharge();
-        c.hasChannel = IsChannel();
-        c.hasPlace   = IsPlace();
-        c.hasEnhance = IsEnhance();
-        c.hasSplit   = IsSplit() || (extraProjectiles > 0);
-        c.hasInstant = (activationType == ActivationType::Instant);
-        c.count      = 0; // count not used by legacy code
-        return c;
+        RuneCombo combo{};
+
+        combo.hasInstant = activationInstant;
+        combo.hasCharge = activationCharge;
+        combo.hasChannel = activationChannel;
+        combo.hasPlace = activationPlace;
+        combo.hasEnhance = activationEnhance;
+        combo.hasSplit = activationSplit || extraProjectiles > 0;
+        combo.count = 0;
+
+        return combo;
     }
 };
 
@@ -145,7 +250,8 @@ struct RuneDef
     float statusChanceMult    = 1.f;
     float knockbackMult       = 1.f;
 
-    // Activation type override (overrides the skill's default activation)
+    // 이 룬이 추가하는 발동 방식.
+    // 여러 발동 룬은 SkillStats에 누적되어 조합된다.
     std::optional<ActivationType> activationOverride;
 
     // VFX modification applied when this rune is equipped
@@ -164,7 +270,6 @@ struct RuneDef
     float overheatBonus    = 0.f;
     int   orbitalCount          = 0;    // 선회/성좌: 궤도 파티클 다단히트 수
     int   spawnOnHitCount       = 0;    // 반향/폭발반향: 적중 시 추가 투사체 수
-    bool  randomElementOnCast   = false; // 원소 변환(L04): 시전 시 원소 무작위 변경
 
     // Sub-particle VFX: EffectRegistry에 등록된 서브 파티클 def ID (빈 문자열 = 없음)
     std::string subVFXId;

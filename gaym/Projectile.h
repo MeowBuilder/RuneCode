@@ -53,6 +53,10 @@ struct Projectile
     int   spawnOnHitCount = 0;      // 반향: 적중 시 주변 적으로 추가 투사체 생성
     SkillSlot skillSlot   = SkillSlot::Count; // 적중 시 onHit 훅 호출용 슬롯 정보
 
+    // 설치 함정/메아리처럼 현재 룬이 아니라
+// 예약 당시 ORB 스택을 사용해야 할 때 설정한다.
+    int forcedOrbitalCount = -1;
+
     // 네트워크 유도 룬 타겟 정보
     bool useNetworkHomingTarget = false;
     uint64 networkHomingTargetMonsterId = 0;

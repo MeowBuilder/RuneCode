@@ -76,6 +76,10 @@ message C_SKILL // 클라 -> 서버 스킬 사용 요청 패킷
 	float dirX = 5;          // 스킬 사용 방향 X
 	float dirY = 6;          // 스킬 사용 방향 Y
 	float dirZ = 7;          // 스킬 사용 방향 Z
+
+	// true: 실제 신규 스킬 시전
+    // false: 채널 반복 틱 등 동일 시전의 후속 패킷
+    bool countAsSkillUse = 8;
 }
 
 message S_SKILL // 서버 -> 클라 스킬 사용 알림 패킷
@@ -190,6 +194,10 @@ message C_PLAYER_ATTACK // 클라 -> 서버 플레이어 공격 판정 요청 �
 	float targetZ = 10;      // 타겟 좌표 Z
 
 	float chargeRatio = 11; // 차징 룬 비율, 0.0 ~ 1.0
+
+	 // true: 새로운 스킬 시전의 최초 공격
+    // false: 채널 후속 틱, 궤도 실제 발사 등 동일 시전의 후속 공격
+    bool countAsSkillUse = 12;
 }
 
 message S_MONSTER_DAMAGE // 서버 -> 클라 몬스터 피격/사망 알림 패킷

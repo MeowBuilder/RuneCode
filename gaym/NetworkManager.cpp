@@ -64,6 +64,159 @@ namespace
     constexpr float kNetSpawnPortalY = 6.0f;
     constexpr float kNetSpawnFallTime = 0.4f;
 
+    // 서버 BuildServerPlaceVisualPolicy와 동일한 시각 메타데이터.
+//
+// 이 값은 게임 판정용 룬 플래그가 아니라
+// 설치·메아리 스냅샷에 포함되는 네트워크 시각 정보다.
+    constexpr uint32_t
+        NETWORK_RUNE_VIS_ORBITAL =
+        1u << 6;
+
+    constexpr uint32_t
+        NETWORK_RUNE_VIS_ORBITAL_COUNT_SHIFT =
+        16u;
+
+    constexpr uint32_t
+        NETWORK_RUNE_VIS_ORBITAL_COUNT_MASK =
+        0xFFu <<
+        NETWORK_RUNE_VIS_ORBITAL_COUNT_SHIFT;
+
+    int DecodeNetworkOrbitalCount(
+        uint32_t runeFlags)
+    {
+        int orbitalCount =
+            static_cast<int>(
+                (runeFlags &
+                    NETWORK_RUNE_VIS_ORBITAL_COUNT_MASK)
+                >>
+                NETWORK_RUNE_VIS_ORBITAL_COUNT_SHIFT);
+
+        // 이전 패킷 또는 스택 수를 넣지 않은 구버전과 호환.
+        //
+        // ORB 여부 비트만 있으면 1스택으로 취급한다.
+        if (orbitalCount <= 0 &&
+            (runeFlags &
+                NETWORK_RUNE_VIS_ORBITAL) != 0)
+        {
+            orbitalCount = 1;
+        }
+
+        return std::max(
+            0,
+            orbitalCount);
+    }
+
+    uint32_t DecodeNetworkUInt(float value)
+    {
+        if (!std::isfinite(value) ||
+            value <= 0.0f)
+        {
+            return 0;
+        }
+
+        return static_cast<uint32_t>(
+            std::lround(value));
+    }
+
+    ElementType DecodeNetworkVisualElement(
+        float value,
+        ElementType fallback)
+    {
+        const int32_t encoded =
+            static_cast<int32_t>(
+                std::lround(value));
+
+        if (encoded >=
+            static_cast<int32_t>(
+                ElementType::Fire) &&
+            encoded <=
+            static_cast<int32_t>(
+                ElementType::Earth))
+        {
+            return static_cast<ElementType>(
+                encoded);
+        }
+
+        return fallback;
+    }
+
+    uint32_t EncodeVisualElementMask(
+        const std::vector<ElementType>& elements)
+    {
+        uint32_t mask = 0;
+
+        for (ElementType element : elements)
+        {
+            const int32_t value =
+                static_cast<int32_t>(element);
+
+            if (value >= 1 &&
+                value <= 4)
+            {
+                mask |=
+                    1u <<
+                    static_cast<uint32_t>(
+                        value - 1);
+            }
+        }
+
+        return mask;
+    }
+
+    std::vector<ElementType>
+        DecodeVisualElementMask(
+            uint32_t mask)
+    {
+        std::vector<ElementType> elements;
+
+        for (int32_t value = 1;
+            value <= 4;
+            ++value)
+        {
+            const uint32_t bit =
+                1u <<
+                static_cast<uint32_t>(
+                    value - 1);
+
+            if ((mask & bit) != 0)
+            {
+                elements.push_back(
+                    static_cast<ElementType>(
+                        value));
+            }
+        }
+
+        return elements;
+    }
+
+    void DecodePackedPlaceActionVisualPolicy(
+        float packedValue,
+        uint32_t& outRuneFlags,
+        uint32_t& outElementMask)
+    {
+        const uint32_t packed =
+            DecodeNetworkUInt(
+                packedValue);
+
+        outRuneFlags =
+            packed & 0xFFu;
+
+        outElementMask =
+            (packed >> 8) & 0xFFu;
+    }
+
+    DirectX::XMFLOAT4 GetPlaceVisualColor(
+        ElementType element)
+    {
+        FluidElementColor color =
+            FluidElementColors::Get(
+                element);
+
+        color.coreColor.w = 1.0f;
+
+        return color.coreColor;
+    }
+
     // 플레이어 포탈 Intro Fly 
     constexpr float kPlayerPortalIntroStartHeight = 22.0f;
     constexpr float kPlayerPortalIntroDuration = 3.0f;
@@ -847,6 +1000,8 @@ void NetworkManager::ResetForNewSession()
     m_mapRemoteEnhanceVFXId.clear();
     m_mapRemoteChannelLastSpawnTime.clear();
     m_mapRemotePlaceDecalIds.clear();
+    m_mapRemoteChannelPlaceVisualPolicy.clear();
+    m_mapNetworkEchoVisualByObjectId.clear();
     m_mapNetworkTrapVFXByObjectId.clear();
 
     // 3) 펜딩 큐 — 이전 세션 패킷이 새 씬에서 발동되면 monsterId mismatch 로 또 stale 접근.
@@ -857,7 +1012,6 @@ void NetworkManager::ResetForNewSession()
     m_vPendingSpawns.clear();
     m_vPendingMonsterVFX.clear();
     m_vPendingMeteorShowers.clear();
-    m_vPendingOrbitals.clear();
     m_vNetworkNormalMonsterBehaviors.clear();
     m_vNetworkGolemBehaviors.clear();
     m_vNetworkDemonBehaviors.clear();
@@ -1167,6 +1321,7 @@ void NetworkManager::Update(Scene* pScene, ID3D12Device* pDevice, ID3D12Graphics
                 cmd.runeTriggerTargetPlayerId,
                 cmd.runeTriggerObjectId,
                 DirectX::XMFLOAT3(cmd.x, cmd.y, cmd.z),
+                DirectX::XMFLOAT3(cmd.dirX, cmd.dirY, cmd.dirZ),
                 cmd.runeTriggerValue1,
                 cmd.runeTriggerValue2
             );
@@ -1348,7 +1503,7 @@ void NetworkManager::SendMove(float x, float y, float z, float dirX, float dirY,
     m_pSession->Send(sendBuffer);
 }
 
-void NetworkManager::SendSkill(int skillType, float x, float y, float z, float dirX, float dirY, float dirZ)
+void NetworkManager::SendSkill(int skillType, float x, float y, float z, float dirX, float dirY, float dirZ, bool countAsSkillUse)
 {
     if (!m_bConnected || !m_pSession)
         return;
@@ -1368,12 +1523,10 @@ void NetworkManager::SendSkill(int skillType, float x, float y, float z, float d
     skillPkt.set_dirx(dirX);
     skillPkt.set_diry(dirY);
     skillPkt.set_dirz(dirZ);
+    skillPkt.set_countasskilluse(countAsSkillUse);
 
     auto sendBuffer = ServerPacketHandler::MakeSendBuffer(skillPkt);
     m_pSession->Send(sendBuffer);
-
-    // 결산: 로컬 플레이어 스킬 사용 카운트
-    StatOnSkillUse(m_nLocalPlayerId.load(), skillType);
 }
 
 void NetworkManager::SendPlayerAction(uint32 actionType,
@@ -1575,7 +1728,7 @@ void NetworkManager::SendPlayerAttack(int skillType,
     float x, float y, float z,
     float dirX, float dirY, float dirZ,
     float targetX, float targetY, float targetZ,
-    float chargeRatio)
+    float chargeRatio, bool countAsSkillUse)
 {
     if (!m_bConnected || !m_pSession)
         return;
@@ -1599,9 +1752,19 @@ void NetworkManager::SendPlayerAttack(int skillType,
     pkt.set_targety(targetY);
     pkt.set_targetz(targetZ);
     pkt.set_chargeratio(chargeRatio);
+    pkt.set_countasskilluse(countAsSkillUse);
 
     auto sendBuffer = ServerPacketHandler::MakeSendBuffer(pkt);
     m_pSession->Send(sendBuffer);
+
+    // 로컬 통계도 실제 공격 요청 기준으로 1회 집계한다.
+// 설치 스킬은 C_SKILL을 보내지 않더라도 여기서는 집계된다.
+    if (countAsSkillUse)
+    {
+        StatOnSkillUse(
+            m_nLocalPlayerId.load(),
+            skillType);
+    }
 
     char buf[256];
     sprintf_s(buf,
@@ -1930,13 +2093,6 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
                     pVFX->StopEffect(kv.second);
             }
 
-            // 서버 orbitalId 기준 궤도 룬 대기 VFX 제거
-            for (auto& kv : m_mapNetworkOrbitalVFXByObjectId)
-            {
-                if (kv.second.vfxId >= 0)
-                    pVFX->StopEffect(kv.second.vfxId);
-            }
-
             // 원격 플레이어 지속형 스킬 VFX 제거
             for (auto& kv : m_mapRemotePlayerVFX)
             {
@@ -1958,9 +2114,10 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
             }
         }
 
+        m_mapNetworkEchoVisualByObjectId.clear();
         m_mapNetworkTrapVFXByObjectId.clear();
-        m_mapNetworkOrbitalVFXByObjectId.clear();
         m_mapRemotePlaceDecalIds.clear();
+        m_mapRemoteChannelPlaceVisualPolicy.clear();
 
         m_mapRemoteChargeVFXId.clear();
         m_mapRemoteEnhanceVFXId.clear();
@@ -1970,9 +2127,6 @@ void NetworkManager::ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uin
 
         m_setRemoteChannelingPlayers.clear();
         m_mapRemoteChannelLastSpawnTime.clear();
-
-        // 클라 측 궤도 지연 투사체 큐도 새 방으로 넘어가면 무조건 제거
-        m_vPendingOrbitals.clear();
 
         WriteNetworkLog("[Network] Cleared network rune VFX states on room transition");
     }
@@ -2600,29 +2754,6 @@ void NetworkManager::ProcessDespawnPlayer(Scene* pScene, uint64 playerId)
     GameObject* pRemotePlayer = it->second;
     pScene->MarkForDeletion(pRemotePlayer);
 
-    // pending orbital 발사 큐 정리 — owner 가 곧 파기될 원격 플레이어이면
-    // 지연 발사 시 dangling owner 로 SpawnProjectile 호출 → UAF.
-    if (!m_vPendingOrbitals.empty())
-    {
-        FluidSkillVFXManager* pVFX = pScene ? pScene->GetFluidVFXManager() : nullptr;
-        m_vPendingOrbitals.erase(
-            std::remove_if(
-                m_vPendingOrbitals.begin(),
-                m_vPendingOrbitals.end(),
-                [pRemotePlayer, pVFX](const PendingOrbitalProjectile& p)
-                {
-                    if (p.owner == pRemotePlayer)
-                    {
-                        if (pVFX && p.orbVfxId >= 0)
-                            pVFX->StopEffect(p.orbVfxId);
-                        return true;
-                    }
-                    return false;
-                }),
-            m_vPendingOrbitals.end()
-        );
-    }
-
     // 원격 플레이어 지속형 스킬 VFX 정리 — UpdateRemoteActivationRuneVFX 가 매 프레임
     // m_mapRemotePlayers find 로 자체 청소하지만, 그 사이 한 프레임은 stale entry 로
     // playerIt->second->GetTransform() 호출 가능. despawn 시점에 즉시 끊는다.
@@ -2668,6 +2799,24 @@ void NetworkManager::ProcessDespawnPlayer(Scene* pScene, uint64 playerId)
         }
     }
 
+    m_mapRemoteChannelPlaceVisualPolicy.erase(playerId);
+    for (auto echoIt =
+        m_mapNetworkEchoVisualByObjectId.begin();
+        echoIt !=
+        m_mapNetworkEchoVisualByObjectId.end();)
+    {
+        if (echoIt->second.ownerPlayerId ==
+            playerId)
+        {
+            echoIt =
+                m_mapNetworkEchoVisualByObjectId.erase(
+                    echoIt);
+        }
+        else
+        {
+            ++echoIt;
+        }
+    }
     m_setRemoteChannelingPlayers.erase(playerId);
     m_mapRemoteChannelLastSpawnTime.erase(playerId);
 
@@ -3036,8 +3185,24 @@ void NetworkManager::TickPendingTidalFoamVFX(FluidSkillVFXManager* pVFXManager, 
                 it->runeFlags
             );
 
-            if (it->visualElementOverride != ElementType::None)
-                ApplyElementToEffectDef(def, it->visualElementOverride);
+            const std::vector<ElementType>
+                visualElements =
+                DecodeVisualElementMask(
+                    it->visualElementMask);
+
+            if (!visualElements.empty())
+            {
+                ApplyElementSetToEffectDef(
+                    def,
+                    visualElements);
+            }
+            else if (it->visualElementOverride !=
+                ElementType::None)
+            {
+                ApplyElementToEffectDef(
+                    def,
+                    it->visualElementOverride);
+            }
 
             if (it->radiusScale != 1.0f)
             {
@@ -3386,7 +3551,26 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
 
     GameObject* pRemotePlayer = it->second;
     TransformComponent* pTransform = pRemotePlayer->GetTransform();
-    if (pTransform)
+
+    // 설치+채널의 S_SKILL x/y/z는
+// 플레이어 위치가 아니라 설치된 공격 원점이다.
+    auto remotePlacePolicyIt =
+        m_mapRemoteChannelPlaceVisualPolicy
+        .find(playerId);
+
+    const bool isPlacedChannelTick =
+        m_setRemoteChannelingPlayers.find(
+            playerId) !=
+        m_setRemoteChannelingPlayers.end() &&
+        remotePlacePolicyIt !=
+        m_mapRemoteChannelPlaceVisualPolicy.end() &&
+        remotePlacePolicyIt
+        ->second
+        .skillSlot ==
+        serverSkillSlot;
+
+    if (pTransform &&
+        !isPlacedChannelTick)
     {
         // 위치 설정
         pTransform->SetPosition(x, y, z);
@@ -3449,18 +3633,45 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
     //   Charge/Channel/Enhance/Split/Place 활성화 룬의 RegisterRuneMod 가 자동 적용된다.
     //   (예: WaveSlash + Enhance → 파티클 강화 mod, FireBeam + Channel → 채널 mod 등)
     uint32_t remoteRuneFlags = RUNE_NONE;
+    // 원격 플레이어의 TRF_MLT 스택이 반영된
+// 추가 투사체 수.
+//
+// RuneDef::ApplyTo()에서
+// extraProjectiles * stackCount로 계산된다.
+    int32_t remoteExtraProjectiles =
+        0;
     // 속성 변환 룬 (FIR_1/WAT_1/WND_1/ERT_1 등) — elementSet 첫 원소가 캐릭터 기본 원소와 다르면
     // 그 색상으로 effect 를 재칠한다. (오프라인의 Behavior 별 ApplyElementToEffectDef 와 동일)
     ElementType visualElementOverride = ElementType::None;
+    uint32_t visualElementMask = 0;
+    int32_t remoteSkillSlotIndex = -1;
     {
         SkillSlot remoteSlot = SkillSlot::Count;
         switch (skillType)
         {
-        case 1: remoteSlot = SkillSlot::Q;          break;
-        case 2: remoteSlot = SkillSlot::E;          break;
-        case 3: remoteSlot = SkillSlot::R;          break;
-        case 4: remoteSlot = SkillSlot::RightClick; break;
-        default: break;
+        case 1:
+            remoteSlot = SkillSlot::Q;
+            remoteSkillSlotIndex = 0;
+            break;
+
+        case 2:
+            remoteSlot = SkillSlot::E;
+            remoteSkillSlotIndex = 1;
+            break;
+
+        case 3:
+            remoteSlot = SkillSlot::R;
+            remoteSkillSlotIndex = 2;
+            break;
+
+        case 4:
+            remoteSlot =
+                SkillSlot::RightClick;
+            remoteSkillSlotIndex = 3;
+            break;
+
+        default:
+            break;
         }
         if (remoteSlot != SkillSlot::Count)
         {
@@ -3473,32 +3684,107 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
                 if (auto* sk = pRemoteSkill->GetSkill(remoteSlot))
                     defType = sk->GetSkillData().activationType;
                 SkillStats stats = pRemoteSkill->BuildSkillStats(remoteSlot, defType);
-                // L04 randomElementOnCast 는 매 호출 RNG → 서버/클라 desync 위험이라 elementSet/elementOverride 만 사용.
-                // elementSet 은 장착된 원소 룬으로 결정적이라 안전.
+                remoteExtraProjectiles =
+                    std::max(
+                        0,
+                        stats.extraProjectiles);
+             
                 // 비교 가드 제거: cached remoteElement 가 잘못된 값(맵 미등록 등) 일 때도 override 가 무효화되는 문제 방지.
                 //   같은 원소면 ApplyElementToEffectDef 가 효과 동일 → 안전.
                 if (!stats.elementSet.empty())
-                    visualElementOverride = stats.elementSet[0];
-                else if (stats.elementOverride.has_value() && !stats.randomElementOnCast)
-                    visualElementOverride = *stats.elementOverride;
+                {
+                    visualElementOverride =
+                        stats.elementSet[0];
+
+                    visualElementMask =
+                        EncodeVisualElementMask(
+                            stats.elementSet);
+                }
+                else if (
+                    stats.elementOverride.has_value())
+                {
+                    visualElementOverride =
+                        *stats.elementOverride;
+
+                    const int32_t value =
+                        static_cast<int32_t>(
+                            *stats.elementOverride);
+
+                    if (value >= 1 &&
+                        value <= 4)
+                    {
+                        visualElementMask =
+                            1u <<
+                            static_cast<uint32_t>(
+                                value - 1);
+                    }
+                }
 
                 // 어떤 룬이 실제 등록돼 있는지 직접 dump
                 {
                     char rbuf[400];
-                    sprintf_s(rbuf,
-                        "[RuneDiag] ProcessSkill playerId=%llu skillType=%d cachedElem=%d setSize=%zu set0=%d override=%d randEl=%d r0=%s r1=%s r2=%s",
-                        playerId, skillType, (int)remoteElement,
+                    sprintf_s(
+                        rbuf,
+                        "[RuneDiag] ProcessSkill playerId=%llu skillType=%d cachedElem=%d setSize=%zu set0=%d override=%d r0=%s r1=%s r2=%s",
+                        playerId,
+                        skillType,
+                        (int)remoteElement,
                         stats.elementSet.size(),
-                        stats.elementSet.empty() ? -1 : (int)stats.elementSet[0],
+                        stats.elementSet.empty()
+                        ? -1
+                        : (int)stats.elementSet[0],
                         (int)visualElementOverride,
-                        stats.randomElementOnCast ? 1 : 0,
-                        pRemoteSkill->GetRuneSlot(remoteSlot, 0).runeId.c_str(),
-                        pRemoteSkill->GetRuneSlot(remoteSlot, 1).runeId.c_str(),
-                        pRemoteSkill->GetRuneSlot(remoteSlot, 2).runeId.c_str());
+                        pRemoteSkill
+                        ->GetRuneSlot(
+                            remoteSlot,
+                            0)
+                        .runeId.c_str(),
+                        pRemoteSkill
+                        ->GetRuneSlot(
+                            remoteSlot,
+                            1)
+                        .runeId.c_str(),
+                        pRemoteSkill
+                        ->GetRuneSlot(
+                            remoteSlot,
+                            2)
+                        .runeId.c_str());
                     WriteNetworkLog(rbuf);
                 }
             }
         }
+    }
+
+    // 설치+채널은 원격 SkillComponent의 현재 룬보다
+// 서버가 설치 당시 보내준 시각 정책을 우선한다.
+//
+// 룬 동기화 순서가 늦더라도 모든 클라이언트가
+// 같은 색과 같은 RuneFlag로 렌더링된다.
+    auto placePolicyIt =
+        m_mapRemoteChannelPlaceVisualPolicy
+        .find(playerId);
+
+    if (placePolicyIt !=
+        m_mapRemoteChannelPlaceVisualPolicy.end() &&
+        placePolicyIt
+        ->second
+        .skillSlot ==
+        remoteSkillSlotIndex)
+    {
+        remoteRuneFlags =
+            placePolicyIt
+            ->second
+            .runeFlags;
+
+        visualElementOverride =
+            placePolicyIt
+            ->second
+            .primaryElement;
+
+        visualElementMask =
+            placePolicyIt
+            ->second
+            .elementMask;
     }
 
     // 서버 권위 radiusMult — AMP_RAD3 같은 범위 룬은 서버가 계산해 보내준 값을 그대로 적용.
@@ -3507,9 +3793,31 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
     auto spawnOneShot = [&](const char* effectName, const XMFLOAT3& origin, const XMFLOAT3& dir) -> int
         {
             if (!pVFXManager) return -1;
-            EffectDef def = EffectRegistry::Get().GetEffect(effectName, remoteRuneFlags);
-            if (visualElementOverride != ElementType::None)
-                ApplyElementToEffectDef(def, visualElementOverride);
+            EffectDef def =
+                EffectRegistry::Get()
+                .GetEffect(
+                    effectName,
+                    remoteRuneFlags);
+
+            const std::vector<ElementType>
+                visualElements =
+                DecodeVisualElementMask(
+                    visualElementMask);
+
+            if (!visualElements.empty())
+            {
+                ApplyElementSetToEffectDef(
+                    def,
+                    visualElements);
+            }
+            else if (visualElementOverride !=
+                ElementType::None)
+            {
+                ApplyElementToEffectDef(
+                    def,
+                    visualElementOverride);
+            }
+
             if (vfxRadiusScale != 1.0f)
             {
                 for (auto& l : def.layers)
@@ -3542,6 +3850,7 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
             pending.remaining = delaySec;
             pending.runeFlags = remoteRuneFlags;
             pending.visualElementOverride = visualElementOverride;
+            pending.visualElementMask = visualElementMask;
             pending.radiusScale = vfxRadiusScale;
             pending.autoKillAfter = autoKillAfter;
 
@@ -3884,6 +4193,7 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
 
             foam.runeFlags = remoteRuneFlags;
             foam.visualElementOverride = visualElementOverride;
+            foam.visualElementMask = visualElementMask;
             foam.radiusScale = vfxRadiusScale;
 
             m_vPendingTidalFoamVFX.push_back(foam);
@@ -4010,85 +4320,122 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
         bool isPiercing = (projElement == ElementType::Wind);
 
         // 룬 분기 (HasRuneEquipped 로 직접 체크 — RuneCombo 에 해당 필드가 없음)
-        SkillComponent* pRemoteSkill = pRemotePlayer->GetComponent<SkillComponent>();
-        bool bOrb = pRemoteSkill && pRemoteSkill->HasRuneEquipped(SkillSlot::RightClick, "TRF_ORB");
-        bool bMlt = pRemoteSkill && pRemoteSkill->HasRuneEquipped(SkillSlot::RightClick, "TRF_MLT");
-        const bool bSplit = (remoteRuneFlags & RUNE_SPLIT) != 0;
+        // 클라이언트 RuneRegistry 정책:
+//
+// 기본 1발 + 스택당 추가 2발
+        const int remoteProjectileCount =
+            std::max(
+                1,
+                1 +
+                remoteExtraProjectiles);
 
         // 부채꼴 N개 타겟 생성 (가운데 + 좌/우 ±15도)
-        auto buildFanTargets = [&](int count) -> std::vector<XMFLOAT3>
+        // 로컬 클라이언트의 기존 TRF_MLT 정책과 동일하게
+// 중앙 목표를 기준으로 좌우 1.5m씩 벌린다.
+        auto buildFanTargets =
+            [&](int count)
+            -> std::vector<
+            DirectX::XMFLOAT3>
             {
-                std::vector<XMFLOAT3> out;
-                if (count <= 1) { out.push_back(projTarget); return out; }
-                constexpr float DEG = 15.0f;
-                for (int i = 0; i < count; ++i)
+                count =
+                    std::max(
+                        1,
+                        count);
+
+                std::vector<
+                    DirectX::XMFLOAT3>
+                    targets;
+
+                targets.reserve(
+                    static_cast<size_t>(
+                        count));
+
+                if (count == 1)
                 {
-                    float t = (count == 1) ? 0.f : (float(i) - float(count - 1) * 0.5f); // -..0..+
-                    float angleDeg = t * DEG / std::max(1.f, float(count - 1) * 0.5f);
-                    float rad = DirectX::XMConvertToRadians(angleDeg);
-                    float cs = cosf(rad), sn = sinf(rad);
-                    XMFLOAT3 d(horizontalDir.x * cs - horizontalDir.z * sn, 0.f,
-                        horizontalDir.x * sn + horizontalDir.z * cs);
-                    out.push_back(XMFLOAT3(projOrigin.x + d.x * 50.0f, projOrigin.y, projOrigin.z + d.z * 50.0f));
+                    targets.push_back(
+                        projTarget);
+
+                    return targets;
                 }
-                return out;
+
+                // 진행 방향의 수직 방향
+                const DirectX::XMFLOAT3
+                    rightDirection(
+                        -horizontalDir.z,
+                        0.0f,
+                        horizontalDir.x);
+
+                constexpr float FAN_SPACING =
+                    1.5f;
+
+                const float center =
+                    static_cast<float>(
+                        count - 1) *
+                    0.5f;
+
+                for (int projectileIndex = 0;
+                    projectileIndex <
+                    count;
+                    ++projectileIndex)
+                {
+                    const float offsetIndex =
+                        static_cast<float>(
+                            projectileIndex) -
+                        center;
+
+                    const float lateralOffset =
+                        offsetIndex *
+                        FAN_SPACING;
+
+                    targets.push_back(
+                        DirectX::XMFLOAT3(
+                            projTarget.x +
+                            rightDirection.x *
+                            lateralOffset,
+
+                            projTarget.y,
+
+                            projTarget.z +
+                            rightDirection.z *
+                            lateralOffset));
+                }
+
+                return targets;
             };
 
-        // 궤도(TRF_ORB): 즉시 spawn 대신 0.5초 공전 visual 후 deferred. ORB 가 가장 강력하므로 우선 적용.
-        if (bOrb)
+        if (remoteProjectileCount > 1)
         {
-            int orbVfxId = -1;
-            if (pVFXManager && EffectRegistry::Get().HasEffect("sub_orbital_halo"))
+            const auto projectileTargets =
+                buildFanTargets(
+                    remoteProjectileCount);
+
+            for (const auto&
+                projectileTarget :
+                projectileTargets)
             {
-                EffectDef def = EffectRegistry::Get().GetEffect("sub_orbital_halo");
-                ApplyElementToEffectDef(def, projElement);
-                orbVfxId = pVFXManager->SpawnEffectDef(projOrigin, XMFLOAT3(0, 1, 0), def, false);
+                pProjManager
+                    ->SpawnProjectile(
+                        projOrigin,
+                        projectileTarget,
+                        0.0f,
+                        speed,
+                        radius,
+                        explosionRadius,
+                        projElement,
+                        pRemotePlayer,
+                        true,
+                        scale,
+                        RuneCombo{},
+                        0.0f,
+                        100.0f,
+                        isPiercing,
+                        false,
+                        0.0f,
+                        0.0f,
+                        0.0f,
+                        SkillSlot::RightClick);
             }
 
-            int count = bMlt ? 3 : 1;
-            auto tgts = buildFanTargets(count);
-            for (auto& t : tgts)
-            {
-                PendingOrbitalProjectile p;
-                p.origin = projOrigin;
-                p.target = t;
-                p.speed = speed; p.radius = radius; p.explosionRadius = explosionRadius;
-                p.scale = scale; p.element = projElement; p.owner = pRemotePlayer;
-                p.isPiercing = isPiercing;
-                p.orbVfxId = (&t == &tgts.front()) ? orbVfxId : -1;
-                p.delay = 0.5f;
-                m_vPendingOrbitals.push_back(p);
-            }
-            break;
-        }
-
-        if (bMlt)
-        {
-            auto tgts = buildFanTargets(3);
-            for (auto& t : tgts)
-            {
-                pProjManager->SpawnProjectile(
-                    projOrigin, t, 0.0f, speed, radius, explosionRadius,
-                    projElement, pRemotePlayer, true, scale,
-                    RuneCombo{}, 0.0f, 100.0f, isPiercing);
-            }
-            break;
-        }
-
-        if (bSplit)
-        {
-            XMFLOAT3 right = XMFLOAT3(-horizontalDir.z, 0.0f, horizontalDir.x);
-            constexpr float SPREAD = 1.5f;
-            XMFLOAT3 t1(projTarget.x + right.x * SPREAD, projTarget.y, projTarget.z + right.z * SPREAD);
-            XMFLOAT3 t2(projTarget.x - right.x * SPREAD, projTarget.y, projTarget.z - right.z * SPREAD);
-            pProjManager->SpawnProjectile(
-                projOrigin, t1, 0.0f, speed, radius, explosionRadius,
-                projElement, pRemotePlayer, true, scale,
-                RuneCombo{}, 0.0f, 100.0f, isPiercing);
-            pProjManager->SpawnProjectile(
-                projOrigin, t2, 0.0f, speed, radius, explosionRadius,
-                projElement, pRemotePlayer, true, scale,
-                RuneCombo{}, 0.0f, 100.0f, isPiercing);
             break;
         }
 
@@ -4101,7 +4448,12 @@ void NetworkManager::ProcessSkill(Scene* pScene, uint64 playerId, int skillType,
             true, scale,
             RuneCombo{}, 0.0f,
             100.0f,
-            isPiercing
+            isPiercing,
+            false,
+            0.0f,
+            0.0f,
+            0.0f,
+            SkillSlot::RightClick
         );
         break;
     }
@@ -4306,21 +4658,66 @@ void NetworkManager::ProcessPlayerAction(Scene* pScene, uint64 playerId, uint32 
             slotArr[slotIdx] = -1;
         }
 
-        ElementType elem = ElementType::Fire;
-        auto eIt = m_mapRemotePlayerElement.find(playerId);
-        if (eIt != m_mapRemotePlayerElement.end()) elem = eIt->second;
-        DirectX::XMFLOAT4 color(1.f, 0.7f, 0.3f, 1.f);
-        switch (elem)
-        {
-        case ElementType::Fire:  color = { 1.0f, 0.5f, 0.2f, 1.0f }; break;
-        case ElementType::Water: color = { 0.4f, 0.7f, 1.0f, 1.0f }; break;
-        case ElementType::Wind:  color = { 0.7f, 1.0f, 0.8f, 1.0f }; break;
-        case ElementType::Earth: color = { 0.7f, 0.5f, 0.3f, 1.0f }; break;
-        default: break;
-        }
-        int decalId = pDecals->Spawn(DecalTexture::Star08, DirectX::XMFLOAT3(x, y, z),
-            8.0f, 0.f, 30.0f, color, 1.2f);
-        slotArr[slotIdx] = decalId;
+        const ElementType fallbackElement =
+            GetPlayerElement(playerId);
+
+        // 서버가 dirY에 넣어준 대표 원소
+        const ElementType visualElement =
+            DecodeNetworkVisualElement(
+                dirY,
+                fallbackElement);
+
+        // 서버가 dirZ에 패킹한
+        // 하위 8비트 RuneFlag,
+        // 상위 8비트 원소 마스크
+        uint32_t visualRuneFlags = 0;
+        uint32_t visualElementMask = 0;
+
+        DecodePackedPlaceActionVisualPolicy(
+            dirZ,
+            visualRuneFlags,
+            visualElementMask);
+
+        const DirectX::XMFLOAT4 color =
+            GetPlaceVisualColor(
+                visualElement);
+
+        int decalId =
+            pDecals->Spawn(
+                DecalTexture::Star08,
+                DirectX::XMFLOAT3(
+                    x,
+                    y,
+                    z),
+                8.0f,
+                0.0f,
+                30.0f,
+                color,
+                1.2f);
+
+        slotArr[slotIdx] =
+            decalId;
+
+        // 설치+채널 반복 틱에서 사용할 서버 권위 시각 정책 저장
+        RemoteChannelPlaceVisualPolicy
+            placePolicy;
+
+        placePolicy.skillSlot =
+            slotIdx;
+
+        placePolicy.primaryElement =
+            visualElement;
+
+        placePolicy.runeFlags =
+            visualRuneFlags;
+
+        placePolicy.elementMask =
+            visualElementMask;
+
+        m_mapRemoteChannelPlaceVisualPolicy
+            [playerId] =
+            placePolicy;
+
         break;
     }
 
@@ -4384,69 +4781,132 @@ void NetworkManager::ProcessPlayerAction(Scene* pScene, uint64 playerId, uint32 
 
     case PLAYER_ACTION_PLACE_FIRE:
     {
-        int slot = static_cast<int>(dirX);
-        if (slot < 0 || slot >= 4)
-            slot = 0;
+        int slot =
+            static_cast<int>(dirX);
 
-        // SkillSlot Q=0/E=1/R=2/RC=3 → skillType 1/2/3/4
-        int skillType = slot + 1;
-
-        // 해당 슬롯 데칼 정리 (트랩 발동 후 잔류 방지)
-        if (DecalManager* pDecals = pScene ? pScene->GetDecalManager() : nullptr)
+        if (slot < 0 ||
+            slot >= 4)
         {
-            auto it = m_mapRemotePlaceDecalIds.find(playerId);
-            if (it != m_mapRemotePlaceDecalIds.end() && it->second[slot] >= 0)
+            slot = 0;
+        }
+
+        const int skillType =
+            slot + 1;
+
+        // 기존 설치 데칼 정리
+        if (DecalManager* pDecals =
+            pScene
+            ? pScene->GetDecalManager()
+            : nullptr)
+        {
+            auto it =
+                m_mapRemotePlaceDecalIds
+                .find(playerId);
+
+            if (it !=
+                m_mapRemotePlaceDecalIds.end() &&
+                it->second[slot] >= 0)
             {
-                pDecals->Stop(it->second[slot]);
+                pDecals->Stop(
+                    it->second[slot]);
+
                 it->second[slot] = -1;
             }
         }
 
-        ElementType elem = ElementType::Fire;
-        auto eIt = m_mapRemotePlayerElement.find(playerId);
-        if (eIt != m_mapRemotePlayerElement.end())
-            elem = eIt->second;
+        uint32_t placedRuneFlags =
+            RUNE_NONE;
 
-        // 설치 룬 발동 VFX에도 해당 슬롯의 룬 modifier를 반영한다.
-        uint32_t placedRuneFlags = RUNE_NONE;
+        uint32_t placedElementMask = 0;
 
-        SkillSlot placedSlot = SkillSlot::Count;
-        switch (slot)
+        DecodePackedPlaceActionVisualPolicy(
+            dirZ,
+            placedRuneFlags,
+            placedElementMask);
+
+        // 구버전 서버 또는 정책값이 없는 경우에만
+        // 원격 SkillComponent로 fallback한다.
+        if (placedRuneFlags == 0)
         {
-        case 0: placedSlot = SkillSlot::Q;          break;
-        case 1: placedSlot = SkillSlot::E;          break;
-        case 2: placedSlot = SkillSlot::R;          break;
-        case 3: placedSlot = SkillSlot::RightClick; break;
-        default: break;
-        }
+            SkillSlot placedSlot =
+                SkillSlot::Count;
 
-        if (placedSlot != SkillSlot::Count)
-        {
-            if (SkillComponent* pRemoteSkill = pRemotePlayer->GetComponent<SkillComponent>())
+            switch (slot)
             {
-                RuneCombo combo = pRemoteSkill->GetRuneCombo(placedSlot);
-                placedRuneFlags = ToRuneFlags(combo);
+            case 0:
+                placedSlot = SkillSlot::Q;
+                break;
+
+            case 1:
+                placedSlot = SkillSlot::E;
+                break;
+
+            case 2:
+                placedSlot = SkillSlot::R;
+                break;
+
+            case 3:
+                placedSlot =
+                    SkillSlot::RightClick;
+                break;
+
+            default:
+                break;
+            }
+
+            if (placedSlot !=
+                SkillSlot::Count)
+            {
+                if (SkillComponent*
+                    pRemoteSkill =
+                    pRemotePlayer
+                    ->GetComponent<
+                    SkillComponent>())
+                {
+                    RuneCombo combo =
+                        pRemoteSkill
+                        ->GetRuneCombo(
+                            placedSlot);
+
+                    placedRuneFlags =
+                        ToRuneFlags(combo);
+                }
             }
         }
+
+        const DirectX::XMFLOAT3
+            placePos(
+                x,
+                y,
+                z);
 
         SpawnEchoSkillVFX(
             pScene,
             skillType,
-            elem,
-            DirectX::XMFLOAT3(x, y, z),
-            placedRuneFlags
-        );
+            GetPlayerElement(playerId),
+            placePos,
+            placedRuneFlags,
+            placedElementMask,
+            1.0f,
+            nullptr);
+
+        m_mapRemoteChannelPlaceVisualPolicy
+            .erase(playerId);
 
         char buf[256];
+
         sprintf_s(
             buf,
-            "[Network] PLACE_FIRE trigger VFX: playerId=%llu slot=%d skillType=%d runeFlags=%u pos=(%.2f,%.2f,%.2f)",
+            "[Network] PLACE_FIRE trigger VFX: playerId=%llu slot=%d skillType=%d runeFlags=%u elementMask=%u pos=(%.2f,%.2f,%.2f)",
             playerId,
             slot,
             skillType,
             placedRuneFlags,
-            x, y, z
-        );
+            placedElementMask,
+            x,
+            y,
+            z);
+
         WriteNetworkLog(buf);
 
         break;
@@ -4464,54 +4924,74 @@ void NetworkManager::ProcessPlayerAction(Scene* pScene, uint64 playerId, uint32 
 
     case PLAYER_ACTION_CHANNEL_END:
     {
-        m_setRemoteChannelingPlayers.erase(playerId);
-        // 종료 시 idle 로 자연 전환되도록 CheckRemotePlayerIdle 이 처리한다.
-        // 여기서 명시적으로 Idle 로 페이드해주면 깔끔하다.
-        if (auto* pAnim = pRemotePlayer->GetComponent<AnimationComponent>())
-            pAnim->CrossFade("Idle", 0.15f, true /*loop*/, false);
+        m_setRemoteChannelingPlayers.erase(
+            playerId);
+
+        auto placePolicyIt =
+            m_mapRemoteChannelPlaceVisualPolicy
+            .find(playerId);
+
+        if (placePolicyIt !=
+            m_mapRemoteChannelPlaceVisualPolicy.end())
+        {
+            const int slotIdx =
+                placePolicyIt
+                ->second
+                .skillSlot;
+
+            if (slotIdx >= 0 &&
+                slotIdx < 4)
+            {
+                DecalManager* pDecals =
+                    pScene
+                    ? pScene->GetDecalManager()
+                    : nullptr;
+
+                if (pDecals)
+                {
+                    auto decalIt =
+                        m_mapRemotePlaceDecalIds
+                        .find(playerId);
+
+                    if (decalIt !=
+                        m_mapRemotePlaceDecalIds.end() &&
+                        decalIt
+                        ->second
+                        [slotIdx] >= 0)
+                    {
+                        pDecals->Stop(
+                            decalIt
+                            ->second
+                            [slotIdx]);
+
+                        decalIt
+                            ->second
+                            [slotIdx] = -1;
+                    }
+                }
+            }
+
+            m_mapRemoteChannelPlaceVisualPolicy
+                .erase(placePolicyIt);
+        }
+
+        if (auto* pAnim =
+            pRemotePlayer
+            ->GetComponent<
+            AnimationComponent>())
+        {
+            pAnim->CrossFade(
+                "Idle",
+                0.15f,
+                true,
+                false);
+        }
+
         break;
     }
 
     default:
         break;
-    }
-}
-
-void NetworkManager::UpdatePendingOrbitals(Scene* pScene, float deltaTime)
-{
-    if (!pScene || m_vPendingOrbitals.empty()) return;
-    FluidSkillVFXManager* pVFX = pScene->GetFluidVFXManager();
-    ProjectileManager* pPM = pScene->GetProjectileManager();
-    if (!pPM) return;
-
-    for (auto it = m_vPendingOrbitals.begin(); it != m_vPendingOrbitals.end(); )
-    {
-        it->delay -= deltaTime;
-        if (it->delay <= 0.f)
-        {
-            // 공전 visual 정리 (첫 발에만 orbVfxId 가 붙어있음)
-            if (pVFX && it->orbVfxId >= 0)
-                pVFX->StopEffect(it->orbVfxId);
-
-            // owner 가 곧 파기될 원격 플레이어이면 ProcessDespawnPlayer 가 entry 를 erase 하지만,
-            // 같은 프레임 내 명령 순서에 따라 여기까지 살아남을 수 있다. 방어적으로 null 체크.
-            if (it->owner != nullptr)
-            {
-                pPM->SpawnProjectile(
-                    it->origin, it->target, 0.0f,
-                    it->speed, it->radius, it->explosionRadius,
-                    it->element, it->owner,
-                    /*isPlayerProjectile*/true, it->scale,
-                    RuneCombo{}, 0.0f,
-                    /*maxDistance*/100.0f,
-                    /*isPiercing*/it->isPiercing);
-            }
-            it = m_vPendingOrbitals.erase(it);
-        }
-        else
-        {
-            ++it;
-        }
     }
 }
 
@@ -7998,8 +8478,8 @@ void NetworkManager::QueueRuneHomingTarget(uint64 playerId, int32 skillSlot, int
 void NetworkManager::QueueRuneTrigger(uint64 playerId, int32 skillSlot, int32 skillType,
     const std::string& runeId, int32 triggerType,
     uint64 targetMonsterId, uint64 targetPlayerId,
-    uint64 objectId,
-    const DirectX::XMFLOAT3& pos, float value1, float value2)
+    uint64 objectId, const DirectX::XMFLOAT3& pos, const DirectX::XMFLOAT3& visualData,
+    float value1, float value2)
 {
     NetworkCommandData cmd{};
     cmd.type = NetworkCommand::RuneTrigger;
@@ -8009,6 +8489,10 @@ void NetworkManager::QueueRuneTrigger(uint64 playerId, int32 skillSlot, int32 sk
     cmd.x = pos.x;
     cmd.y = pos.y;
     cmd.z = pos.z;
+
+    cmd.dirX = visualData.x;
+    cmd.dirY = visualData.y;
+    cmd.dirZ = visualData.z;
 
     cmd.runeTriggerSkillSlot = skillSlot;
     cmd.runeTriggerSkillType = skillType;
@@ -9395,8 +9879,8 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
     uint64 playerId, int32 skillSlot, int32 skillType,
     const std::string& runeId, int32 triggerType,
     uint64 targetMonsterId, uint64 targetPlayerId,
-    uint64 objectId,
-    const DirectX::XMFLOAT3& pos, float value1, float value2)
+    uint64 objectId,const DirectX::XMFLOAT3& pos, const DirectX::XMFLOAT3& visualData,
+    float value1, float value2)
 {
     if (!pScene)
         return;
@@ -10159,52 +10643,154 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
 // triggerType 10 = ECHO_SCHEDULE, 11 = ECHO_FIRE
     if (runeId == "ABY_ECO")
     {
-        GameObject* pMonster = GetServerMonster(targetMonsterId);
+        // 서버 패킷의 예약 당시 시각 정책.
+// 발동 패킷에도 동일한 값이 들어오지만,
+// 예약 캐시가 있으면 예약 시점 값을 최종 기준으로 사용한다.
+        ElementType echoBaseElement =
+            DecodeNetworkVisualElement(
+                visualData.x,
+                GetPlayerElement(playerId));
 
-        DirectX::XMFLOAT3 ringPos = pos;
-        if (pMonster)
+        uint32_t echoRuneFlags =
+            DecodeNetworkUInt(
+                visualData.y);
+
+        uint32_t echoElementMask =
+            DecodeNetworkUInt(
+                visualData.z);
+
+        // 서버가 메아리 대상을 찾지 못해 예약을 취소한 경우
+        const bool bEchoCancel =
+            value1 <= -2.0f;
+
+        if (bEchoCancel)
         {
-            if (auto* t = pMonster->GetComponent<TransformComponent>())
+            if (objectId != 0)
             {
-                ringPos = t->GetPosition();
-                ringPos.y += 0.05f;
+                m_mapNetworkEchoVisualByObjectId
+                    .erase(objectId);
             }
+
+            return;
         }
 
         const bool bEchoFire =
             (triggerType == 11 /* ECHO_FIRE */) ||
-            (triggerType == 0 && value1 >= 0.0f);
+            (triggerType == 0 &&
+                value1 >= 0.0f);
+
+        // 기본 fallback은 현재 시전자 위치.
+        // 정상적인 경우에는 예약 패킷에 저장된 origin으로 덮어쓴다.
+        DirectX::XMFLOAT3 echoOrigin =
+            GetCasterPos();
+
+        if (objectId != 0)
+        {
+            if (!bEchoFire)
+            {
+                // 예약 이벤트:
+                // pos는 서버가 보낸 원래 시전 위치다.
+                NetworkEchoVisualSnapshot
+                    snapshot;
+
+                snapshot.ownerPlayerId =
+                    playerId;
+
+                snapshot.origin =
+                    pos;
+
+                snapshot.baseElement =
+                    echoBaseElement;
+
+                snapshot.runeFlags =
+                    echoRuneFlags;
+
+                snapshot.elementMask =
+                    echoElementMask;
+
+                m_mapNetworkEchoVisualByObjectId
+                    [objectId] =
+                    snapshot;
+
+                echoOrigin =
+                    pos;
+            }
+            else
+            {
+                // 실제 발동 이벤트:
+                // 동일 echoId의 예약 정보를 찾아 원래 시전 위치와
+                // 예약 당시 시각정책을 복원한다.
+                auto echoIt =
+                    m_mapNetworkEchoVisualByObjectId
+                    .find(objectId);
+
+                if (echoIt !=
+                    m_mapNetworkEchoVisualByObjectId.end())
+                {
+                    echoOrigin =
+                        echoIt->second.origin;
+
+                    echoBaseElement =
+                        echoIt->second.baseElement;
+
+                    echoRuneFlags =
+                        echoIt->second.runeFlags;
+
+                    echoElementMask =
+                        echoIt->second.elementMask;
+
+                    // 1회 발동 후 예약 캐시는 제거
+                    m_mapNetworkEchoVisualByObjectId
+                        .erase(echoIt);
+                }
+            }
+        }
+
+        DirectX::XMFLOAT4 echoColor =
+            GetPlaceVisualColor(
+                echoBaseElement);
+
+        echoColor.w =
+            1.0f;
+
+        GameObject* pMonster =
+            GetServerMonster(
+                targetMonsterId);
+
+        DirectX::XMFLOAT3 ringPos =
+            pos;
+
+        if (pMonster)
+        {
+            if (auto* t =
+                pMonster->GetComponent<
+                TransformComponent>())
+            {
+                ringPos =
+                    t->GetPosition();
+
+                ringPos.y += 0.05f;
+            }
+        }
 
         if (bEchoFire)
         {
             // 실제 추가타 — 원본 스킬 VFX 50% 스케일
-            ElementType casterElem = GetPlayerElement(playerId);
-            uint32_t casterRuneFlags = RUNE_NONE;
-
-            if (pCaster)
-            {
-                SkillSlot echoSlot = SkillSlot::Count;
-
-                switch (skillSlot)
-                {
-                case 0: echoSlot = SkillSlot::Q;          break;
-                case 1: echoSlot = SkillSlot::E;          break;
-                case 2: echoSlot = SkillSlot::R;          break;
-                case 3: echoSlot = SkillSlot::RightClick; break;
-                default: break;
-                }
-
-                if (echoSlot != SkillSlot::Count)
-                {
-                    if (SkillComponent* pCasterSkill = pCaster->GetComponent<SkillComponent>())
-                    {
-                        RuneCombo combo = pCasterSkill->GetRuneCombo(echoSlot);
-                        casterRuneFlags = ToRuneFlags(combo);
-                    }
-                }
-            }
-
-            SpawnEchoSkillVFX(pScene, skillType, casterElem, ringPos, casterRuneFlags);
+           // 현재 클라이언트의 룬 장착 상태를 다시 읽지 않는다.
+//
+// 서버가 예약 순간에 저장한 원소·룬 조합으로
+// 모든 클라이언트가 같은 원본 스킬 VFX를 재생한다.
+            // 원래 예약 위치에서 실제 메아리 대상 방향으로
+// 50% 크기의 원본 스킬 VFX를 재생한다.
+            SpawnEchoSkillVFX(
+                pScene,
+                skillType,
+                echoBaseElement,
+                echoOrigin,
+                echoRuneFlags,
+                echoElementMask,
+                0.5f,
+                &ringPos);
 
             // 실제 발동 바닥 마법진
             if (pDecals)
@@ -10215,7 +10801,7 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
                     3.0f,
                     0.0f,
                     0.8f,
-                    DirectX::XMFLOAT4(0.85f, 0.55f, 1.0f, 1.0f));
+                    echoColor);
             }
 
             // 실제 발동 표적 아이콘
@@ -10228,7 +10814,7 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
                     iconPos,
                     135.f,
                     0.85f,
-                    DirectX::XMFLOAT4(0.9f, 0.6f, 1.0f, 1.0f),
+                    echoColor,
                     3.0f,
                     VFXSpriteAnim::FadeOut);
             }
@@ -10238,12 +10824,18 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
                 DirectX::XMFLOAT3 twirlPos = ringPos;
                 twirlPos.y += 1.8f;
 
+                DirectX::XMFLOAT4 echoSoftColor =
+                    echoColor;
+
+                echoSoftColor.w =
+                    0.9f;
+
                 VFXSpriteManager::Get().Spawn(
                     "twirl2",
                     twirlPos,
-                    170.f,
+                    170.0f,
                     0.65f,
-                    DirectX::XMFLOAT4(0.75f, 0.45f, 1.0f, 0.9f),
+                    echoSoftColor,
                     7.0f,
                     VFXSpriteAnim::FadeOut);
             }
@@ -10257,10 +10849,23 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
             DamageNumberManager::Get().AddText(
                 textPos,
                 buf,
-                DirectX::XMFLOAT4(0.85f, 0.6f, 1.0f, 1.0f));
+                echoColor);
         }
         else
         {
+            // 예약 패킷의 value2에는 서버가 저장한
+            // 메아리 발동까지의 남은 시간이 들어온다.
+            const float scheduleDuration =
+                value2 > 0.0f
+                ? value2
+                : 2.0f;
+
+            DirectX::XMFLOAT4 scheduleColor =
+                echoColor;
+
+            scheduleColor.w =
+                0.95f;
+
             // 예약 마법진
             if (pDecals)
             {
@@ -10269,38 +10874,42 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
                     ringPos,
                     3.5f,
                     0.0f,
-                    2.0f,
-                    DirectX::XMFLOAT4(0.7f, 0.5f, 1.0f, 1.0f),
+                    scheduleDuration,
+                    scheduleColor,
                     DirectX::XM_PI,
                     0.3f);
             }
 
             // 예약 표적 아이콘
             {
-                DirectX::XMFLOAT3 iconPos = ringPos;
+                DirectX::XMFLOAT3 iconPos =
+                    ringPos;
+
                 iconPos.y += 2.2f;
 
                 VFXSpriteManager::Get().Spawn(
                     "magic3",
                     iconPos,
-                    115.f,
-                    1.6f,
-                    DirectX::XMFLOAT4(0.7f, 0.5f, 1.0f, 0.95f),
+                    115.0f,
+                    scheduleDuration,
+                    scheduleColor,
                     2.5f,
                     VFXSpriteAnim::FadeOut);
             }
 
             // 예약 회전 표시
             {
-                DirectX::XMFLOAT3 twirlPos = ringPos;
+                DirectX::XMFLOAT3 twirlPos =
+                    ringPos;
+
                 twirlPos.y += 1.6f;
 
                 VFXSpriteManager::Get().Spawn(
                     "twirl3",
                     twirlPos,
-                    150.f,
-                    1.4f,
-                    DirectX::XMFLOAT4(0.6f, 0.45f, 1.0f, 0.85f),
+                    150.0f,
+                    scheduleDuration,
+                    scheduleColor,
                     5.5f,
                     VFXSpriteAnim::FadeOut);
             }
@@ -10349,32 +10958,128 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
     // targetMonsterId = echoTargetMonsterId
     if (runeId == "TRF_ECH")
     {
-        DirectX::XMFLOAT3 sourcePos;
-        DirectX::XMFLOAT3 targetPos2;
+        // 서버 패킷 규칙:
+        //
+        // objectId        = 최초 피격 몬스터 ID
+        // targetMonsterId = 반향 대상 몬스터 ID
+        // visualData.x    = 대표 원소
+        // visualData.y    = RuneFlag
+        // visualData.z    = 원소 마스크
 
-        GetMonsterWorldPosById(objectId, sourcePos);
-        GetMonsterWorldPosById(targetMonsterId, targetPos2);
+        // 몬스터 조회 실패에 대비해 패킷 위치를 fallback으로 사용한다.
+        DirectX::XMFLOAT3 sourcePos =
+            pos;
 
+        DirectX::XMFLOAT3 targetPos2 =
+            pos;
+
+        GetMonsterWorldPosById(
+            objectId,
+            sourcePos);
+
+        GetMonsterWorldPosById(
+            targetMonsterId,
+            targetPos2);
+
+        // 몬스터 바닥이 아니라 몸통 높이에서 투사체가 이동하도록 보정
+        sourcePos.y += 1.1f;
+        targetPos2.y += 1.1f;
+
+        // 원소 룬이 없는 경우 캐릭터 기본 원소를 사용한다.
+        const ElementType fallbackElement =
+            GetPlayerElement(playerId);
+
+        // 서버가 확정한 대표 원소를 사용한다.
+        const ElementType visualElement =
+            DecodeNetworkVisualElement(
+                visualData.x,
+                fallbackElement);
+
+        const DirectX::XMFLOAT4 echoColor =
+            GetPlaceVisualColor(
+                visualElement);
+
+        // 출발 위치 연출
         SpawnRuneBurstAt(
             sourcePos,
             "twirl1",
-            140.f,
+            140.0f,
             0.30f,
-            DirectX::XMFLOAT4(0.75f, 0.55f, 1.0f, 0.85f),
+            echoColor,
             6.5f);
 
+        ProjectileManager* pProjectileManager =
+            pScene
+            ? pScene->GetProjectileManager()
+            : nullptr;
+
+        if (pProjectileManager)
+        {
+            const float dx =
+                targetPos2.x - sourcePos.x;
+
+            const float dy =
+                targetPos2.y - sourcePos.y;
+
+            const float dz =
+                targetPos2.z - sourcePos.z;
+
+            const float distance =
+                std::sqrt(
+                    dx * dx +
+                    dy * dy +
+                    dz * dz);
+
+            RuneCombo visualOnlyCombo{};
+
+            // 데미지는 서버에서 이미 적용했다.
+            // 클라이언트 투사체는 모든 화면에 동일하게 보이기 위한 시각 전용이다.
+            pProjectileManager->SpawnProjectile(
+                sourcePos,
+                targetPos2,
+
+                0.0f,          // damage: 서버 권위이므로 0
+                28.0f,         // speed
+                0.25f,         // projectile radius
+                0.0f,          // explosion radius
+
+                visualElement,
+                nullptr,
+                false,
+
+                0.42f,         // 작은 반향 투사체 크기
+                visualOnlyCombo,
+                0.0f,
+
+                std::max(
+                    2.0f,
+                    distance + 1.0f),
+
+                false,         // piercing
+                false,         // homing
+                0.0f,          // lifesteal
+                0.0f,          // execute bonus
+                0.0f,          // cooldown reset
+                SkillSlot::Count);
+        }
+
+        // 도착 위치 보조 섬광
         SpawnRuneBurstAt(
             targetPos2,
             "flare1",
-            230.f,
-            0.42f,
-            DirectX::XMFLOAT4(0.80f, 0.60f, 1.0f, 0.95f),
-            6.5f);
+            180.0f,
+            0.30f,
+            echoColor,
+            5.0f);
 
-        DamageNumberManager::Get().AddText(
-            DirectX::XMFLOAT3(targetPos2.x, targetPos2.y + 2.0f, targetPos2.z),
-            L"ECHO SHOT",
-            DirectX::XMFLOAT4(0.8f, 0.6f, 1.0f, 1.0f));
+        DamageNumberManager::Get()
+            .AddText(
+                DirectX::XMFLOAT3(
+                    targetPos2.x,
+                    targetPos2.y + 1.0f,
+                    targetPos2.z),
+                L"ECHO SHOT",
+                echoColor);
 
         return;
     }
@@ -10385,107 +11090,296 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
     // targetMonsterId != 0 : 발동
     if (runeId == "TRF_DEP")
     {
-        const bool bPlaced = (targetMonsterId == 0);
-        const bool bTriggered = (targetMonsterId != 0);
+        // 같은 플레이어의 같은 스킬 슬롯에 새 함정이 설치되면
+// 서버가 기존 함정을 제거하는 전용 이벤트를 전송한다.
+//
+// 서버 규칙:
+// triggerType = RUNE_TRIGGER_TRAP_FIRE
+// targetMonsterId = 0
+// value1 < 0
+        const bool bRemoved =
+            objectId != 0 &&
+            value1 < 0.0f;
+
+        if (bRemoved)
+        {
+            auto trapIt =
+                m_mapNetworkTrapVFXByObjectId
+                .find(objectId);
+
+            if (trapIt !=
+                m_mapNetworkTrapVFXByObjectId.end())
+            {
+                if (pDecals &&
+                    trapIt->second.decalId >= 0)
+                {
+                    pDecals->Stop(
+                        trapIt->second.decalId);
+                }
+
+                m_mapNetworkTrapVFXByObjectId
+                    .erase(trapIt);
+            }
+
+            return;
+        }
+
+        const bool bPlaced =
+            triggerType ==
+            static_cast<int32>(
+                Protocol::
+                RUNE_TRIGGER_TRAP_SPAWN) ||
+            (triggerType == 0 &&
+                targetMonsterId == 0);
+
+        const bool bTriggered =
+            triggerType ==
+            static_cast<int32>(
+                Protocol::
+                RUNE_TRIGGER_TRAP_FIRE) ||
+            (triggerType == 0 &&
+                targetMonsterId != 0);
+
+        const ElementType baseElement =
+            GetPlayerElement(playerId);
+
+        const ElementType visualElement =
+            DecodeNetworkVisualElement(
+                visualData.x,
+                baseElement);
+
+        const uint32_t visualRuneFlags =
+            DecodeNetworkUInt(
+                visualData.y);
+
+        const uint32_t visualElementMask =
+            DecodeNetworkUInt(
+                visualData.z);
+
+        const DirectX::XMFLOAT4
+            visualColor =
+            GetPlaceVisualColor(
+                visualElement);
 
         if (bPlaced)
         {
-            // 같은 trapId가 다시 오면 기존 표식을 제거하고 새로 만든다.
             if (objectId != 0)
             {
-                auto oldIt = m_mapNetworkTrapVFXByObjectId.find(objectId);
-                if (oldIt != m_mapNetworkTrapVFXByObjectId.end())
-                {
-                    if (pDecals && oldIt->second.decalId >= 0)
-                        pDecals->Stop(oldIt->second.decalId);
+                auto oldIt =
+                    m_mapNetworkTrapVFXByObjectId
+                    .find(objectId);
 
-                    m_mapNetworkTrapVFXByObjectId.erase(oldIt);
+                if (oldIt !=
+                    m_mapNetworkTrapVFXByObjectId.end())
+                {
+                    if (pDecals &&
+                        oldIt
+                        ->second
+                        .decalId >= 0)
+                    {
+                        pDecals->Stop(
+                            oldIt
+                            ->second
+                            .decalId);
+                    }
+
+                    m_mapNetworkTrapVFXByObjectId
+                        .erase(oldIt);
                 }
             }
 
-            DirectX::XMFLOAT3 trapPos = pos;
+            DirectX::XMFLOAT3 trapPos =
+                pos;
+
             trapPos.y += 0.05f;
 
             int decalId = -1;
 
             if (pDecals)
             {
-                decalId = pDecals->Spawn(
-                    DecalTexture::Star08,
-                    trapPos,
-                    value2 > 0.0f ? value2 : 5.0f,
-                    0.0f,
-                    30.0f,
-                    DirectX::XMFLOAT4(0.75f, 0.90f, 1.0f, 0.95f),
-                    1.5f,
-                    0.2f);
+                decalId =
+                    pDecals->Spawn(
+                        DecalTexture::Star08,
+                        trapPos,
+                        8.0f,
+                        0.0f,
+                        30.0f,
+                        visualColor,
+                        1.2f);
             }
 
             if (objectId != 0)
             {
-                NetworkRuneTrapVFX trapState;
-                trapState.decalId = decalId;
-                trapState.pos = trapPos;
-                trapState.ownerPlayerId = playerId;
-                trapState.skillSlot = skillSlot;
+                NetworkRuneTrapVFX
+                    trapState;
 
-                m_mapNetworkTrapVFXByObjectId[objectId] = trapState;
+                trapState.decalId =
+                    decalId;
+
+                trapState.pos =
+                    trapPos;
+
+                trapState.ownerPlayerId =
+                    playerId;
+
+                trapState.skillSlot =
+                    skillSlot;
+
+                trapState.skillType =
+                    skillType;
+
+                trapState.baseElement =
+                    baseElement;
+
+                trapState.primaryElement =
+                    visualElement;
+
+                trapState.runeFlags =
+                    visualRuneFlags;
+
+                trapState.elementMask =
+                    visualElementMask;
+
+                m_mapNetworkTrapVFXByObjectId
+                    [objectId] =
+                    trapState;
             }
 
             SpawnRuneBurstAt(
                 trapPos,
                 "twirl1",
-                150.f,
+                150.0f,
                 0.35f,
-                DirectX::XMFLOAT4(0.75f, 0.90f, 1.0f, 0.95f),
+                visualColor,
                 4.0f);
 
-            DamageNumberManager::Get().AddText(
-                DirectX::XMFLOAT3(trapPos.x, trapPos.y + 2.0f, trapPos.z),
-                L"TRAP SET",
-                DirectX::XMFLOAT4(0.75f, 0.90f, 1.0f, 1.0f));
+            DamageNumberManager::Get()
+                .AddText(
+                    DirectX::XMFLOAT3(
+                        trapPos.x,
+                        trapPos.y + 2.0f,
+                        trapPos.z),
+                    L"TRAP SET",
+                    visualColor);
 
             return;
         }
 
         if (bTriggered)
         {
-            DirectX::XMFLOAT3 hitPos;
-            GetMonsterWorldPosById(targetMonsterId, hitPos);
+            DirectX::XMFLOAT3 hitPos =
+                pos;
 
-            // trapId 기준으로 설치 표식 제거
+            GetMonsterWorldPosById(
+                targetMonsterId,
+                hitPos);
+
+            DirectX::XMFLOAT3 trapPos =
+                pos;
+
+            ElementType triggerBaseElement =
+                baseElement;
+
+            ElementType triggerVisualElement =
+                visualElement;
+
+            uint32_t triggerRuneFlags =
+                visualRuneFlags;
+
+            uint32_t triggerElementMask =
+                visualElementMask;
+
             if (objectId != 0)
             {
-                auto it = m_mapNetworkTrapVFXByObjectId.find(objectId);
-                if (it != m_mapNetworkTrapVFXByObjectId.end())
+                auto trapIt =
+                    m_mapNetworkTrapVFXByObjectId
+                    .find(objectId);
+
+                if (trapIt !=
+                    m_mapNetworkTrapVFXByObjectId.end())
                 {
-                    if (pDecals && it->second.decalId >= 0)
-                        pDecals->Stop(it->second.decalId);
+                    trapPos =
+                        trapIt
+                        ->second
+                        .pos;
 
-                    SpawnRuneBurstAt(
-                        it->second.pos,
-                        "flare1",
-                        260.f,
-                        0.40f,
-                        DirectX::XMFLOAT4(1.0f, 0.55f, 0.25f, 0.95f),
-                        0.0f);
+                    triggerBaseElement =
+                        trapIt
+                        ->second
+                        .baseElement;
 
-                    m_mapNetworkTrapVFXByObjectId.erase(it);
+                    triggerVisualElement =
+                        trapIt
+                        ->second
+                        .primaryElement;
+
+                    triggerRuneFlags =
+                        trapIt
+                        ->second
+                        .runeFlags;
+
+                    triggerElementMask =
+                        trapIt
+                        ->second
+                        .elementMask;
+
+                    if (pDecals &&
+                        trapIt
+                        ->second
+                        .decalId >= 0)
+                    {
+                        pDecals->Stop(
+                            trapIt
+                            ->second
+                            .decalId);
+                    }
+
+                    m_mapNetworkTrapVFXByObjectId
+                        .erase(trapIt);
                 }
             }
+
+            const DirectX::XMFLOAT4
+                triggerColor =
+                GetPlaceVisualColor(
+                    triggerVisualElement);
+
+            // 설치 당시 원래 스킬 VFX를
+            // 설치 위치에서 100% 크기로 재생
+            SpawnEchoSkillVFX(
+                pScene,
+                skillType,
+                triggerBaseElement,
+                trapPos,
+                triggerRuneFlags,
+                triggerElementMask,
+                1.0f,
+                &hitPos);
+
+            SpawnRuneBurstAt(
+                trapPos,
+                "flare1",
+                260.0f,
+                0.40f,
+                triggerColor,
+                0.0f);
 
             SpawnRuneBurstAt(
                 hitPos,
                 "flare1",
-                300.f,
+                300.0f,
                 0.45f,
-                DirectX::XMFLOAT4(1.0f, 0.55f, 0.25f, 0.95f),
+                triggerColor,
                 0.0f);
 
-            DamageNumberManager::Get().AddText(
-                DirectX::XMFLOAT3(hitPos.x, hitPos.y + 2.0f, hitPos.z),
-                L"TRAP HIT",
-                DirectX::XMFLOAT4(1.0f, 0.65f, 0.3f, 1.0f));
+            DamageNumberManager::Get()
+                .AddText(
+                    DirectX::XMFLOAT3(
+                        hitPos.x,
+                        hitPos.y + 2.0f,
+                        hitPos.z),
+                    L"TRAP HIT",
+                    triggerColor);
 
             return;
         }
@@ -10572,100 +11466,6 @@ void NetworkManager::ProcessRuneTrigger(Scene* pScene,
                 GetDisplayPos(pCaster),
                 L"ENHANCE HIT",
                 DirectX::XMFLOAT4(1.0f, 0.75f, 0.25f, 1.0f));
-
-            return;
-        }
-    }
-
-    // ─── TRF_ORB: 궤도 룬 정밀 처리 ─────────────────────────────────────
- // objectId = 서버 orbitalId
- // start: targetMonsterId == 0 && 0 < value1 < 1.0f
- // fire : value1 == 0.0f 또는 value1 >= 1.0f
-    if (runeId == "TRF_ORB")
-    {
-        DirectX::XMFLOAT3 casterPos = GetCasterPos();
-        casterPos.y += 1.5f;
-
-        FluidSkillVFXManager* pVFX = pScene ? pScene->GetFluidVFXManager() : nullptr;
-
-        const bool bStart =
-            objectId != 0 &&
-            targetMonsterId == 0 &&
-            value1 > 0.0f &&
-            value1 < 1.0f;
-
-        const bool bFire = !bStart;
-
-        if (bStart)
-        {
-            int vfxId = -1;
-
-            if (pVFX && EffectRegistry::Get().HasEffect("sub_orbital_halo"))
-            {
-                EffectDef def = EffectRegistry::Get().GetEffect("sub_orbital_halo");
-
-                vfxId = pVFX->SpawnEffectDef(
-                    casterPos,
-                    DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f),
-                    def,
-                    false);
-            }
-            else
-            {
-                SpawnRuneBurstAt(
-                    casterPos,
-                    "twirl1",
-                    230.f,
-                    0.60f,
-                    DirectX::XMFLOAT4(0.65f, 0.75f, 1.0f, 0.95f),
-                    9.0f);
-            }
-
-            NetworkOrbitalRuneVFX orbitalState;
-            orbitalState.vfxId = vfxId;
-            orbitalState.ownerPlayerId = playerId;
-
-            m_mapNetworkOrbitalVFXByObjectId[objectId] = orbitalState;
-
-            DamageNumberManager::Get().AddText(
-                GetDisplayPos(pCaster),
-                L"ORBIT READY",
-                DirectX::XMFLOAT4(0.65f, 0.75f, 1.0f, 1.0f));
-
-            return;
-        }
-
-        if (bFire)
-        {
-            if (objectId != 0)
-            {
-                auto it = m_mapNetworkOrbitalVFXByObjectId.find(objectId);
-                if (it != m_mapNetworkOrbitalVFXByObjectId.end())
-                {
-                    if (pVFX && it->second.vfxId >= 0)
-                        pVFX->StopEffect(it->second.vfxId);
-
-                    m_mapNetworkOrbitalVFXByObjectId.erase(it);
-                }
-            }
-
-            DirectX::XMFLOAT3 firePos = casterPos;
-
-            if (targetMonsterId != 0)
-                GetMonsterWorldPosById(targetMonsterId, firePos);
-
-            SpawnRuneBurstAt(
-                firePos,
-                "flare1",
-                260.f,
-                0.45f,
-                DirectX::XMFLOAT4(0.65f, 0.75f, 1.0f, 0.95f),
-                9.0f);
-
-            DamageNumberManager::Get().AddText(
-                DirectX::XMFLOAT3(firePos.x, firePos.y + 2.0f, firePos.z),
-                L"ORBIT FIRE",
-                DirectX::XMFLOAT4(0.65f, 0.75f, 1.0f, 1.0f));
 
             return;
         }
@@ -10867,7 +11667,7 @@ ElementType NetworkManager::GetPlayerElement(uint64 playerId) const
     return ElementType::Water;
 }
 
-void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType element, const DirectX::XMFLOAT3& pos, uint32_t runeFlags)
+void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType baseElement, const DirectX::XMFLOAT3& pos, uint32_t runeFlags, uint32_t visualElementMask, float visualScale, const DirectX::XMFLOAT3* pTargetPos)
 {
     if (!pScene)
         return;
@@ -10883,17 +11683,76 @@ void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType
 
     ProjectileManager* pProjManager = pScene->GetProjectileManager();
 
-    XMFLOAT3 forward = XMFLOAT3(0.0f, 0.0f, 1.0f);
+    XMFLOAT3 forward =
+        XMFLOAT3(
+            0.0f,
+            0.0f,
+            1.0f);
 
-    // Echo는 원본 스킬 VFX의 50% 스케일.
-    constexpr float ECHO_SCALE = 0.5f;
+    if (pTargetPos)
+    {
+        forward =
+            XMFLOAT3(
+                pTargetPos->x - pos.x,
+                pTargetPos->y - pos.y,
+                pTargetPos->z - pos.z);
+
+        const float lengthSq =
+            forward.x * forward.x +
+            forward.y * forward.y +
+            forward.z * forward.z;
+
+        if (lengthSq > 0.000001f)
+        {
+            const float invLength =
+                1.0f /
+                std::sqrt(lengthSq);
+
+            forward.x *= invLength;
+            forward.y *= invLength;
+            forward.z *= invLength;
+        }
+        else
+        {
+            forward =
+                XMFLOAT3(
+                    0.0f,
+                    0.0f,
+                    1.0f);
+        }
+    }
+
+    const float ECHO_SCALE =
+        visualScale > 0.0f
+        ? visualScale
+        : 0.5f;
+
+    const std::vector<ElementType>
+        visualElements =
+        DecodeVisualElementMask(
+            visualElementMask);
 
     auto spawnScaled = [&](const char* effectName, const XMFLOAT3& origin, const XMFLOAT3& dir) -> int
         {
-            EffectDef def = EffectRegistry::Get().GetEffect(effectName, runeFlags);
+            EffectDef def =
+                EffectRegistry::Get()
+                .GetEffect(
+                    effectName,
+                    runeFlags);
 
-            for (auto& layer : def.layers)
-                layer.sizeScale *= ECHO_SCALE;
+            if (!visualElements.empty())
+            {
+                ApplyElementSetToEffectDef(
+                    def,
+                    visualElements);
+            }
+
+            for (auto& layer :
+                def.layers)
+            {
+                layer.sizeScale *=
+                    ECHO_SCALE;
+            }
 
             return pVFXManager->SpawnEffectDef(origin, dir, def, true);
         };
@@ -10922,6 +11781,7 @@ void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType
             pending.remaining = delaySec;
             pending.runeFlags = runeFlags;
             pending.visualElementOverride = ElementType::None;
+            pending.visualElementMask = visualElementMask;
 
             // 지연 생성에서도 Echo 50% 스케일 적용.
             pending.radiusScale = ECHO_SCALE;
@@ -10939,7 +11799,7 @@ void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType
     {
     case 1: // Q
     {
-        switch (element)
+        switch (baseElement)
         {
         case ElementType::Fire:
         {
@@ -11039,7 +11899,7 @@ void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType
 
     case 2: // E
     {
-        switch (element)
+        switch (baseElement)
         {
         case ElementType::Fire:
         {
@@ -11105,7 +11965,7 @@ void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType
 
     case 3: // R
     {
-        switch (element)
+        switch (baseElement)
         {
         case ElementType::Fire:
         {
@@ -11143,6 +12003,7 @@ void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType
             foam.nextFoamAt = NetRandRange(foam.seed, 0.05f, 0.18f);
             foam.runeFlags = runeFlags;
             foam.visualElementOverride = ElementType::None;
+            foam.visualElementMask = visualElementMask;
             foam.radiusScale = ECHO_SCALE;
 
             m_vPendingTidalFoamVFX.push_back(foam);
@@ -11197,41 +12058,40 @@ void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType
         // Echo는 실제 서버 판정 위치에서 터지는 추가타이므로,
         // 짧은 0-damage 투사체 + 원소별 보조 impact로 표현한다.
 
-        ElementType rcElement = element;
+        ElementType rcElement =
+            !visualElements.empty()
+            ? visualElements.front()
+            : baseElement;
 
         float speed = 30.0f;
         float radius = 0.5f;
         float explosionRadius = 3.0f;
-        float scale = 0.5f; // Echo 기본 50%
+        float scale = ECHO_SCALE;
 
         switch (rcElement)
         {
         case ElementType::Fire:
-            speed = 30.0f;
-            radius = 0.50f;
-            explosionRadius = 3.0f;
-            scale = 0.50f;
+            scale =
+                1.00f *
+                ECHO_SCALE;
             break;
 
         case ElementType::Water:
-            speed = 25.0f;
-            radius = 0.60f;
-            explosionRadius = 3.0f;
-            scale = 0.40f;
+            scale =
+                0.80f *
+                ECHO_SCALE;
             break;
 
         case ElementType::Wind:
-            speed = 28.0f;
-            radius = 0.35f;
-            explosionRadius = 0.0f; // Wind RC는 관통형이라 폭발 없음
-            scale = 0.35f;
+            scale =
+                0.70f *
+                ECHO_SCALE;
             break;
 
         case ElementType::Earth:
-            speed = 32.0f;
-            radius = 0.70f;
-            explosionRadius = 3.0f;
-            scale = 0.45f;
+            scale =
+                0.90f *
+                ECHO_SCALE;
             break;
 
         default:
@@ -11245,28 +12105,43 @@ void NetworkManager::SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType
             projOrigin.z + forward.z * 12.0f
         );
 
+        const int forcedOrbitalCount =
+            DecodeNetworkOrbitalCount(
+                runeFlags);
+
         if (pProjManager)
         {
             pProjManager->SpawnProjectile(
                 projOrigin,
                 projTarget,
+
                 0.0f,                 // 데미지는 서버 권위
                 speed,
                 radius,
                 explosionRadius,
+
                 rcElement,
                 nullptr,
-                false,
+                true,
+
                 scale,
                 RuneCombo{},
                 0.0f,
+
                 12.0f,                // Echo용 짧은 maxDist
                 false,
                 false,
+
                 0.0f,
                 0.0f,
                 0.0f,
-                SkillSlot::Count
+
+                SkillSlot::Count,
+
+                {},                   // elementSet
+                {},                   // subVFXDefIds
+
+                forcedOrbitalCount
             );
         }
 

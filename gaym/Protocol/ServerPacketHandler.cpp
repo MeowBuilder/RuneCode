@@ -735,6 +735,16 @@ bool Handle_S_RUNE_TRIGGER(PacketSessionRef& session, Protocol::S_RUNE_TRIGGER& 
     float y = pkt.y();
     float z = pkt.z();
 
+    // TRF_DEP 설치 룬은 다음처럼 사용한다.
+    //
+    // dirX = 대표 원소
+    // dirY = RuneFlag
+    // dirZ = 원소 마스크
+    DirectX::XMFLOAT3 visualData(
+        pkt.dirx(),
+        pkt.diry(),
+        pkt.dirz());
+
     float value1 = pkt.value1();
     float value2 = pkt.value2();
 
@@ -769,6 +779,7 @@ bool Handle_S_RUNE_TRIGGER(PacketSessionRef& session, Protocol::S_RUNE_TRIGGER& 
             targetPlayerId,
             objectId,
             DirectX::XMFLOAT3(x, y, z),
+            visualData,
             value1,
             value2);
     }
