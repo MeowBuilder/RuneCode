@@ -57,22 +57,22 @@ struct NetworkRewardRuneObjectInfo
 //   x/y/z 는 액션 위치 (CHARGE/ENHANCE: 시전자 위치, PLACE: 트랩 좌표).
 enum : uint32
 {
-    PLAYER_ACTION_DASH_CAPE_FLUTTER  = 1,
-    PLAYER_ACTION_PORTAL_INTRO_FLY   = 2,
+    PLAYER_ACTION_DASH_CAPE_FLUTTER = 1,
+    PLAYER_ACTION_PORTAL_INTRO_FLY = 2,
 
-    PLAYER_ACTION_CHARGE_BEGIN       = 10, // dirX = skillSlot
-    PLAYER_ACTION_CHARGE_END         = 11, // dirX = skillSlot (cancel or release)
+    PLAYER_ACTION_CHARGE_BEGIN = 10, // dirX = skillSlot
+    PLAYER_ACTION_CHARGE_END = 11, // dirX = skillSlot (cancel or release)
 
-    PLAYER_ACTION_ENHANCE_BEGIN      = 20, // dirX = skillSlot, dirY = durationSec
-    PLAYER_ACTION_ENHANCE_END        = 21, // dirX = skillSlot (expire or consume)
+    PLAYER_ACTION_ENHANCE_BEGIN = 20, // dirX = skillSlot, dirY = durationSec
+    PLAYER_ACTION_ENHANCE_END = 21, // dirX = skillSlot (expire or consume)
 
-    PLAYER_ACTION_PLACE_SPAWN        = 30, // x,y,z = trapPos, dirX = skillSlot
-    PLAYER_ACTION_PLACE_FIRE         = 31, // x,y,z = trapPos, dirX = skillSlot
+    PLAYER_ACTION_PLACE_SPAWN = 30, // x,y,z = trapPos, dirX = skillSlot
+    PLAYER_ACTION_PLACE_FIRE = 31, // x,y,z = trapPos, dirX = skillSlot
 
-    PLAYER_ACTION_CHANNEL_BEGIN      = 40, // dirX = skillSlot
-    PLAYER_ACTION_CHANNEL_END        = 41, // dirX = skillSlot
+    PLAYER_ACTION_CHANNEL_BEGIN = 40, // dirX = skillSlot
+    PLAYER_ACTION_CHANNEL_END = 41, // dirX = skillSlot
 
-	PLAYER_ACTION_R_MAGIC_CIRCLE     = 50, // R 스킬 시전 시 마법진 소환 연출  
+    PLAYER_ACTION_R_MAGIC_CIRCLE = 50, // R 스킬 시전 시 마법진 소환 연출  
 };
 
 // 패킷 처리를 위한 명령 타입
@@ -94,7 +94,7 @@ enum class NetworkCommand
     RoomCleared,
     BossEvent,
     MonsterStagger,
-	MapTornadoEvent,
+    MapTornadoEvent,
     RoomStart,
     RoomRewardSpawn,
     RuneRewardPicked,
@@ -196,13 +196,14 @@ struct NetworkCommandData
     uint64 runeTriggerTargetMonsterId = 0;
     uint64 runeTriggerTargetPlayerId = 0;
     uint64 runeTriggerObjectId = 0; // 서버 objectId: trapId/sourceMonsterId/orbitalId 등
+    DirectX::XMFLOAT3 runeTriggerVisualData = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
     float  runeTriggerValue1 = 0.0f;
     float  runeTriggerValue2 = 0.0f;
 
     // S_SKILL 룬 보정 필드 — 서버 권위 radius/damage 배율을 원격 클라가 그대로 사용
-    int32  skillSlot                  = -1;
-    float  skillRadiusMult            = 1.0f;
-    float  skillDamageMult            = 1.0f;
+    int32  skillSlot = -1;
+    float  skillRadiusMult = 1.0f;
+    float  skillDamageMult = 1.0f;
 };
 
 // =============================================================================
@@ -285,10 +286,10 @@ public:
 
     // 플레이어 공격(히트 판정 요청) 전송 — 서버가 히트 판정 후 S_MONSTER_DAMAGE 브로드캐스트
     void SendPlayerAttack(int skillType,
-                          float x, float y, float z,
-                          float dirX, float dirY, float dirZ,
-                          float targetX, float targetY, float targetZ,
-                          float chargeRatio = 0.0f, bool countAsSkillUse = true);
+        float x, float y, float z,
+        float dirX, float dirY, float dirZ,
+        float targetX, float targetY, float targetZ,
+        float chargeRatio = 0.0f, bool countAsSkillUse = true);
 
     // 보스 컷신 종료 알림 전송
     void SendBossCutsceneEnd(uint64 monsterId, uint32 eventType, uint32 phaseIndex);
@@ -319,7 +320,7 @@ public:
     void QueueDespawnPlayer(uint64 playerId);
     void QueueMovePlayer(uint64 playerId, float x, float y, float z, float dirX, float dirY, float dirZ);
     void QueueSkill(uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ,
-                    int32 skillSlot = -1, float radiusMult = 1.0f, float damageMult = 1.0f);
+        int32 skillSlot = -1, float radiusMult = 1.0f, float damageMult = 1.0f);
     void QueuePlayerAction(uint64 playerId, uint32 actionType, float x, float y, float z, float dirX, float dirY, float dirZ);
     void QueueSetLocalPlayerId(uint64 playerId);
     void QueueRoomTransition(uint32 stageIndex, uint32 roomIndex, bool isBossRoom, const std::string& mapId);
@@ -340,13 +341,13 @@ public:
     void QueueMonsterDamage(uint64 monsterId, float damage, float currentHp, bool isDead, uint64 attackerPlayerId, int skillType);
     void QueueRoomCleared(uint32 stageIndex, uint32 roomIndex);
 
-	// 방 보상 스폰 큐잉
+    // 방 보상 스폰 큐잉
     void QueueRoomRewardSpawn(uint32 stageIndex, uint32 roomIndex, const DirectX::XMFLOAT3& portalPos, bool hasSecondPortal, const DirectX::XMFLOAT3& secondPortalPos, const std::vector<NetworkRewardRuneObjectInfo>& runeObjects);
 
-	// 룬 보상 획득 큐잉
+    // 룬 보상 획득 큐잉
     void QueueRuneRewardPicked(uint64 ownerPlayerId);
 
-	// 룬 장착 큐잉
+    // 룬 장착 큐잉
     void QueueRuneEquip(uint64 playerId, uint32 skillSlot, uint32 runeSlotIndex, const std::string& runeId, uint32 stackCount);
 
     // 룬 유도 타겟 큐잉
@@ -358,9 +359,9 @@ public:
     // 보스 이벤트 (인트로/페이즈 전환/사망 컷씬)
     void QueueBossEvent(uint64 monsterId, uint32 eventType, uint32 phaseIndex);
 
-	// 몬스터 스태거 큐잉 — 피격 시 잠시 멈추는 효과
+    // 몬스터 스태거 큐잉 — 피격 시 잠시 멈추는 효과
     void QueueMonsterStagger(uint64 monsterId, float duration);
-    
+
     // 맵 토네이도 이벤트 큐잉
     void QueueMapTornadoEvent(float x, float y, float z, float warningSec, float activeSec);
 
@@ -399,16 +400,16 @@ public:
     //   playerId 별 누적. DarkLord 처치 시 freeze.
     struct GameClearStat
     {
-        uint64 playerId        = 0;
+        uint64 playerId = 0;
         float  totalDamageDealt = 0.0f;
         float  totalDamageTaken = 0.0f;
-        float  maxSingleHit     = 0.0f;
-        uint32 hitsLanded       = 0;
-        uint32 deathCount       = 0;
-        uint32 monstersKilled   = 0;
-        bool   bossLastHit      = false;
-        double runStartTime     = 0.0;        // GetTickCount64()/1000
-        float  survivalTime     = 0.0f;       // 사망 시 누적 또는 클리어까지
+        float  maxSingleHit = 0.0f;
+        uint32 hitsLanded = 0;
+        uint32 deathCount = 0;
+        uint32 monstersKilled = 0;
+        bool   bossLastHit = false;
+        double runStartTime = 0.0;        // GetTickCount64()/1000
+        float  survivalTime = 0.0f;       // 사망 시 누적 또는 클리어까지
         uint32 skillUseCounts[4] = { 0, 0, 0, 0 }; // Q/E/R/RC
     };
     void StatOnPlayerDamage(uint64 victimPlayerId, float damage, bool isDead);
@@ -490,7 +491,7 @@ private:
     void ProcessDespawnPlayer(Scene* pScene, uint64 playerId);
     void ProcessMovePlayer(Scene* pScene, uint64 playerId, float x, float y, float z, float dirX, float dirY, float dirZ);
     void ProcessSkill(Scene* pScene, uint64 playerId, int skillType, float x, float y, float z, float dirX, float dirY, float dirZ,
-                      int32 skillSlot = -1, float radiusMult = 1.0f, float damageMult = 1.0f);
+        int32 skillSlot = -1, float radiusMult = 1.0f, float damageMult = 1.0f);
     void ProcessPlayerAction(Scene* pScene, uint64 playerId, uint32 actionType, float x, float y, float z, float dirX, float dirY, float dirZ);
     void ProcessRoomTransition(Scene* pScene, uint32 stageIndex, uint32 roomIndex, bool isBossRoom, const std::string& mapId);
 
@@ -513,14 +514,16 @@ private:
 
     // 메아리(ABY_ECO) ECHO_FIRE 시 원본 스킬 시각을 echo 위치에 50% 스케일로 재생
     void SpawnEchoSkillVFX(Scene* pScene, int skillType, ElementType baseElement,
-                           const DirectX::XMFLOAT3& pos, uint32_t runeFlags = 0, uint32_t visualElementMask = 0, float visualScale = 0.5f, const DirectX::XMFLOAT3* pTargetPos = nullptr);
+        const DirectX::XMFLOAT3& pos, uint32_t runeFlags = 0U,
+        uint32_t visualElementMask = 0U, float visualScale = 0.5F,
+        const DirectX::XMFLOAT3* pTargetPos = nullptr);
 
     // playerId 기준 원소 조회 — local 은 PlayerComponent, remote 는 m_mapRemotePlayerElement
     ElementType GetPlayerElement(uint64 playerId) const;
     void ProcessBossEvent(Scene* pScene, uint64 monsterId, uint32 eventType, uint32 phaseIndex);
     void ProcessMonsterStagger(uint64 monsterId, float duration);
 
-	// 몬스터 공격 애니메이션 재생 (ProcessMonsterAttack에서 호출)
+    // 몬스터 공격 애니메이션 재생 (ProcessMonsterAttack에서 호출)
     void PlayNetworkGolemAttackBehavior(Scene* pScene, GameObject* pMonster, uint64 monsterId, uint32 attackType, uint64 targetPlayerId, const std::vector<DirectX::XMFLOAT3>& effectPositions, uint32 effectOption);
 
     // 서버 권위 일반 몬스터 공격 연출 실행
@@ -548,7 +551,7 @@ private:
     // 공격 애니 재생 중인 몬스터 — 이 시간 동안은 Move 와서도 Walk 로 덮어쓰지 않음
     std::unordered_map<uint64, float> m_mapServerMonsterAttackTimer;
     static constexpr float ATTACK_ANIM_LOCK = 1.4f;  // 공격 애니 지속 (대략)
-   
+
     // 서버 몬스터 hit flash 타이머 — 피격 시 glow 페이드아웃 (원격 플레이어와 동일 패턴)
     std::unordered_map<uint64, float> m_mapServerMonsterHitFlashTimer;
     static constexpr float SERVER_MONSTER_HIT_FLASH_DURATION = 0.15f;
@@ -563,6 +566,7 @@ private:
     // 방 전환 중복 방지 — S_ROOM_TRANSITION 이 서버에서 중복 전송되거나, 같은 프레임에
     // 두 번 큐잉되는 경우 ProcessRoomTransition 을 여러 번 실행해 자원 이중 정리/생성으로
     // 크래시 나는 케이스 차단. 전환 처리 진입 시 true, 완료 시 false.
+    bool m_bAwaitingEntryRoom = true; // Entry/retry waits for manual F; portal travel auto-starts.
     bool m_bPendingTorchInteract = false;
     int m_nPendingTorchInteractFrame = 0;
     bool m_bInRoomTransition = false;
@@ -580,7 +584,7 @@ private:
         bool  hasTarget = false;
         // 발 끌림 픽스용 — 패킷 간 실제 dt 와 EMA 스무딩 속도 (u/s).
         double lastPacketTime = 0.0;   // GetTickCount64() / 1000.0
-        float  smoothedSpeed  = 0.0f;
+        float  smoothedSpeed = 0.0f;
     };
     std::unordered_map<uint64, ServerMonsterTarget> m_mapServerMonsterTarget;
 
@@ -617,16 +621,16 @@ private:
     struct ServerBossIntroState
     {
         BossIntroPhase phase = BossIntroPhase::FlyingIn;
-        float phaseTimer  = 0.0f;
+        float phaseTimer = 0.0f;
         float startHeight = 25.0f; // 오프라인 동일 (Red Dragon 25u)
-        float groundY     = 0.0f;  // 착지 목표 y
-        float curY        = 25.0f; // 매 프레임 갱신 y (8u/s 등속 강하)
-        float bossX       = 0.0f;
-        float bossZ       = 0.0f;
-        bool  flyAnimFired  = false;
+        float groundY = 0.0f;  // 착지 목표 y
+        float curY = 25.0f; // 매 프레임 갱신 y (8u/s 등속 강하)
+        float bossX = 0.0f;
+        float bossZ = 0.0f;
+        bool  flyAnimFired = false;
         bool  landAnimFired = false;
         bool  roarAnimFired = false;
-        bool  active        = true;
+        bool  active = true;
     };
     std::unordered_map<uint64, ServerBossIntroState> m_mapServerBossIntros;
 
@@ -653,16 +657,16 @@ private:
         MegaBreathPhase phase = MegaBreathPhase::None;
         float phaseTimer = 0.0f;
         // 위치
-        DirectX::XMFLOAT3 originalPos{0,0,0};   // 보스 진입 직전 위치 (복귀 목표)
-        DirectX::XMFLOAT3 wallPos{0,0,0};       // 보스 비행 목표 (cardinal +25 from spawn)
-        DirectX::XMFLOAT3 phaseStartPos{0,0,0}; // 각 phase 시작 시 보스 위치 (lerp 시작점)
-        DirectX::XMFLOAT3 bossSpawnPos{0,0,0};  // 보스 spawn 좌표 (cover/카메라 reference)
+        DirectX::XMFLOAT3 originalPos{ 0,0,0 };   // 보스 진입 직전 위치 (복귀 목표)
+        DirectX::XMFLOAT3 wallPos{ 0,0,0 };       // 보스 비행 목표 (cardinal +25 from spawn)
+        DirectX::XMFLOAT3 phaseStartPos{ 0,0,0 }; // 각 phase 시작 시 보스 위치 (lerp 시작점)
+        DirectX::XMFLOAT3 bossSpawnPos{ 0,0,0 };  // 보스 spawn 좌표 (cover/카메라 reference)
         // VFX
         Vector<GameObject*> covers;             // 4 기둥
         int chargeVFXId = -1;
         int beamVFXIds[5] = { -1, -1, -1, -1, -1 };
         // 카메라 블렌드 상태
-        DirectX::XMFLOAT3 camLookAt{0,0,0};
+        DirectX::XMFLOAT3 camLookAt{ 0,0,0 };
         float camDist = 50.f;
         float camPitch = 60.f;
         float camYaw = 45.f;
@@ -678,7 +682,7 @@ private:
     struct ServerBossAction
     {
         BossActionKind kind = BossActionKind::None;
-        float timer    = 0.0f;
+        float timer = 0.0f;
         float duration = 0.0f;
         float peakHeight = 0.0f;  // Jump: 포물선 정점 높이, Flying: 비행 고도
     };
@@ -713,9 +717,9 @@ private:
     struct ServerMonsterIndicators
     {
         GameObject* circleBorder = nullptr;
-        GameObject* circleFill   = nullptr;
-        GameObject* boxBorder    = nullptr;
-        GameObject* boxFill      = nullptr;
+        GameObject* circleFill = nullptr;
+        GameObject* boxBorder = nullptr;
+        GameObject* boxFill = nullptr;
 
         NetIndicatorType activeType = NetIndicatorType::None;
         float windupTotal = 0.0f;
@@ -727,7 +731,7 @@ private:
         float anchorX = 0.0f;
         float anchorY = 0.0f;
         float anchorZ = 0.0f;
-        float yawDeg  = 0.0f;          // ForwardBox 회전
+        float yawDeg = 0.0f;          // ForwardBox 회전
         bool  yawLocked = false;       // true 면 매 프레임 보스 yaw 추적 안 함 (서버 패킷 yaw 고정)
     };
     std::unordered_map<uint64, ServerMonsterIndicators> m_mapServerMonsterIndicators;
@@ -743,28 +747,28 @@ private:
     struct PendingMonsterVFX
     {
         PendingVFXKind kind = PendingVFXKind::Projectile;
-        float    delay     = 0.0f;
+        float    delay = 0.0f;
         // 보스 실시간 위치 추적 (0 이면 추적 안 함 — 캐시된 startPos 사용).
         //   Projectile 의 경우: 보스가 windup/breath 동안 움직여도 입에서 발사되도록 매 스폰 시점에 위치 재조회.
         uint64   monsterId = 0;
-        DirectX::XMFLOAT3 startPos  = { 0.f, 0.f, 0.f };  // 캐시된 fallback 위치
+        DirectX::XMFLOAT3 startPos = { 0.f, 0.f, 0.f };  // 캐시된 fallback 위치
         DirectX::XMFLOAT3 targetPos = { 0.f, 0.f, 0.f };  // 캐시된 타겟 (player at packet time)
-        float    yOffset   = 2.0f;       // 보스 base 에서 입 높이 (Projectile 만)
+        float    yOffset = 2.0f;       // 보스 base 에서 입 높이 (Projectile 만)
         float    fanAngleDeg = 0.0f;     // 정면 forward 기준 ± offset (Projectile/SPHBeam)
         float    fireRange = 60.0f;      // 타겟까지 투영 거리 (Projectile 만)
-        float    speed     = 18.0f;
-        float    radius    = 0.5f;
-        float    scale     = 1.0f;
-        float    maxDist   = 60.0f;
+        float    speed = 18.0f;
+        float    radius = 0.5f;
+        float    scale = 1.0f;
+        float    maxDist = 60.0f;
         ElementType element = ElementType::Fire;
         // CameraShake 전용
         float    shakeIntensity = 0.0f;
-        float    shakeDuration  = 0.0f;
+        float    shakeDuration = 0.0f;
         // SPHBeam 전용 — 오프라인 MegaBreath 5-fan beam 재현
         int      beamParticleCount = 4400;
-        float    beamSpreadMult    = 1.0f;
-        float    beamLength        = 70.0f;
-        float    beamDuration      = 4.0f;
+        float    beamSpreadMult = 1.0f;
+        float    beamLength = 70.0f;
+        float    beamDuration = 4.0f;
     };
     std::vector<PendingMonsterVFX> m_vPendingMonsterVFX;
 
@@ -781,7 +785,7 @@ private:
     };
     std::vector<NetworkGolemBehaviorEntry> m_vNetworkGolemBehaviors;
 
-	// 네트워크 Demon 전용 AttackBehavior 보관 
+    // 네트워크 Demon 전용 AttackBehavior 보관 
     struct NetworkDemonBehaviorEntry
     {
         std::unique_ptr<IAttackBehavior> behavior;
@@ -799,7 +803,7 @@ public:
     // 매 프레임 서버 몬스터 스폰 연출 갱신
     bool IsServerMonsterSpawnEffectActive(uint64 monsterId) const;
     void UpdateServerMonsterSpawnEffects(float deltaTime);
-    
+
     // 서버 보스 인디케이터(Circle/ForwardBox) fill 진행도 갱신 (Dx12App 메인 루프에서 호출)
     //   ProcessMonsterAttack 에서 windup 시작, 매 프레임 0→1 차오르고 종료 시 hide.
     void UpdateServerMonsterIndicators(float deltaTime);
@@ -813,7 +817,7 @@ public:
     // 네트워크 Golem 전용 AttackBehavior 갱신
     void UpdateNetworkGolemBehaviors(float deltaTime);
 
-	// 네트워크 Demon 전용 AttackBehavior 갱신
+    // 네트워크 Demon 전용 AttackBehavior 갱신
     void UpdateNetworkDemonBehaviors(float deltaTime);
 
 private:
@@ -824,7 +828,7 @@ private:
 
     // 로컬 플레이어의 실제 시작 위치를 서버에 알려준다.
     void SyncLocalPlayerPositionToServer(Scene* pScene);
-     
+
     // 원격 플레이어 마지막 이동 시간 (idle 전환용)
     std::unordered_map<uint64, float> m_mapRemotePlayerMoveTime;
 
@@ -857,82 +861,54 @@ private:
     //   같은 슬롯 재설치 시 이전 데칼을 Stop. lifetime 30s 가 남아 화면에 잔류하는 문제 방지.
     std::unordered_map<uint64, std::array<int, 4>> m_mapRemotePlaceDecalIds;
 
-    // 설치+채널은 설치 위치에서 반복 VFX가 발생한다.
-//
-// 서버가 보내준 대표 원소, 룬 조합,
-// 원소 조합을 채널 종료까지 저장한다.
-    struct RemoteChannelPlaceVisualPolicy
-    {
-        int skillSlot = -1;
-
-        ElementType primaryElement =
-            ElementType::None;
-
-        uint32 runeFlags = 0;
-        uint32 elementMask = 0;
-    };
-
-    std::unordered_map<
-        uint64,
-        RemoteChannelPlaceVisualPolicy>
-        m_mapRemoteChannelPlaceVisualPolicy;
-
-    // 서버 ABY_ECO 예약 패킷과 발동 패킷을 연결하는 정보
-    struct NetworkEchoVisualSnapshot
-    {
-        uint64 ownerPlayerId = 0;
-
-        DirectX::XMFLOAT3 origin =
-            DirectX::XMFLOAT3(
-                0.0f,
-                0.0f,
-                0.0f);
-
-        ElementType baseElement =
-            ElementType::None;
-
-        uint32 runeFlags = 0;
-        uint32 elementMask = 0;
-    };
-
-    // key = 서버가 보낸 S_RUNE_TRIGGER.objectId, 즉 echoId
-    std::unordered_map<
-        uint64,
-        NetworkEchoVisualSnapshot>
-        m_mapNetworkEchoVisualByObjectId;
-
     // 서버 objectId 기준 설치 룬 VFX 추적.
 // TRF_DEP는 서버 trapId를 objectId로 보내므로, 같은 슬롯이 아니라 같은 함정 ID로 정확히 제거한다.
     struct NetworkRuneTrapVFX
     {
         int decalId = -1;
-
-        DirectX::XMFLOAT3 pos =
-            DirectX::XMFLOAT3(
-                0.0f,
-                0.0f,
-                0.0f);
-
+        DirectX::XMFLOAT3 pos = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
         uint64 ownerPlayerId = 0;
         int32 skillSlot = -1;
-        int32 skillType = 0;
-
-        ElementType baseElement =
-            ElementType::None;
-
-        ElementType primaryElement =
-            ElementType::None;
-
-        uint32 runeFlags = 0;
-        uint32 elementMask = 0;
+        ElementType element = ElementType::None;
+        uint32_t runeFlags = 0;
+        uint32_t elementMask = 0;
     };
 
     std::unordered_map<uint64, NetworkRuneTrapVFX> m_mapNetworkTrapVFXByObjectId;
 
+    // 서버 objectId 기준 궤도 룬 VFX 추적.
+    // TRF_ORB start/fire를 같은 orbitalId로 묶기 위한 상태값이다.
+    struct NetworkOrbitalRuneVFX
+    {
+        int vfxId = -1;
+        uint64 ownerPlayerId = 0;
+    };
+
+    std::unordered_map<uint64, NetworkOrbitalRuneVFX> m_mapNetworkOrbitalVFXByObjectId;
+
+    // 궤도 룬(TRF_ORB) — 원격 플레이어 RC 발사 시 0.5초 공전 visual 후 실제 투사체 spawn.
+    //   서버는 즉시 데미지 처리하므로 visual 만 살짝 늦지만 수용 가능.
+    struct PendingOrbitalProjectile
+    {
+        DirectX::XMFLOAT3 origin{};
+        DirectX::XMFLOAT3 target{};
+        float speed = 30.f;
+        float radius = 0.5f;
+        float explosionRadius = 3.f;
+        float scale = 1.f;
+        ElementType element = ElementType::Fire;
+        GameObject* owner = nullptr;
+        bool isPiercing = false;
+        int orbVfxId = -1;
+        float delay = 0.5f;
+    };
+    std::vector<PendingOrbitalProjectile> m_vPendingOrbitals;
+
     float m_fLocalMoveCorrectionBlockTimer = 0.0f; // 포탈 낙하 중 서버 위치 보정 잠시 차단
 
 public:
-   
+    // 매 프레임 호출 — 궤도 deferred 큐 tick
+    void UpdatePendingOrbitals(Scene* pScene, float deltaTime);
 private:
 
     // 원격 플레이어 VFX 상태 (채널링 스킬 방향 추적용)
@@ -962,7 +938,7 @@ private:
     //   EffectDef.duration=-1 이라 자동 종료가 없는 경우.)
     struct TimedVFXKill
     {
-        int   vfxId     = -1;
+        int   vfxId = -1;
         float remaining = 0.0f;
     };
     std::vector<TimedVFXKill> m_vTimedVFXKills;
@@ -980,7 +956,6 @@ private:
 
         uint32 runeFlags = 0;
         ElementType visualElementOverride = ElementType::None;
-        uint32 visualElementMask = 0;
         float radiusScale = 1.0f;
 
         // duration=-1 계열이면 생성 후 특정 시간 뒤 수동 Stop
@@ -1024,7 +999,6 @@ private:
 
         uint32 runeFlags = 0;
         ElementType visualElementOverride = ElementType::None;
-        uint32 visualElementMask = 0;
         float radiusScale = 1.0f;
     };
 
@@ -1040,26 +1014,26 @@ private:
         DirectX::XMFLOAT3 scatterPos;       // 지면 착지점
         DirectX::XMFLOAT3 spawnPos;         // scatterPos + (0, height, 0)
         float delayUntilSpawn = 0.0f;       // shower 시작 후 trail spawn 까지의 대기
-        bool  spawned         = false;
-        int   trailVfxId      = -1;
-        float fallElapsed     = 0.0f;
-        float fallDuration    = 0.0f;
-        bool  impacted        = false;
+        bool  spawned = false;
+        int   trailVfxId = -1;
+        float fallElapsed = 0.0f;
+        float fallDuration = 0.0f;
+        bool  impacted = false;
     };
     struct PendingMeteorShower
     {
         DirectX::XMFLOAT3 targetPos;
         std::vector<PendingSmallMeteor> smallMeteors;
-        float elapsed         = 0.0f;       // shower 시작 후 누적 시간
-        bool  finalSpawned    = false;
-        int   finalTrailId    = -1;
-        int   finalOuterId    = -1;
+        float elapsed = 0.0f;       // shower 시작 후 누적 시간
+        bool  finalSpawned = false;
+        int   finalTrailId = -1;
+        int   finalOuterId = -1;
         DirectX::XMFLOAT3 finalSpawnPos;
-        float finalFallElapsed   = 0.0f;
-        float finalFallDuration  = 0.0f;
-        bool  finalImpacted   = false;
+        float finalFallElapsed = 0.0f;
+        float finalFallDuration = 0.0f;
+        bool  finalImpacted = false;
         float postImpactKeepalive = 0.0f;   // impact 후 잠시 더 살려두기 (impact VFX 자체 lifetime 위해)
-    
+
         // 룬/원소 시각 보정.
         // ProcessSkill에서 계산한 remoteRuneFlags / visualElementOverride / vfxRadiusScale을
         // Meteor 지연 VFX에도 그대로 적용한다.
@@ -1079,7 +1053,7 @@ public:
 
     // 원격 플레이어 끊김 방지 체크
     void UpdateRemotePlayerInterpolation(float deltaTime);
-    
+
     // 원격 플레이어 VFX 타임아웃 체크 (Update에서 호출)
     void CheckRemotePlayerVFXTimeout(Scene* pScene, float deltaTime);
 

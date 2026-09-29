@@ -40,7 +40,7 @@ enum class StageTheme
 // StageTheme → 적 메쉬 색 접미사 후보 (우선순위순). 첫 번째 존재 파일을 사용.
 inline const char* const* StageThemeColorCandidates(StageTheme theme, int& outCount)
 {
-    static const char* kFire [] = { "Rd", "Or", "Ye" };
+    static const char* kFire[] = { "Rd", "Or", "Ye" };
     static const char* kWater[] = { "Bl", "Cn" };
     static const char* kEarth[] = { "Pe", "Gr", "Br", "Bk" };
     static const char* kGrass[] = { "Gn", "Ye" };
@@ -141,25 +141,25 @@ public:
     void Update(float deltaTime, InputSystem* pInputSystem);
     void RenderShadowPass(ID3D12GraphicsCommandList* pCommandList);
     void Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR_HANDLE shadowSrvHandle,
-                D3D12_CPU_DESCRIPTOR_HANDLE mainRTV, D3D12_CPU_DESCRIPTOR_HANDLE mainDSV,
-                ID3D12Resource* pMainRTBuffer = nullptr);
+        D3D12_CPU_DESCRIPTOR_HANDLE mainRTV, D3D12_CPU_DESCRIPTOR_HANDLE mainDSV,
+        ID3D12Resource* pMainRTBuffer = nullptr);
     void OnResizeSSF(UINT width, UINT height);
 
     CCamera* GetCamera() const { return m_pCamera.get(); } // Added getter for CCamera
     CRoom* GetCurrentRoom() const { return m_pCurrentRoom; } // Added getter for current room
     void SetCurrentRoom(CRoom* pRoom) { m_pCurrentRoom = pRoom; }
     ProjectileManager* GetProjectileManager() { return m_pProjectileManager.get(); }
-    DecalManager*      GetDecalManager()      { return m_pDecalManager.get(); }
+    DecalManager* GetDecalManager() { return m_pDecalManager.get(); }
     // 통합 VFX 파사드: 신규 코드는 이 API만 사용한다.
     VFXManager* GetVFXManager() { return m_pVFXManager.get(); }
 
     // 방 전환 / 스테이지 전환 시 남아 있는 전투용 임시 이펙트 정리
     void ClearTransientCombatEffects();
-     
+
     // ─── 호환용 게터: 기존 SetVFXManager(FluidSkillVFXManager*) 패턴 보존 ───
     // 신규 코드에서 사용하지 말 것 — 점진적 마이그레이션을 위해 잠시 유지.
-    FluidSkillVFXManager* GetFluidVFXManager()      { return m_pVFXManager ? m_pVFXManager->GetPlayerVFX() : nullptr; }
-    FluidSkillVFXManager* GetEnemyFluidVFXManager() { return m_pVFXManager ? m_pVFXManager->GetEnemyVFX()  : nullptr; }
+    FluidSkillVFXManager* GetFluidVFXManager() { return m_pVFXManager ? m_pVFXManager->GetPlayerVFX() : nullptr; }
+    FluidSkillVFXManager* GetEnemyFluidVFXManager() { return m_pVFXManager ? m_pVFXManager->GetEnemyVFX() : nullptr; }
     TorchSystem* GetTorchSystem() { return m_pTorchSystem.get(); }
     GameObject* GetPlayer() const { return m_pPlayerGameObject; }
     StageTheme  GetCurrentTheme() const { return m_eCurrentTheme; }
@@ -198,7 +198,7 @@ public:
     void TransitionToNextRoom();
     void TransitionToRoomByIndex(int index); // pool 인덱스 직접 지정 이동 (서버 동기화 / 9·0 디버그)
     void TransitionToBossRoom();        // 불 보스전 (Dragon)
-    void TransitionToFireStage(int roomIndex = 0);       // 불 스테이지 (파밍 루프 회귀용)
+    void TransitionToFireStage(int roomIndex = 0, bool waitForInteraction = false);       // 불 스테이지 (파밍 루프 회귀용)
     void TransitionToWaterStage(int roomIndex = 0);      // 물 스테이지 (N: 불→물)
     void TransitionToWaterBossRoom();   // 물 보스전 (Kraken)
     void TransitionToEarthStage(int roomIndex = 0);      // 땅 스테이지 (N: 물→땅)
@@ -252,20 +252,20 @@ public:
     //     0.45 ~ 0.85 : 화면 균열 (검은 갭 + 붉은 glow)
     //     0.85 ~ 1.00 : recovery (붉은 잔광만 남음)
     struct IntroSeverState {
-        bool  active           = false;
-        float progress         = 0.0f;   // 0~1 전체 진행률
-        float predarkAlpha     = 0.0f;   // 화면 어둡게 덮는 black 알파
+        bool  active = false;
+        float progress = 0.0f;   // 0~1 전체 진행률
+        float predarkAlpha = 0.0f;   // 화면 어둡게 덮는 black 알파
         float warningLineAlpha = 0.0f;   // 얇은 예고 흰 선
-        float flashAlpha       = 0.0f;   // 풀스크린 화이트
-        float coreAlpha        = 0.0f;   // 얇은 흰 절단선 (main)
-        float voidAlpha        = 0.0f;   // 검은 갭 (검정 균열)
-        float redGlowAlpha     = 0.0f;   // 가장자리 어두운 진홍 잔광
-        float afterGlowAlpha   = 0.0f;   // recovery 단계의 옅은 잔광
+        float flashAlpha = 0.0f;   // 풀스크린 화이트
+        float coreAlpha = 0.0f;   // 얇은 흰 절단선 (main)
+        float voidAlpha = 0.0f;   // 검은 갭 (검정 균열)
+        float redGlowAlpha = 0.0f;   // 가장자리 어두운 진홍 잔광
+        float afterGlowAlpha = 0.0f;   // recovery 단계의 옅은 잔광
         // ── Strike head — 슬래시 위를 지나가는 밝은 점.
         //   slashHeadT 가 0→1 로 sweep 하는 동안 한 점이 화면 좌하 → 우상 직선을 따라 이동.
         //   카멘/히어로식 "칼이 지나갔다" 의 인과를 만든다. headAlpha 는 warning~flash 동안만 visible.
-        float slashHeadT       = 0.0f;
-        float slashHeadAlpha   = 0.0f;
+        float slashHeadT = 0.0f;
+        float slashHeadAlpha = 0.0f;
     };
     IntroSeverState GetIntroSeverState() const;
 
@@ -341,12 +341,12 @@ public:
         m_nPersistentDescriptorEnd = m_nNextDescriptorIndex;
     }
 
-    D3D12_GPU_VIRTUAL_ADDRESS GetPassCBVAddress() const { if(m_pd3dcbPass) return m_pd3dcbPass->GetGPUVirtualAddress(); return 0; }
+    D3D12_GPU_VIRTUAL_ADDRESS GetPassCBVAddress() const { if (m_pd3dcbPass) return m_pd3dcbPass->GetGPUVirtualAddress(); return 0; }
 
     // 서버 BossEvent PhaseChange 수신 시 호출되는 네트워크 Kraken 컷신 시작 함수
     // 서버가 스폰한 Kraken GameObject와 monsterId를 기존 컷신 상태머신에 연결한다.
     void StartNetworkKrakenCutscene(GameObject* pKrakenObj, uint64 monsterId);
-	// 컷신 진행 중 매 프레임마다 Update에서 호출하여 컷신 상태머신 업데이트 및 Kraken GameObject 제어
+    // 컷신 진행 중 매 프레임마다 Update에서 호출하여 컷신 상태머신 업데이트 및 Kraken GameObject 제어
     bool IsNetworkKrakenCutsceneTarget(uint64 monsterId) const;
 
 private:
@@ -355,22 +355,22 @@ private:
 
     float m_fTotalTime = 0.0f;
     float m_fLastDeltaTime = 0.016f;
-    float m_fRawDeltaTime  = 0.016f;  // Hit-Stop 영향 X — 카메라/플래시 등 raw dt 소비자용
+    float m_fRawDeltaTime = 0.016f;  // Hit-Stop 영향 X — 카메라/플래시 등 raw dt 소비자용
 public:
     float GetRawDeltaTime() const { return m_fRawDeltaTime; }
 private:
     bool m_bInBossRoom = false;  // 보스 룸 여부 (클리어 시 다음 스테이지 전환)
 
     // 디버그용 영구 wind VFX (데몬 보스방 진입 시 활성, 튜닝 가시성 확보)
-    int   m_nDebugWindVFXId    = -1;
+    int   m_nDebugWindVFXId = -1;
     float m_fDebugWindVFXTimer = 0.0f;
     DirectX::XMFLOAT3 m_xmf3DebugWindPos = { 0.0f, 0.0f, 0.0f };
 
     // 인터랙션 큐브 포탈 VFX — 3 레이어(Ring + Suction + Beam) 무한 루프. 각 이미터 1회 spawn 후 입자가 죽으므로
     // 주기적으로 재 spawn 하여 continuous 유지. RespawnTimer 가 PORTAL_RING_RESPAWN_INTERVAL 도달 시 stop+spawn.
-    int   m_nInteractionCubePortalRingVFXId    = -1; // Portal_Ring 슬롯 (보색 마젠타-시안 회전 링)
+    int   m_nInteractionCubePortalRingVFXId = -1; // Portal_Ring 슬롯 (보색 마젠타-시안 회전 링)
     int   m_nInteractionCubePortalSuctionVFXId = -1; // Portal_Suction 슬롯 (외곽→중심 흡입)
-    int   m_nInteractionCubePortalBeamVFXId    = -1; // Portal_Beam 슬롯 (수직 광주)
+    int   m_nInteractionCubePortalBeamVFXId = -1; // Portal_Beam 슬롯 (수직 광주)
     float m_fPortalRingRespawnTimer = 0.0f;          // 재 spawn 누적 타이머 (3 레이어 공통)
 
     // 4스테이지 바람 ambient — 절차적 풀 군집
@@ -381,41 +381,41 @@ private:
     // 4스테이지 바람 ambient — 배경 토네이도/업드래프트/드리프트 잎 + 주기 큰 토네이도(트랩)
     std::vector<int> m_vAmbientWindIds;          // 영구 ambient VFX 슬롯
     enum class TornadoEventPhase { Idle, Warning, Active, Cooldown };
-    TornadoEventPhase m_eTornadoPhase    = TornadoEventPhase::Idle;
+    TornadoEventPhase m_eTornadoPhase = TornadoEventPhase::Idle;
     DirectX::XMFLOAT3 m_xmf3TornadoEventPos = { 0.0f, 0.0f, 0.0f };
     int   m_nPeriodicTornadoId = -1;             // Active 페이즈 토네이도 VFX 슬롯
     int   m_nTornadoWarningVFXId = -1;           // Warning 페이즈 경고 VFX 슬롯
     float m_fPeriodicTornadoTimer = 0.0f;        // 현재 페이즈 경과 시간
     float m_fTornadoDamageTickTimer = 0.0f;      // Active 중 데미지 tick
     float m_fGustBurstTimer = 0.0f;              // gust 꽃가루 burst — 풀숲에서 주기적 emit
-	float m_fNetworkTornadoWarningSec = 2.0f;    // 네트워크 맵 토네이도 이벤트 시간 (경고 지속 시간)
-	float m_fNetworkTornadoActiveSec = 6.0f;     // 네트워크 맵 토네이도 이벤트 시간 (활성 지속 시간)
-	bool m_bUseNetworkTornadoEvent = false;      // 네트워크 맵 토네이도 이벤트 사용 여부 
+    float m_fNetworkTornadoWarningSec = 2.0f;    // 네트워크 맵 토네이도 이벤트 시간 (경고 지속 시간)
+    float m_fNetworkTornadoActiveSec = 6.0f;     // 네트워크 맵 토네이도 이벤트 시간 (활성 지속 시간)
+    bool m_bUseNetworkTornadoEvent = false;      // 네트워크 맵 토네이도 이벤트 사용 여부 
     StageTheme m_eLastAppliedTheme = StageTheme::Fire;  // sky color 변경 감지용
     StageTheme m_eCurrentTheme = StageTheme::Fire; // 현재 스테이지 테마
 
     // ── Sandstorm state (Earth theme) ───────────────────────────────────────
     //   서버 권위화 대비: TriggerSandstorm() 가 패킷-드리븐 진입점. 로컬 cycleTimer 가 임시 트리거.
     //   envelope: attack 1.5s → 지속 (duration-3s) → release 1.5s. 활성 끝나면 m_bSandstormActive=false.
-    float m_fSandstormCycleTimer  = 0.0f;   // 다음 폭풍까지 경과 (Earth 진입 시 0 으로 reset)
-    float m_fSandstormPhaseTimer  = 0.0f;   // 활성 중 경과
-    float m_fSandstormDuration    = 0.0f;   // 현재 활성 폭풍 총 지속 시간
-    float m_fSandstormStrength    = 0.0f;   // 셰이더에 push 할 0~1 envelope
-    bool  m_bSandstormActive      = false;
-    static constexpr float kSandstormCycleSec   = 35.0f;  // 다음 폭풍 간격
+    float m_fSandstormCycleTimer = 0.0f;   // 다음 폭풍까지 경과 (Earth 진입 시 0 으로 reset)
+    float m_fSandstormPhaseTimer = 0.0f;   // 활성 중 경과
+    float m_fSandstormDuration = 0.0f;   // 현재 활성 폭풍 총 지속 시간
+    float m_fSandstormStrength = 0.0f;   // 셰이더에 push 할 0~1 envelope
+    bool  m_bSandstormActive = false;
+    static constexpr float kSandstormCycleSec = 35.0f;  // 다음 폭풍 간격
     static constexpr float kSandstormDefaultSec = 8.0f;   // 기본 폭풍 지속 (램프 길이 늘리면서 함께 증가)
-    static constexpr float kSandstormRampSec    = 2.5f;   // attack=release ramp — 너무 빠르면 binary 함
+    static constexpr float kSandstormRampSec = 2.5f;   // attack=release ramp — 너무 빠르면 binary 함
 
     // ── Wind gust state (Grass theme) — Sandstorm 과 동일 패턴 ─────────────
-    float m_fWindGustCycleTimer  = 0.0f;
-    float m_fWindGustPhaseTimer  = 0.0f;
-    float m_fWindGustDuration    = 0.0f;
-    float m_fWindGustStrength    = 0.0f;
-    bool  m_bWindGustActive      = false;
+    float m_fWindGustCycleTimer = 0.0f;
+    float m_fWindGustPhaseTimer = 0.0f;
+    float m_fWindGustDuration = 0.0f;
+    float m_fWindGustStrength = 0.0f;
+    bool  m_bWindGustActive = false;
     // TODO 테스트용 단축값 — 확인 끝나면 원래 (30 / 5 / 1.5) 로 복구
-    static constexpr float kWindGustCycleSec   = 6.0f;
+    static constexpr float kWindGustCycleSec = 6.0f;
     static constexpr float kWindGustDefaultSec = 3.0f;
-    static constexpr float kWindGustRampSec    = 0.8f;
+    static constexpr float kWindGustRampSec = 0.8f;
     bool m_bToonEnabled = true;  // F7로 토글: 원신풍 셀 셰이딩 (기본 ON)
     GameObject* m_pLavaPlane = nullptr; // 용암 바닥 평면
     GameObject* m_pWaterPlane = nullptr; // 물 바닥 평면
@@ -443,7 +443,7 @@ private:
 
     // 4스테이지(Grass) 보스 클리어 후 파밍 루프를 돌 때마다 1씩 증가 — 적 HP/데미지 스케일에 사용
     int  m_nCycleCount = 0;
-    bool m_bGameClear  = false;
+    bool m_bGameClear = false;
     // 풀 보스 클리어 후 분기 포탈 한 번만 spawn 하기 위한 가드
     bool m_bBranchPortalsSpawned = false;
 
@@ -451,15 +451,15 @@ private:
     GameObject* m_pFlightBossDummy = nullptr;
     float m_fFlightBossSpeed = 22.0f;       // 보스 전진 속도 (m/s)
     float m_fFlightBossYawDeg = 0.0f;       // 보스 진행 방향 yaw (deg). +Z 기준
-    float m_fFlightCurveTime  = 0.0f;       // 곡선 코스 누적 시간
+    float m_fFlightCurveTime = 0.0f;       // 곡선 코스 누적 시간
     float m_fFlightBossHitFlashTimer = 0.0f; // 사격 피격 시 보스 플래시
     int   m_nFlightHitCount = 0;             // 누적 명중 (HUD/디버그)
     float m_fFlightWindAccum = 0.f;          // 비행 윈드 LightEmitter 재스폰 누적
     float m_fFlightFovOffsetCur = 0.0f;      // 현재 적용된 FOV 보정(deg)
     float m_fFlightBossSkillTimer = 0.0f;    // 보스 기본 공격 쿨다운 (s)
     static constexpr float kFlightHitFlashDuration = 0.18f;
-    static constexpr float kFlightBaseFovOffset    = 6.0f;  // 비행 진입 시 항상 +6deg
-    static constexpr float kFlightBoostFovOffset   = 22.0f; // 부스트 시 +22deg (기본+16)
+    static constexpr float kFlightBaseFovOffset = 6.0f;  // 비행 진입 시 항상 +6deg
+    static constexpr float kFlightBoostFovOffset = 22.0f; // 부스트 시 +22deg (기본+16)
     static constexpr float kFlightBossSkillCooldown = 2.2f; // 보스 기본 공격 발사 주기(s)
 
     // 보스 기본 공격 = 부채꼴 탄막 (속성별 색만 다름, 메커닉은 동일)
@@ -473,10 +473,10 @@ private:
     std::vector<FlightBossBullet> m_FlightBossBullets;
     ElementType m_eFlightBossElement = ElementType::Wind;
     static constexpr int   kFlightBulletsPerVolley = 5;
-    static constexpr float kFlightBulletSpeed      = 38.0f;
-    static constexpr float kFlightBulletLifetime   = 2.5f;
-    static constexpr float kFlightBulletFanDeg     = 22.0f; // 부채꼴 반각
-    static constexpr float kFlightBulletHitRadius  = 1.6f;  // 플레이어 피격 반경
+    static constexpr float kFlightBulletSpeed = 38.0f;
+    static constexpr float kFlightBulletLifetime = 2.5f;
+    static constexpr float kFlightBulletFanDeg = 22.0f; // 부채꼴 반각
+    static constexpr float kFlightBulletHitRadius = 1.6f;  // 플레이어 피격 반경
     void FireFlightBossBarrage();
     void UpdateFlightBossBullets(float deltaTime);
     void GetFlightBulletColors(ElementType e, XMFLOAT4& outStart, XMFLOAT4& outEnd) const;
@@ -501,13 +501,13 @@ private:
 
     // Fire boss Dragon intro cutscene
     EnemyComponent* m_pDragonIntroEnemy = nullptr;
-    BossIntroPhase  m_eLastDragonPhase  = BossIntroPhase::None;
+    BossIntroPhase  m_eLastDragonPhase = BossIntroPhase::None;
 
     // Water boss 2-phase: Kraken pre-spawned, emerges after Blue Dragon dies
     bool m_bPendingKrakenSpawn = false;          // death callback set this
     XMFLOAT3 m_xmf3PendingKrakenPos = {};        // dragon death position
     EnemyComponent* m_pPreloadedKraken = nullptr; // pre-spawned but hidden
-	
+
     // 온라인/네트워크 모드에서 서버가 스폰한 Kraken GameObject를 컷신 대상으로 사용
     // 기존 오프라인 컷신은 EnemyComponent* m_pPreloadedKraken 기준이지만,
     // 서버 권위 몬스터는 EnemyComponent가 없으므로 GameObject*를 별도로 보관한다.
@@ -534,27 +534,27 @@ private:
     bool  m_bSlamShakeTriggered = false;
     bool  m_bKrakenRoarFadedToIdle = false;   // Roar 중 Unreal Take 종료 후 Idle 루프 전환 플래그
     XMFLOAT3 m_xmf3KrakenJumpStart = {}; // Roar 종료 시 크라켄 위치 (점프 시작점)
-    XMFLOAT3 m_xmf3KrakenJumpEnd   = {}; // 점프 착지점 (맵 바깥 수면 위 슬램 지점)
+    XMFLOAT3 m_xmf3KrakenJumpEnd = {}; // 점프 착지점 (맵 바깥 수면 위 슬램 지점)
     static constexpr float KRAKEN_SCALE = 2.0f;
     // Stage durations (cumulative) — 연출 텀 확보를 위해 일부 단계 확장
-    static constexpr float KRAKEN_T_RUMBLE     = 1.2f;   // +0.4s (진동 예고)
-    static constexpr float KRAKEN_T_RISE       = 2.4f;   // Rumble + 1.2s
-    static constexpr float KRAKEN_T_BURST      = 4.0f;   // Rise + 1.6s
-    static constexpr float KRAKEN_T_REVEAL     = 6.0f;   // Burst + 2.0s (몸 드러내는 여운)
-    static constexpr float KRAKEN_T_ROAR       = 9.5f;   // Reveal + 3.5s (포효 fully 재생)
-    static constexpr float KRAKEN_T_JUMP       = 14.0f;  // Roar + 4.5s (거리 -100)
-    static constexpr float KRAKEN_T_SLAM       = 16.0f;  // Jump + 2.0s
+    static constexpr float KRAKEN_T_RUMBLE = 1.2f;   // +0.4s (진동 예고)
+    static constexpr float KRAKEN_T_RISE = 2.4f;   // Rumble + 1.2s
+    static constexpr float KRAKEN_T_BURST = 4.0f;   // Rise + 1.6s
+    static constexpr float KRAKEN_T_REVEAL = 6.0f;   // Burst + 2.0s (몸 드러내는 여운)
+    static constexpr float KRAKEN_T_ROAR = 9.5f;   // Reveal + 3.5s (포효 fully 재생)
+    static constexpr float KRAKEN_T_JUMP = 14.0f;  // Roar + 4.5s (거리 -100)
+    static constexpr float KRAKEN_T_SLAM = 16.0f;  // Jump + 2.0s
     static constexpr float KRAKEN_T_WATER_RISE = 26.0f;  // Slam + 10s
 
     // 슬램/점프 착지점 (맵 바깥 수면 위)
     static constexpr float KRAKEN_SLAM_OFFSET_X = 0.0f;
     static constexpr float KRAKEN_SLAM_OFFSET_Z = -125.0f;  // 맵 바깥 물 장판 위 내려찍기
-    static constexpr float KRAKEN_LAND_Y        = -2.0f;   // 수면(-4) 위 몸체 노출 Y
-    static constexpr float KRAKEN_JUMP_PEAK_DY  = 25.0f;   // 점프 최고점 추가 Y
+    static constexpr float KRAKEN_LAND_Y = -2.0f;   // 수면(-4) 위 몸체 노출 Y
+    static constexpr float KRAKEN_JUMP_PEAK_DY = 25.0f;   // 점프 최고점 추가 Y
 
     // 물 상승: 기존 맵 타일(Y=0)보다 훨씬 위로 → "더 높은 곳에서 전투" 연출
     static constexpr float KRAKEN_WATER_Y_START = -4.0f;
-    static constexpr float KRAKEN_WATER_Y_END   = 28.0f;   // 15 → 28: 확실한 고지대 상승
+    static constexpr float KRAKEN_WATER_Y_END = 28.0f;   // 15 → 28: 확실한 고지대 상승
 
     // ── DarkLord 입장 컷씬 ────────────────────────────────────────────────────
     // Phase 1 Sanctum(화려한 4원소 맵 + 카메라 팬인) → 2 Dread(라이팅 dim + tremor)
@@ -589,17 +589,17 @@ private:
 
     // 입장 컷씬 동안 플레이어 위치 stash — 컷씬 끝나면 복귀.
     DirectX::XMFLOAT3 m_xmf3PlayerIntroStashPos = { 0.0f, 0.0f, 0.0f };
-    bool              m_bPlayerIntroStashed     = false;
-    bool              m_bScreenSplitTriggered    = false;  // Sever 화면 분리 1회 가드
+    bool              m_bPlayerIntroStashed = false;
+    bool              m_bScreenSplitTriggered = false;  // Sever 화면 분리 1회 가드
     // 0.0 = 화려한 Sanctum 톤, 1.0 = 어두운 Dark 톤. Sever 페이즈에서 빠르게 1.0 로 lerp.
     //   PassConstants 의 light/ambient 가 이 값으로 sanctum 팔레트 ↔ 기존 Dark 팔레트 사이를 보간.
-    float    m_fSanctumBlend       = 1.0f;   // Dark 비활성 디폴트 (이전 동작 유지)
+    float    m_fSanctumBlend = 1.0f;   // Dark 비활성 디폴트 (이전 동작 유지)
     bool     m_bIntroSeverShakeTriggered = false;
-    bool     m_bIntroBossSpawned         = false;
-    int      m_nIntroAbsorbCount         = 0;   // Phase 4 에서 0~3 으로 카운트 (4 원소 차례로 흡수)
-    GameObject*           m_pDarkLordCutsceneObject = nullptr;   // Phase 4 에서 spawn 된 보스 — driver 가 scale/pos 트래킹
-    GameObject*           m_pIntroSlashOverlay      = nullptr;   // legacy — 스크린 SpriteBatch 오버레이로 대체, nullptr 유지
-    SwordTrailMesh*       m_pIntroSlashMesh         = nullptr;   // legacy
+    bool     m_bIntroBossSpawned = false;
+    int      m_nIntroAbsorbCount = 0;   // Phase 4 에서 0~3 으로 카운트 (4 원소 차례로 흡수)
+    GameObject* m_pDarkLordCutsceneObject = nullptr;   // Phase 4 에서 spawn 된 보스 — driver 가 scale/pos 트래킹
+    GameObject* m_pIntroSlashOverlay = nullptr;   // legacy — 스크린 SpriteBatch 오버레이로 대체, nullptr 유지
+    SwordTrailMesh* m_pIntroSlashMesh = nullptr;   // legacy
     // ── Sanctum 4 zone 트래킹 — 각 zone (방 사분면) 마다 다수 sigil + aura + pillar 무작위 흩뿌림.
     //   인위적 cardinal 배치 대신 organic scatter — "그 구역에 그 원소 색이 확 보임".
     struct SanctumElement {
@@ -610,10 +610,10 @@ private:
     std::vector<SanctumElement> m_vSanctumElements;
 
     // Cumulative timings — Kraken 패턴.
-    static constexpr float DLI_T_SANCTUM  = 3.0f;     // 0   ~ 3.0s  : vivid 4원소 reveal + camera 슬로 팬인
-    static constexpr float DLI_T_DREAD    = 5.0f;     // 3.0 ~ 5.0s  : 라이팅 dim + 가벼운 tremor + edge vignette
-    static constexpr float DLI_T_SEVER    = 7.2f;     // 5.0 ~ 7.2s  : 슬래시 + flash + 테마 즉시 스왑 (2.2s 로 늘려 베기 연출 여유)
-    static constexpr float DLI_T_DEVOUR   = 10.8f;    // 7.2 ~ 10.8s : 보스 솟구침 + 4원소 흡수
+    static constexpr float DLI_T_SANCTUM = 3.0f;     // 0   ~ 3.0s  : vivid 4원소 reveal + camera 슬로 팬인
+    static constexpr float DLI_T_DREAD = 5.0f;     // 3.0 ~ 5.0s  : 라이팅 dim + 가벼운 tremor + edge vignette
+    static constexpr float DLI_T_SEVER = 7.2f;     // 5.0 ~ 7.2s  : 슬래시 + flash + 테마 즉시 스왑 (2.2s 로 늘려 베기 연출 여유)
+    static constexpr float DLI_T_DEVOUR = 10.8f;    // 7.2 ~ 10.8s : 보스 솟구침 + 4원소 흡수
     static constexpr float DLI_T_DOMINION = 12.0f;    // 10.8 ~ 12.0s : 보스 포효 + 카메라 홀드 (1.2s) → 입력 복구
     // 컷씬 종료 후 보스 공격 grace — 입력 / AI 풀리지만 보스는 이 시간 동안 정지·무적 유지.
     static constexpr float DLI_T_BOSS_GRACE_AFTER_CUTSCENE = 3.0f;

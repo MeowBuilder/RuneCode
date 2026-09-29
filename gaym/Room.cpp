@@ -36,19 +36,19 @@ CRoom::~CRoom()
     {
         if (auto* pVFX = m_pScene->GetVFXManager())
         {
-            if (m_nPortalCubeRingVFXId    >= 0) pVFX->Stop(m_nPortalCubeRingVFXId);
+            if (m_nPortalCubeRingVFXId >= 0) pVFX->Stop(m_nPortalCubeRingVFXId);
             if (m_nPortalCubeSuctionVFXId >= 0) pVFX->Stop(m_nPortalCubeSuctionVFXId);
-            if (m_nPortalCubeBeamVFXId    >= 0) pVFX->Stop(m_nPortalCubeBeamVFXId);
-            if (m_nSecondPortalRingVFXId    >= 0) pVFX->Stop(m_nSecondPortalRingVFXId);
+            if (m_nPortalCubeBeamVFXId >= 0) pVFX->Stop(m_nPortalCubeBeamVFXId);
+            if (m_nSecondPortalRingVFXId >= 0) pVFX->Stop(m_nSecondPortalRingVFXId);
             if (m_nSecondPortalSuctionVFXId >= 0) pVFX->Stop(m_nSecondPortalSuctionVFXId);
-            if (m_nSecondPortalBeamVFXId    >= 0) pVFX->Stop(m_nSecondPortalBeamVFXId);
+            if (m_nSecondPortalBeamVFXId >= 0) pVFX->Stop(m_nSecondPortalBeamVFXId);
         }
-        m_nPortalCubeRingVFXId    = -1;
+        m_nPortalCubeRingVFXId = -1;
         m_nPortalCubeSuctionVFXId = -1;
-        m_nPortalCubeBeamVFXId    = -1;
-        m_nSecondPortalRingVFXId    = -1;
+        m_nPortalCubeBeamVFXId = -1;
+        m_nSecondPortalRingVFXId = -1;
         m_nSecondPortalSuctionVFXId = -1;
-        m_nSecondPortalBeamVFXId    = -1;
+        m_nSecondPortalBeamVFXId = -1;
     }
 }
 
@@ -93,13 +93,13 @@ void CRoom::ClearSecondPortal()
     {
         if (auto* pVFX = m_pScene->GetVFXManager())
         {
-            if (m_nSecondPortalRingVFXId    >= 0) pVFX->Stop(m_nSecondPortalRingVFXId);
+            if (m_nSecondPortalRingVFXId >= 0) pVFX->Stop(m_nSecondPortalRingVFXId);
             if (m_nSecondPortalSuctionVFXId >= 0) pVFX->Stop(m_nSecondPortalSuctionVFXId);
-            if (m_nSecondPortalBeamVFXId    >= 0) pVFX->Stop(m_nSecondPortalBeamVFXId);
+            if (m_nSecondPortalBeamVFXId >= 0) pVFX->Stop(m_nSecondPortalBeamVFXId);
         }
-        m_nSecondPortalRingVFXId    = -1;
+        m_nSecondPortalRingVFXId = -1;
         m_nSecondPortalSuctionVFXId = -1;
-        m_nSecondPortalBeamVFXId    = -1;
+        m_nSecondPortalBeamVFXId = -1;
     }
 
     if (m_pSecondPortal)
@@ -193,23 +193,23 @@ void CRoom::Update(float deltaTime)
             m_fPortalCubeRingRespawnTimer += deltaTime;
 
             bool bNeedSpawn = (m_nPortalCubeRingVFXId < 0)
-                           || (m_fPortalCubeRingRespawnTimer >= PORTAL_RING_RESPAWN_INTERVAL);
+                || (m_fPortalCubeRingRespawnTimer >= PORTAL_RING_RESPAWN_INTERVAL);
 
             if (bNeedSpawn)
             {
-                if (m_nPortalCubeRingVFXId    >= 0) pVFX->Stop(m_nPortalCubeRingVFXId);
+                if (m_nPortalCubeRingVFXId >= 0) pVFX->Stop(m_nPortalCubeRingVFXId);
                 if (m_nPortalCubeSuctionVFXId >= 0) pVFX->Stop(m_nPortalCubeSuctionVFXId);
-                if (m_nPortalCubeBeamVFXId    >= 0) pVFX->Stop(m_nPortalCubeBeamVFXId);
-                m_nPortalCubeRingVFXId    = pVFX->Spawn("Portal_Ring",    cubePos, vfxNormal, 0u, false);
+                if (m_nPortalCubeBeamVFXId >= 0) pVFX->Stop(m_nPortalCubeBeamVFXId);
+                m_nPortalCubeRingVFXId = pVFX->Spawn("Portal_Ring", cubePos, vfxNormal, 0u, false);
                 m_nPortalCubeSuctionVFXId = pVFX->Spawn("Portal_Suction", cubePos, vfxNormal, 0u, false);
-                m_nPortalCubeBeamVFXId    = pVFX->Spawn("Portal_Beam",    cubePos, beamNormal, 0u, false);
+                m_nPortalCubeBeamVFXId = pVFX->Spawn("Portal_Beam", cubePos, beamNormal, 0u, false);
                 m_fPortalCubeRingRespawnTimer = 0.0f;
             }
             else
             {
-                if (m_nPortalCubeRingVFXId    >= 0) pVFX->Track(m_nPortalCubeRingVFXId,    cubePos, vfxNormal);
+                if (m_nPortalCubeRingVFXId >= 0) pVFX->Track(m_nPortalCubeRingVFXId, cubePos, vfxNormal);
                 if (m_nPortalCubeSuctionVFXId >= 0) pVFX->Track(m_nPortalCubeSuctionVFXId, cubePos, vfxNormal);
-                if (m_nPortalCubeBeamVFXId    >= 0) pVFX->Track(m_nPortalCubeBeamVFXId,    cubePos, beamNormal);
+                if (m_nPortalCubeBeamVFXId >= 0) pVFX->Track(m_nPortalCubeBeamVFXId, cubePos, beamNormal);
             }
         }
         else
@@ -249,30 +249,30 @@ void CRoom::Update(float deltaTime)
             m_fSecondPortalRingRespawnTimer += deltaTime;
 
             bool bNeedSpawn = (m_nSecondPortalRingVFXId < 0)
-                           || (m_fSecondPortalRingRespawnTimer >= PORTAL_RING_RESPAWN_INTERVAL);
+                || (m_fSecondPortalRingRespawnTimer >= PORTAL_RING_RESPAWN_INTERVAL);
 
             if (bNeedSpawn)
             {
-                if (m_nSecondPortalRingVFXId    >= 0) pVFX->Stop(m_nSecondPortalRingVFXId);
+                if (m_nSecondPortalRingVFXId >= 0) pVFX->Stop(m_nSecondPortalRingVFXId);
                 if (m_nSecondPortalSuctionVFXId >= 0) pVFX->Stop(m_nSecondPortalSuctionVFXId);
-                if (m_nSecondPortalBeamVFXId    >= 0) pVFX->Stop(m_nSecondPortalBeamVFXId);
-                m_nSecondPortalRingVFXId    = pVFX->Spawn("Portal_Ring",    cubePos, vfxNormal, 0u, false);
+                if (m_nSecondPortalBeamVFXId >= 0) pVFX->Stop(m_nSecondPortalBeamVFXId);
+                m_nSecondPortalRingVFXId = pVFX->Spawn("Portal_Ring", cubePos, vfxNormal, 0u, false);
                 m_nSecondPortalSuctionVFXId = pVFX->Spawn("Portal_Suction", cubePos, vfxNormal, 0u, false);
-                m_nSecondPortalBeamVFXId    = pVFX->Spawn("Portal_Beam",    cubePos, vfxNormal, 0u, false);
+                m_nSecondPortalBeamVFXId = pVFX->Spawn("Portal_Beam", cubePos, vfxNormal, 0u, false);
                 m_fSecondPortalRingRespawnTimer = 0.0f;
             }
             else
             {
-                if (m_nSecondPortalRingVFXId    >= 0) pVFX->Track(m_nSecondPortalRingVFXId,    cubePos, vfxNormal);
+                if (m_nSecondPortalRingVFXId >= 0) pVFX->Track(m_nSecondPortalRingVFXId, cubePos, vfxNormal);
                 if (m_nSecondPortalSuctionVFXId >= 0) pVFX->Track(m_nSecondPortalSuctionVFXId, cubePos, vfxNormal);
-                if (m_nSecondPortalBeamVFXId    >= 0) pVFX->Track(m_nSecondPortalBeamVFXId,    cubePos, vfxNormal);
+                if (m_nSecondPortalBeamVFXId >= 0) pVFX->Track(m_nSecondPortalBeamVFXId, cubePos, vfxNormal);
             }
         }
         else
         {
-            if (m_nSecondPortalRingVFXId >= 0)    { pVFX->Stop(m_nSecondPortalRingVFXId);    m_nSecondPortalRingVFXId = -1; }
+            if (m_nSecondPortalRingVFXId >= 0) { pVFX->Stop(m_nSecondPortalRingVFXId);    m_nSecondPortalRingVFXId = -1; }
             if (m_nSecondPortalSuctionVFXId >= 0) { pVFX->Stop(m_nSecondPortalSuctionVFXId); m_nSecondPortalSuctionVFXId = -1; }
-            if (m_nSecondPortalBeamVFXId >= 0)    { pVFX->Stop(m_nSecondPortalBeamVFXId);    m_nSecondPortalBeamVFXId = -1; }
+            if (m_nSecondPortalBeamVFXId >= 0) { pVFX->Stop(m_nSecondPortalBeamVFXId);    m_nSecondPortalBeamVFXId = -1; }
             m_fSecondPortalRingRespawnTimer = 0.0f;
         }
     }
@@ -356,6 +356,10 @@ void CRoom::SetState(RoomState state)
     // 상태 변경 시 필요한 로직
     switch (m_eState)
     {
+    case RoomState::Inactive:
+        if (m_pGeyserManager)   m_pGeyserManager->SetActive(false);
+        if (m_pRockfallManager) m_pRockfallManager->SetActive(false);
+        break;
     case RoomState::Active:
         OutputDebugString(L"[Room] Room activated - enemies will spawn\n");
         // Enemies will be spawned in Update
@@ -450,16 +454,16 @@ void CRoom::SpawnEnemies()
     {
         wchar_t buf[128];
         swprintf_s(buf, L"[Room] Multi-wave config (%zu waves) — spawning wave 0\n",
-                   m_SpawnConfig.m_vWaves.size());
+            m_SpawnConfig.m_vWaves.size());
         OutputDebugString(buf);
 
         // 첫 웨이브는 강제로 즉시 스폰 (trigger 설정과 무관)
         const EnemyWave& first = m_SpawnConfig.m_vWaves[0];
         SpawnSingleWave(first);
-        m_nNextWaveIndex          = 1;
-        m_fSinceLastWaveSpawn     = 0.0f;
-        m_nKillsAtLastWaveSpawn   = m_nDeadEnemies;
-        m_nLastWaveSpawnedSize    = static_cast<int>(first.spawns.size());
+        m_nNextWaveIndex = 1;
+        m_fSinceLastWaveSpawn = 0.0f;
+        m_nKillsAtLastWaveSpawn = m_nDeadEnemies;
+        m_nLastWaveSpawnedSize = static_cast<int>(first.spawns.size());
         return;
     }
 
@@ -479,8 +483,8 @@ void CRoom::SpawnEnemies()
 // 등장 연출 파라미터 (CRoom 전역)
 namespace {
     constexpr float kSpawnPortalDelay = 0.7f;   // Phase A: 포탈 표시 시간
-    constexpr float kSpawnPortalY     = 6.0f;   // 공중 포탈/낙하 시작 높이
-    constexpr float kSpawnFallTime    = 0.4f;   // Phase B: 낙하 시간
+    constexpr float kSpawnPortalY = 6.0f;   // 공중 포탈/낙하 시작 높이
+    constexpr float kSpawnFallTime = 0.4f;   // Phase B: 낙하 시간
 }
 
 void CRoom::SpawnSingleWave(const EnemyWave& wave)
@@ -499,7 +503,7 @@ void CRoom::SpawnSingleWave(const EnemyWave& wave)
     {
         PendingWaveSpawn pending;
         pending.preset = s.first;
-        pending.pos    = s.second;
+        pending.pos = s.second;
         pending.fDelay = kSpawnPortalDelay + spawnIdx * kStaggerPerSpawn;
 
         if (pVFX)
@@ -525,7 +529,7 @@ void CRoom::SpawnSingleWave(const EnemyWave& wave)
 
     wchar_t buf[160];
     swprintf_s(buf, L"[Room] Scheduled wave with %zu pending spawns (portal %.2fs + fall %.2fs)\n",
-               wave.spawns.size(), kSpawnPortalDelay, kSpawnFallTime);
+        wave.spawns.size(), kSpawnPortalDelay, kSpawnFallTime);
     OutputDebugString(buf);
 }
 
@@ -553,10 +557,10 @@ void CRoom::UpdatePendingSpawns(float dt)
 
                 if (pNewEnemy)
                 {
-                    it->pEnemy     = pNewEnemy;
+                    it->pEnemy = pNewEnemy;
                     it->fFallTimer = 0.0f;
-                    it->fSkyY      = skyPos.y;
-                    it->fGroundY   = it->pos.y;
+                    it->fSkyY = skyPos.y;
+                    it->fGroundY = it->pos.y;
                     // 포탈은 낙하 동안에도 보이게 그대로 둠 (착지 시 stop)
                 }
                 else
@@ -634,7 +638,7 @@ void CRoom::TrySpawnNextWave(float dt)
         // 직전 웨이브가 스폰한 적이 전부 사망했는지 확인
         int killsSinceWaveStart = m_nDeadEnemies - m_nKillsAtLastWaveSpawn;
         bTrigger = (m_nLastWaveSpawnedSize > 0
-                 && killsSinceWaveStart >= m_nLastWaveSpawnedSize);
+            && killsSinceWaveStart >= m_nLastWaveSpawnedSize);
         break;
     }
     case EnemyWave::TriggerType::AfterKillN:
@@ -653,9 +657,9 @@ void CRoom::TrySpawnNextWave(float dt)
 
         SpawnSingleWave(next);
         ++m_nNextWaveIndex;
-        m_fSinceLastWaveSpawn   = 0.0f;
+        m_fSinceLastWaveSpawn = 0.0f;
         m_nKillsAtLastWaveSpawn = m_nDeadEnemies;
-        m_nLastWaveSpawnedSize  = static_cast<int>(next.spawns.size());
+        m_nLastWaveSpawnedSize = static_cast<int>(next.spawns.size());
     }
 }
 
@@ -1021,8 +1025,8 @@ void CRoom::SpawnSecondPortalAt(const XMFLOAT3& spawnPos, std::function<void()> 
 
     // 최종 보스 포탈 톤 — 핏빛 적색 (기존 보라/라벤더와 시각적으로 구분)
     MATERIAL portalMat;
-    portalMat.m_cAmbient  = XMFLOAT4(0.00f, 0.00f, 0.00f, 1.0f);
-    portalMat.m_cDiffuse  = XMFLOAT4(0.85f, 0.10f, 0.10f, 1.0f);
+    portalMat.m_cAmbient = XMFLOAT4(0.00f, 0.00f, 0.00f, 1.0f);
+    portalMat.m_cDiffuse = XMFLOAT4(0.85f, 0.10f, 0.10f, 1.0f);
     portalMat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
     portalMat.m_cEmissive = XMFLOAT4(1.00f, 0.20f, 0.20f, 1.0f);
     m_pSecondPortal->SetMaterial(portalMat);
@@ -1038,13 +1042,13 @@ void CRoom::SpawnSecondPortalAt(const XMFLOAT3& spawnPos, std::function<void()> 
     auto cb = std::move(onInteract);
     pInteractable->SetOnInteract([cb](InteractableComponent* /*pComp*/) {
         if (cb) cb();
-    });
+        });
 
     OutputDebugString(L"[Room] Second portal spawned successfully!\n");
 }
 
 void CRoom::InitLavaGeyserManager(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList,
-                                   Shader* pShader, CDescriptorHeap* pDescriptorHeap, UINT nDescriptorIndex)
+    Shader* pShader, CDescriptorHeap* pDescriptorHeap, UINT nDescriptorIndex)
 {
     if (m_pGeyserManager)
     {
@@ -1054,6 +1058,7 @@ void CRoom::InitLavaGeyserManager(ID3D12Device* pDevice, ID3D12GraphicsCommandLi
 
     m_pGeyserManager = std::make_unique<LavaGeyserManager>();
     m_pGeyserManager->Init(pDevice, pCommandList, this, pShader, pDescriptorHeap, nDescriptorIndex);
+    m_pGeyserManager->SetActive(m_eState == RoomState::Active);
 
     OutputDebugString(L"[Room] LavaGeyserManager initialized\n");
 }
@@ -1076,6 +1081,7 @@ void CRoom::InitRockfallManager(ID3D12Device* pDevice, ID3D12GraphicsCommandList
 
     m_pRockfallManager = std::make_unique<RockfallManager>();
     m_pRockfallManager->Init(pDevice, pCommandList, this, pShader);
+    m_pRockfallManager->SetActive(m_eState == RoomState::Active);
     OutputDebugString(L"[Room] RockfallManager initialized\n");
 }
 

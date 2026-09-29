@@ -91,20 +91,20 @@ static std::wstring BuildRuneDesc(const RuneDef& def)
         ss << Utf8ToWide(def.description) << L"  ";
 
     // 수치 스탯
-    if (def.damageMult    != 1.f) ss << L"데미지 " << (pct(def.damageMult) >= 0 ? L"+" : L"") << pct(def.damageMult) << L"%  ";
-    if (def.radiusMult    != 1.f) ss << L"범위 "   << (pct(def.radiusMult) >= 0 ? L"+" : L"") << pct(def.radiusMult) << L"%  ";
-    if (def.cooldownMult  != 1.f) ss << L"쿨다운 " << (pct(def.cooldownMult) >= 0 ? L"+" : L"") << pct(def.cooldownMult) << L"%  ";
-    if (def.castTimeMult  != 1.f) ss << L"시전 "   << (pct(def.castTimeMult) >= 0 ? L"+" : L"") << pct(def.castTimeMult) << L"%  ";
-    if (def.durationMult  != 1.f) ss << L"지속 "   << (pct(def.durationMult) >= 0 ? L"+" : L"") << pct(def.durationMult) << L"%  ";
-    if (def.knockbackMult != 1.f) ss << L"넉백 "   << (pct(def.knockbackMult) >= 0 ? L"+" : L"") << pct(def.knockbackMult) << L"%  ";
+    if (def.damageMult != 1.f) ss << L"데미지 " << (pct(def.damageMult) >= 0 ? L"+" : L"") << pct(def.damageMult) << L"%  ";
+    if (def.radiusMult != 1.f) ss << L"범위 " << (pct(def.radiusMult) >= 0 ? L"+" : L"") << pct(def.radiusMult) << L"%  ";
+    if (def.cooldownMult != 1.f) ss << L"쿨다운 " << (pct(def.cooldownMult) >= 0 ? L"+" : L"") << pct(def.cooldownMult) << L"%  ";
+    if (def.castTimeMult != 1.f) ss << L"시전 " << (pct(def.castTimeMult) >= 0 ? L"+" : L"") << pct(def.castTimeMult) << L"%  ";
+    if (def.durationMult != 1.f) ss << L"지속 " << (pct(def.durationMult) >= 0 ? L"+" : L"") << pct(def.durationMult) << L"%  ";
+    if (def.knockbackMult != 1.f) ss << L"넉백 " << (pct(def.knockbackMult) >= 0 ? L"+" : L"") << pct(def.knockbackMult) << L"%  ";
     if (def.statusDurationMult != 1.f) ss << L"상태지속 " << (pct(def.statusDurationMult) >= 0 ? L"+" : L"") << pct(def.statusDurationMult) << L"%  ";
-    if (def.statusChanceMult   != 1.f) ss << L"상태확률 " << (pct(def.statusChanceMult) >= 0 ? L"+" : L"") << pct(def.statusChanceMult) << L"%  ";
+    if (def.statusChanceMult != 1.f) ss << L"상태확률 " << (pct(def.statusChanceMult) >= 0 ? L"+" : L"") << pct(def.statusChanceMult) << L"%  ";
     if (def.extraProjectiles > 0) ss << L"투사체 +" << def.extraProjectiles << L"  ";
-    if (def.orbitalCount     > 0) ss << L"궤도탄 " << def.orbitalCount << L"  ";
-    if (def.spawnOnHitCount  > 0) ss << L"반향 +"  << def.spawnOnHitCount << L"  ";
-    if (def.lifestealRatio   > 0.f) ss << L"흡수 " << (int)(def.lifestealRatio * 100.f + 0.5f) << L"%  ";
-    if (def.execDamageBonus  > 0.f) ss << L"처형 +" << (int)(def.execDamageBonus * 100.f + 0.5f) << L"%  ";
-    if (def.cdResetChance    > 0.f) ss << L"무한 " << (int)(def.cdResetChance * 100.f + 0.5f) << L"%  ";
+    if (def.orbitalCount > 0) ss << L"궤도탄 " << def.orbitalCount << L"  ";
+    if (def.spawnOnHitCount > 0) ss << L"반향 +" << def.spawnOnHitCount << L"  ";
+    if (def.lifestealRatio > 0.f) ss << L"흡수 " << (int)(def.lifestealRatio * 100.f + 0.5f) << L"%  ";
+    if (def.execDamageBonus > 0.f) ss << L"처형 +" << (int)(def.execDamageBonus * 100.f + 0.5f) << L"%  ";
+    if (def.cdResetChance > 0.f) ss << L"무한 " << (int)(def.cdResetChance * 100.f + 0.5f) << L"%  ";
     if (def.piercing)    ss << L"관통  ";
     if (def.homing)      ss << L"유도  ";
     if (def.doublecast)  ss << L"쌍발  ";
@@ -126,10 +126,10 @@ static std::wstring BuildRuneDesc(const RuneDef& def)
 
 // ─── Debug Rune Inspector constants ─────────────────────────────────────────
 static constexpr int   kDebugVisibleRows = 12;
-static constexpr float kDebugRowHeight   = 42.0f;
-static constexpr float kDebugPanelLeft   = 30.0f;
-static constexpr float kDebugPanelWidth  = 900.0f;
-static constexpr float kDebugRowsStartY  = 158.0f;
+static constexpr float kDebugRowHeight = 42.0f;
+static constexpr float kDebugPanelLeft = 30.0f;
+static constexpr float kDebugPanelWidth = 900.0f;
+static constexpr float kDebugRowsStartY = 158.0f;
 
 Dx12App* Dx12App::s_pInstance = nullptr;
 
@@ -191,8 +191,8 @@ void Dx12App::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
 
         m_pCharSelect = std::make_unique<CharacterSelectScreen>();
         m_pCharSelect->Initialize(m_pd3dDevice.Get(), m_pd3dCommandList.Get(),
-                                   m_fontDescriptorHeap.get(), 3,
-                                   m_pd3dCommandQueue.Get());
+            m_fontDescriptorHeap.get(), 3,
+            m_pd3dCommandQueue.Get());
 
         CHECK_HR(m_pd3dCommandList->Close());
         ID3D12CommandList* lists[] = { m_pd3dCommandList.Get() };
@@ -205,36 +205,36 @@ void Dx12App::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
         auto texSize = [&](UISlot s) -> DirectX::XMUINT2 {
             auto d = m_pUITex[(UINT)s]->GetDesc();
             return { (UINT)d.Width, (UINT)d.Height };
-        };
+            };
         m_pTitleScreen = std::make_unique<TitleScreen>();
         m_pTitleScreen->Initialize(
-            m_hUI[(UINT)UISlot::TitleBg],   texSize(UISlot::TitleBg),
+            m_hUI[(UINT)UISlot::TitleBg], texSize(UISlot::TitleBg),
             m_hUI[(UINT)UISlot::TitleLogo], texSize(UISlot::TitleLogo),
             m_hUI[(UINT)UISlot::BtnNormal], texSize(UISlot::BtnNormal),
-            m_hUI[(UINT)UISlot::BtnHover],  texSize(UISlot::BtnHover));
+            m_hUI[(UINT)UISlot::BtnHover], texSize(UISlot::BtnHover));
 
         m_pLoadingScreen = std::make_unique<LoadingScreen>();
         m_pLoadingScreen->Initialize(
-            m_hUI[(UINT)UISlot::LoadingBg],      texSize(UISlot::LoadingBg),
+            m_hUI[(UINT)UISlot::LoadingBg], texSize(UISlot::LoadingBg),
             m_hUI[(UINT)UISlot::LoadingSpinner], texSize(UISlot::LoadingSpinner));
 
         m_pGameOverScreen = std::make_unique<GameOverScreen>();
         m_pGameOverScreen->Initialize(
-            m_hUI[(UINT)UISlot::GameOverBg],    texSize(UISlot::GameOverBg),
+            m_hUI[(UINT)UISlot::GameOverBg], texSize(UISlot::GameOverBg),
             m_hUI[(UINT)UISlot::GameOverTitle], texSize(UISlot::GameOverTitle),
-            m_hUI[(UINT)UISlot::BtnNormal],     texSize(UISlot::BtnNormal),
-            m_hUI[(UINT)UISlot::BtnHover],      texSize(UISlot::BtnHover));
+            m_hUI[(UINT)UISlot::BtnNormal], texSize(UISlot::BtnNormal),
+            m_hUI[(UINT)UISlot::BtnHover], texSize(UISlot::BtnHover));
 
         m_pEndingScreen = std::make_unique<EndingScreen>();
         m_pEndingScreen->Initialize(
-            m_hUI[(UINT)UISlot::EndingBg],    texSize(UISlot::EndingBg),
+            m_hUI[(UINT)UISlot::EndingBg], texSize(UISlot::EndingBg),
             m_hUI[(UINT)UISlot::EndingTitle], texSize(UISlot::EndingTitle),
-            m_hUI[(UINT)UISlot::BtnNormal],   texSize(UISlot::BtnNormal),
-            m_hUI[(UINT)UISlot::BtnHover],    texSize(UISlot::BtnHover));
+            m_hUI[(UINT)UISlot::BtnNormal], texSize(UISlot::BtnNormal),
+            m_hUI[(UINT)UISlot::BtnHover], texSize(UISlot::BtnHover));
 
         m_pSummaryStatsScreen = std::make_unique<SummaryStatsScreen>();
         m_pSummaryStatsScreen->Initialize(
-            m_hUI[(UINT)UISlot::EndingBg],   texSize(UISlot::EndingBg));
+            m_hUI[(UINT)UISlot::EndingBg], texSize(UISlot::EndingBg));
     }
 
     m_eAppState = AppState::IPInput;
@@ -607,9 +607,9 @@ void Dx12App::FrameAdvance()
         D3D12_RESOURCE_BARRIER barrier = {};
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier.Transition.pResource   = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
+        barrier.Transition.pResource = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
         barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
         m_pd3dCommandList->ResourceBarrier(1, &barrier);
 
@@ -630,7 +630,7 @@ void Dx12App::FrameAdvance()
             m_pd3dCommandList->SetDescriptorHeaps(1, heaps);
             m_spriteBatch->Begin(m_pd3dCommandList.Get());
 
-            float cx = (float)m_nWndClientWidth  / 2.0f;
+            float cx = (float)m_nWndClientWidth / 2.0f;
             float cy = (float)m_nWndClientHeight / 2.0f;
 
             const wchar_t* title = L"서버 IP 주소 입력";
@@ -655,7 +655,7 @@ void Dx12App::FrameAdvance()
         }
 
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
         m_pd3dCommandList->ResourceBarrier(1, &barrier);
 
         CHECK_HR(m_pd3dCommandList->Close());
@@ -704,9 +704,9 @@ void Dx12App::FrameAdvance()
         D3D12_RESOURCE_BARRIER barrier = {};
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier.Transition.pResource   = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
+        barrier.Transition.pResource = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
         barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
         m_pd3dCommandList->ResourceBarrier(1, &barrier);
 
@@ -732,7 +732,7 @@ void Dx12App::FrameAdvance()
         }
 
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
         m_pd3dCommandList->ResourceBarrier(1, &barrier);
 
         CHECK_HR(m_pd3dCommandList->Close());
@@ -775,9 +775,9 @@ void Dx12App::FrameAdvance()
         D3D12_RESOURCE_BARRIER barrier = {};
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier.Transition.pResource   = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
+        barrier.Transition.pResource = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
         barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
         m_pd3dCommandList->ResourceBarrier(1, &barrier);
 
@@ -804,7 +804,7 @@ void Dx12App::FrameAdvance()
         }
 
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
         m_pd3dCommandList->ResourceBarrier(1, &barrier);
 
         CHECK_HR(m_pd3dCommandList->Close());
@@ -842,9 +842,9 @@ void Dx12App::FrameAdvance()
         D3D12_RESOURCE_BARRIER barrier = {};
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier.Transition.pResource   = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
+        barrier.Transition.pResource = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
         barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
         m_pd3dCommandList->ResourceBarrier(1, &barrier);
 
@@ -870,7 +870,7 @@ void Dx12App::FrameAdvance()
         }
 
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
         m_pd3dCommandList->ResourceBarrier(1, &barrier);
 
         CHECK_HR(m_pd3dCommandList->Close());
@@ -894,7 +894,7 @@ void Dx12App::FrameAdvance()
             m_pEndingScreen->Update(m_inputSystem, (float)m_nWndClientWidth, (float)m_nWndClientHeight, deltaTime);
         if (m_eAppState == AppState::SummaryStats && m_pSummaryStatsScreen)
             m_pSummaryStatsScreen->Update(m_inputSystem, m_pScene.get(),
-                                          (float)m_nWndClientWidth, (float)m_nWndClientHeight, deltaTime);
+                (float)m_nWndClientWidth, (float)m_nWndClientHeight, deltaTime);
 
         WaitForGpuComplete();
         CHECK_HR(m_pd3dCommandAllocator->Reset());
@@ -980,9 +980,9 @@ void Dx12App::FrameAdvance()
         D3D12_RESOURCE_BARRIER barrier = {};
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-        barrier.Transition.pResource   = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
+        barrier.Transition.pResource = m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get();
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
         barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
         m_pd3dCommandList->ResourceBarrier(1, &barrier);
 
@@ -1029,7 +1029,7 @@ void Dx12App::FrameAdvance()
         }
 
         barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PRESENT;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
         m_pd3dCommandList->ResourceBarrier(1, &barrier);
 
         CHECK_HR(m_pd3dCommandList->Close());
@@ -1063,6 +1063,8 @@ void Dx12App::FrameAdvance()
     // 네트워크 보스 / 일반 몬스터 공격 연출 업데이트
     if (m_pNetworkManager && m_pNetworkManager->IsConnected())
     {
+        // Projectile creation must run after the command list Reset.
+        m_pNetworkManager->UpdatePendingOrbitals(m_pScene.get(), deltaTime);
         m_pNetworkManager->UpdateNetworkGolemBehaviors(deltaTime);
         m_pNetworkManager->UpdateNetworkDemonBehaviors(deltaTime);
         m_pNetworkManager->UpdateNetworkNormalMonsterBehaviors(deltaTime);
@@ -1144,7 +1146,7 @@ void Dx12App::FrameAdvance()
         if (GameObject* pHudPlayer = m_pScene->GetPlayer())
             pHudSkill = pHudPlayer->GetComponent<SkillComponent>();
         m_pSkillHud->Update(&m_inputSystem, pHudSkill, deltaTime,
-                            (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+            (float)m_nWndClientWidth, (float)m_nWndClientHeight);
     }
 
     // Update damage number animations
@@ -1236,18 +1238,18 @@ void Dx12App::FrameAdvance()
         if (m_inputSystem.IsMouseButtonPressed(0))
         {
             XMFLOAT2 mp = m_inputSystem.GetMousePosition();
-            float cx = (float)m_nWndClientWidth  / 2.0f;
+            float cx = (float)m_nWndClientWidth / 2.0f;
             float cy = (float)m_nWndClientHeight / 2.0f;
 
             float btnW = 220.0f, btnH = 40.0f;
-            float resumeY     = cy - 30.0f;
+            float resumeY = cy - 30.0f;
             float charSelectY = cy + 30.0f;
-            float quitY       = cy + 90.0f;
+            float quitY = cy + 90.0f;
 
             auto inBtn = [&](float btnY) {
-                return mp.x >= cx - btnW/2.f && mp.x <= cx + btnW/2.f &&
-                       mp.y >= btnY && mp.y <= btnY + btnH;
-            };
+                return mp.x >= cx - btnW / 2.f && mp.x <= cx + btnW / 2.f &&
+                    mp.y >= btnY && mp.y <= btnY + btnH;
+                };
 
             if (inBtn(resumeY))
             {
@@ -1278,7 +1280,7 @@ void Dx12App::FrameAdvance()
         {
             XMFLOAT2 mousePos = m_inputSystem.GetMousePosition();
             int idx = m_pRuneRewardUI->HitTestRuneOption(mousePos.x, mousePos.y,
-                                                         (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+                (float)m_nWndClientWidth, (float)m_nWndClientHeight);
             if (idx >= 0)
                 m_pScene->SelectRuneByClick(idx);
         }
@@ -1309,7 +1311,7 @@ void Dx12App::FrameAdvance()
             XMFLOAT2 mousePos = m_inputSystem.GetMousePosition();
             int skillIdx = -1, runeIdx = -1;
             if (m_pRuneRewardUI->HitTestSkillSlot(mousePos.x, mousePos.y,
-                    (float)m_nWndClientWidth, (float)m_nWndClientHeight, skillIdx, runeIdx))
+                (float)m_nWndClientWidth, (float)m_nWndClientHeight, skillIdx, runeIdx))
             {
                 m_pScene->SelectSkillSlot(static_cast<SkillSlot>(skillIdx), runeIdx);
             }
@@ -1398,8 +1400,8 @@ void Dx12App::FrameAdvance()
                 XMFLOAT2 mousePos = m_inputSystem.GetMousePosition();
                 float screenCenterX = (float)m_nWndClientWidth / 2.0f;
                 float screenCenterY = (float)m_nWndClientHeight / 2.0f;
-                float slotStartY    = screenCenterY - 20.0f;
-                float lineHeight    = 50.0f;
+                float slotStartY = screenCenterY - 20.0f;
+                float lineHeight = 50.0f;
 
                 GameObject* pDbgPlayer = m_pScene->GetPlayer();
                 SkillComponent* pDbgSkill = pDbgPlayer
@@ -1532,8 +1534,8 @@ void Dx12App::FrameAdvance()
 
     // Render scene with shadow map (mainRTV + mainDSV 전달)
     m_pScene->Render(m_pd3dCommandList.Get(), m_shadowSrvGpuHandle,
-                     d3dRtvCPUDescriptorHandle, d3dDsvCPUDescriptorHandle,
-                     m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get());
+        d3dRtvCPUDescriptorHandle, d3dDsvCPUDescriptorHandle,
+        m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get());
 
     // Transition shadow map back to depth write for next frame
     D3D12_RESOURCE_BARRIER shadowBarrierBack;
@@ -1552,7 +1554,7 @@ void Dx12App::FrameAdvance()
         m_pLeafSystem->Update(deltaTime);
 
         m_pd3dCommandList->OMSetRenderTargets(1, &d3dRtvCPUDescriptorHandle,
-                                              FALSE, &d3dDsvCPUDescriptorHandle);
+            FALSE, &d3dDsvCPUDescriptorHandle);
         D3D12_VIEWPORT vpL = { 0, 0, (float)m_nWndClientWidth, (float)m_nWndClientHeight, 0, 1 };
         m_pd3dCommandList->RSSetViewports(1, &vpL);
         D3D12_RECT scL = { 0, 0, (LONG)m_nWndClientWidth, (LONG)m_nWndClientHeight };
@@ -1564,13 +1566,13 @@ void Dx12App::FrameAdvance()
             XMFLOAT4X4 vp;
             DirectX::XMStoreFloat4x4(&vp,
                 DirectX::XMMatrixTranspose(
-                  DirectX::XMLoadFloat4x4(&pCam->GetViewMatrix())
-                  * DirectX::XMLoadFloat4x4(&pCam->GetProjectionMatrix())));
+                    DirectX::XMLoadFloat4x4(&pCam->GetViewMatrix())
+                    * DirectX::XMLoadFloat4x4(&pCam->GetProjectionMatrix())));
             DirectX::XMVECTOR camRightV = pCam->GetRightDirection();
-            DirectX::XMVECTOR camUpV    = DirectX::XMVectorSet(0, 1, 0, 0);
+            DirectX::XMVECTOR camUpV = DirectX::XMVectorSet(0, 1, 0, 0);
             XMFLOAT3 camRight, camUp;
             DirectX::XMStoreFloat3(&camRight, camRightV);
-            DirectX::XMStoreFloat3(&camUp,    camUpV);
+            DirectX::XMStoreFloat3(&camUp, camUpV);
             static float s_fLeafTimeAccum = 0.0f;
             s_fLeafTimeAccum += deltaTime;
             m_pLeafSystem->Render(m_pd3dCommandList.Get(), vp, camRight, camUp, s_fLeafTimeAccum);
@@ -1580,18 +1582,18 @@ void Dx12App::FrameAdvance()
     // Bloom: capture LDR scene from the back buffer, extract bright pixels (threshold),
     // Gaussian blur, then additive-composite back onto the swap-chain back buffer.
     m_pBloom->Apply(m_pd3dCommandList.Get(),
-                    m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get(),
-                    d3dRtvCPUDescriptorHandle,
-                    m_nWndClientWidth, m_nWndClientHeight);
+        m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get(),
+        d3dRtvCPUDescriptorHandle,
+        m_nWndClientWidth, m_nWndClientHeight);
 
     // 화면 분리 후처리 — Bloom 직후, WhiteFlash 전. capture → split shader → backbuffer.
     if (m_pScreenSplit)
     {
         m_pScreenSplit->Tick(deltaTime);
         m_pScreenSplit->Apply(m_pd3dCommandList.Get(),
-                              m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get(),
-                              d3dRtvCPUDescriptorHandle,
-                              m_nWndClientWidth, m_nWndClientHeight);
+            m_pd3dRenderTargetBuffers[m_nSwapChainBufferIndex].Get(),
+            d3dRtvCPUDescriptorHandle,
+            m_nWndClientWidth, m_nWndClientHeight);
     }
 
     // 검기 화이트 플래시 — Bloom 직후, 텍스트/HUD 직전.
@@ -1599,8 +1601,8 @@ void Dx12App::FrameAdvance()
     {
         m_pWhiteFlash->Tick(deltaTime);
         m_pWhiteFlash->Apply(m_pd3dCommandList.Get(),
-                             d3dRtvCPUDescriptorHandle,
-                             m_nWndClientWidth, m_nWndClientHeight);
+            d3dRtvCPUDescriptorHandle,
+            m_nWndClientWidth, m_nWndClientHeight);
     }
 
     // Text rendering (2D overlay on top of 3D scene + bloom)
@@ -1739,123 +1741,123 @@ ComPtr<ID3D12Resource> Dx12App::CreateBufferResource(const void* pData, UINT nBy
 //   RGB 는 흰색으로 두고 알파로만 형태를 정의 → 스폰 시 color 인자로 틴트.
 //   포맷 R8G8B8A8_UNORM, 리틀엔디언: byte0=R 이므로 0xAABBGGRR (흰색=0x00FFFFFF | A<<24).
 namespace {
-inline float ProcClampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
-inline float ProcMin(float a, float b) { return a < b ? a : b; }
-inline float ProcMax(float a, float b) { return a > b ? a : b; }
+    inline float ProcClampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+    inline float ProcMin(float a, float b) { return a < b ? a : b; }
+    inline float ProcMax(float a, float b) { return a > b ? a : b; }
 
-inline void ProcPlotWhite(std::vector<uint32_t>& px, int dim, int x, int y, float a)
-{
-    if (x < 0 || y < 0 || x >= dim || y >= dim) return;
-    a = ProcClampf(a, 0.f, 1.f);
-    uint32_t A = (uint32_t)(a * 255.f + 0.5f);
-    uint32_t& p = px[(size_t)y * dim + x];
-    uint32_t curA = (p >> 24) & 0xFFu;
-    if (A > curA) p = 0x00FFFFFFu | (A << 24);   // 흰색 RGB + 최대 알파 블렌드
-}
-
-// 시계: 바깥 링 + 12눈금(정각 4개 강조) + 시침/분침 + 중심 허브
-void BuildClockTexture(std::vector<uint32_t>& px, int dim)
-{
-    const float c  = (dim - 1) * 0.5f;
-    const float R  = dim * 0.46f;
-    const float ringHalf = dim * 0.028f;
-    const float aa = 1.1f;
-    const float PI = 3.14159265f;
-
-    for (int y = 0; y < dim; ++y)
-    for (int x = 0; x < dim; ++x)
+    inline void ProcPlotWhite(std::vector<uint32_t>& px, int dim, int x, int y, float a)
     {
-        float dx = x - c, dy = y - c;
-        float r  = sqrtf(dx * dx + dy * dy);
+        if (x < 0 || y < 0 || x >= dim || y >= dim) return;
+        a = ProcClampf(a, 0.f, 1.f);
+        uint32_t A = (uint32_t)(a * 255.f + 0.5f);
+        uint32_t& p = px[(size_t)y * dim + x];
+        uint32_t curA = (p >> 24) & 0xFFu;
+        if (A > curA) p = 0x00FFFFFFu | (A << 24);   // 흰색 RGB + 최대 알파 블렌드
+    }
 
-        // 바깥 링
-        float ringCov = ProcClampf((ringHalf - fabsf(r - R)) / aa + 0.5f, 0.f, 1.f);
-        if (ringCov > 0.f) ProcPlotWhite(px, dim, x, y, ringCov);
+    // 시계: 바깥 링 + 12눈금(정각 4개 강조) + 시침/분침 + 중심 허브
+    void BuildClockTexture(std::vector<uint32_t>& px, int dim)
+    {
+        const float c = (dim - 1) * 0.5f;
+        const float R = dim * 0.46f;
+        const float ringHalf = dim * 0.028f;
+        const float aa = 1.1f;
+        const float PI = 3.14159265f;
 
-        // 12눈금
-        if (r > R * 0.62f && r < R * 0.92f)
-        {
-            float ang     = atan2f(dy, dx);
-            float step    = PI / 6.f;
-            float nearest = floorf(ang / step + 0.5f);
-            float da      = fabsf(ang / step - nearest) * step;     // 각거리
-            bool  cardinal = (((int)llroundf(nearest)) % 3) == 0;   // 12/3/6/9
-            float halfW   = (cardinal ? dim * 0.016f : dim * 0.009f) / r;
-            float inner   = cardinal ? R * 0.62f : R * 0.74f;
-            if (r > inner)
+        for (int y = 0; y < dim; ++y)
+            for (int x = 0; x < dim; ++x)
             {
-                float cov = ProcClampf((halfW - da) / (aa / r) + 0.5f, 0.f, 1.f);
+                float dx = x - c, dy = y - c;
+                float r = sqrtf(dx * dx + dy * dy);
+
+                // 바깥 링
+                float ringCov = ProcClampf((ringHalf - fabsf(r - R)) / aa + 0.5f, 0.f, 1.f);
+                if (ringCov > 0.f) ProcPlotWhite(px, dim, x, y, ringCov);
+
+                // 12눈금
+                if (r > R * 0.62f && r < R * 0.92f)
+                {
+                    float ang = atan2f(dy, dx);
+                    float step = PI / 6.f;
+                    float nearest = floorf(ang / step + 0.5f);
+                    float da = fabsf(ang / step - nearest) * step;     // 각거리
+                    bool  cardinal = (((int)llroundf(nearest)) % 3) == 0;   // 12/3/6/9
+                    float halfW = (cardinal ? dim * 0.016f : dim * 0.009f) / r;
+                    float inner = cardinal ? R * 0.62f : R * 0.74f;
+                    if (r > inner)
+                    {
+                        float cov = ProcClampf((halfW - da) / (aa / r) + 0.5f, 0.f, 1.f);
+                        if (cov > 0.f) ProcPlotWhite(px, dim, x, y, cov);
+                    }
+                }
+            }
+
+        // 바늘: 12시가 위(-90°). 시침=10시 방향, 분침=2시 방향 (정지 시계 느낌)
+        auto drawHand = [&](float angDeg, float len, float halfW) {
+            float a = angDeg * PI / 180.f;
+            float ex = cosf(a), ey = sinf(a);
+            for (int y = 0; y < dim; ++y)
+                for (int x = 0; x < dim; ++x)
+                {
+                    float pxx = x - c, pyy = y - c;
+                    float t = ProcClampf(pxx * ex + pyy * ey, 0.f, len);
+                    float qx = pxx - ex * t, qy = pyy - ey * t;
+                    float d = sqrtf(qx * qx + qy * qy);
+                    float cov = ProcClampf((halfW - d) + 0.5f, 0.f, 1.f);
+                    if (cov > 0.f) ProcPlotWhite(px, dim, x, y, cov);
+                }
+            };
+        drawHand(-90.f - 60.f, R * 0.46f, dim * 0.018f);
+        drawHand(-90.f + 60.f, R * 0.66f, dim * 0.012f);
+
+        // 중심 허브
+        for (int y = 0; y < dim; ++y)
+            for (int x = 0; x < dim; ++x)
+            {
+                float dx = x - c, dy = y - c;
+                float d = sqrtf(dx * dx + dy * dy);
+                float cov = ProcClampf((dim * 0.03f - d) + 0.5f, 0.f, 1.f);
                 if (cov > 0.f) ProcPlotWhite(px, dim, x, y, cov);
             }
-        }
     }
 
-    // 바늘: 12시가 위(-90°). 시침=10시 방향, 분침=2시 방향 (정지 시계 느낌)
-    auto drawHand = [&](float angDeg, float len, float halfW) {
-        float a  = angDeg * PI / 180.f;
-        float ex = cosf(a), ey = sinf(a);
-        for (int y = 0; y < dim; ++y)
-        for (int x = 0; x < dim; ++x)
-        {
-            float pxx = x - c, pyy = y - c;
-            float t = ProcClampf(pxx * ex + pyy * ey, 0.f, len);
-            float qx = pxx - ex * t, qy = pyy - ey * t;
-            float d  = sqrtf(qx * qx + qy * qy);
-            float cov = ProcClampf((halfW - d) + 0.5f, 0.f, 1.f);
-            if (cov > 0.f) ProcPlotWhite(px, dim, x, y, cov);
-        }
-    };
-    drawHand(-90.f - 60.f, R * 0.46f, dim * 0.018f);
-    drawHand(-90.f + 60.f, R * 0.66f, dim * 0.012f);
-
-    // 중심 허브
-    for (int y = 0; y < dim; ++y)
-    for (int x = 0; x < dim; ++x)
+    // 이빨: 아래로 뾰족한 송곳니 두 개 (흡혈귀 바이트)
+    void BuildFangTexture(std::vector<uint32_t>& px, int dim)
     {
-        float dx = x - c, dy = y - c;
-        float d  = sqrtf(dx * dx + dy * dy);
-        float cov = ProcClampf((dim * 0.03f - d) + 0.5f, 0.f, 1.f);
-        if (cov > 0.f) ProcPlotWhite(px, dim, x, y, cov);
+        auto fillTri = [&](float ax, float ay, float bx, float by, float cx, float cy) {
+            auto edge = [](float Px, float Py, float x0, float y0, float x1, float y1,
+                float ox, float oy) -> float {
+                    float ex = x1 - x0, ey = y1 - y0;
+                    float nx = -ey, ny = ex;
+                    float len = sqrtf(nx * nx + ny * ny);
+                    if (len < 1e-5f) return 0.f;
+                    nx /= len; ny /= len;
+                    float d = (Px - x0) * nx + (Py - y0) * ny;
+                    float od = (ox - x0) * nx + (oy - y0) * ny;   // 내부(반대 꼭짓점) 쪽이 +
+                    return od < 0.f ? -d : d;
+                };
+            int minx = (int)floorf(ProcMin(ax, ProcMin(bx, cx))) - 1;
+            int maxx = (int)ceilf(ProcMax(ax, ProcMax(bx, cx))) + 1;
+            int miny = (int)floorf(ProcMin(ay, ProcMin(by, cy))) - 1;
+            int maxy = (int)ceilf(ProcMax(ay, ProcMax(by, cy))) + 1;
+            for (int y = miny; y <= maxy; ++y)
+                for (int x = minx; x <= maxx; ++x)
+                {
+                    float fx = x + 0.5f, fy = y + 0.5f;
+                    float d0 = edge(fx, fy, ax, ay, bx, by, cx, cy);
+                    float d1 = edge(fx, fy, bx, by, cx, cy, ax, ay);
+                    float d2 = edge(fx, fy, cx, cy, ax, ay, bx, by);
+                    float m = ProcMin(d0, ProcMin(d1, d2));
+                    float cov = ProcClampf(m + 0.5f, 0.f, 1.f);
+                    if (cov > 0.f) ProcPlotWhite(px, dim, x, y, cov);
+                }
+            };
+        float yTop = dim * 0.26f, yTip = dim * 0.72f;
+        float w = dim * 0.15f;
+        float lx = dim * 0.37f, rx = dim * 0.63f;
+        fillTri(lx - w * 0.5f, yTop, lx + w * 0.5f, yTop, lx, yTip);   // 왼쪽 송곳니
+        fillTri(rx - w * 0.5f, yTop, rx + w * 0.5f, yTop, rx, yTip);   // 오른쪽 송곳니
     }
-}
-
-// 이빨: 아래로 뾰족한 송곳니 두 개 (흡혈귀 바이트)
-void BuildFangTexture(std::vector<uint32_t>& px, int dim)
-{
-    auto fillTri = [&](float ax, float ay, float bx, float by, float cx, float cy) {
-        auto edge = [](float Px, float Py, float x0, float y0, float x1, float y1,
-                       float ox, float oy) -> float {
-            float ex = x1 - x0, ey = y1 - y0;
-            float nx = -ey, ny = ex;
-            float len = sqrtf(nx * nx + ny * ny);
-            if (len < 1e-5f) return 0.f;
-            nx /= len; ny /= len;
-            float d  = (Px - x0) * nx + (Py - y0) * ny;
-            float od = (ox - x0) * nx + (oy - y0) * ny;   // 내부(반대 꼭짓점) 쪽이 +
-            return od < 0.f ? -d : d;
-        };
-        int minx = (int)floorf(ProcMin(ax, ProcMin(bx, cx))) - 1;
-        int maxx = (int)ceilf (ProcMax(ax, ProcMax(bx, cx))) + 1;
-        int miny = (int)floorf(ProcMin(ay, ProcMin(by, cy))) - 1;
-        int maxy = (int)ceilf (ProcMax(ay, ProcMax(by, cy))) + 1;
-        for (int y = miny; y <= maxy; ++y)
-        for (int x = minx; x <= maxx; ++x)
-        {
-            float fx = x + 0.5f, fy = y + 0.5f;
-            float d0 = edge(fx, fy, ax, ay, bx, by, cx, cy);
-            float d1 = edge(fx, fy, bx, by, cx, cy, ax, ay);
-            float d2 = edge(fx, fy, cx, cy, ax, ay, bx, by);
-            float m  = ProcMin(d0, ProcMin(d1, d2));
-            float cov = ProcClampf(m + 0.5f, 0.f, 1.f);
-            if (cov > 0.f) ProcPlotWhite(px, dim, x, y, cov);
-        }
-    };
-    float yTop = dim * 0.26f, yTip = dim * 0.72f;
-    float w    = dim * 0.15f;
-    float lx   = dim * 0.37f, rx = dim * 0.63f;
-    fillTri(lx - w * 0.5f, yTop, lx + w * 0.5f, yTop, lx, yTip);   // 왼쪽 송곳니
-    fillTri(rx - w * 0.5f, yTop, rx + w * 0.5f, yTop, rx, yTip);   // 오른쪽 송곳니
-}
 } // namespace
 
 void Dx12App::InitializeText()
@@ -1928,7 +1930,7 @@ void Dx12App::InitializeText()
     //   base/fill = 슬롯 1,2 / 보호막 fill = UI 슬롯 바로 뒤(=10+Count) → 충돌 없음
     const UINT kShieldHeapSlot = kUIHeapBase + (UINT)UISlot::Count;  // = 29
     m_pHealthBarUI->Initialize(m_pd3dDevice.Get(), m_pd3dCommandList.Get(),
-                                m_fontDescriptorHeap.get(), 1, kShieldHeapSlot);
+        m_fontDescriptorHeap.get(), 1, kShieldHeapSlot);
 
     // CommandList를 닫고 실행
     CHECK_HR(m_pd3dCommandList->Close());
@@ -1941,93 +1943,93 @@ void Dx12App::InitializeText()
     CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
     {
         auto loadVFXTex = [&](const wchar_t* path,
-                               ComPtr<ID3D12Resource>& tex, ComPtr<ID3D12Resource>& upload,
-                               UINT heapSlot, const std::string& regId)
-        {
-            std::unique_ptr<uint8_t[]> decoded;
-            D3D12_SUBRESOURCE_DATA sub{};
-            if (FAILED(DirectX::LoadWICTextureFromFile(m_pd3dDevice.Get(), path,
-                                                        tex.ReleaseAndGetAddressOf(), decoded, sub)))
+            ComPtr<ID3D12Resource>& tex, ComPtr<ID3D12Resource>& upload,
+            UINT heapSlot, const std::string& regId)
             {
-                char buf[256];
-                sprintf_s(buf, "[VFXSprite] 텍스처 로드 실패: %ls\n", path);
-                OutputDebugStringA(buf);
-                return;
-            }
-            UINT64 sz = GetRequiredIntermediateSize(tex.Get(), 0, 1);
-            CD3DX12_HEAP_PROPERTIES hp(D3D12_HEAP_TYPE_UPLOAD);
-            auto bd = CD3DX12_RESOURCE_DESC::Buffer(sz);
-            m_pd3dDevice->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd,
-                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&upload));
-            UpdateSubresources(m_pd3dCommandList.Get(), tex.Get(), upload.Get(), 0, 0, 1, &sub);
-            auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(tex.Get(),
-                D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-            m_pd3dCommandList->ResourceBarrier(1, &barrier);
+                std::unique_ptr<uint8_t[]> decoded;
+                D3D12_SUBRESOURCE_DATA sub{};
+                if (FAILED(DirectX::LoadWICTextureFromFile(m_pd3dDevice.Get(), path,
+                    tex.ReleaseAndGetAddressOf(), decoded, sub)))
+                {
+                    char buf[256];
+                    sprintf_s(buf, "[VFXSprite] 텍스처 로드 실패: %ls\n", path);
+                    OutputDebugStringA(buf);
+                    return;
+                }
+                UINT64 sz = GetRequiredIntermediateSize(tex.Get(), 0, 1);
+                CD3DX12_HEAP_PROPERTIES hp(D3D12_HEAP_TYPE_UPLOAD);
+                auto bd = CD3DX12_RESOURCE_DESC::Buffer(sz);
+                m_pd3dDevice->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd,
+                    D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&upload));
+                UpdateSubresources(m_pd3dCommandList.Get(), tex.Get(), upload.Get(), 0, 0, 1, &sub);
+                auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(tex.Get(),
+                    D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                m_pd3dCommandList->ResourceBarrier(1, &barrier);
 
-            D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-            srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-            srvDesc.Format                  = tex->GetDesc().Format;
-            srvDesc.ViewDimension           = D3D12_SRV_DIMENSION_TEXTURE2D;
-            srvDesc.Texture2D.MipLevels     = tex->GetDesc().MipLevels;
-            m_pd3dDevice->CreateShaderResourceView(tex.Get(), &srvDesc,
-                m_fontDescriptorHeap->GetCpuHandle(heapSlot));
+                D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+                srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                srvDesc.Format = tex->GetDesc().Format;
+                srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+                srvDesc.Texture2D.MipLevels = tex->GetDesc().MipLevels;
+                m_pd3dDevice->CreateShaderResourceView(tex.Get(), &srvDesc,
+                    m_fontDescriptorHeap->GetCpuHandle(heapSlot));
 
-            auto desc = tex->GetDesc();
-            VFXSpriteManager::Get().RegisterTex(regId,
-                m_fontDescriptorHeap->GetGpuHandle(heapSlot),
-                (UINT)desc.Width, (UINT)desc.Height);
-        };
+                auto desc = tex->GetDesc();
+                VFXSpriteManager::Get().RegisterTex(regId,
+                    m_fontDescriptorHeap->GetGpuHandle(heapSlot),
+                    (UINT)desc.Width, (UINT)desc.Height);
+            };
 
-        loadVFXTex(L"Assets/Textures/VFX/magic_03.png",   m_pMagicDecalTex, m_pMagicDecalUpload, 4, "magic3");
-        loadVFXTex(L"Assets/Textures/VFX/human-skull.png", m_pSkullTex,      m_pSkullUpload,      5, "skull");
-        loadVFXTex(L"Assets/Textures/VFX/star_08.png",     m_pStarTex,       m_pStarUpload,       6, "star_08");
-        loadVFXTex(L"Assets/Textures/VFX/twirl_01.png",    m_pTwirlTex,      m_pTwirlUpload,      7, "twirl1");
-        loadVFXTex(L"Assets/Textures/VFX/fire_01.png",     m_pFlameTex,      m_pFlameUpload,      8, "fire1");
-        loadVFXTex(L"Assets/Textures/VFX/flare_01.png",    m_pFlareTex,      m_pFlareUpload,      9, "flare1");
+        loadVFXTex(L"Assets/Textures/VFX/magic_03.png", m_pMagicDecalTex, m_pMagicDecalUpload, 4, "magic3");
+        loadVFXTex(L"Assets/Textures/VFX/human-skull.png", m_pSkullTex, m_pSkullUpload, 5, "skull");
+        loadVFXTex(L"Assets/Textures/VFX/star_08.png", m_pStarTex, m_pStarUpload, 6, "star_08");
+        loadVFXTex(L"Assets/Textures/VFX/twirl_01.png", m_pTwirlTex, m_pTwirlUpload, 7, "twirl1");
+        loadVFXTex(L"Assets/Textures/VFX/fire_01.png", m_pFlameTex, m_pFlameUpload, 8, "fire1");
+        loadVFXTex(L"Assets/Textures/VFX/flare_01.png", m_pFlareTex, m_pFlareUpload, 9, "flare1");
 
         // ── 프로시저럴 생성 텍스처 (시계=시간역행, 이빨=흡혈) ──────────────────────
         auto createProcTex = [&](const std::vector<uint32_t>& pixels, UINT dim,
-                                  ComPtr<ID3D12Resource>& tex, ComPtr<ID3D12Resource>& upload,
-                                  UINT heapSlot, const std::string& regId)
-        {
-            CD3DX12_HEAP_PROPERTIES dhp(D3D12_HEAP_TYPE_DEFAULT);
-            auto td = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, dim, dim, 1, 1);
-            m_pd3dDevice->CreateCommittedResource(&dhp, D3D12_HEAP_FLAG_NONE, &td,
-                D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&tex));
+            ComPtr<ID3D12Resource>& tex, ComPtr<ID3D12Resource>& upload,
+            UINT heapSlot, const std::string& regId)
+            {
+                CD3DX12_HEAP_PROPERTIES dhp(D3D12_HEAP_TYPE_DEFAULT);
+                auto td = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, dim, dim, 1, 1);
+                m_pd3dDevice->CreateCommittedResource(&dhp, D3D12_HEAP_FLAG_NONE, &td,
+                    D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&tex));
 
-            D3D12_SUBRESOURCE_DATA sub{};
-            sub.pData      = pixels.data();
-            sub.RowPitch   = (LONG_PTR)dim * 4;
-            sub.SlicePitch = sub.RowPitch * dim;
+                D3D12_SUBRESOURCE_DATA sub{};
+                sub.pData = pixels.data();
+                sub.RowPitch = (LONG_PTR)dim * 4;
+                sub.SlicePitch = sub.RowPitch * dim;
 
-            UINT64 sz = GetRequiredIntermediateSize(tex.Get(), 0, 1);
-            CD3DX12_HEAP_PROPERTIES uhp(D3D12_HEAP_TYPE_UPLOAD);
-            auto bd = CD3DX12_RESOURCE_DESC::Buffer(sz);
-            m_pd3dDevice->CreateCommittedResource(&uhp, D3D12_HEAP_FLAG_NONE, &bd,
-                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&upload));
-            UpdateSubresources(m_pd3dCommandList.Get(), tex.Get(), upload.Get(), 0, 0, 1, &sub);
-            auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(tex.Get(),
-                D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-            m_pd3dCommandList->ResourceBarrier(1, &barrier);
+                UINT64 sz = GetRequiredIntermediateSize(tex.Get(), 0, 1);
+                CD3DX12_HEAP_PROPERTIES uhp(D3D12_HEAP_TYPE_UPLOAD);
+                auto bd = CD3DX12_RESOURCE_DESC::Buffer(sz);
+                m_pd3dDevice->CreateCommittedResource(&uhp, D3D12_HEAP_FLAG_NONE, &bd,
+                    D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&upload));
+                UpdateSubresources(m_pd3dCommandList.Get(), tex.Get(), upload.Get(), 0, 0, 1, &sub);
+                auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(tex.Get(),
+                    D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                m_pd3dCommandList->ResourceBarrier(1, &barrier);
 
-            D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-            srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-            srvDesc.Format                  = DXGI_FORMAT_R8G8B8A8_UNORM;
-            srvDesc.ViewDimension           = D3D12_SRV_DIMENSION_TEXTURE2D;
-            srvDesc.Texture2D.MipLevels     = 1;
-            m_pd3dDevice->CreateShaderResourceView(tex.Get(), &srvDesc,
-                m_fontDescriptorHeap->GetCpuHandle(heapSlot));
-            VFXSpriteManager::Get().RegisterTex(regId,
-                m_fontDescriptorHeap->GetGpuHandle(heapSlot), dim, dim);
-        };
+                D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+                srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+                srvDesc.Texture2D.MipLevels = 1;
+                m_pd3dDevice->CreateShaderResourceView(tex.Get(), &srvDesc,
+                    m_fontDescriptorHeap->GetCpuHandle(heapSlot));
+                VFXSpriteManager::Get().RegisterTex(regId,
+                    m_fontDescriptorHeap->GetGpuHandle(heapSlot), dim, dim);
+            };
 
         constexpr UINT kProcDim = 128;
         std::vector<uint32_t> clockPx((size_t)kProcDim * kProcDim, 0u);
-        std::vector<uint32_t> fangPx ((size_t)kProcDim * kProcDim, 0u);
+        std::vector<uint32_t> fangPx((size_t)kProcDim * kProcDim, 0u);
         BuildClockTexture(clockPx, kProcDim);
-        BuildFangTexture (fangPx,  kProcDim);
+        BuildFangTexture(fangPx, kProcDim);
         createProcTex(clockPx, kProcDim, m_pClockTex, m_pClockUpload, 30, "clock");
-        createProcTex(fangPx,  kProcDim, m_pFangTex,  m_pFangUpload,  31, "fang");
+        createProcTex(fangPx, kProcDim, m_pFangTex, m_pFangUpload, 31, "fang");
     }
     CHECK_HR(m_pd3dCommandList->Close());
     ID3D12CommandList* vfxCmdLists[] = { m_pd3dCommandList.Get() };
@@ -2067,64 +2069,64 @@ void Dx12App::InitializeText()
     CHECK_HR(m_pd3dCommandList->Reset(m_pd3dCommandAllocator.Get(), NULL));
     {
         auto loadUITex = [&](const wchar_t* path, UISlot slot)
-        {
-            UINT idx      = (UINT)slot;
-            UINT heapSlot = kUIHeapBase + idx;
-
-            std::unique_ptr<uint8_t[]> decoded;
-            D3D12_SUBRESOURCE_DATA sub{};
-            if (FAILED(DirectX::LoadWICTextureFromFile(m_pd3dDevice.Get(), path,
-                m_pUITex[idx].ReleaseAndGetAddressOf(), decoded, sub)))
             {
-                char buf[256];
-                sprintf_s(buf, "[UI] 텍스처 로드 실패: %ls\n", path);
-                OutputDebugStringA(buf);
-                return;
-            }
-            UINT64 sz = GetRequiredIntermediateSize(m_pUITex[idx].Get(), 0, 1);
-            CD3DX12_HEAP_PROPERTIES hp(D3D12_HEAP_TYPE_UPLOAD);
-            auto bd = CD3DX12_RESOURCE_DESC::Buffer(sz);
-            m_pd3dDevice->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd,
-                D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
-                IID_PPV_ARGS(&m_pUIUpload[idx]));
-            UpdateSubresources(m_pd3dCommandList.Get(), m_pUITex[idx].Get(),
-                               m_pUIUpload[idx].Get(), 0, 0, 1, &sub);
-            auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(m_pUITex[idx].Get(),
-                D3D12_RESOURCE_STATE_COPY_DEST,
-                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-            m_pd3dCommandList->ResourceBarrier(1, &barrier);
+                UINT idx = (UINT)slot;
+                UINT heapSlot = kUIHeapBase + idx;
 
-            D3D12_SHADER_RESOURCE_VIEW_DESC sd{};
-            sd.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-            sd.Format                  = m_pUITex[idx]->GetDesc().Format;
-            sd.ViewDimension           = D3D12_SRV_DIMENSION_TEXTURE2D;
-            sd.Texture2D.MipLevels     = m_pUITex[idx]->GetDesc().MipLevels;
-            m_pd3dDevice->CreateShaderResourceView(m_pUITex[idx].Get(), &sd,
-                m_fontDescriptorHeap->GetCpuHandle(heapSlot));
-            m_hUI[idx] = m_fontDescriptorHeap->GetGpuHandle(heapSlot);
-        };
+                std::unique_ptr<uint8_t[]> decoded;
+                D3D12_SUBRESOURCE_DATA sub{};
+                if (FAILED(DirectX::LoadWICTextureFromFile(m_pd3dDevice.Get(), path,
+                    m_pUITex[idx].ReleaseAndGetAddressOf(), decoded, sub)))
+                {
+                    char buf[256];
+                    sprintf_s(buf, "[UI] 텍스처 로드 실패: %ls\n", path);
+                    OutputDebugStringA(buf);
+                    return;
+                }
+                UINT64 sz = GetRequiredIntermediateSize(m_pUITex[idx].Get(), 0, 1);
+                CD3DX12_HEAP_PROPERTIES hp(D3D12_HEAP_TYPE_UPLOAD);
+                auto bd = CD3DX12_RESOURCE_DESC::Buffer(sz);
+                m_pd3dDevice->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd,
+                    D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                    IID_PPV_ARGS(&m_pUIUpload[idx]));
+                UpdateSubresources(m_pd3dCommandList.Get(), m_pUITex[idx].Get(),
+                    m_pUIUpload[idx].Get(), 0, 0, 1, &sub);
+                auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(m_pUITex[idx].Get(),
+                    D3D12_RESOURCE_STATE_COPY_DEST,
+                    D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+                m_pd3dCommandList->ResourceBarrier(1, &barrier);
 
-        loadUITex(L"Assets/Textures/UI/title_bg.png",         UISlot::TitleBg);
-        loadUITex(L"Assets/Textures/UI/title_logo.png",       UISlot::TitleLogo);
-        loadUITex(L"Assets/Textures/UI/btn_normal.png",       UISlot::BtnNormal);
-        loadUITex(L"Assets/Textures/UI/btn_hover.png",        UISlot::BtnHover);
-        loadUITex(L"Assets/Textures/UI/Loading.png",          UISlot::LoadingBg);
-        loadUITex(L"Assets/Textures/UI/loading_spinner.png",  UISlot::LoadingSpinner);
-        loadUITex(L"Assets/Textures/UI/pause_panel.png",      UISlot::PausePanel);
-        loadUITex(L"Assets/Textures/UI/gameover_bg.png",      UISlot::GameOverBg);
-        loadUITex(L"Assets/Textures/UI/gameover_title.png",   UISlot::GameOverTitle);
-        loadUITex(L"Assets/Textures/UI/ending_bg.png",        UISlot::EndingBg);
-        loadUITex(L"Assets/Textures/UI/ending_title.png",     UISlot::EndingTitle);
-        loadUITex(L"Assets/Textures/UI/hud_stage_badge.png",  UISlot::HudStageBadge);
-        loadUITex(L"Assets/Textures/UI/hud_boss_bar.png",     UISlot::HudBossBar);
-        loadUITex(L"Assets/Textures/UI/hud_boss_bar_fill.png",UISlot::HudBossBarFill);
-        loadUITex(L"Assets/Textures/UI/avatar_fire.png",      UISlot::AvatarFire);
-        loadUITex(L"Assets/Textures/UI/avatar_water.png",     UISlot::AvatarWater);
-        loadUITex(L"Assets/Textures/UI/avatar_wind.png",      UISlot::AvatarWind);
-        loadUITex(L"Assets/Textures/UI/avatar_earth.png",     UISlot::AvatarEarth);
+                D3D12_SHADER_RESOURCE_VIEW_DESC sd{};
+                sd.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                sd.Format = m_pUITex[idx]->GetDesc().Format;
+                sd.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+                sd.Texture2D.MipLevels = m_pUITex[idx]->GetDesc().MipLevels;
+                m_pd3dDevice->CreateShaderResourceView(m_pUITex[idx].Get(), &sd,
+                    m_fontDescriptorHeap->GetCpuHandle(heapSlot));
+                m_hUI[idx] = m_fontDescriptorHeap->GetGpuHandle(heapSlot);
+            };
+
+        loadUITex(L"Assets/Textures/UI/title_bg.png", UISlot::TitleBg);
+        loadUITex(L"Assets/Textures/UI/title_logo.png", UISlot::TitleLogo);
+        loadUITex(L"Assets/Textures/UI/btn_normal.png", UISlot::BtnNormal);
+        loadUITex(L"Assets/Textures/UI/btn_hover.png", UISlot::BtnHover);
+        loadUITex(L"Assets/Textures/UI/Loading.png", UISlot::LoadingBg);
+        loadUITex(L"Assets/Textures/UI/loading_spinner.png", UISlot::LoadingSpinner);
+        loadUITex(L"Assets/Textures/UI/pause_panel.png", UISlot::PausePanel);
+        loadUITex(L"Assets/Textures/UI/gameover_bg.png", UISlot::GameOverBg);
+        loadUITex(L"Assets/Textures/UI/gameover_title.png", UISlot::GameOverTitle);
+        loadUITex(L"Assets/Textures/UI/ending_bg.png", UISlot::EndingBg);
+        loadUITex(L"Assets/Textures/UI/ending_title.png", UISlot::EndingTitle);
+        loadUITex(L"Assets/Textures/UI/hud_stage_badge.png", UISlot::HudStageBadge);
+        loadUITex(L"Assets/Textures/UI/hud_boss_bar.png", UISlot::HudBossBar);
+        loadUITex(L"Assets/Textures/UI/hud_boss_bar_fill.png", UISlot::HudBossBarFill);
+        loadUITex(L"Assets/Textures/UI/avatar_fire.png", UISlot::AvatarFire);
+        loadUITex(L"Assets/Textures/UI/avatar_water.png", UISlot::AvatarWater);
+        loadUITex(L"Assets/Textures/UI/avatar_wind.png", UISlot::AvatarWind);
+        loadUITex(L"Assets/Textures/UI/avatar_earth.png", UISlot::AvatarEarth);
         // 최종 보스 입장 컷씬용 화면 대각 베기 — Kenney slash_02 (깔끔 호) 를 스크린 오버레이로 사용.
         //   파일 위치는 UI 폴더가 아니라 VFX 폴더지만 WIC 로더는 경로 무관.
-        loadUITex(L"Assets/Textures/VFX/slash_02.png",        UISlot::IntroSlash);
+        loadUITex(L"Assets/Textures/VFX/slash_02.png", UISlot::IntroSlash);
     }
     CHECK_HR(m_pd3dCommandList->Close());
     ID3D12CommandList* uiCmdLists[] = { m_pd3dCommandList.Get() };
@@ -2144,32 +2146,32 @@ void Dx12App::RenderPauseMenu()
         float panelH = (float)m_nWndClientHeight * 0.80f;
         float panelScale = panelH / (float)panelSz.y;
         float panelW = panelSz.x * panelScale;
-        float panelX = ((float)m_nWndClientWidth  - panelW) * 0.5f;
+        float panelX = ((float)m_nWndClientWidth - panelW) * 0.5f;
         float panelY = ((float)m_nWndClientHeight - panelH) * 0.5f;
         RECT panelDst = { (LONG)panelX, (LONG)panelY,
                           (LONG)(panelX + panelW), (LONG)(panelY + panelH) };
         m_spriteBatch->Draw(m_hUI[(UINT)UISlot::PausePanel], panelSz, panelDst);
     }
 
-    float cx = (float)m_nWndClientWidth  / 2.0f;
+    float cx = (float)m_nWndClientWidth / 2.0f;
     float cy = (float)m_nWndClientHeight / 2.0f;
     XMFLOAT2 mp = m_inputSystem.GetMousePosition();
 
     constexpr float btnW = 220.0f, btnH = 40.0f;
-    float resumeY     = cy - 30.0f;
+    float resumeY = cy - 30.0f;
     float charSelectY = cy + 30.0f;
-    float quitY       = cy + 90.0f;
+    float quitY = cy + 90.0f;
 
     auto isHover = [&](float btnY) {
-        return mp.x >= cx - btnW/2.f && mp.x <= cx + btnW/2.f &&
-               mp.y >= btnY && mp.y <= btnY + btnH;
-    };
+        return mp.x >= cx - btnW / 2.f && mp.x <= cx + btnW / 2.f &&
+            mp.y >= btnY && mp.y <= btnY + btnH;
+        };
     auto drawBtn = [&](const wchar_t* text, float btnY, DirectX::XMVECTORF32 normal, DirectX::XMVECTORF32 hovered) {
         XMVECTOR sz = m_spriteFont->MeasureString(text);
         m_spriteFont->DrawString(m_spriteBatch.get(), text,
             XMFLOAT2(cx - XMVectorGetX(sz) / 2.0f, btnY),
             isHover(btnY) ? hovered : normal);
-    };
+        };
 
     // Title
     const wchar_t* title = L"===  일시정지  ===";
@@ -2178,9 +2180,9 @@ void Dx12App::RenderPauseMenu()
         XMFLOAT2(cx - XMVectorGetX(tsz) / 2.0f, cy - 90.0f),
         DirectX::Colors::White);
 
-    drawBtn(L"계속하기",              resumeY,     DirectX::Colors::White,     DirectX::Colors::Yellow);
-    drawBtn(L"캐릭터 선택 화면으로",   charSelectY, DirectX::Colors::LightBlue, DirectX::Colors::Cyan);
-    drawBtn(L"게임 종료",             quitY,       DirectX::Colors::Gray,      DirectX::Colors::OrangeRed);
+    drawBtn(L"계속하기", resumeY, DirectX::Colors::White, DirectX::Colors::Yellow);
+    drawBtn(L"캐릭터 선택 화면으로", charSelectY, DirectX::Colors::LightBlue, DirectX::Colors::Cyan);
+    drawBtn(L"게임 종료", quitY, DirectX::Colors::Gray, DirectX::Colors::OrangeRed);
 
     // Hint
     const wchar_t* hint = L"[ESC] 계속하기";
@@ -2204,7 +2206,7 @@ void Dx12App::BuildDebugRuneList()
         case RuneGrade::Rare:      return 3;
         default:                   return 4;
         }
-    };
+        };
 
     std::sort(m_debugRuneSortedIds.begin(), m_debugRuneSortedIds.end(),
         [&](const std::string& a, const std::string& b) {
@@ -2257,9 +2259,9 @@ void Dx12App::RenderDebugRuneUI()
 
             float rowY = kDebugRowsStartY + i * kDebugRowHeight;
             bool isHovered = (mousePos.x >= kDebugPanelLeft &&
-                               mousePos.x <= kDebugPanelLeft + kDebugPanelWidth &&
-                               mousePos.y >= rowY &&
-                               mousePos.y < rowY + kDebugRowHeight);
+                mousePos.x <= kDebugPanelLeft + kDebugPanelWidth &&
+                mousePos.y >= rowY &&
+                mousePos.y < rowY + kDebugRowHeight);
 
             // Grade label
             const wchar_t* gradeLabel = GetRuneGradeLabel(def->grade);
@@ -2311,7 +2313,7 @@ void Dx12App::RenderDebugRuneUI()
         // Selected rune info
         const RuneDef* selDef = RuneRegistry::Get().Find(m_debugSelectedRuneId);
         std::wstring wselName = selDef ? Utf8ToWide(selDef->name)
-                                       : Utf8ToWide(m_debugSelectedRuneId);
+            : Utf8ToWide(m_debugSelectedRuneId);
         std::wstring selectedText = L"선택한 룬: " + wselName;
         XMVECTOR selectedSize = m_spriteFont->MeasureString(selectedText.c_str());
         float selTextX = screenCenterX - XMVectorGetX(selectedSize) / 2.0f;
@@ -2354,7 +2356,7 @@ void Dx12App::RenderDebugRuneUI()
                     : (rDef ? Utf8ToWide(rDef->name) : Utf8ToWide(er.runeId));
 
                 bool isHovered = (mousePos.x >= runeX && mousePos.x <= runeX + runeW &&
-                                   mousePos.y >= slotY && mousePos.y <= slotY + runeH);
+                    mousePos.y >= slotY && mousePos.y <= slotY + runeH);
 
                 if (isHovered)
                     m_spriteFont->DrawString(m_spriteBatch.get(), wRuneName.c_str(),
@@ -2387,9 +2389,9 @@ void Dx12App::RenderText()
 
     // 룬 획득 모달이 열려있는지 — 열려있으면 하단 스킬 HUD 는 숨긴다.
     DropInteractionState dropStateTop = m_pScene ? m_pScene->GetDropInteractionState()
-                                                 : DropInteractionState::None;
+        : DropInteractionState::None;
     bool runeModalActive = (dropStateTop == DropInteractionState::SelectingRune ||
-                            dropStateTop == DropInteractionState::SelectingSkill);
+        dropStateTop == DropInteractionState::SelectingSkill);
 
     // ========== 아이콘 패스 — 자체 PSO/디스크립터힙 (폰트 힙 바인딩 전에 먼저) ==========
     if (m_pScene && m_pSkillIconRenderer)
@@ -2401,7 +2403,7 @@ void Dx12App::RenderText()
         if (!runeModalActive && m_pSkillHud && pSkill)
         {
             m_pSkillHud->RenderIcons(m_pd3dCommandList.Get(), m_pSkillIconRenderer.get(),
-                                     pSkill, scrW, scrH);
+                pSkill, scrW, scrH);
         }
 
         // 룬 획득 모달 아이콘
@@ -2416,13 +2418,13 @@ void Dx12App::RenderText()
                 if (pDropComp)
                 {
                     m_pRuneRewardUI->RenderRuneSelectIcons(m_pd3dCommandList.Get(), m_pSkillIconRenderer.get(),
-                                                           pDropComp->GetRuneOptions(), mp.x, mp.y, scrW, scrH);
+                        pDropComp->GetRuneOptions(), mp.x, mp.y, scrW, scrH);
                 }
             }
             else // SelectingSkill
             {
                 m_pRuneRewardUI->RenderSkillSelectIcons(m_pd3dCommandList.Get(), m_pSkillIconRenderer.get(),
-                                                        m_pScene->GetSelectedRune(), pSkill, mp.x, mp.y, scrW, scrH);
+                    m_pScene->GetSelectedRune(), pSkill, mp.x, mp.y, scrW, scrH);
             }
         }
     }
@@ -2478,7 +2480,7 @@ void Dx12App::RenderText()
         const wchar_t* godText = L"[INS] GOD MODE ON";
         m_spriteFont->DrawString(m_spriteBatch.get(), godText,
             XMFLOAT2(20.0f, (float)m_nWndClientHeight - 50.0f),
-            DirectX::Colors::Gold, 0.0f, XMFLOAT2(0,0), 1.0f);
+            DirectX::Colors::Gold, 0.0f, XMFLOAT2(0, 0), 1.0f);
     }
 
     // DarkLord 입장/사망 연출 중에는 HUD / HP / 스킬 / 디버그 일체 숨김.
@@ -2499,7 +2501,7 @@ void Dx12App::RenderText()
                 // 선택한 원소에 맞는 아바타를 매 프레임 주입
                 ElementType e = m_pScene->GetSelectedElement();
                 UISlot avSlot = UISlot::AvatarWater;
-                if      (e == ElementType::Fire)  avSlot = UISlot::AvatarFire;
+                if (e == ElementType::Fire)  avSlot = UISlot::AvatarFire;
                 else if (e == ElementType::Water) avSlot = UISlot::AvatarWater;
                 else if (e == ElementType::Wind)  avSlot = UISlot::AvatarWind;
                 else if (e == ElementType::Earth) avSlot = UISlot::AvatarEarth;
@@ -2515,21 +2517,21 @@ void Dx12App::RenderText()
                 float shieldRatio = (pPlayerComp->GetMaxHP() > 0.f)
                     ? shield / pPlayerComp->GetMaxHP() : 0.f;
                 m_pHealthBarUI->Render(m_spriteBatch.get(), pPlayerComp->GetHPRatio(),
-                                        shieldRatio,
-                                        (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+                    shieldRatio,
+                    (float)m_nWndClientWidth, (float)m_nWndClientHeight);
 
                 // HP / 보호막 수치 텍스트 (HP 바 기준 정렬)
                 float bx, by, bw, bh;
                 m_pHealthBarUI->GetFillRect(bx, by, bw, bh);
 
                 auto drawHudText = [&](const wchar_t* txt, XMFLOAT2 pos, float scale, FXMVECTOR color)
-                {
-                    m_spriteFont->DrawString(m_spriteBatch.get(), txt,
-                        XMFLOAT2(pos.x + 1.5f, pos.y + 1.5f), DirectX::Colors::Black,
-                        0.f, XMFLOAT2(0.f, 0.f), scale);   // 그림자
-                    m_spriteFont->DrawString(m_spriteBatch.get(), txt, pos, color,
-                        0.f, XMFLOAT2(0.f, 0.f), scale);
-                };
+                    {
+                        m_spriteFont->DrawString(m_spriteBatch.get(), txt,
+                            XMFLOAT2(pos.x + 1.5f, pos.y + 1.5f), DirectX::Colors::Black,
+                            0.f, XMFLOAT2(0.f, 0.f), scale);   // 그림자
+                        m_spriteFont->DrawString(m_spriteBatch.get(), txt, pos, color,
+                            0.f, XMFLOAT2(0.f, 0.f), scale);
+                    };
 
                 // HP 숫자 — 바 중앙
                 const float sc = 0.42f;
@@ -2676,8 +2678,8 @@ void Dx12App::RenderText()
                 // 아이콘 위 조작키 라벨 + 쿨다운 남은 초 + (확대 시) 호버 툴팁
                 //   폰트 힙 슬롯 3 = 1x1 흰 픽셀 (툴팁 배경 사각형용)
                 m_pSkillHud->RenderText(m_spriteBatch.get(), m_spriteFont.get(),
-                                        pSkill, m_fontDescriptorHeap->GetGpuHandle(3),
-                                        (float)m_nWndClientWidth, (float)m_nWndClientHeight);
+                    pSkill, m_fontDescriptorHeap->GetGpuHandle(3),
+                    (float)m_nWndClientWidth, (float)m_nWndClientHeight);
 
                 // 활성화 상태 표시 (차지/채널/강화) — 아이콘 줄 위
                 float statusX = 24.0f;
@@ -2688,7 +2690,7 @@ void Dx12App::RenderText()
                     float mult = 1.0f + chargeProgress * 2.0f;
                     std::wstringstream s;
                     s << L"CHARGING " << (int)(chargeProgress * 100) << L"% ("
-                      << std::fixed << std::setprecision(1) << mult << L"x)";
+                        << std::fixed << std::setprecision(1) << mult << L"x)";
                     m_spriteFont->DrawString(m_spriteBatch.get(), s.str().c_str(),
                         XMFLOAT2(statusX, statusY), DirectX::Colors::Orange);
                     statusY -= 30.0f;
@@ -2706,7 +2708,7 @@ void Dx12App::RenderText()
                 {
                     std::wstringstream s;
                     s << L"ENHANCED 2x (" << std::fixed << std::setprecision(1)
-                      << pSkill->GetEnhanceTimeRemaining() << L"s)";
+                        << pSkill->GetEnhanceTimeRemaining() << L"s)";
                     m_spriteFont->DrawString(m_spriteBatch.get(), s.str().c_str(),
                         XMFLOAT2(statusX, statusY), DirectX::Colors::Gold);
                 }
@@ -2743,7 +2745,7 @@ void Dx12App::RenderText()
         float cx = (float)m_nWndClientWidth * 0.5f - XMVectorGetX(sz) * 0.5f;
         float cy = (float)m_nWndClientHeight * 0.5f - XMVectorGetY(sz) * 0.5f;
         m_spriteFont->DrawString(m_spriteBatch.get(), crosshair,
-            XMFLOAT2(cx, cy), DirectX::Colors::White, 0.0f, XMFLOAT2(0,0), 1.6f);
+            XMFLOAT2(cx, cy), DirectX::Colors::White, 0.0f, XMFLOAT2(0, 0), 1.6f);
 
         wchar_t hitBuf[64];
         swprintf_s(hitBuf, L"HITS: %d", m_pScene->GetFlightHitCount());
@@ -2780,7 +2782,7 @@ void Dx12App::RenderText()
             {
                 RECT full = { 0, 0, (LONG)scrW, (LONG)scrH };
                 DirectX::XMVECTORF32 darkTint{ 0.02f, 0.0f, 0.02f, st.predarkAlpha };
-                m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1), full, darkTint);
+                m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1, 1), full, darkTint);
             }
 
             // 슬래시 텍스처 기반 레이어 헬퍼.
@@ -2799,20 +2801,20 @@ void Dx12App::RenderText()
                 constexpr float kEchoB = +0.013f;   // +0.75° 고정
 
                 auto drawSlashLayer = [&](float lengthMul, float thicknessFrac,
-                                          float layerAlpha, float extraRot,
-                                          const DirectX::XMVECTORF32& color) {
-                    if (layerAlpha < 0.001f) return;
-                    float scaleX = (diag * lengthMul) / (float)slashSz.x;
-                    float scaleY = (scrH * thicknessFrac) / (float)slashSz.y;
-                    DirectX::XMFLOAT2 scale(scaleX, scaleY);
-                    DirectX::FXMVECTOR alphaVec = DirectX::XMVectorSet(
-                        layerAlpha, layerAlpha, layerAlpha, layerAlpha);
-                    DirectX::XMVECTOR finalTint = DirectX::XMVectorMultiply(color, alphaVec);
-                    m_spriteBatch->Draw(
-                        m_hUI[(UINT)UISlot::IntroSlash], slashSz, pos, nullptr,
-                        finalTint, kRotation + extraRot, origin, scale,
-                        DirectX::SpriteEffects_None, 0.0f);
-                };
+                    float layerAlpha, float extraRot,
+                    const DirectX::XMVECTORF32& color) {
+                        if (layerAlpha < 0.001f) return;
+                        float scaleX = (diag * lengthMul) / (float)slashSz.x;
+                        float scaleY = (scrH * thicknessFrac) / (float)slashSz.y;
+                        DirectX::XMFLOAT2 scale(scaleX, scaleY);
+                        DirectX::FXMVECTOR alphaVec = DirectX::XMVectorSet(
+                            layerAlpha, layerAlpha, layerAlpha, layerAlpha);
+                        DirectX::XMVECTOR finalTint = DirectX::XMVectorMultiply(color, alphaVec);
+                        m_spriteBatch->Draw(
+                            m_hUI[(UINT)UISlot::IntroSlash], slashSz, pos, nullptr,
+                            finalTint, kRotation + extraRot, origin, scale,
+                            DirectX::SpriteEffects_None, 0.0f);
+                    };
 
                 // 카멘 톤 — 검정/흰빛/핏빛 3겹 구조 강화:
                 //   core 더 얇고 강하게 / void 더 분명하게 / red glow 더 좁게.
@@ -2820,15 +2822,15 @@ void Dx12App::RenderText()
 
                 // (b) warning line — 두께 1.5%, 어두운 흰. 베기 직전 얇은 예고.
                 drawSlashLayer(1.18f, 0.015f, st.warningLineAlpha * 0.90f, 0.0f,
-                               DirectX::XMVECTORF32{ 0.85f, 0.88f, 0.95f, 1.0f });
+                    DirectX::XMVECTORF32{ 0.85f, 0.88f, 0.95f, 1.0f });
 
                 // (c) red glow — 두께 7% (이전 14%), 어두운 진홍. echo 도 더 좁게 + 살짝 어둡게.
                 drawSlashLayer(1.32f, 0.070f, st.redGlowAlpha * 0.85f, 0.0f,
-                               DirectX::XMVECTORF32{ 0.60f, 0.03f, 0.02f, 1.0f });
+                    DirectX::XMVECTORF32{ 0.60f, 0.03f, 0.02f, 1.0f });
                 drawSlashLayer(1.30f, 0.050f, st.redGlowAlpha * 0.45f, kEchoA,
-                               DirectX::XMVECTORF32{ 0.70f, 0.04f, 0.03f, 1.0f });
+                    DirectX::XMVECTORF32{ 0.70f, 0.04f, 0.03f, 1.0f });
                 drawSlashLayer(1.30f, 0.050f, st.redGlowAlpha * 0.45f, kEchoB,
-                               DirectX::XMVECTORF32{ 0.45f, 0.02f, 0.01f, 1.0f });
+                    DirectX::XMVECTORF32{ 0.45f, 0.02f, 0.01f, 1.0f });
 
                 // (d) void gap (검은 균열) — 두께 9% (이전 6%), 거의 검정. void 가 핵심.
                 //   알파 boost 1.2× — core 와 glow 사이를 또렷이 끊어줘야 "절단" 느낌.
@@ -2836,25 +2838,25 @@ void Dx12App::RenderText()
                     float voidBoost = st.voidAlpha * 1.2f;
                     if (voidBoost > 1.0f) voidBoost = 1.0f;
                     drawSlashLayer(1.28f, 0.090f, voidBoost, 0.0f,
-                                   DirectX::XMVECTORF32{ 0.00f, 0.0f, 0.00f, 1.0f });
+                        DirectX::XMVECTORF32{ 0.00f, 0.0f, 0.00f, 1.0f });
                 }
                 drawSlashLayer(1.25f, 0.060f, st.voidAlpha * 0.65f, kEchoA * 0.6f,
-                               DirectX::XMVECTORF32{ 0.01f, 0.0f, 0.01f, 1.0f });
+                    DirectX::XMVECTORF32{ 0.01f, 0.0f, 0.01f, 1.0f });
                 drawSlashLayer(1.25f, 0.060f, st.voidAlpha * 0.65f, kEchoB * 0.6f,
-                               DirectX::XMVECTORF32{ 0.01f, 0.0f, 0.01f, 1.0f });
+                    DirectX::XMVECTORF32{ 0.01f, 0.0f, 0.01f, 1.0f });
 
                 // (e) core (메인 절단선) — 두께 0.6% (이전 1.2%). 매우 얇고 뜨거운 흰빛.
                 //   alpha 1.0 그대로지만 두께 절반이라 인상이 훨씬 더 sharp.
                 drawSlashLayer(1.15f, 0.006f, st.coreAlpha, 0.0f,
-                               DirectX::XMVECTORF32{ 1.0f, 0.97f, 0.92f, 1.0f });
+                    DirectX::XMVECTORF32{ 1.0f, 0.97f, 0.92f, 1.0f });
                 drawSlashLayer(1.14f, 0.004f, st.coreAlpha * 0.55f, kEchoA * 0.45f,
-                               DirectX::XMVECTORF32{ 1.0f, 0.95f, 0.85f, 1.0f });
+                    DirectX::XMVECTORF32{ 1.0f, 0.95f, 0.85f, 1.0f });
                 drawSlashLayer(1.14f, 0.004f, st.coreAlpha * 0.55f, kEchoB * 0.45f,
-                               DirectX::XMVECTORF32{ 1.0f, 0.95f, 0.85f, 1.0f });
+                    DirectX::XMVECTORF32{ 1.0f, 0.95f, 0.85f, 1.0f });
 
                 // (f) afterglow — 두께 5% (이전 8%), 더 어두운 적갈색 잔광.
-                drawSlashLayer(1.20f, 0.050f, st.afterGlowAlpha,  0.0f,
-                               DirectX::XMVECTORF32{ 0.18f, 0.02f, 0.06f, 1.0f });
+                drawSlashLayer(1.20f, 0.050f, st.afterGlowAlpha, 0.0f,
+                    DirectX::XMVECTORF32{ 0.18f, 0.02f, 0.06f, 1.0f });
 
                 // (k) ★ Strike head — 슬래시 직선 위를 좌하 → 우상 sweep 하는 밝은 점.
                 //   카멘/히어로식 "칼이 지나갔다" 의 인과. headT 0→1 동안 한 점이 직선을 그림.
@@ -2871,7 +2873,7 @@ void Dx12App::RenderText()
                     DirectX::XMFLOAT2 headPos(hx, hy);
                     // 작은 코멧 head — slash 텍스처 같은 회전 + 매우 작은 elongated 스케일.
                     float headThick = scrH * 0.030f / (float)slashSz.y;
-                    float headLong  = scrH * 0.120f / (float)slashSz.x;
+                    float headLong = scrH * 0.120f / (float)slashSz.x;
                     DirectX::XMFLOAT2 headScale(headLong, headThick);
                     DirectX::XMVECTORF32 headTint{
                         1.0f, 0.96f, 0.88f, st.slashHeadAlpha
@@ -2892,8 +2894,8 @@ void Dx12App::RenderText()
                         DirectX::XMVECTORF32 brightTint{
                             1.0f, 1.0f, 1.0f, st.slashHeadAlpha
                         };
-                        m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1),
-                                             brightRect, brightTint);
+                        m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1, 1),
+                            brightRect, brightTint);
                     }
                 }
             }
@@ -2903,7 +2905,7 @@ void Dx12App::RenderText()
             {
                 RECT full = { 0, 0, (LONG)scrW, (LONG)scrH };
                 DirectX::XMVECTORF32 whiteTint{ 1.0f, 1.0f, 1.0f, st.flashAlpha };
-                m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1), full, whiteTint);
+                m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1, 1), full, whiteTint);
             }
         }
     }
@@ -2922,7 +2924,7 @@ void Dx12App::RenderText()
         {
             RECT full = { 0, 0, (LONG)scrW, (LONG)scrH };
             DirectX::XMVECTORF32 blackTint{ 0.0f, 0.0f, 0.0f, blackoutAlpha };
-            m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1), full, blackTint);
+            m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1, 1), full, blackTint);
         }
 
         // (h) 레터박스 — 위/아래 검정 띠. amt 1.0 일 때 화면 H 의 11% 두께씩.
@@ -2931,10 +2933,10 @@ void Dx12App::RenderText()
         {
             float barH = scrH * 0.11f * letterAmt;
             DirectX::XMVECTORF32 black{ 0.0f, 0.0f, 0.0f, 1.0f };
-            RECT top    = { 0, 0, (LONG)scrW, (LONG)barH };
+            RECT top = { 0, 0, (LONG)scrW, (LONG)barH };
             RECT bottom = { 0, (LONG)(scrH - barH), (LONG)scrW, (LONG)scrH };
-            m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1), top,    black);
-            m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1), bottom, black);
+            m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1, 1), top, black);
+            m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1, 1), bottom, black);
         }
 
         // (i) Edge vignette — 가장자리 어둡게 (좌/우 띠 + 위/아래 살짝 더). 시선 보스 집중.
@@ -2952,10 +2954,10 @@ void Dx12App::RenderText()
                 float w = maxBarW * frac;
                 float a = kMaxAlpha * (1.0f - frac);
                 DirectX::XMVECTORF32 c{ vigCol[0], vigCol[1], vigCol[2], a };
-                RECT left  = { 0, 0, (LONG)w, (LONG)scrH };
+                RECT left = { 0, 0, (LONG)w, (LONG)scrH };
                 RECT right = { (LONG)(scrW - w), 0, (LONG)scrW, (LONG)scrH };
-                m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1), left,  c);
-                m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1,1), right, c);
+                m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1, 1), left, c);
+                m_spriteBatch->Draw(whitePx, DirectX::XMUINT2(1, 1), right, c);
             }
         }
 
@@ -2963,7 +2965,7 @@ void Dx12App::RenderText()
         float nameAlpha = m_pScene->GetIntroBossNameAlpha();
         if (m_spriteFont && nameAlpha > 0.001f)
         {
-            const wchar_t* kBossName  = L"DARK LORD";
+            const wchar_t* kBossName = L"DARK LORD";
             const wchar_t* kBossTitle = L"심연을 베어낸 자";
 
             float cx = scrW * 0.5f;
@@ -2973,27 +2975,27 @@ void Dx12App::RenderText()
             XMVECTOR sz = m_spriteFont->MeasureString(kBossName);
             float bigScale = (scrH / 720.0f) * 2.4f;   // 화면 H 720 기준 2.4×
             DirectX::XMFLOAT2 namePos(cx - XMVectorGetX(sz) * 0.5f * bigScale,
-                                       cy - XMVectorGetY(sz) * 0.5f * bigScale);
+                cy - XMVectorGetY(sz) * 0.5f * bigScale);
             DirectX::XMVECTORF32 nameTint{ 0.96f, 0.95f, 0.94f, nameAlpha };
             // 살짝 빨간 그림자 — 좌상 +2px / 우하 +2px shadow.
             DirectX::XMVECTORF32 shadowTint{ 0.45f, 0.02f, 0.01f, nameAlpha * 0.8f };
             DirectX::XMFLOAT2 shadowPos1(namePos.x + 3.0f, namePos.y + 3.0f);
             DirectX::XMFLOAT2 shadowPos2(namePos.x - 3.0f, namePos.y + 3.0f);
             m_spriteFont->DrawString(m_spriteBatch.get(), kBossName, shadowPos1,
-                                      shadowTint, 0.0f, XMFLOAT2(0,0), bigScale);
+                shadowTint, 0.0f, XMFLOAT2(0, 0), bigScale);
             m_spriteFont->DrawString(m_spriteBatch.get(), kBossName, shadowPos2,
-                                      shadowTint, 0.0f, XMFLOAT2(0,0), bigScale);
+                shadowTint, 0.0f, XMFLOAT2(0, 0), bigScale);
             m_spriteFont->DrawString(m_spriteBatch.get(), kBossName, namePos,
-                                      nameTint, 0.0f, XMFLOAT2(0,0), bigScale);
+                nameTint, 0.0f, XMFLOAT2(0, 0), bigScale);
 
             // 부제 — 메인 아래 작게.
             XMVECTOR tSz = m_spriteFont->MeasureString(kBossTitle);
             float smallScale = (scrH / 720.0f) * 0.95f;
             DirectX::XMFLOAT2 titlePos(cx - XMVectorGetX(tSz) * 0.5f * smallScale,
-                                       cy + XMVectorGetY(sz) * 0.5f * bigScale + 12.0f);
+                cy + XMVectorGetY(sz) * 0.5f * bigScale + 12.0f);
             DirectX::XMVECTORF32 titleTint{ 0.85f, 0.70f, 0.72f, nameAlpha * 0.90f };
             m_spriteFont->DrawString(m_spriteBatch.get(), kBossTitle, titlePos,
-                                      titleTint, 0.0f, XMFLOAT2(0,0), smallScale);
+                titleTint, 0.0f, XMFLOAT2(0, 0), smallScale);
         }
     }
 
@@ -3121,11 +3123,11 @@ void Dx12App::UpdateNetwork(float deltaTime)
     // 보스 VFX 지연 스폰 처리 (windup 후/동안 staggered 발사)
     m_pNetworkManager->UpdatePendingMonsterVFX(m_pScene.get(), deltaTime);
 
-	// 서버 몬스터 행동 업데이트 — Dx12App::Update 내부의 cmd list Reset 이후에 호출되어야 함.
-	// SpawnRocks 가 MeshLoader 로 vertex/index/texture upload 커맨드를 기록하는데,
-	// 여기서 호출하면 Reset 에 의해 그 upload 가 다 폐기되어 GPU 에 데이터가 없는
-	// 상태로 draw → 화면에 안 보임. → Dx12App::Update 에서 따로 호출하므로 여기선 빼둔다.
-	// m_pNetworkManager->UpdateNetworkGolemBehaviors(deltaTime);  // moved to Dx12App::Update after Reset
+    // 서버 몬스터 행동 업데이트 — Dx12App::Update 내부의 cmd list Reset 이후에 호출되어야 함.
+    // SpawnRocks 가 MeshLoader 로 vertex/index/texture upload 커맨드를 기록하는데,
+    // 여기서 호출하면 Reset 에 의해 그 upload 가 다 폐기되어 GPU 에 데이터가 없는
+    // 상태로 draw → 화면에 안 보임. → Dx12App::Update 에서 따로 호출하므로 여기선 빼둔다.
+    // m_pNetworkManager->UpdateNetworkGolemBehaviors(deltaTime);  // moved to Dx12App::Update after Reset
 
     // 서버 몬스터 위치/회전 보간 (MOVE 패킷 간격 사이 부드럽게 이동)
     m_pNetworkManager->InterpolateServerMonsters(deltaTime);
@@ -3175,7 +3177,7 @@ void Dx12App::UpdateNetwork(float deltaTime)
 
         // 위치와 방향 전송
         m_pNetworkManager->SendMove(currentPos.x, currentPos.y, currentPos.z,
-                                    lookDir.x, lookDir.y, lookDir.z);
+            lookDir.x, lookDir.y, lookDir.z);
         m_lastSentPosition = currentPos;
     }
 }

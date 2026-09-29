@@ -73,8 +73,8 @@ Scene::Scene()
     m_pCollisionManager = std::make_unique<CollisionManager>();
     m_pEnemySpawner = std::make_unique<EnemySpawner>();
     m_pProjectileManager = std::make_unique<ProjectileManager>();
-    m_pVFXManager     = std::make_unique<VFXManager>();
-    m_pSSF                 = std::make_unique<ScreenSpaceFluid>();
+    m_pVFXManager = std::make_unique<VFXManager>();
+    m_pSSF = std::make_unique<ScreenSpaceFluid>();
     m_pDebugRenderer = std::make_unique<DebugRenderer>();
     m_pTorchSystem = std::make_unique<TorchSystem>();
     m_pDecalManager = std::make_unique<DecalManager>();
@@ -290,8 +290,8 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
         std::function<void(GameObject*)> applyPlayerColor = [&](GameObject* go) {
             if (!go) return;
             MATERIAL mat;
-            mat.m_cAmbient  = XMFLOAT4(playerColor.x*0.30f, playerColor.y*0.30f, playerColor.z*0.30f, 1.0f);
-            mat.m_cDiffuse  = playerColor;
+            mat.m_cAmbient = XMFLOAT4(playerColor.x * 0.30f, playerColor.y * 0.30f, playerColor.z * 0.30f, 1.0f);
+            mat.m_cDiffuse = playerColor;
             // specular 0 — 카툰 룩에서 highlight 가 진해지면 플라스틱처럼 빤딱이게 됨
             mat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 32.0f);
             // emissive 제거 — ambient+diffuse+floor 누적으로 발광체처럼 보이던 문제
@@ -299,7 +299,7 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
             go->SetMaterial(mat);
             applyPlayerColor(go->m_pChild);
             applyPlayerColor(go->m_pSibling);
-        };
+            };
         applyPlayerColor(pPlayer);
     }
     else
@@ -651,8 +651,8 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
 
         // 포탈 머티리얼 — 보라 포탈 추천값 (rim 밝게, core 어둡게 = 포탈 깊이감)
         MATERIAL portalMat;
-        portalMat.m_cAmbient  = XMFLOAT4(0.00f, 0.00f, 0.00f, 1.0f);
-        portalMat.m_cDiffuse  = XMFLOAT4(0.75f, 0.42f, 1.00f, 1.0f);   // 밝은 보라 림
+        portalMat.m_cAmbient = XMFLOAT4(0.00f, 0.00f, 0.00f, 1.0f);
+        portalMat.m_cDiffuse = XMFLOAT4(0.75f, 0.42f, 1.00f, 1.0f);   // 밝은 보라 림
         portalMat.m_cSpecular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
         portalMat.m_cEmissive = XMFLOAT4(0.08f, 0.01f, 0.18f, 1.0f);   // 깊은 심연 — 거의 검정 바이올렛
         m_pInteractionCube->SetMaterial(portalMat);
@@ -692,7 +692,7 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
             NetworkManager* pNet = NetworkManager::GetInstance();
             bool bOnline = (pNet && pNet->IsConnected());
             WriteNetworkLog(bOnline ? "[Scene] OnInteract path: ONLINE → SendTorchInteract"
-                                    : "[Scene] OnInteract path: OFFLINE → local SetState(Active)");
+                : "[Scene] OnInteract path: OFFLINE → local SetState(Active)");
 
             if (bOnline)
             {
@@ -705,7 +705,7 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
                 OutputDebugString(L"[Scene] Room activated locally (offline)\n");
             }
             pComp->Hide();
-        });
+            });
     }
     m_bInteractionCubeActive = true;
     m_bEnemiesSpawned = false;
@@ -733,8 +733,8 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
 
             // 용암 머티리얼 (텍스쳐 원본 색상 유지)
             MATERIAL lavaMat;
-            lavaMat.m_cAmbient  = XMFLOAT4(0.25f, 0.25f, 0.25f, 1.0f);
-            lavaMat.m_cDiffuse  = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+            lavaMat.m_cAmbient = XMFLOAT4(0.25f, 0.25f, 0.25f, 1.0f);
+            lavaMat.m_cDiffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
             lavaMat.m_cSpecular = XMFLOAT4(0.85f, 0.85f, 0.85f, 8.0f);  // smoothness 0.85
             lavaMat.m_cEmissive = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
             m_pLavaPlane->SetMaterial(lavaMat);
@@ -777,8 +777,8 @@ void Scene::Init(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList)
             m_pRockPlane->SetRocky(true);
 
             MATERIAL rockMat;
-            rockMat.m_cAmbient  = XMFLOAT4(0.20f, 0.18f, 0.16f, 1.0f);
-            rockMat.m_cDiffuse  = XMFLOAT4(0.32f, 0.29f, 0.26f, 1.0f);  // 어두운 회갈색
+            rockMat.m_cAmbient = XMFLOAT4(0.20f, 0.18f, 0.16f, 1.0f);
+            rockMat.m_cDiffuse = XMFLOAT4(0.32f, 0.29f, 0.26f, 1.0f);  // 어두운 회갈색
             rockMat.m_cSpecular = XMFLOAT4(0.18f, 0.18f, 0.18f, 4.0f);  // 거친 표면
             rockMat.m_cEmissive = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
             m_pRockPlane->SetMaterial(rockMat);
@@ -926,30 +926,30 @@ CRoom* Scene::CreateRoomFromBounds(const XMFLOAT3& center, const XMFLOAT3& exten
 }
 
 void Scene::AddRenderComponentsToHierarchy(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCommandList,
-	GameObject* pGameObject, Shader* pShader, bool bCastsShadow)
+    GameObject* pGameObject, Shader* pShader, bool bCastsShadow)
 {
-	if (!pGameObject)
-	{
-		OutputDebugString(L"AddRenderComponentsToHierarchy called with a NULL game object!\n");
-		return;
-	}
+    if (!pGameObject)
+    {
+        OutputDebugString(L"AddRenderComponentsToHierarchy called with a NULL game object!\n");
+        return;
+    }
 
-	if (pGameObject->GetMesh())
-	{
-		auto* pRenderComp = pGameObject->AddComponent<RenderComponent>();
-		pRenderComp->SetMesh(pGameObject->GetMesh());
-		pRenderComp->SetCastsShadow(bCastsShadow);
-		pShader->AddRenderComponent(pRenderComp);
-	}
+    if (pGameObject->GetMesh())
+    {
+        auto* pRenderComp = pGameObject->AddComponent<RenderComponent>();
+        pRenderComp->SetMesh(pGameObject->GetMesh());
+        pRenderComp->SetCastsShadow(bCastsShadow);
+        pShader->AddRenderComponent(pRenderComp);
+    }
 
-	if (pGameObject->m_pChild)
-	{
-		AddRenderComponentsToHierarchy(pDevice, pCommandList, pGameObject->m_pChild, pShader, bCastsShadow);
-	}
-	if (pGameObject->m_pSibling)
-	{
-		AddRenderComponentsToHierarchy(pDevice, pCommandList, pGameObject->m_pSibling, pShader, bCastsShadow);
-	}
+    if (pGameObject->m_pChild)
+    {
+        AddRenderComponentsToHierarchy(pDevice, pCommandList, pGameObject->m_pChild, pShader, bCastsShadow);
+    }
+    if (pGameObject->m_pSibling)
+    {
+        AddRenderComponentsToHierarchy(pDevice, pCommandList, pGameObject->m_pSibling, pShader, bCastsShadow);
+    }
 }
 
 void Scene::Update(float deltaTime, InputSystem* pInputSystem)
@@ -958,7 +958,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     //   카메라/플래시/VFX 는 m_fRawDeltaTime (정지 영향 X) 사용
     //   게임 로직 (이동·애니·물리) 은 deltaTime (effective) 사용
     m_fRawDeltaTime = deltaTime;
-    deltaTime       = HitStopSystem::Get().Tick(deltaTime);
+    deltaTime = HitStopSystem::Get().Tick(deltaTime);
 
     m_fLastDeltaTime = deltaTime;
 
@@ -979,20 +979,20 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         {
             m_fSandstormPhaseTimer += deltaTime;
             const float ramp = kSandstormRampSec;
-            const float dur  = m_fSandstormDuration;
-            const float t    = m_fSandstormPhaseTimer;
+            const float dur = m_fSandstormDuration;
+            const float t = m_fSandstormPhaseTimer;
             auto sstep = [](float a, float b, float x) {
                 float u = std::clamp((x - a) / (b - a), 0.0f, 1.0f);
                 return u * u * (3.0f - 2.0f * u);
-            };
+                };
             // attack-release envelope: smoothstep ramp in, plateau, smoothstep ramp out.
-            float attack  = (ramp > 0.0f) ? sstep(0.0f, ramp, t) : 1.0f;
+            float attack = (ramp > 0.0f) ? sstep(0.0f, ramp, t) : 1.0f;
             float release = (ramp > 0.0f) ? (1.0f - sstep(dur - ramp, dur, t)) : 1.0f;
             m_fSandstormStrength = std::clamp(attack * release, 0.0f, 1.0f);
             if (t >= dur)
             {
-                m_bSandstormActive    = false;
-                m_fSandstormStrength  = 0.0f;
+                m_bSandstormActive = false;
+                m_fSandstormStrength = 0.0f;
                 m_fSandstormPhaseTimer = 0.0f;
                 m_fSandstormCycleTimer = 0.0f;
             }
@@ -1001,8 +1001,8 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     else if (m_fSandstormStrength != 0.0f || m_bSandstormActive)
     {
         // Earth 외 테마로 전환 시 상태 깨끗하게 reset.
-        m_bSandstormActive     = false;
-        m_fSandstormStrength   = 0.0f;
+        m_bSandstormActive = false;
+        m_fSandstormStrength = 0.0f;
         m_fSandstormCycleTimer = 0.0f;
         m_fSandstormPhaseTimer = 0.0f;
     }
@@ -1020,19 +1020,19 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         {
             m_fWindGustPhaseTimer += deltaTime;
             const float ramp = kWindGustRampSec;
-            const float dur  = m_fWindGustDuration;
-            const float t    = m_fWindGustPhaseTimer;
+            const float dur = m_fWindGustDuration;
+            const float t = m_fWindGustPhaseTimer;
             auto sstep = [](float a, float b, float x) {
                 float u = std::clamp((x - a) / (b - a), 0.0f, 1.0f);
                 return u * u * (3.0f - 2.0f * u);
-            };
-            float attack  = (ramp > 0.0f) ? sstep(0.0f, ramp, t) : 1.0f;
+                };
+            float attack = (ramp > 0.0f) ? sstep(0.0f, ramp, t) : 1.0f;
             float release = (ramp > 0.0f) ? (1.0f - sstep(dur - ramp, dur, t)) : 1.0f;
             m_fWindGustStrength = std::clamp(attack * release, 0.0f, 1.0f);
             if (t >= dur)
             {
-                m_bWindGustActive    = false;
-                m_fWindGustStrength  = 0.0f;
+                m_bWindGustActive = false;
+                m_fWindGustStrength = 0.0f;
                 m_fWindGustPhaseTimer = 0.0f;
                 m_fWindGustCycleTimer = 0.0f;
             }
@@ -1040,8 +1040,8 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     }
     else if (m_fWindGustStrength != 0.0f || m_bWindGustActive)
     {
-        m_bWindGustActive     = false;
-        m_fWindGustStrength   = 0.0f;
+        m_bWindGustActive = false;
+        m_fWindGustStrength = 0.0f;
         m_fWindGustCycleTimer = 0.0f;
         m_fWindGustPhaseTimer = 0.0f;
     }
@@ -1070,7 +1070,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
             m_fPortalRingRespawnTimer += deltaTime;
 
             bool bNeedSpawn = (m_nInteractionCubePortalRingVFXId < 0)
-                           || (m_fPortalRingRespawnTimer >= PORTAL_RING_RESPAWN_INTERVAL);
+                || (m_fPortalRingRespawnTimer >= PORTAL_RING_RESPAWN_INTERVAL);
 
             if (bNeedSpawn)
             {
@@ -1080,16 +1080,16 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
                     m_pVFXManager->Stop(m_nInteractionCubePortalSuctionVFXId);
                 if (m_nInteractionCubePortalBeamVFXId >= 0)
                     m_pVFXManager->Stop(m_nInteractionCubePortalBeamVFXId);
-                m_nInteractionCubePortalRingVFXId    = m_pVFXManager->Spawn("Portal_Ring",    cubePos, vfxNormal, 0u, false);
+                m_nInteractionCubePortalRingVFXId = m_pVFXManager->Spawn("Portal_Ring", cubePos, vfxNormal, 0u, false);
                 m_nInteractionCubePortalSuctionVFXId = m_pVFXManager->Spawn("Portal_Suction", cubePos, vfxNormal, 0u, false);
-                m_nInteractionCubePortalBeamVFXId    = m_pVFXManager->Spawn("Portal_Beam",    cubePos, beamNormal, 0u, false);
+                m_nInteractionCubePortalBeamVFXId = m_pVFXManager->Spawn("Portal_Beam", cubePos, beamNormal, 0u, false);
                 m_fPortalRingRespawnTimer = 0.0f;
             }
             else
             {
-                if (m_nInteractionCubePortalRingVFXId    >= 0) m_pVFXManager->Track(m_nInteractionCubePortalRingVFXId,    cubePos, vfxNormal);
+                if (m_nInteractionCubePortalRingVFXId >= 0) m_pVFXManager->Track(m_nInteractionCubePortalRingVFXId, cubePos, vfxNormal);
                 if (m_nInteractionCubePortalSuctionVFXId >= 0) m_pVFXManager->Track(m_nInteractionCubePortalSuctionVFXId, cubePos, vfxNormal);
-                if (m_nInteractionCubePortalBeamVFXId    >= 0) m_pVFXManager->Track(m_nInteractionCubePortalBeamVFXId,    cubePos, beamNormal);
+                if (m_nInteractionCubePortalBeamVFXId >= 0) m_pVFXManager->Track(m_nInteractionCubePortalBeamVFXId, cubePos, beamNormal);
             }
         }
         else
@@ -1178,7 +1178,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         float T = m_fKrakenEmergeTimer;
 
         auto easeOutCubic = [](float t) { return 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t); };
-        auto easeInOutQuad = [](float t) { return t < 0.5f ? 2*t*t : 1 - (-2*t+2)*(-2*t+2)/2; };
+        auto easeInOutQuad = [](float t) { return t < 0.5f ? 2 * t * t : 1 - (-2 * t + 2) * (-2 * t + 2) / 2; };
         auto lerp = [](float a, float b, float t) { return a + (b - a) * t; };
 
         // ── Stage: Rumble (0 ~ KRAKEN_T_RUMBLE) ─────────────────────────────
@@ -1327,7 +1327,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
                         m_xmf3KrakenJumpEnd.x - m_xmf3KrakenJumpStart.x, 0.0f,
                         m_xmf3KrakenJumpEnd.z - m_xmf3KrakenJumpStart.z
                     };
-                    if (d.x*d.x + d.z*d.z > 0.001f)
+                    if (d.x * d.x + d.z * d.z > 0.001f)
                     {
                         float yawDeg = atan2f(d.x, d.z) * (180.0f / XM_PI);
                         XMFLOAT3 rot = pKrakenObj->GetTransform()->GetRotation();
@@ -1372,12 +1372,12 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
                     // 상승 ease-out / 하강 ease-in → 정점에서 살짝 멈춘 듯한 무게감
                     float arc;
                     if (u < 0.5f) { float r = u * 2.0f; arc = 1.0f - (1.0f - r) * (1.0f - r); }
-                    else          { float r = (u - 0.5f) * 2.0f; arc = 1.0f - r * r; }
+                    else { float r = (u - 0.5f) * 2.0f; arc = 1.0f - r * r; }
                     pos.y = yBase + KRAKEN_JUMP_PEAK_DY * arc;
                     // 공중 피치 — Attack_Forward 애니가 이미 내려찍는 자세라 과한 추가 기울임은 오히려 어색함.
                     // 상승 시 살짝 젖힘(-6) → 하강 시 완만하게 앞으로(+10).
                     pitchDeg = (u < 0.5f) ? -6.0f * (u * 2.0f)
-                                          :  10.0f * ((u - 0.5f) * 2.0f);
+                        : 10.0f * ((u - 0.5f) * 2.0f);
                 }
                 pKrakenObj->GetTransform()->SetPosition(pos);
 
@@ -1431,7 +1431,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
                 // 카메라 / 조작 권한 플레이어에게 반환 — WaterRise는 일반 게임플레이
                 m_pCamera->StopCinematic();
 
-				// 온라인 모드: 컷신용 Kraken 오브젝트 제거 (서버가 스폰한 GameObject이므로 클라이언트에서 직접 삭제)
+                // 온라인 모드: 컷신용 Kraken 오브젝트 제거 (서버가 스폰한 GameObject이므로 클라이언트에서 직접 삭제)
                 NetworkManager::GetInstance()->SetCutscenePlaying(false);
                 WriteNetworkLog("[Network] Cutscene lock OFF");
 
@@ -1514,7 +1514,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     if (pInputSystem && pInputSystem->IsKeyPressed(VK_F6))
     {
         ToggleFlightMode(Dx12App::GetInstance()->GetDevice(),
-                         Dx12App::GetInstance()->GetCommandList());
+            Dx12App::GetInstance()->GetCommandList());
     }
 
     // F7: Toon shading 토글 (원신풍 셀 셰이딩 ON/OFF — 적용 전후 비교용)
@@ -1653,28 +1653,28 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         static int s_nClipIdx = 0;
 
         auto cycleBossClip = [&](int delta)
-        {
-            if (!m_pCurrentRoom) return;
-            const auto& vEnemies = m_pCurrentRoom->GetEnemies();
-            EnemyComponent* pBoss = nullptr;
-            for (EnemyComponent* pE : vEnemies)
             {
-                if (pE && pE->IsBoss()) { pBoss = pE; break; }
-            }
-            if (!pBoss) { OutputDebugString(L"[ClipCycler] no boss in current room\n"); return; }
-            AnimationComponent* pAnim = pBoss->GetAnimationComponent();
-            if (!pAnim) { OutputDebugString(L"[ClipCycler] boss has no AnimationComponent\n"); return; }
+                if (!m_pCurrentRoom) return;
+                const auto& vEnemies = m_pCurrentRoom->GetEnemies();
+                EnemyComponent* pBoss = nullptr;
+                for (EnemyComponent* pE : vEnemies)
+                {
+                    if (pE && pE->IsBoss()) { pBoss = pE; break; }
+                }
+                if (!pBoss) { OutputDebugString(L"[ClipCycler] no boss in current room\n"); return; }
+                AnimationComponent* pAnim = pBoss->GetAnimationComponent();
+                if (!pAnim) { OutputDebugString(L"[ClipCycler] boss has no AnimationComponent\n"); return; }
 
-            s_nClipIdx = (s_nClipIdx + delta + (int)s_vBossClips.size()) % (int)s_vBossClips.size();
-            const std::string& clip = s_vBossClips[s_nClipIdx];
-            // bForceRestart=true — 같은 클립 재선택 시에도 처음부터 재생되게 함
-            pAnim->CrossFade(clip, 0.10f, true, true);
+                s_nClipIdx = (s_nClipIdx + delta + (int)s_vBossClips.size()) % (int)s_vBossClips.size();
+                const std::string& clip = s_vBossClips[s_nClipIdx];
+                // bForceRestart=true — 같은 클립 재선택 시에도 처음부터 재생되게 함
+                pAnim->CrossFade(clip, 0.10f, true, true);
 
-            char msg[160];
-            snprintf(msg, sizeof(msg), "[ClipCycler] (%d/%zu) %s\n",
-                     s_nClipIdx + 1, s_vBossClips.size(), clip.c_str());
-            OutputDebugStringA(msg);
-        };
+                char msg[160];
+                snprintf(msg, sizeof(msg), "[ClipCycler] (%d/%zu) %s\n",
+                    s_nClipIdx + 1, s_vBossClips.size(), clip.c_str());
+                OutputDebugStringA(msg);
+            };
 
         if (pInputSystem && pInputSystem->IsKeyPressed(VK_F9))  cycleBossClip(+1);
         if (pInputSystem && pInputSystem->IsKeyPressed(VK_F10)) cycleBossClip(-1);
@@ -1735,7 +1735,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
             }
         }
     }
-    
+
     // N 키: 다음 스테이지 이동
     if (pInputSystem && pInputSystem->IsKeyPressed('N'))
     {
@@ -1966,7 +1966,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     m_pcbMappedPass->m_nStageTheme = static_cast<int>(m_eCurrentTheme);
     m_pcbMappedPass->m_nToonEnabled = m_bToonEnabled ? 1 : 0;
     m_pcbMappedPass->m_fStormStrength = m_fSandstormStrength;
-    m_pcbMappedPass->m_fGustStrength  = m_fWindGustStrength;
+    m_pcbMappedPass->m_fGustStrength = m_fWindGustStrength;
 
     // Update SpotLight parameters based on player position
     if (m_pPlayerGameObject)
@@ -2022,7 +2022,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
                 m_bInBossRoom = false;          // 보스방 플래그 해제 (다음 보스방 진입 가드)
                 m_bBranchPortalsSpawned = false; // 다음 사이클을 위해 reset (DarkLord 클리어 시점 별개)
                 TransitionToDarkLordRoom();
-            });
+                });
 
             m_bBranchPortalsSpawned = true;
             OutputDebugString(L"[Scene] Grass boss cleared → two portals offered (farm loop / final boss)\n");
@@ -2058,7 +2058,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         {
             BossIntroPhase phase = m_pDragonIntroEnemy->GetIntroPhase();
             GameObject* pDragonObj = m_pDragonIntroEnemy->GetOwner();
-            XMFLOAT3 dragonPos = pDragonObj ? pDragonObj->GetTransform()->GetPosition() : XMFLOAT3(0,0,0);
+            XMFLOAT3 dragonPos = pDragonObj ? pDragonObj->GetTransform()->GetPosition() : XMFLOAT3(0, 0, 0);
 
             if (phase != m_eLastDragonPhase)
             {
@@ -2134,9 +2134,9 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
     bool bKrakenBlocking =
         (m_eKrakenStage != KrakenCutsceneStage::None) &&
         (m_eKrakenStage != KrakenCutsceneStage::WaterRise);
-    
+
     bool bDarkLordIntroBlocking = IsDarkLordIntroPlaying();
-    
+
     bool bDarkLordDeathBlocking = IsDarkLordDeathSequencePlaying();
 
     // Dragon intro는 m_pDragonIntroEnemy가 살아있는 동안 전체 입력 차단.
@@ -2263,7 +2263,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
                 XMFLOAT3 cp = pClump->GetTransform()->GetPosition();
                 cp.y = 1.5f;  // 풀 중간 높이에서 터짐
                 m_pVFXManager->Spawn("Wind_GustBurst", cp,
-                                     XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
+                    XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
             }
             // 다음 인터벌 랜덤화 — timer 를 음수로 살짝 밀어주면 다음 burst 까지 1.8~3.2 사이
             m_fGustBurstTimer = -((rand() % 1400) / 1000.0f);  // -1.4 ~ 0
@@ -2275,11 +2275,11 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
         if (m_eTornadoPhase == TornadoEventPhase::Active)
         {
             const float kSuctionRadius = 7.5f;       // 이 안에 들어오면 끌림
-            const float kTrapRadius    = 3.5f;       // 이 안에 들어오면 트랩 발동
-            const float kPullStrength  = 12.0f;      // 끌리는 속도 (units/s)
+            const float kTrapRadius = 3.5f;       // 이 안에 들어오면 트랩 발동
+            const float kPullStrength = 12.0f;      // 끌리는 속도 (units/s)
             const float kInitialDamage = 10.0f;      // 트랩 진입 시 즉시 데미지
-            const float kTickDamage    = 6.0f;       // 트랩 중 0.5s 마다 tick
-            const float kTickInterval  = 0.5f;
+            const float kTickDamage = 6.0f;       // 트랩 중 0.5s 마다 tick
+            const float kTickInterval = 0.5f;
 
             m_fTornadoDamageTickTimer += deltaTime;
             bool bTickFires = (m_fTornadoDamageTickTimer >= kTickInterval);
@@ -2296,7 +2296,7 @@ void Scene::Update(float deltaTime, InputSystem* pInputSystem)
                 XMFLOAT3 ppos = pPT->GetPosition();
                 float dx = ppos.x - m_xmf3TornadoEventPos.x;
                 float dz = ppos.z - m_xmf3TornadoEventPos.z;
-                float dist = sqrtf(dx*dx + dz*dz);
+                float dist = sqrtf(dx * dx + dz * dz);
 
                 if (pPC->IsTornadoTrapped())
                 {
@@ -2524,8 +2524,8 @@ void Scene::RenderShadowPass(ID3D12GraphicsCommandList* pCommandList)
 }
 
 void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR_HANDLE shadowSrvHandle,
-                   D3D12_CPU_DESCRIPTOR_HANDLE mainRTV, D3D12_CPU_DESCRIPTOR_HANDLE mainDSV,
-                   ID3D12Resource* pMainRTBuffer)
+    D3D12_CPU_DESCRIPTOR_HANDLE mainRTV, D3D12_CPU_DESCRIPTOR_HANDLE mainDSV,
+    ID3D12Resource* pMainRTBuffer)
 {
     // Set the descriptor heap
     ID3D12DescriptorHeap* ppHeaps[] = { m_pDescriptorHeap->GetHeap() };
@@ -2537,8 +2537,8 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
     for (auto& shader : m_vShaders)
     {
         shader->Render(pCommandList, GetPassCBVAddress(), shadowSrvHandle,
-                       m_d3dWaterNormal2GpuHandle, m_d3dWaterHeight2GpuHandle,
-                       m_d3dFoamOpacityGpuHandle, m_d3dFoamDiffuseGpuHandle);
+            m_d3dWaterNormal2GpuHandle, m_d3dWaterHeight2GpuHandle,
+            m_d3dFoamOpacityGpuHandle, m_d3dFoamDiffuseGpuHandle);
     }
 
     // Terrain 렌더 (불투명, 전용 힙 사용) — Water stage에만 사용 (다른 stage에선 흰 면 버그)
@@ -2588,7 +2588,7 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
         XMMATRIX mView = XMLoadFloat4x4(&m_pCamera->GetViewMatrix());
         XMMATRIX mProj = XMLoadFloat4x4(&m_pCamera->GetProjectionMatrix());
         XMFLOAT3 camRight = { XMVectorGetX(mView.r[0]), XMVectorGetX(mView.r[1]), XMVectorGetX(mView.r[2]) };
-        XMFLOAT3 camUp    = { XMVectorGetY(mView.r[0]), XMVectorGetY(mView.r[1]), XMVectorGetY(mView.r[2]) };
+        XMFLOAT3 camUp = { XMVectorGetY(mView.r[0]), XMVectorGetY(mView.r[1]), XMVectorGetY(mView.r[2]) };
 
         XMFLOAT4X4 viewProjT, viewT;
         DirectX::XMStoreFloat4x4(&viewProjT, XMMatrixTranspose(mView * mProj));
@@ -2610,18 +2610,18 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
         DirectX::XMStoreFloat3(&lightDirVS, XMVector3Normalize(lightV));
 
         auto GetFluidColors = [&](bool blurOnly) -> std::pair<XMFLOAT4, XMFLOAT4>
-        {
-            XMFLOAT4 outer = { 0.95f, 0.15f, 0.0f, 0.9f };
-            XMFLOAT4 inner = { 1.0f,  0.88f, 0.25f, 1.0f };
-            FluidElementColor colors = m_pVFXManager->GetDominantFluidColors(blurOnly);
-            if (colors.coreColor.w > 0.01f)
             {
-                outer   = colors.edgeColor;
-                outer.w = (std::max)(outer.w, 0.6f);
-                inner   = colors.coreColor;
-            }
-            return { outer, inner };
-        };
+                XMFLOAT4 outer = { 0.95f, 0.15f, 0.0f, 0.9f };
+                XMFLOAT4 inner = { 1.0f,  0.88f, 0.25f, 1.0f };
+                FluidElementColor colors = m_pVFXManager->GetDominantFluidColors(blurOnly);
+                if (colors.coreColor.w > 0.01f)
+                {
+                    outer = colors.edgeColor;
+                    outer.w = (std::max)(outer.w, 0.6f);
+                    inner = colors.coreColor;
+                }
+                return { outer, inner };
+            };
 
         // ── 패스 A: blur 없는 플레이어 이펙트 ──
         bool bHasNonBlur = m_pVFXManager->HasActiveSlots(false);
@@ -2691,7 +2691,7 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
         // Fallback: SSF 없이 빌보드 렌더링
         XMMATRIX mView2 = XMLoadFloat4x4(&m_pCamera->GetViewMatrix());
         XMFLOAT3 camRight2 = { XMVectorGetX(mView2.r[0]), XMVectorGetX(mView2.r[1]), XMVectorGetX(mView2.r[2]) };
-        XMFLOAT3 camUp2    = { XMVectorGetY(mView2.r[0]), XMVectorGetY(mView2.r[1]), XMVectorGetY(mView2.r[2]) };
+        XMFLOAT3 camUp2 = { XMVectorGetY(mView2.r[0]), XMVectorGetY(mView2.r[1]), XMVectorGetY(mView2.r[2]) };
 
         XMMATRIX mViewProj2 = mView2 * XMLoadFloat4x4(&m_pCamera->GetProjectionMatrix());
         XMFLOAT4X4 viewProj2;
@@ -2709,7 +2709,7 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
         {
             XMMATRIX mView3 = XMLoadFloat4x4(&m_pCamera->GetViewMatrix());
             XMFLOAT3 camRight3 = { XMVectorGetX(mView3.r[0]), XMVectorGetX(mView3.r[1]), XMVectorGetX(mView3.r[2]) };
-            XMFLOAT3 camUp3    = { XMVectorGetY(mView3.r[0]), XMVectorGetY(mView3.r[1]), XMVectorGetY(mView3.r[2]) };
+            XMFLOAT3 camUp3 = { XMVectorGetY(mView3.r[0]), XMVectorGetY(mView3.r[1]), XMVectorGetY(mView3.r[2]) };
 
             XMMATRIX mViewProj3 = mView3 * XMLoadFloat4x4(&m_pCamera->GetProjectionMatrix());
             XMFLOAT4X4 viewProj3;
@@ -2724,7 +2724,7 @@ void Scene::Render(ID3D12GraphicsCommandList* pCommandList, D3D12_GPU_DESCRIPTOR
     {
         XMMATRIX mView4 = XMLoadFloat4x4(&m_pCamera->GetViewMatrix());
         XMFLOAT3 camRight4 = { XMVectorGetX(mView4.r[0]), XMVectorGetY(mView4.r[0]), XMVectorGetZ(mView4.r[0]) };
-        XMFLOAT3 camUp4    = { XMVectorGetX(mView4.r[1]), XMVectorGetY(mView4.r[1]), XMVectorGetZ(mView4.r[1]) };
+        XMFLOAT3 camUp4 = { XMVectorGetX(mView4.r[1]), XMVectorGetY(mView4.r[1]), XMVectorGetZ(mView4.r[1]) };
 
         XMMATRIX mViewProj4 = mView4 * XMLoadFloat4x4(&m_pCamera->GetProjectionMatrix());
         XMFLOAT4X4 viewProj4;
@@ -2782,8 +2782,8 @@ GameObject* Scene::CreateGameObject(ID3D12Device* pDevice, ID3D12GraphicsCommand
 
     // 슬롯 충돌 진단 로그
     wchar_t dbgBuf[256];
-    swprintf_s(dbgBuf, L"[Scene] CreateObject: Slot=%u, Reused=%s, PersistentEnd=%u\n", 
-              slot, (bReused ? L"TRUE" : L"FALSE"), m_nPersistentDescriptorEnd);
+    swprintf_s(dbgBuf, L"[Scene] CreateObject: Slot=%u, Reused=%s, PersistentEnd=%u\n",
+        slot, (bReused ? L"TRUE" : L"FALSE"), m_nPersistentDescriptorEnd);
     OutputDebugString(dbgBuf);
 
     if (bReused)
@@ -2798,7 +2798,7 @@ GameObject* Scene::CreateGameObject(ID3D12Device* pDevice, ID3D12GraphicsCommand
         UINT nCBSize = (sizeof(ObjectConstants) + 255) & ~255;
         D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
         cbvDesc.BufferLocation = cacheIt->second->GetGPUVirtualAddress();
-        cbvDesc.SizeInBytes    = nCBSize;
+        cbvDesc.SizeInBytes = nCBSize;
         pDevice->CreateConstantBufferView(&cbvDesc, m_pDescriptorHeap->GetCPUHandle(slot));
     }
     else
@@ -2830,31 +2830,31 @@ GameObject* Scene::CreateGameObject(ID3D12Device* pDevice, ID3D12GraphicsCommand
 
 void Scene::PrintHierarchy(GameObject* pGameObject, int nDepth)
 {
-	if (!pGameObject) return;
+    if (!pGameObject) return;
 
-	// Indent for hierarchy visualization
-	std::wstring indent(nDepth * 2, ' ');
+    // Indent for hierarchy visualization
+    std::wstring indent(nDepth * 2, ' ');
 
-	// Prepare debug string
-	wchar_t buffer[256];
-	swprintf_s(buffer, 256, L"%sFrame: %hs, Has Mesh: %s, Has RenderComponent: %s\n",
-		indent.c_str(),
-		pGameObject->m_pstrFrameName,
-		pGameObject->GetMesh() ? L"Yes" : L"No",
-		pGameObject->GetComponent<RenderComponent>() ? L"Yes" : L"No"
-	);
+    // Prepare debug string
+    wchar_t buffer[256];
+    swprintf_s(buffer, 256, L"%sFrame: %hs, Has Mesh: %s, Has RenderComponent: %s\n",
+        indent.c_str(),
+        pGameObject->m_pstrFrameName,
+        pGameObject->GetMesh() ? L"Yes" : L"No",
+        pGameObject->GetComponent<RenderComponent>() ? L"Yes" : L"No"
+    );
 
-	OutputDebugString(buffer);
+    OutputDebugString(buffer);
 
-	// Recurse for children and siblings
-	if (pGameObject->m_pChild)
-	{
-		PrintHierarchy(pGameObject->m_pChild, nDepth + 1);
-	}
-	if (pGameObject->m_pSibling)
-	{
-		PrintHierarchy(pGameObject->m_pSibling, nDepth);
-	}
+    // Recurse for children and siblings
+    if (pGameObject->m_pChild)
+    {
+        PrintHierarchy(pGameObject->m_pChild, nDepth + 1);
+    }
+    if (pGameObject->m_pSibling)
+    {
+        PrintHierarchy(pGameObject->m_pSibling, nDepth);
+    }
 }
 
 void Scene::CollectColliders(GameObject* pGameObject, std::vector<ColliderComponent*>& outColliders)
@@ -3159,7 +3159,7 @@ bool Scene::IsNearPortalCube() const
         auto* pInteractable = pPortal->GetComponent<InteractableComponent>();
         if (!pInteractable || !pInteractable->IsActive()) return false;
         return pInteractable->IsPlayerInRange(m_pPlayerGameObject);
-    };
+        };
 
     if (checkPortal(m_pCurrentRoom->GetPortalCube()))   return true;
     if (checkPortal(m_pCurrentRoom->GetSecondPortal())) return true;
@@ -3178,7 +3178,7 @@ void Scene::TriggerPortalInteraction()
         if (!pInteractable->IsPlayerInRange(m_pPlayerGameObject)) return false;
         pInteractable->Interact();
         return true;
-    };
+        };
 
     // 보조(최종 보스) 포탈을 먼저 시도 — 두 포탈이 겹치면 의도적으로 분기 우선
     if (tryInteract(m_pCurrentRoom->GetSecondPortal())) return;
@@ -3295,8 +3295,8 @@ void Scene::TransitionToNextRoom()
     m_strCurrentMap = nextMap;
 
     // ── 6. 새 맵 로드
-    ID3D12Device*               pDevice      = Dx12App::GetInstance()->GetDevice();
-    ID3D12GraphicsCommandList*  pCommandList = Dx12App::GetInstance()->GetCommandList();
+    ID3D12Device* pDevice = Dx12App::GetInstance()->GetDevice();
+    ID3D12GraphicsCommandList* pCommandList = Dx12App::GetInstance()->GetCommandList();
 
     bool bLoaded = MapLoader::LoadIntoScene(
         m_strCurrentMap.c_str(), this, pDevice, pCommandList, m_vShaders[0].get());
@@ -3363,12 +3363,12 @@ void Scene::TransitionToNextRoom()
         m_pPlayerGameObject->GetTransform()->SetPosition(playerSpawn.x, playerSpawn.y + 22.0f, playerSpawn.z);
         if (auto* pPC = m_pPlayerGameObject->GetComponent<PlayerComponent>())
             pPC->StartIntroFly(3.0f, playerSpawn.y,
-                               XMFLOAT3(playerSpawn.x, playerSpawn.y, playerSpawn.z), 5.0f);
+                XMFLOAT3(playerSpawn.x, playerSpawn.y, playerSpawn.z), 5.0f);
     }
 
     wchar_t buffer[128];
     swprintf_s(buffer, L"[Scene] Transitioned to map: %hs (room #%d)\n",
-               m_strCurrentMap.c_str(), m_nRoomCount + 1);
+        m_strCurrentMap.c_str(), m_nRoomCount + 1);
     OutputDebugString(buffer);
 }
 
@@ -3414,7 +3414,7 @@ void Scene::TransitionToRoomByIndex(int index)
     // ── 지정 인덱스 맵 로드
     m_strCurrentMap = m_vMapPool[index];
 
-    ID3D12Device*              pDevice      = Dx12App::GetInstance()->GetDevice();
+    ID3D12Device* pDevice = Dx12App::GetInstance()->GetDevice();
     ID3D12GraphicsCommandList* pCommandList = Dx12App::GetInstance()->GetCommandList();
 
     bool bLoaded = MapLoader::LoadIntoScene(
@@ -3510,8 +3510,8 @@ void Scene::TransitionToBossRoom()
         ReAddRenderComponentsToShader(pGO.get());
 
     // ── 5. 보스 맵 로드 (일반 맵과 동일)
-    ID3D12Device*               pDevice      = Dx12App::GetInstance()->GetDevice();
-    ID3D12GraphicsCommandList*  pCommandList = Dx12App::GetInstance()->GetCommandList();
+    ID3D12Device* pDevice = Dx12App::GetInstance()->GetDevice();
+    ID3D12GraphicsCommandList* pCommandList = Dx12App::GetInstance()->GetCommandList();
 
     m_strCurrentMap = m_strBossMap;
 
@@ -3796,7 +3796,7 @@ std::vector<GameObject*> Scene::GetAllPlayers() const
 // ================================================================
 void Scene::LoadTerrain(const char* configJsonPath, int subdivisionStep)
 {
-    ID3D12Device*              pDevice      = Dx12App::GetInstance()->GetDevice();
+    ID3D12Device* pDevice = Dx12App::GetInstance()->GetDevice();
     ID3D12GraphicsCommandList* pCommandList = Dx12App::GetInstance()->GetCommandList();
 
     m_pTerrain = std::make_unique<Terrain>();
@@ -3822,7 +3822,7 @@ void Scene::RegisterPlayersToEnemy(EnemyComponent* pEnemy)
     pEnemy->RegisterAllPlayers(players);
 }
 
-void Scene::TransitionToFireStage(int roomIndex)
+void Scene::TransitionToFireStage(int roomIndex, bool waitForInteraction)
 {
     OutputDebugString(L"[Scene] ========== FIRE STAGE (cycle restart) ==========\n");
     if (!IsReadyForTransition()) return;
@@ -3897,7 +3897,7 @@ void Scene::TransitionToFireStage(int roomIndex)
     {
         for (const auto& pGO : m_pCurrentRoom->GetGameObjects())
             pGO->Update(0.0f);
-        m_pCurrentRoom->SetState(RoomState::Active);
+        m_pCurrentRoom->SetState(waitForInteraction ? RoomState::Inactive : RoomState::Active);
     }
 
     // 첫 방용 LavaGeyser 매니저 셋업 (Fire 전용 기믹)
@@ -3914,8 +3914,19 @@ void Scene::TransitionToFireStage(int roomIndex)
     if (m_pInteractionCube)
     {
         auto* pI = m_pInteractionCube->GetComponent<InteractableComponent>();
-        if (pI) pI->Hide();
-        m_bInteractionCubeActive = false;
+        if (waitForInteraction && m_pPlayerGameObject)
+        {
+            const XMFLOAT3 spawn = m_pPlayerGameObject->GetTransform()->GetPosition();
+            m_pInteractionCube->GetTransform()->SetPosition(spawn.x, 2.5f, spawn.z);
+            if (pI) pI->SetActive(true);
+            m_bInteractionCubeActive = true;
+            m_bEnemiesSpawned = false;
+        }
+        else
+        {
+            if (pI) pI->Hide();
+            m_bInteractionCubeActive = false;
+        }
     }
     if (m_pPlayerGameObject)
     {
@@ -4003,7 +4014,7 @@ void Scene::TransitionToWaterStage(int roomIndex)
         ReAddRenderComponentsToShader(pGO.get());
     }
 
-    ID3D12Device*              pDevice      = Dx12App::GetInstance()->GetDevice();
+    ID3D12Device* pDevice = Dx12App::GetInstance()->GetDevice();
     ID3D12GraphicsCommandList* pCommandList = Dx12App::GetInstance()->GetCommandList();
 
     // ── 7. 서버 roomIndex 기준으로 물 스테이지 맵 로드
@@ -4052,8 +4063,8 @@ void Scene::TransitionToWaterStage(int roomIndex)
 
             // 물 머티리얼 (파란색, 높은 광택)
             MATERIAL waterMat;
-            waterMat.m_cAmbient  = XMFLOAT4(0.1f, 0.15f, 0.25f, 1.0f);
-            waterMat.m_cDiffuse  = XMFLOAT4(0.8f, 0.9f, 1.0f, 1.0f);
+            waterMat.m_cAmbient = XMFLOAT4(0.1f, 0.15f, 0.25f, 1.0f);
+            waterMat.m_cDiffuse = XMFLOAT4(0.8f, 0.9f, 1.0f, 1.0f);
             waterMat.m_cSpecular = XMFLOAT4(0.95f, 0.95f, 0.95f, 64.0f);
             waterMat.m_cEmissive = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
             m_pWaterPlane->SetMaterial(waterMat);
@@ -4414,7 +4425,7 @@ void Scene::TransitionToWaterBossRoom()
             [pOldWaterPlane](const std::unique_ptr<GameObject>& p) { return p.get() == pOldWaterPlane; }),
         m_vGameObjects.end());
 
-    ID3D12Device*              pDevice      = Dx12App::GetInstance()->GetDevice();
+    ID3D12Device* pDevice = Dx12App::GetInstance()->GetDevice();
     ID3D12GraphicsCommandList* pCommandList = Dx12App::GetInstance()->GetCommandList();
 
     // ── 9. 보스 공용 맵 로드 — 모든 보스전이 Red Dragon 과 동일한 맵 사용 (rooms.json 의 bossRoom)
@@ -4449,8 +4460,8 @@ void Scene::TransitionToWaterBossRoom()
             m_pWaterPlane->SetWater(true);
 
             MATERIAL waterMat;
-            waterMat.m_cAmbient  = XMFLOAT4(0.1f, 0.15f, 0.25f, 1.0f);
-            waterMat.m_cDiffuse  = XMFLOAT4(0.8f, 0.9f, 1.0f, 1.0f);
+            waterMat.m_cAmbient = XMFLOAT4(0.1f, 0.15f, 0.25f, 1.0f);
+            waterMat.m_cDiffuse = XMFLOAT4(0.8f, 0.9f, 1.0f, 1.0f);
             waterMat.m_cSpecular = XMFLOAT4(0.95f, 0.95f, 0.95f, 64.0f);
             waterMat.m_cEmissive = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
             m_pWaterPlane->SetMaterial(waterMat);
@@ -4539,16 +4550,16 @@ void Scene::TransitionToWaterBossRoom()
 
                     CRoom* pRoom = m_pCurrentRoom;
                     pDragonEnemy->SetOnDeathCallback([this, pRoom](EnemyComponent* pDeadEnemy)
-                    {
-                        if (pRoom)
-                            pRoom->OnEnemyDeath(pDeadEnemy);
+                        {
+                            if (pRoom)
+                                pRoom->OnEnemyDeath(pDeadEnemy);
 
-                        OutputDebugString(L"[Scene] Blue Dragon defeated - Kraken emerges! (Phase 2)\n");
-                        m_xmf3PendingKrakenPos = { 0.0f, 0.0f, 0.0f };
-                        if (pDeadEnemy && pDeadEnemy->GetOwner())
-                            m_xmf3PendingKrakenPos = pDeadEnemy->GetOwner()->GetTransform()->GetPosition();
-                        m_bPendingKrakenSpawn = true;
-                    });
+                            OutputDebugString(L"[Scene] Blue Dragon defeated - Kraken emerges! (Phase 2)\n");
+                            m_xmf3PendingKrakenPos = { 0.0f, 0.0f, 0.0f };
+                            if (pDeadEnemy && pDeadEnemy->GetOwner())
+                                m_xmf3PendingKrakenPos = pDeadEnemy->GetOwner()->GetTransform()->GetPosition();
+                            m_bPendingKrakenSpawn = true;
+                        });
                 }
             }
 
@@ -4575,39 +4586,39 @@ void Scene::TransitionToWaterBossRoom()
     if (m_pcbMappedPass)
     {
         m_pcbMappedPass->m_Waves[0].m_fWavelength = 70.0f;
-        m_pcbMappedPass->m_Waves[0].m_fAmplitude  = 12.0f;
-        m_pcbMappedPass->m_Waves[0].m_fSteepness  = 0.4f;
-        m_pcbMappedPass->m_Waves[0].m_fSpeed      = 5.0f;
+        m_pcbMappedPass->m_Waves[0].m_fAmplitude = 12.0f;
+        m_pcbMappedPass->m_Waves[0].m_fSteepness = 0.4f;
+        m_pcbMappedPass->m_Waves[0].m_fSpeed = 5.0f;
         m_pcbMappedPass->m_Waves[0].m_xmf2Direction = XMFLOAT2(1.0f, 0.3f);
-        m_pcbMappedPass->m_Waves[0].m_fFadeSpeed  = 0.1f;
+        m_pcbMappedPass->m_Waves[0].m_fFadeSpeed = 0.1f;
 
         m_pcbMappedPass->m_Waves[1].m_fWavelength = 45.0f;
-        m_pcbMappedPass->m_Waves[1].m_fAmplitude  = 8.0f;
-        m_pcbMappedPass->m_Waves[1].m_fSteepness  = 0.35f;
-        m_pcbMappedPass->m_Waves[1].m_fSpeed      = 7.0f;
+        m_pcbMappedPass->m_Waves[1].m_fAmplitude = 8.0f;
+        m_pcbMappedPass->m_Waves[1].m_fSteepness = 0.35f;
+        m_pcbMappedPass->m_Waves[1].m_fSpeed = 7.0f;
         m_pcbMappedPass->m_Waves[1].m_xmf2Direction = XMFLOAT2(-0.7f, 0.7f);
-        m_pcbMappedPass->m_Waves[1].m_fFadeSpeed  = 0.12f;
+        m_pcbMappedPass->m_Waves[1].m_fFadeSpeed = 0.12f;
 
         m_pcbMappedPass->m_Waves[2].m_fWavelength = 28.0f;
-        m_pcbMappedPass->m_Waves[2].m_fAmplitude  = 5.0f;
-        m_pcbMappedPass->m_Waves[2].m_fSteepness  = 0.3f;
-        m_pcbMappedPass->m_Waves[2].m_fSpeed      = 9.0f;
+        m_pcbMappedPass->m_Waves[2].m_fAmplitude = 5.0f;
+        m_pcbMappedPass->m_Waves[2].m_fSteepness = 0.3f;
+        m_pcbMappedPass->m_Waves[2].m_fSpeed = 9.0f;
         m_pcbMappedPass->m_Waves[2].m_xmf2Direction = XMFLOAT2(0.6f, -0.8f);
-        m_pcbMappedPass->m_Waves[2].m_fFadeSpeed  = 0.15f;
+        m_pcbMappedPass->m_Waves[2].m_fFadeSpeed = 0.15f;
 
         m_pcbMappedPass->m_Waves[3].m_fWavelength = 30.0f;
-        m_pcbMappedPass->m_Waves[3].m_fAmplitude  = 2.5f;
-        m_pcbMappedPass->m_Waves[3].m_fSteepness  = 0.25f;
-        m_pcbMappedPass->m_Waves[3].m_fSpeed      = 10.0f;
+        m_pcbMappedPass->m_Waves[3].m_fAmplitude = 2.5f;
+        m_pcbMappedPass->m_Waves[3].m_fSteepness = 0.25f;
+        m_pcbMappedPass->m_Waves[3].m_fSpeed = 10.0f;
         m_pcbMappedPass->m_Waves[3].m_xmf2Direction = XMFLOAT2(0.5f, 0.9f);
-        m_pcbMappedPass->m_Waves[3].m_fFadeSpeed  = 0.0f;
+        m_pcbMappedPass->m_Waves[3].m_fFadeSpeed = 0.0f;
 
         m_pcbMappedPass->m_Waves[4].m_fWavelength = 22.0f;
-        m_pcbMappedPass->m_Waves[4].m_fAmplitude  = 1.5f;
-        m_pcbMappedPass->m_Waves[4].m_fSteepness  = 0.2f;
-        m_pcbMappedPass->m_Waves[4].m_fSpeed      = 12.0f;
+        m_pcbMappedPass->m_Waves[4].m_fAmplitude = 1.5f;
+        m_pcbMappedPass->m_Waves[4].m_fSteepness = 0.2f;
+        m_pcbMappedPass->m_Waves[4].m_fSpeed = 12.0f;
         m_pcbMappedPass->m_Waves[4].m_xmf2Direction = XMFLOAT2(-0.9f, 0.4f);
-        m_pcbMappedPass->m_Waves[4].m_fFadeSpeed  = 0.0f;
+        m_pcbMappedPass->m_Waves[4].m_fFadeSpeed = 0.0f;
     }
 
     m_bInBossRoom = true;
@@ -4736,7 +4747,7 @@ void Scene::TransitionToEarthStage(int roomIndex)
             ReAddRenderComponentsToShader(pGO.get());
     }
 
-    ID3D12Device*              pDevice      = Dx12App::GetInstance()->GetDevice();
+    ID3D12Device* pDevice = Dx12App::GetInstance()->GetDevice();
     ID3D12GraphicsCommandList* pCommandList = Dx12App::GetInstance()->GetCommandList();
 
     int safeRoomIndex = roomIndex;
@@ -4832,7 +4843,7 @@ void Scene::TransitionToGrassStage(int roomIndex)
             ReAddRenderComponentsToShader(pGO.get());
     }
 
-    ID3D12Device*              pDevice      = Dx12App::GetInstance()->GetDevice();
+    ID3D12Device* pDevice = Dx12App::GetInstance()->GetDevice();
     ID3D12GraphicsCommandList* pCommandList = Dx12App::GetInstance()->GetCommandList();
 
     int safeRoomIndex = roomIndex;
@@ -4914,7 +4925,7 @@ void Scene::TransitionToEarthBossRoom()
             ReAddRenderComponentsToShader(pGO.get());
     }
 
-    ID3D12Device*              pDevice      = Dx12App::GetInstance()->GetDevice();
+    ID3D12Device* pDevice = Dx12App::GetInstance()->GetDevice();
     ID3D12GraphicsCommandList* pCommandList = Dx12App::GetInstance()->GetCommandList();
 
     // 보스 공용 맵 — Red Dragon 과 동일 (rooms.json 의 bossRoom)
@@ -5351,11 +5362,11 @@ void Scene::TransitionToDarkLordRoom(bool bStartIntro)
 
         m_eDarkLordIntroStage = DarkLordIntroStage::Sanctum;
         m_fDarkLordIntroTimer = 0.0f;
-        m_fSanctumBlend       = 0.0f;
+        m_fSanctumBlend = 0.0f;
         m_bIntroSeverShakeTriggered = false;
-        m_bIntroBossSpawned         = false;
-        m_nIntroAbsorbCount         = 0;
-        m_bScreenSplitTriggered     = false;
+        m_bIntroBossSpawned = false;
+        m_nIntroAbsorbCount = 0;
+        m_bScreenSplitTriggered = false;
 
         // ── 입장 컷씬 동안 플레이어/포탈 hide ────────────────────────────────
         //   플레이어가 hierarchy mesh (parent + children) 일 가능성 — RenderComponent
@@ -5373,7 +5384,7 @@ void Scene::TransitionToDarkLordRoom(bool bStartIntro)
                     pRC->SetVisible(false);
                 hideTree(pGO->m_pChild);
                 hideTree(pGO->m_pSibling);
-            };
+                };
             hideTree(m_pPlayerGameObject->m_pChild);
             // 3) Transform Y stash + 멀리 이동 (안전망 — flag 가 일부 경로 못 잡아도)
             XMFLOAT3 origPos = m_pPlayerGameObject->GetTransform()->GetPosition();
@@ -5391,7 +5402,7 @@ void Scene::TransitionToDarkLordRoom(bool bStartIntro)
                     pRC->SetVisible(false);
                 hideTree(pGO->m_pChild);
                 hideTree(pGO->m_pSibling);
-            };
+                };
             hideTree(m_pInteractionCube->m_pChild);
         }
 
@@ -5421,7 +5432,7 @@ void Scene::SetupElementalSanctum(const BoundingBox& roomBB)
 
     // BB 반경의 60% 위치에 4방향 배치.
     const float r = ((roomBB.Extents.x < roomBB.Extents.z)
-                     ? roomBB.Extents.x : roomBB.Extents.z) * 0.60f;
+        ? roomBB.Extents.x : roomBB.Extents.z) * 0.60f;
     // ★ 4 원소별 vivid 파티클 컬럼 + 색조명. (이전 흰 톤 Wind_UpdraftSmall 폐기)
     struct Slot { XMFLOAT3 offset; XMFLOAT4 color; ElementType element; const char* pillarFx; };
     Slot slots[4] = {
@@ -5431,12 +5442,12 @@ void Scene::SetupElementalSanctum(const BoundingBox& roomBB)
         { { -r,    0.0f, 0.0f}, { 0.22f, 0.68f, 1.20f, 1.0f }, ElementType::Water, "Sanctum_Pillar_Water" },   // 서 — 물
     };
 
-    const float kAuraSize    = 55.0f;     // zone 한가운데 큰 색 wash
-    const float kAuraRotSpd  = 0.15f;
-    const float kLifetime    = 1e9f;
-    const float kRevealDur   = 1.2f;
-    const int   kSigilsPerZone   = 6;     // 4 → 6 (마법진 밀도 ↑)
-    const int   kPillarsPerZone  = 10;    // 6 → 10 (컬럼 풍성)
+    const float kAuraSize = 55.0f;     // zone 한가운데 큰 색 wash
+    const float kAuraRotSpd = 0.15f;
+    const float kLifetime = 1e9f;
+    const float kRevealDur = 1.2f;
+    const int   kSigilsPerZone = 6;     // 4 → 6 (마법진 밀도 ↑)
+    const int   kPillarsPerZone = 10;    // 6 → 10 (컬럼 풍성)
     const float kZoneScatterRadius = 14.0f;
 
     // 결정론적 PRNG — 매 실행 동일 패턴, 단 cardinal 직선 배치 아니라 organic.
@@ -5444,7 +5455,7 @@ void Scene::SetupElementalSanctum(const BoundingBox& roomBB)
         seed = seed * 1664525u + 1013904223u;
         float u = (float)(seed >> 8) / (float)(1u << 24);
         return lo + (hi - lo) * u;
-    };
+        };
 
     for (const Slot& s : slots)
     {
@@ -5475,8 +5486,8 @@ void Scene::SetupElementalSanctum(const BoundingBox& roomBB)
                 zoneCenter.z + sinf(ang) * dist
             };
             float size = frand(8.0f, 16.0f);
-            float rot  = frand(0.0f, 360.0f);
-            float spd  = frand(0.3f, 0.7f);
+            float rot = frand(0.0f, 360.0f);
+            float spd = frand(0.3f, 0.7f);
             int slot = m_pDecalManager->Spawn(
                 DecalTexture::MagicCircle, sp, size,
                 rot, kLifetime, s.color, spd, kRevealDur);
@@ -5487,8 +5498,8 @@ void Scene::SetupElementalSanctum(const BoundingBox& roomBB)
         //     최소 거리 0.30 보장 → 코어 decal 위에 안 겹침. 외곽까지 풍성히 흩뿌림.
         for (int k = 0; k < kPillarsPerZone; ++k)
         {
-            float ang  = frand(0.0f, 6.2832f);
-            float u    = frand(0.0f, 1.0f);
+            float ang = frand(0.0f, 6.2832f);
+            float u = frand(0.0f, 1.0f);
             // sqrt 분포 — 면적 균등. 최소 0.30 (코어 비워둠).
             float dist = (0.30f + sqrtf(u) * 0.70f) * kZoneScatterRadius;
             XMFLOAT3 pp = {
@@ -5497,17 +5508,17 @@ void Scene::SetupElementalSanctum(const BoundingBox& roomBB)
                 zoneCenter.z + sinf(ang) * dist
             };
             int fxId = m_pVFXManager->Spawn(s.pillarFx, pp,
-                                             XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
+                XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
             if (fxId >= 0) el.pillarVFXIds.push_back(fxId);
         }
 
         // (4) 진입 임팩트 — zone 중앙에 SigilImpact 1발 (원소색 ring + spark burst).
         m_pVFXManager->Spawn(SlashCue::ImpactEffectName(s.element), zoneCenter,
-                              XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
+            XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
 
         // (5) Charge aura — zone 중앙에 떠다니는 원소 응축 오라 (추가 vivid).
         m_pVFXManager->Spawn(SlashCue::ChargeAuraEffectName(s.element), zoneCenter,
-                              XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
+            XMFLOAT3(0.0f, 1.0f, 0.0f), 0u, false);
 
         m_vSanctumElements.push_back(el);
     }
@@ -5631,7 +5642,7 @@ Scene::IntroSeverState Scene::GetIntroSeverState() const
     if (m_eDarkLordIntroStage != DarkLordIntroStage::Sever) return s;
     float t = (m_fDarkLordIntroTimer - DLI_T_DREAD) / (DLI_T_SEVER - DLI_T_DREAD);
     if (t < 0.0f || t > 1.0f) return s;
-    s.active   = true;
+    s.active = true;
     s.progress = t;
 
     // pre-dark — 0.0 ~ 0.45 까지 점점 어두워졌다가 flash 직전에 max,
@@ -5657,7 +5668,7 @@ Scene::IntroSeverState Scene::GetIntroSeverState() const
     s.afterGlowAlpha = SmoothStep01(0.55f, 0.75f, t) * (1.0f - SmoothStep01(0.92f, 1.00f, t)) * 0.50f;
 
     // strike head — 0.18 ~ 0.48 동안 좌하 → 우상 sweep. flash 전후로 가시.
-    s.slashHeadT     = std::clamp((t - 0.18f) / 0.30f, 0.0f, 1.0f);
+    s.slashHeadT = std::clamp((t - 0.18f) / 0.30f, 0.0f, 1.0f);
     s.slashHeadAlpha = SmoothStep01(0.18f, 0.24f, t) * (1.0f - SmoothStep01(0.46f, 0.55f, t));
 
     return s;
@@ -5677,7 +5688,7 @@ void Scene::CancelTransientStateBeforeTransition()
     //   m_pDragonIntroEnemy 는 EnemyComponent* raw pointer. 보스가 다음 m_vRooms.clear() 에서
     //   파기되므로 여기서 null 로 끊지 않으면 다음 Scene::Update 의 (1700) IsInIntro() 가 UAF.
     m_pDragonIntroEnemy = nullptr;
-    m_eLastDragonPhase  = BossIntroPhase::None;
+    m_eLastDragonPhase = BossIntroPhase::None;
 
     // ── DarkLord 입장 컷씬 ─────────────────────────────────────────────────
     //   state machine 을 None 으로 끊고 raw pointer 도 해제. 안 그러면 다음 프레임
@@ -5687,17 +5698,17 @@ void Scene::CancelTransientStateBeforeTransition()
     {
         OutputDebugString(L"[Scene] CancelTransientStateBeforeTransition: aborting DarkLord intro\n");
     }
-    m_eDarkLordIntroStage         = DarkLordIntroStage::None;
-    m_fDarkLordIntroTimer         = 0.0f;
-    m_fSanctumBlend               = 1.0f;   // dark 톤 기본값 복귀
-    m_bIntroSeverShakeTriggered   = false;
-    m_bIntroBossSpawned           = false;
-    m_nIntroAbsorbCount           = 0;
-    m_pDarkLordCutsceneObject     = nullptr;
-    m_bDarkLordIntroNetworkMode   = false;
+    m_eDarkLordIntroStage = DarkLordIntroStage::None;
+    m_fDarkLordIntroTimer = 0.0f;
+    m_fSanctumBlend = 1.0f;   // dark 톤 기본값 복귀
+    m_bIntroSeverShakeTriggered = false;
+    m_bIntroBossSpawned = false;
+    m_nIntroAbsorbCount = 0;
+    m_pDarkLordCutsceneObject = nullptr;
+    m_bDarkLordIntroNetworkMode = false;
     m_nNetworkDarkLordIntroMonsterId = 0;
-    m_pIntroSlashOverlay          = nullptr;
-    m_pIntroSlashMesh             = nullptr;
+    m_pIntroSlashOverlay = nullptr;
+    m_pIntroSlashMesh = nullptr;
     CleanupElementalSanctum();   // sigil / aura / pillar decal+VFX 정리
 
     // ── Kraken (Water boss) 컷씬 ───────────────────────────────────────────
@@ -5705,24 +5716,24 @@ void Scene::CancelTransientStateBeforeTransition()
     //   m_eKrakenStage 만 None 으로 끊으면 UpdateKrakenCutscene 라인 1167 가드는 통과하지만,
     //   라인 1110 (m_bPendingKrakenSpawn && m_pPreloadedKraken) 는 별도 가드라 stale 포인터로 진입 가능.
     //   m_vRooms.clear() 직후 raw 포인터를 끊지 않으면 다음 보스방 진입 시 UAF 위험.
-    m_eKrakenStage              = KrakenCutsceneStage::None;
-    m_fKrakenEmergeTimer        = 0.0f;
-    m_bSlamShakeTriggered       = false;
-    m_bKrakenRoarFadedToIdle    = false;
-    m_pPreloadedKraken          = nullptr;
+    m_eKrakenStage = KrakenCutsceneStage::None;
+    m_fKrakenEmergeTimer = 0.0f;
+    m_bSlamShakeTriggered = false;
+    m_bKrakenRoarFadedToIdle = false;
+    m_pPreloadedKraken = nullptr;
     m_pNetworkKrakenCutsceneObject = nullptr;
-    m_bPendingKrakenSpawn       = false;
-    m_xmf3PendingKrakenPos      = {};
+    m_bPendingKrakenSpawn = false;
+    m_xmf3PendingKrakenPos = {};
     m_nNetworkKrakenCutsceneMonsterId = 0;
 
     // ── 보스 grace period — 보스가 사라지면 카운트도 의미 없음 ────────────
-    m_fBossGracePeriodRemain    = 0.0f;
+    m_fBossGracePeriodRemain = 0.0f;
 
     // ── Drop 상호작용 — 다음 방으로 raw drop pointer 가 새지 않게 ────────
-    m_pCurrentDropItem          = nullptr;
-    m_eDropState                = DropInteractionState::None;
+    m_pCurrentDropItem = nullptr;
+    m_eDropState = DropInteractionState::None;
     m_sSelectedRuneId.clear();
-    m_nSelectedRuneOptionIndex  = -1;
+    m_nSelectedRuneOptionIndex = -1;
 
     // ── 카메라: cinematic / shake / extra orbit 부스트 즉시 종료 ─────────
     //   StopCinematic 미호출 시 다음 방의 player 추적이 stale lookAt 으로 흔들림.
@@ -5734,7 +5745,7 @@ void Scene::CancelTransientStateBeforeTransition()
     }
 
     // ── flight 모드 보스 추적 — 보스가 사라지면 raw pointer 끊기 ───────
-    m_pFlightBossDummy          = nullptr;
+    m_pFlightBossDummy = nullptr;
 }
 
 void Scene::StartNetworkDarkLordIntro(GameObject* pDarkLordObj, uint64 monsterId)
@@ -5953,12 +5964,12 @@ void Scene::UpdateDarkLordIntro(float dt)
     //   다음 dereference 가 UAF/NPE. CancelTransientStateBeforeTransition() 이 누락된 경로
     //   (예: 외부 코드가 m_vRooms 를 직접 건드린 경우) 의 안전망.
     bool bNeedBoss = (m_eDarkLordIntroStage == DarkLordIntroStage::Devour
-                   || m_eDarkLordIntroStage == DarkLordIntroStage::Dominion);
+        || m_eDarkLordIntroStage == DarkLordIntroStage::Dominion);
     if ((bNeedBoss && !m_pDarkLordCutsceneObject) || !m_pCurrentRoom)
     {
         OutputDebugString(L"[Scene] UpdateDarkLordIntro: state stale (boss/room gone) — aborting\n");
-        m_eDarkLordIntroStage     = DarkLordIntroStage::None;
-        m_fDarkLordIntroTimer     = 0.0f;
+        m_eDarkLordIntroStage = DarkLordIntroStage::None;
+        m_fDarkLordIntroTimer = 0.0f;
         m_pDarkLordCutsceneObject = nullptr;
         if (m_pCamera && m_pCamera->IsCinematic()) m_pCamera->StopCinematic();
         return;
@@ -5969,7 +5980,7 @@ void Scene::UpdateDarkLordIntro(float dt)
 
     auto lerp = [](float a, float b, float t) { return a + (b - a) * t; };
     auto easeOutCubic = [](float t) { return 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t); };
-    auto easeInQuad   = [](float t) { return t * t; };
+    auto easeInQuad = [](float t) { return t * t; };
 
     GameObject* pBoss = m_pDarkLordCutsceneObject;
 
@@ -5981,7 +5992,7 @@ void Scene::UpdateDarkLordIntro(float dt)
         float t = T / DLI_T_SANCTUM;
         float e = easeOutCubic(std::clamp(t, 0.0f, 1.0f));
         float dist = lerp(70.0f, 60.0f, e);
-        float yaw  = lerp(0.0f, 60.0f, e);
+        float yaw = lerp(0.0f, 60.0f, e);
         if (m_pCamera) m_pCamera->SetCinematicOrbit(dist, 28.0f, yaw);
 
         if (T >= DLI_T_SANCTUM)
@@ -6002,7 +6013,7 @@ void Scene::UpdateDarkLordIntro(float dt)
         m_fSanctumBlend = lerp(0.0f, 0.35f, easeInQuad(t));
         // 카메라 — 더 zoom in. yaw 60° → 90° 로 회전 (원소 4방 둘러보는 느낌).
         float dist = lerp(60.0f, 52.0f, t);
-        float yaw  = lerp(60.0f, 90.0f, t);
+        float yaw = lerp(60.0f, 90.0f, t);
         if (m_pCamera) m_pCamera->SetCinematicOrbit(dist, 26.0f, yaw);
 
         if (T >= DLI_T_DREAD)
@@ -6172,11 +6183,11 @@ void Scene::UpdateDarkLordIntro(float dt)
                 {
                     float yaw = baseYaw + XMConvertToRadians(s.angleDeg);
                     XMFLOAT3 fwd = { sinf(yaw), 0.0f, cosf(yaw) };
-                    XMFLOAT3 sp  = { bossPos.x + fwd.x * kDist,
+                    XMFLOAT3 sp = { bossPos.x + fwd.x * kDist,
                                      bossPos.y + 5.0f,
                                      bossPos.z + fwd.z * kDist };
                     std::string crescentName = "Boss_CrescentSigil_";
-                    std::string boltName     = "Boss_CrescentBolt_";
+                    std::string boltName = "Boss_CrescentBolt_";
                     switch (s.elem)
                     {
                     case ElementType::Fire:  crescentName += "Fire";  boltName += "Fire";  break;
@@ -6191,7 +6202,7 @@ void Scene::UpdateDarkLordIntro(float dt)
                     // 발치 ring 충격파
                     XMFLOAT3 ringPos = { sp.x, bossPos.y + 0.2f, sp.z };
                     m_pVFXManager->Spawn(SlashCue::ImpactEffectName(s.elem),
-                                          ringPos, fwd, 0u, false);
+                        ringPos, fwd, 0u, false);
 
                     // ★ 추가: 발사형 Bolt — 8 방향 외곽으로 발사 (사방 leakage 시각)
                     XMFLOAT3 boltPos = { bossPos.x + fwd.x * (kDist + 4.0f),
@@ -6202,10 +6213,10 @@ void Scene::UpdateDarkLordIntro(float dt)
 
                 // ★ 보스 발치 거대 폭발 — 4 원소 ring 모두 spawn (color stacked)
                 XMFLOAT3 footPos = { bossPos.x, bossPos.y + 0.3f, bossPos.z };
-                m_pVFXManager->Spawn(SlashCue::ImpactEffectName(ElementType::Fire),  footPos, XMFLOAT3(1,0,0), 0u, false);
-                m_pVFXManager->Spawn(SlashCue::ImpactEffectName(ElementType::Water), footPos, XMFLOAT3(0,0,1), 0u, false);
-                m_pVFXManager->Spawn(SlashCue::ImpactEffectName(ElementType::Wind),  footPos, XMFLOAT3(-1,0,0), 0u, false);
-                m_pVFXManager->Spawn(SlashCue::ImpactEffectName(ElementType::Earth), footPos, XMFLOAT3(0,0,-1), 0u, false);
+                m_pVFXManager->Spawn(SlashCue::ImpactEffectName(ElementType::Fire), footPos, XMFLOAT3(1, 0, 0), 0u, false);
+                m_pVFXManager->Spawn(SlashCue::ImpactEffectName(ElementType::Water), footPos, XMFLOAT3(0, 0, 1), 0u, false);
+                m_pVFXManager->Spawn(SlashCue::ImpactEffectName(ElementType::Wind), footPos, XMFLOAT3(-1, 0, 0), 0u, false);
+                m_pVFXManager->Spawn(SlashCue::ImpactEffectName(ElementType::Earth), footPos, XMFLOAT3(0, 0, -1), 0u, false);
 
                 // 화이트플래시 풀파워 + 긴 히트스톱
                 if (auto* pApp = Dx12App::GetInstance())
@@ -6235,14 +6246,14 @@ void Scene::UpdateDarkLordIntro(float dt)
         {
             // 시그니처 발동 직후 — 매우 가까이 framing (게임 최근접)
             float u = t / 0.5f;
-            dist  = lerp(55.0f, 75.0f, u);
+            dist = lerp(55.0f, 75.0f, u);
             pitch = lerp(12.0f, 16.0f, u);
         }
         else
         {
             // 후반 — 점차 zoom out 으로 전투 자세
             float u = (t - 0.5f) / 0.5f;
-            dist  = lerp(75.0f, 105.0f, u);
+            dist = lerp(75.0f, 105.0f, u);
             pitch = lerp(16.0f, 22.0f, u);
         }
         if (m_pCamera) m_pCamera->SetCinematicOrbit(dist, pitch, 180.0f);
@@ -6272,7 +6283,7 @@ void Scene::UpdateDarkLordIntro(float dt)
                         pRC->SetVisible(true);
                     showTree(pGO->m_pChild);
                     showTree(pGO->m_pSibling);
-                };
+                    };
                 showTree(m_pPlayerGameObject->m_pChild);
                 // Transform 복귀
                 if (m_bPlayerIntroStashed)
@@ -6458,7 +6469,7 @@ void Scene::SetupWindAmbient(const BoundingBox& roomBB)
             for (const auto& t : tiles) {
                 float dx = t.x - spawnPos.x;
                 float dz = t.z - spawnPos.z;
-                if (dx*dx + dz*dz >= kSpawnExc * kSpawnExc) tileAvail.push_back(t);
+                if (dx * dx + dz * dz >= kSpawnExc * kSpawnExc) tileAvail.push_back(t);
             }
             if (tileAvail.empty()) tileAvail = tiles;
 
@@ -6518,7 +6529,8 @@ void Scene::SetupWindAmbient(const BoundingBox& roomBB)
                 bool useTile = (i < kTileClumpCount) && (i < tileTotal);
                 if (useTile) {
                     clumpPos = tileAvail[i];
-                } else {
+                }
+                else {
                     // Ring 분포: 균등 각도 + jitter, 타원형 경로 따라.
                     int ringIdx = i - kTileClumpCount;
                     float baseAngle = (float)ringIdx / (float)kRingClumpCount * 6.2831853f;
@@ -6561,8 +6573,8 @@ void Scene::SetupWindAmbient(const BoundingBox& roomBB)
 
                 // 머티리얼: 흰색 diffuse — 셰이더가 grass 그라데이션으로 덮음. ambient는 0.5로 그라데이션 잘 살게.
                 MATERIAL grassMat;
-                grassMat.m_cAmbient  = XMFLOAT4(0.50f, 0.50f, 0.50f, 1.0f);
-                grassMat.m_cDiffuse  = XMFLOAT4(1.00f, 1.00f, 1.00f, 1.0f);
+                grassMat.m_cAmbient = XMFLOAT4(0.50f, 0.50f, 0.50f, 1.0f);
+                grassMat.m_cDiffuse = XMFLOAT4(1.00f, 1.00f, 1.00f, 1.0f);
                 grassMat.m_cSpecular = XMFLOAT4(0.05f, 0.05f, 0.05f, 16.0f);
                 grassMat.m_cEmissive = XMFLOAT4(0.00f, 0.00f, 0.00f, 1.0f);
                 pClump->SetMaterial(grassMat);
@@ -6599,7 +6611,7 @@ void Scene::CleanupWindAmbient()
                 if (up.get() == pObj) return true;
         }
         return false;
-    };
+        };
 
     for (GameObject* pClump : m_vGrassClumpObjects)
     {
@@ -6709,10 +6721,10 @@ bool Scene::IsReadyForTransition() const
 void Scene::TriggerSandstorm(float duration)
 {
     if (duration <= 0.0f) duration = kSandstormDefaultSec;
-    m_bSandstormActive     = true;
-    m_fSandstormDuration   = duration;
+    m_bSandstormActive = true;
+    m_fSandstormDuration = duration;
     m_fSandstormPhaseTimer = 0.0f;
-    m_fSandstormStrength   = 0.0f;
+    m_fSandstormStrength = 0.0f;
     m_fSandstormCycleTimer = 0.0f;
 }
 
@@ -6720,10 +6732,10 @@ void Scene::TriggerSandstorm(float duration)
 void Scene::TriggerWindGust(float duration)
 {
     if (duration <= 0.0f) duration = kWindGustDefaultSec;
-    m_bWindGustActive     = true;
-    m_fWindGustDuration   = duration;
+    m_bWindGustActive = true;
+    m_fWindGustDuration = duration;
     m_fWindGustPhaseTimer = 0.0f;
-    m_fWindGustStrength   = 0.0f;
+    m_fWindGustStrength = 0.0f;
     m_fWindGustCycleTimer = 0.0f;
 }
 
@@ -6769,8 +6781,8 @@ void Scene::SpawnFlightBossDummy(ID3D12Device* pDevice, ID3D12GraphicsCommandLis
     m_pFlightBossDummy->SetMesh(pCubeMesh);
 
     MATERIAL windMaterial;
-    windMaterial.m_cAmbient  = XMFLOAT4(0.1f, 0.15f, 0.1f, 1.0f);
-    windMaterial.m_cDiffuse  = XMFLOAT4(0.6f, 0.85f, 0.7f, 1.0f);   // 청록빛 (바람 컨셉)
+    windMaterial.m_cAmbient = XMFLOAT4(0.1f, 0.15f, 0.1f, 1.0f);
+    windMaterial.m_cDiffuse = XMFLOAT4(0.6f, 0.85f, 0.7f, 1.0f);   // 청록빛 (바람 컨셉)
     windMaterial.m_cSpecular = XMFLOAT4(0.4f, 0.4f, 0.4f, 16.0f);
     windMaterial.m_cEmissive = XMFLOAT4(0.05f, 0.15f, 0.1f, 1.0f);
     m_pFlightBossDummy->SetMaterial(windMaterial);
@@ -6781,7 +6793,7 @@ void Scene::SpawnFlightBossDummy(ID3D12Device* pDevice, ID3D12GraphicsCommandLis
 
     // 초기 진행 방향 = +Z (yaw 0)
     m_fFlightBossYawDeg = 0.0f;
-    m_fFlightCurveTime  = 0.0f;
+    m_fFlightCurveTime = 0.0f;
     m_pFlightBossDummy->GetTransform()->SetRotation(0.0f, m_fFlightBossYawDeg, 0.0f);
 
     OutputDebugString(L"[Scene] Flight boss dummy spawned (rail)\n");
@@ -6819,7 +6831,7 @@ void Scene::ToggleFlightMode(ID3D12Device* pDevice, ID3D12GraphicsCommandList* p
             XMFLOAT3 pp = m_pPlayerGameObject->GetTransform()->GetPosition();
             m_pFlightBossDummy->GetTransform()->SetPosition(XMFLOAT3(pp.x, pp.y + 22.0f, pp.z + 30.0f));
             m_fFlightBossYawDeg = 0.0f;
-            m_fFlightCurveTime  = 0.0f;
+            m_fFlightCurveTime = 0.0f;
             m_pFlightBossDummy->GetTransform()->SetRotation(0.0f, m_fFlightBossYawDeg, 0.0f);
         }
 
@@ -6867,15 +6879,15 @@ void Scene::FlightShoot(const XMFLOAT3& muzzlePos, const XMFLOAT3& dirNormalized
     // 머즐 플래시 — 작은 Sphere Burst
     {
         EffectLayer layer;
-        layer.type          = EmitterType::Sphere;
+        layer.type = EmitterType::Sphere;
         layer.particleCount = 14;
-        layer.coreColor     = { 0.85f, 0.95f, 1.0f, 1.0f };
-        layer.edgeColor     = { 0.2f,  0.4f,  0.9f, 0.0f };
-        layer.speedMin      = 2.0f;
-        layer.speedMax      = 5.0f;
-        layer.lifetimeMin   = 0.05f;
-        layer.lifetimeMax   = 0.18f;
-        layer.sizeScale     = 0.6f;
+        layer.coreColor = { 0.85f, 0.95f, 1.0f, 1.0f };
+        layer.edgeColor = { 0.2f,  0.4f,  0.9f, 0.0f };
+        layer.speedMin = 2.0f;
+        layer.speedMax = 5.0f;
+        layer.lifetimeMin = 0.05f;
+        layer.lifetimeMax = 0.18f;
+        layer.sizeScale = 0.6f;
         layer.sphere.radius = 0.4f;
         m_pVFXManager->SpawnLightLayer(muzzlePos, dirNormalized, layer, /*isPlayer*/true);
     }
@@ -6884,18 +6896,18 @@ void Scene::FlightShoot(const XMFLOAT3& muzzlePos, const XMFLOAT3& dirNormalized
     {
         // 피격 폭발 — Burst (중력 영향)
         EffectLayer layer;
-        layer.type          = EmitterType::Burst;
+        layer.type = EmitterType::Burst;
         layer.particleCount = 28;
-        layer.coreColor     = { 1.0f, 0.95f, 0.7f, 1.0f };
-        layer.edgeColor     = { 0.6f, 0.3f,  0.1f, 0.0f };
-        layer.speedMin      = 5.0f;
-        layer.speedMax      = 10.0f;
-        layer.lifetimeMin   = 0.20f;
-        layer.lifetimeMax   = 0.45f;
-        layer.sizeScale     = 0.8f;
+        layer.coreColor = { 1.0f, 0.95f, 0.7f, 1.0f };
+        layer.edgeColor = { 0.6f, 0.3f,  0.1f, 0.0f };
+        layer.speedMin = 5.0f;
+        layer.speedMax = 10.0f;
+        layer.lifetimeMin = 0.20f;
+        layer.lifetimeMax = 0.45f;
+        layer.sizeScale = 0.8f;
         layer.burst.bounceCoeff = 0.f;
-        layer.burst.fadeOut     = true;
-        layer.burst.fadeSize    = true;
+        layer.burst.fadeOut = true;
+        layer.burst.fadeSize = true;
         m_pVFXManager->SpawnLightLayer(hitPoint, dirNormalized, layer, /*isPlayer*/true);
 
         m_fFlightBossHitFlashTimer = kFlightHitFlashDuration;
@@ -6912,15 +6924,15 @@ void Scene::FlightShoot(const XMFLOAT3& muzzlePos, const XMFLOAT3& dirNormalized
             XMFLOAT3 pp; DirectX::XMStoreFloat3(&pp, p);
 
             EffectLayer layer;
-            layer.type          = EmitterType::Sphere;
+            layer.type = EmitterType::Sphere;
             layer.particleCount = 4;
-            layer.coreColor     = { 0.7f, 0.85f, 1.0f, 0.9f };
-            layer.edgeColor     = { 0.2f, 0.3f,  0.6f, 0.0f };
-            layer.speedMin      = 0.5f;
-            layer.speedMax      = 1.5f;
-            layer.lifetimeMin   = 0.05f;
-            layer.lifetimeMax   = 0.15f;
-            layer.sizeScale     = 0.45f;
+            layer.coreColor = { 0.7f, 0.85f, 1.0f, 0.9f };
+            layer.edgeColor = { 0.2f, 0.3f,  0.6f, 0.0f };
+            layer.speedMin = 0.5f;
+            layer.speedMax = 1.5f;
+            layer.lifetimeMin = 0.05f;
+            layer.lifetimeMax = 0.15f;
+            layer.sizeScale = 0.45f;
             layer.sphere.radius = 0.2f;
             m_pVFXManager->SpawnLightLayer(pp, dirNormalized, layer, /*isPlayer*/true);
         }
@@ -6971,21 +6983,21 @@ void Scene::UpdateFlightFX(float deltaTime, InputSystem* pInputSystem)
         XMFLOAT3 backDir = { -fwdF.x, 0.0f, -fwdF.z };
 
         EffectLayer layer;
-        layer.type          = EmitterType::Cone;
+        layer.type = EmitterType::Cone;
         layer.particleCount = bBoost ? 12 : 8;   // 1회 스폰량
-        layer.coreColor     = { 0.95f, 1.0f, 1.0f, 0.7f };
-        layer.edgeColor     = { 0.55f, 0.85f, 1.0f, 0.0f };
-        layer.speedMin      = windSpeed * 0.85f;
-        layer.speedMax      = windSpeed * 1.05f;
-        layer.lifetimeMin   = 0.40f;
-        layer.lifetimeMax   = 0.85f;
-        layer.sizeScale     = 0.85f;
-        layer.cone.halfAngle     = 35.0f;        // 시야 양옆까지 spread
-        layer.cone.gravityScale  = 0.f;
+        layer.coreColor = { 0.95f, 1.0f, 1.0f, 0.7f };
+        layer.edgeColor = { 0.55f, 0.85f, 1.0f, 0.0f };
+        layer.speedMin = windSpeed * 0.85f;
+        layer.speedMax = windSpeed * 1.05f;
+        layer.lifetimeMin = 0.40f;
+        layer.lifetimeMax = 0.85f;
+        layer.sizeScale = 0.85f;
+        layer.cone.halfAngle = 35.0f;        // 시야 양옆까지 spread
+        layer.cone.gravityScale = 0.f;
         layer.cone.startSizeMult = 1.0f;
-        layer.cone.endSizeMult   = 0.05f;
-        layer.cone.fadeAlpha     = true;
-        layer.cone.fadeSize      = false;
+        layer.cone.endSizeMult = 0.05f;
+        layer.cone.fadeAlpha = true;
+        layer.cone.fadeSize = false;
         m_pVFXManager->SpawnLightLayer(spawnPos, backDir, layer, /*isPlayer*/true);
     }
 }
@@ -7035,20 +7047,20 @@ void Scene::GetFlightBulletColors(ElementType e, XMFLOAT4& outStart, XMFLOAT4& o
     {
     case ElementType::Fire:
         outStart = { 1.0f, 0.7f, 0.2f, 1.0f };
-        outEnd   = { 0.8f, 0.2f, 0.05f, 0.0f };
+        outEnd = { 0.8f, 0.2f, 0.05f, 0.0f };
         break;
     case ElementType::Water:
         outStart = { 0.4f, 0.8f, 1.0f, 1.0f };
-        outEnd   = { 0.1f, 0.3f, 0.7f, 0.0f };
+        outEnd = { 0.1f, 0.3f, 0.7f, 0.0f };
         break;
     case ElementType::Earth:
         outStart = { 0.85f, 0.7f, 0.4f, 1.0f };
-        outEnd   = { 0.4f,  0.3f, 0.15f, 0.0f };
+        outEnd = { 0.4f,  0.3f, 0.15f, 0.0f };
         break;
     case ElementType::Wind:
     default:
         outStart = { 0.85f, 1.0f, 0.95f, 1.0f };
-        outEnd   = { 0.45f, 0.85f, 0.7f, 0.0f };
+        outEnd = { 0.45f, 0.85f, 0.7f, 0.0f };
         break;
     }
 }
@@ -7079,7 +7091,7 @@ void Scene::FireFlightBossBarrage()
     FluidSkillVFXDef fluidDef = FluidSkillVFXManager::GetVFXDef(m_eFlightBossElement);
     // 보스 탄막은 작고 빠르게 — 입자 수/반경 살짝 줄여서 5발 동시에도 부담 적게
     fluidDef.particleCount = 80;
-    fluidDef.spawnRadius   = 0.5f;
+    fluidDef.spawnRadius = 0.5f;
 
     const int N = kFlightBulletsPerVolley;
     for (int i = 0; i < N; ++i)
@@ -7108,15 +7120,15 @@ void Scene::FireFlightBossBarrage()
         if (m_pVFXManager)
         {
             EffectLayer layer;
-            layer.type          = EmitterType::Sphere;
+            layer.type = EmitterType::Sphere;
             layer.particleCount = 10;
-            layer.coreColor     = colStart;
-            layer.edgeColor     = colEnd;
-            layer.speedMin      = 1.5f;
-            layer.speedMax      = 4.0f;
-            layer.lifetimeMin   = 0.10f;
-            layer.lifetimeMax   = 0.20f;
-            layer.sizeScale     = 0.7f;
+            layer.coreColor = colStart;
+            layer.edgeColor = colEnd;
+            layer.speedMin = 1.5f;
+            layer.speedMax = 4.0f;
+            layer.lifetimeMin = 0.10f;
+            layer.lifetimeMax = 0.20f;
+            layer.sizeScale = 0.7f;
             layer.sphere.radius = 0.3f;
             // 보스 발사 = 적 슬롯
             m_pVFXManager->SpawnLightLayer(b.pos, d, layer, /*isPlayer*/false);
@@ -7179,18 +7191,18 @@ void Scene::UpdateFlightBossBullets(float deltaTime)
                 GetFlightBulletColors(m_eFlightBossElement, colStart, colEnd);
 
                 EffectLayer layer;
-                layer.type          = EmitterType::Sphere;
+                layer.type = EmitterType::Sphere;
                 layer.particleCount = 22;
-                layer.coreColor     = colStart;
-                layer.edgeColor     = colEnd;
-                layer.speedMin      = 3.0f;
-                layer.speedMax      = 8.0f;
-                layer.lifetimeMin   = 0.12f;
-                layer.lifetimeMax   = 0.30f;
-                layer.sizeScale     = 0.85f;
+                layer.coreColor = colStart;
+                layer.edgeColor = colEnd;
+                layer.speedMin = 3.0f;
+                layer.speedMax = 8.0f;
+                layer.lifetimeMin = 0.12f;
+                layer.lifetimeMax = 0.30f;
+                layer.sizeScale = 0.85f;
                 layer.sphere.radius = 0.5f;
                 m_pVFXManager->SpawnLightLayer(it->pos, XMFLOAT3(0, 1, 0),
-                                               layer, /*isPlayer*/false);
+                    layer, /*isPlayer*/false);
             }
 
             it = m_FlightBossBullets.erase(it);

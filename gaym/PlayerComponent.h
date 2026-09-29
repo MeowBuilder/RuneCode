@@ -85,10 +85,12 @@ public:
     //   groundY: 착지 높이 (포탈 베이스 표면 등). 기본 0.
     //   standCenterXZ + standRadius: 베이스 영역 (XZ 평면). 영역 밖으로 이동하면 자유낙하 트리거.
     void StartIntroFly(float duration, float groundY = 0.0f,
-                       const XMFLOAT3& standCenter = XMFLOAT3(0,0,0), float standRadius = 0.0f);
+        const XMFLOAT3& standCenter = XMFLOAT3(0, 0, 0), float standRadius = 0.0f);
 
     // 포탈 Intro Fly 낙하/착지 연출 중인지 확인.
     // 보스 컷신 입력 차단 중에도 이 연출 업데이트는 허용해야 한다.
+    float GetIntroGroundY() const { return m_fIntroGroundY; }
+
     bool IsIntroFlyPlaying() const
     {
         return m_fIntroFlyTimer > 0.0f || m_fLandingHoldTimer > 0.0f;
@@ -116,42 +118,42 @@ public:
 
 private:
     // ─── 캐릭터 원소 ──────────────────────────────────────────────────────────
-    ElementType m_elementType    = ElementType::Water;
-    XMFLOAT4    m_dashCoreColor  = { 0.35f, 0.75f, 1.0f, 1.0f };
-    XMFLOAT4    m_dashEdgeColor  = { 0.05f, 0.15f, 0.55f, 0.0f };
-    float       m_fMoveSpeed     = 20.0f;   // 기본값; SetElementType 으로 덮어씀
-    float       m_fDashCooldown  = 1.2f;    // 기본값 (Water); SetElementType 으로 덮어씀
-    float       m_fDashDuration  = 0.25f;
+    ElementType m_elementType = ElementType::Water;
+    XMFLOAT4    m_dashCoreColor = { 0.35f, 0.75f, 1.0f, 1.0f };
+    XMFLOAT4    m_dashEdgeColor = { 0.05f, 0.15f, 0.55f, 0.0f };
+    float       m_fMoveSpeed = 20.0f;   // 기본값; SetElementType 으로 덮어씀
+    float       m_fDashCooldown = 1.2f;    // 기본값 (Water); SetElementType 으로 덮어씀
+    float       m_fDashDuration = 0.25f;
     float       m_fDashSpeedMult = 3.2f;
 
     // ─── HP ───────────────────────────────────────────────────────────────────
     float m_fMaxHP = 100.0f;
     float m_fCurrentHP = 100.0f;
-    float m_fShield    = 0.0f;
+    float m_fShield = 0.0f;
     // 최대 보호막 = 최대 생명력(m_fMaxHP)
 
     float m_fDamageReductionRatio = 0.f;
     float m_fDamageReductionTimer = 0.f;
-    float m_fInvincibleTimer      = 0.f;
+    float m_fInvincibleTimer = 0.f;
 
     bool  m_bVengeancePrimed = false;
-    float m_fVengeanceTimer  = 0.f;
+    float m_fVengeanceTimer = 0.f;
 
     // ─── 심연 룬 추적 VFX (보호막 오라 / 보복 오라) ──────────────────────────
     //   짧은 lifetime 으로 매 프레임 위치 추적 + 만료 직전 재스폰 패턴 (m_overheatStackVFX 와 동일).
-    int   m_shieldVFXSlot         = -1;
-    float m_shieldRefreshTimer    = 0.f;   // 0이 되면 다음 프레임에서 재스폰
-    float m_prevShieldAmount      = 0.f;   // 흡수 펄스 트리거용 (TakeDamage 후 감소 감지)
-    int   m_vengeanceVFXSlot      = -1;
+    int   m_shieldVFXSlot = -1;
+    float m_shieldRefreshTimer = 0.f;   // 0이 되면 다음 프레임에서 재스폰
+    float m_prevShieldAmount = 0.f;   // 흡수 펄스 트리거용 (TakeDamage 후 감소 감지)
+    int   m_vengeanceVFXSlot = -1;
     float m_vengeanceRefreshTimer = 0.f;
 
     // 흡혈 룬(ABY_VMP) 송곳니 VFX 추적 (플레이어 따라 이동, 새 발동 시 교체)
-    int   m_lifestealVFXSlot      = -1;
-    float m_lifestealVFXTimer     = 0.f;
+    int   m_lifestealVFXSlot = -1;
+    float m_lifestealVFXTimer = 0.f;
 
     // 시간역행 룬(ABY_TIM) 시계 VFX 추적 (위와 동일 패턴)
-    int   m_timeRewindVFXSlot     = -1;
-    float m_timeRewindVFXTimer    = 0.f;
+    int   m_timeRewindVFXSlot = -1;
+    float m_timeRewindVFXTimer = 0.f;
 
     // 보호막/보복 오라 추적 — PlayerUpdate 에서 매 프레임 호출
     void UpdateAbyssAuraVFX(float deltaTime);
@@ -164,7 +166,7 @@ private:
 
     // Fall zone (water-boss)
     bool m_bFallZoneActive = false;
-    XMFLOAT3 m_xmf3SafeCenter  = {};
+    XMFLOAT3 m_xmf3SafeCenter = {};
     XMFLOAT3 m_xmf3SafeExtents = {};
     float m_fFallZoneWaterY = -1e9f;  // 현재 수면 Y (Scene이 매 프레임 갱신)
     static constexpr float FALL_DEATH_Y = -10.0f;  // 맵 바닥(-4) 훨씬 아래로 떨어지면 즉사
@@ -181,11 +183,11 @@ private:
     float m_fAttackTimer = 0.0f;
 
     // Intro Fly — 포탈 진입 후 낙하 시퀀스
-    float    m_fIntroFlyTimer    = 0.0f;   // > 0 동안 입력 차단 + 강제 비행 모션
+    float    m_fIntroFlyTimer = 0.0f;   // > 0 동안 입력 차단 + 강제 비행 모션
     float    m_fLandingHoldTimer = 0.0f;   // 바닥 도달 후 Landing 클립 유지 시간
-    float    m_fIntroGroundY     = 0.0f;   // 포탈 베이스 표면 등 착지 높이
-    XMFLOAT3 m_xmf3StandCenter   = { 0, 0, 0 };  // 베이스 영역 중심 (XZ)
-    float    m_fStandRadius      = 0.0f;   // > 0 동안 활성. 영역 밖 = 자유낙하.
+    float    m_fIntroGroundY = 0.0f;   // 포탈 베이스 표면 등 착지 높이
+    XMFLOAT3 m_xmf3StandCenter = { 0, 0, 0 };  // 베이스 영역 중심 (XZ)
+    float    m_fStandRadius = 0.0f;   // > 0 동안 활성. 영역 밖 = 자유낙하.
     static constexpr float kAttackAnimDuration = 0.92f;  // Attack1 clip duration
 
     // Dash (Space key) — 짧은 무적 이동기. LevitateStart 애니 재사용 + 이미시브 플래시
@@ -209,10 +211,10 @@ private:
     static constexpr float YAW_SYNC_THRESHOLD = 1.0f;  // 1도 이상 변화 시 동기화
 
     // Tornado Trap (4스테이지 ambient 회오리)
-    bool      m_bTornadoTrapped     = false;
-    XMFLOAT3  m_xmf3TornadoCenter   = { 0.0f, 0.0f, 0.0f };
-    float     m_fTornadoTime        = 0.0f;       // trap 진입 후 경과
-    float     m_fTornadoStartY      = 0.0f;       // 진입 시점 Y
+    bool      m_bTornadoTrapped = false;
+    XMFLOAT3  m_xmf3TornadoCenter = { 0.0f, 0.0f, 0.0f };
+    float     m_fTornadoTime = 0.0f;       // trap 진입 후 경과
+    float     m_fTornadoStartY = 0.0f;       // 진입 시점 Y
     void      UpdateTornadoTrap(float dt);
 
     // Flight mode (레일 슈팅: 보스 forward 기준 2D 평면 락온)
@@ -222,14 +224,14 @@ private:
     float m_fFlightOffsetY = 0.0f;             // 월드 up 방향 오프셋
     float m_fFlightOffsetXVel = 0.0f;
     float m_fFlightOffsetYVel = 0.0f;
-    static constexpr float kFlightTrailDist  = 30.0f;  // 보스 뒤 거리
+    static constexpr float kFlightTrailDist = 30.0f;  // 보스 뒤 거리
     static constexpr float kFlightOffsetXMax = 18.0f;  // 좌우 무빙 한계
     static constexpr float kFlightOffsetYMax = 11.0f;  // 상하 무빙 한계
     static constexpr float kFlightOffsetYMin = -8.0f;  // 아래쪽 한계 (보스 시야 유지)
-    static constexpr float kFlightAccel      = 110.0f; // m/s^2
-    static constexpr float kFlightMaxSpeed   = 28.0f;  // m/s
-    static constexpr float kFlightDrag       = 5.0f;   // 1/s — 키 떼면 빠르게 정지(무빙 정확도)
-    static constexpr float kFlightBoostMult  = 1.6f;
+    static constexpr float kFlightAccel = 110.0f; // m/s^2
+    static constexpr float kFlightMaxSpeed = 28.0f;  // m/s
+    static constexpr float kFlightDrag = 5.0f;   // 1/s — 키 떼면 빠르게 정지(무빙 정확도)
+    static constexpr float kFlightBoostMult = 1.6f;
     void UpdateFlightMode(float deltaTime, InputSystem* pInputSystem, CCamera* pCamera);
 
     void UpdateAnimation(float deltaTime, bool bMoving, bool bAttackTriggered, bool bDashStarted, bool bDashing);

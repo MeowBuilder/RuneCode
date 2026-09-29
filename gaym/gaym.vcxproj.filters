@@ -531,6 +531,9 @@
     <ClInclude Include="MapCollisionExporter.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="SummaryStatsScreen.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="gaym.cpp">
@@ -990,6 +993,9 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="MapCollisionExporter.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="SummaryStatsScreen.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>

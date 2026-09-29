@@ -17,18 +17,18 @@ class GameObject;
 // ─────────────────────────────────────────────────────────────────────────────
 struct SkillContext
 {
-    GameObject*   caster        = nullptr;
-    XMFLOAT3      targetPos     = {};
-    ElementType   element       = ElementType::None;
-    float         baseDamage    = 0.f;
-    float         damageDealt   = 0.f;   // populated on hit
+    GameObject* caster = nullptr;
+    XMFLOAT3      targetPos = {};
+    ElementType   element = ElementType::None;
+    float         baseDamage = 0.f;
+    float         damageDealt = 0.f;   // populated on hit
     int           projectileIdx = 0;     // for split/multi projectiles
-    SkillSlot     skillSlot     = SkillSlot::Count; // onHit 훅: 어느 슬롯에서 발사됐는지
-    void*         scene         = nullptr;          // Scene* (void* to avoid circular include)
-    void*         hitEnemy      = nullptr;          // EnemyComponent* (void*)
-    XMFLOAT3      hitEnemyPos   = {};
+    SkillSlot     skillSlot = SkillSlot::Count; // onHit 훅: 어느 슬롯에서 발사됐는지
+    void* scene = nullptr;          // Scene* (void* to avoid circular include)
+    void* hitEnemy = nullptr;          // EnemyComponent* (void*)
+    XMFLOAT3      hitEnemyPos = {};
     // 상태이상 룬에서 사용 — SkillStats에서 전달
-    float         statusChanceMult   = 1.f;
+    float         statusChanceMult = 1.f;
     float         statusDurationMult = 1.f;
 };
 
@@ -39,17 +39,17 @@ struct SkillContext
 struct SkillStats
 {
     // Stat multipliers (all start at 1.0)
-    float damageMult            = 1.f;
-    float cooldownMult          = 1.f;
-    float rangeMult             = 1.f;
-    float radiusMult            = 1.f;
-    float castTimeMult          = 1.f;
-    float durationMult          = 1.f;
-    float channelDurationMult   = 1.f;
-    float manaCostMult          = 1.f;
-    float statusDurationMult    = 1.f;
-    float statusChanceMult      = 1.f;
-    float knockbackMult         = 1.f;
+    float damageMult = 1.f;
+    float cooldownMult = 1.f;
+    float rangeMult = 1.f;
+    float radiusMult = 1.f;
+    float castTimeMult = 1.f;
+    float durationMult = 1.f;
+    float channelDurationMult = 1.f;
+    float manaCostMult = 1.f;
+    float statusDurationMult = 1.f;
+    float statusChanceMult = 1.f;
+    float knockbackMult = 1.f;
 
     // 최종 스킬 원소 오버라이드.
     // 값이 없으면 스킬이 원래 가진 원소를 사용한다.
@@ -70,6 +70,7 @@ struct SkillStats
     float overheatBonus = 0.f;
     int   orbitalCount = 0;
     int   spawnOnHitCount = 0;
+    bool  randomElementOnCast = false;
 
     // 룬에서 사용하는 VFX 정보
     VFXModifier vfxMod;
@@ -233,22 +234,22 @@ struct RuneDef
     std::string name;
     std::string category;     // "속성 변경", "속성 강화" 등
     std::string description;  // 선택창 표시 설명 (onHit 효과 등 자동 생성 불가 내용)
-    RuneGrade   grade   = RuneGrade::Normal;
+    RuneGrade   grade = RuneGrade::Normal;
     ElementType element = ElementType::None;  // None = universal
 
     // Stat multipliers (base values for 1 stack)
     // Stack formula: effective = 1 + (baseMult - 1) * stackCount
-    float damageMult          = 1.f;
-    float cooldownMult        = 1.f;
-    float rangeMult           = 1.f;
-    float radiusMult          = 1.f;
-    float castTimeMult        = 1.f;
-    float durationMult        = 1.f;
+    float damageMult = 1.f;
+    float cooldownMult = 1.f;
+    float rangeMult = 1.f;
+    float radiusMult = 1.f;
+    float castTimeMult = 1.f;
+    float durationMult = 1.f;
     float channelDurationMult = 1.f;
-    float manaCostMult        = 1.f;
-    float statusDurationMult  = 1.f;
-    float statusChanceMult    = 1.f;
-    float knockbackMult       = 1.f;
+    float manaCostMult = 1.f;
+    float statusDurationMult = 1.f;
+    float statusChanceMult = 1.f;
+    float knockbackMult = 1.f;
 
     // 이 룬이 추가하는 발동 방식.
     // 여러 발동 룬은 SkillStats에 누적되어 조합된다.
@@ -259,17 +260,18 @@ struct RuneDef
 
     // Behavioral flags (additive / boolean)
     int   extraProjectiles = 0;
-    bool  piercing         = false;
-    bool  homing           = false;
-    float lifestealRatio   = 0.f;
-    float execDamageBonus  = 0.f;
-    bool  doublecast       = false;
-    bool  echoOnCast       = false;
-    float cdResetChance    = 0.f;
-    float revengeBonus     = 0.f;
-    float overheatBonus    = 0.f;
-    int   orbitalCount          = 0;    // 선회/성좌: 궤도 파티클 다단히트 수
-    int   spawnOnHitCount       = 0;    // 반향/폭발반향: 적중 시 추가 투사체 수
+    bool  piercing = false;
+    bool  homing = false;
+    float lifestealRatio = 0.f;
+    float execDamageBonus = 0.f;
+    bool  doublecast = false;
+    bool  echoOnCast = false;
+    float cdResetChance = 0.f;
+    float revengeBonus = 0.f;
+    float overheatBonus = 0.f;
+    int   orbitalCount = 0;    // 선회/성좌: 궤도 파티클 다단히트 수
+    int   spawnOnHitCount = 0;    // 반향/폭발반향: 적중 시 추가 투사체 수
+    bool  randomElementOnCast = false; // 원소 변환(L04): 시전 시 원소 무작위 변경
 
     // Sub-particle VFX: EffectRegistry에 등록된 서브 파티클 def ID (빈 문자열 = 없음)
     std::string subVFXId;

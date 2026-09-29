@@ -2,6 +2,7 @@
 #include "ServerPacketHandler.h"
 #include "../NetworkManager.h"
 #include <fstream>
+#include <mutex>
 #include <string>
 #include <vector>
 #include <DirectXMath.h>
@@ -9,8 +10,19 @@
 // 파일 로그 함수
 void WriteNetworkLog(const std::string& msg)
 {
-    std::ofstream ofs("network_log.txt", std::ios::app);
-    ofs << msg << std::endl;
+    // Packet logging is opt-in: opening/flushing a file on every movement packet
+    // stalls gameplay. Set RUNE_NETWORK_LOG=1 before launch for diagnostics.
+    static const bool enabled = [] {
+        char value[8] = {};
+        return GetEnvironmentVariableA("RUNE_NETWORK_LOG", value, sizeof(value)) == 1
+            && value[0] == '1';
+        }();
+    if (!enabled) return;
+
+    static std::mutex logMutex;
+    static std::ofstream log("network_log.txt", std::ios::app);
+    std::lock_guard<std::mutex> lock(logMutex);
+    log << msg << '\n'; // buffered; flushed on normal process exit
 }
 
 PacketHandlerFunc GPacketHandler[UINT16_MAX];
@@ -310,9 +322,9 @@ bool Handle_S_SKILL(PacketSessionRef& session, Protocol::S_SKILL& pkt)
     float dirZ = pkt.dirz();
 
     // 서버 룬 보정 필드 — 서버 권위 radius/damage 배율 (AMP_RAD3 등). 0 이면 기본값(1.0) 처리.
-    int32 skillSlot   = pkt.skillslot();
-    float radiusMult  = pkt.radiusmult();
-    float damageMult  = pkt.damagemult();
+    int32 skillSlot = pkt.skillslot();
+    float radiusMult = pkt.radiusmult();
+    float damageMult = pkt.damagemult();
 
     char buf[320];
     sprintf_s(buf, "[Network] S_SKILL received: PlayerId=%llu SkillType=%d Pos=(%.1f, %.1f, %.1f) Dir=(%.2f, %.2f, %.2f) Slot=%d RadiusMult=%.2f DamageMult=%.2f",
@@ -324,7 +336,7 @@ bool Handle_S_SKILL(PacketSessionRef& session, Protocol::S_SKILL& pkt)
     if (pNetMgr)
     {
         pNetMgr->QueueSkill(playerId, skillType, x, y, z, dirX, dirY, dirZ,
-                            skillSlot, radiusMult, damageMult);
+            skillSlot, radiusMult, damageMult);
         WriteNetworkLog("[Network] QueueSkill called");
     }
 
